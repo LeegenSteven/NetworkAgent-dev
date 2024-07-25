@@ -9,6 +9,5 @@ metadata:
     app.kubernetes.io/created-by: operator
   name: edgeappliance-sample
 spec:
-  # TODO(user): Add fields here
-  # VM Address
-  # 
+  edgemachine: edge
+  

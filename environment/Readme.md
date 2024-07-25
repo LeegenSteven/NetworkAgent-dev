@@ -9,6 +9,13 @@ gcloud init --no-launch-browser
 
 ## GKE Automation Platform
 
+Create Mgmt network
+
+```
+gcloud compute networks create mgmt --subnet-mode=auto 
+gcloud compute networks subnets create mgmt-subnet --network=mgmt --range=10.100.0.0/24 --region=europe-west2
+```
+
 Create GKE Cluster and install kubectl
 
 ```
@@ -21,7 +28,7 @@ gcloud container clusters create networkautomation \
     --zone europe-west2-a\
     --node-locations europe-west2-a \
     --num-nodes 4 \
-    --network=free5gc-demo 
+    --network mgmt 
 ```
 
 Install kubectl and get cluster credentials
@@ -52,14 +59,11 @@ kubectl apply -f configconnector.yaml
 
 Check the config connector is running
 
-```
-pwd
-```
-
 ## Create Demo VPC Networks
 
 Create the VPCs and Subnets for the demo
 
 ```
 kubectl apply -f demo-networks.yaml
+kubectl apply -f apps.yaml
 ```

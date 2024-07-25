@@ -1,0 +1,175 @@
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeInstance
+metadata:
+  annotations:
+    cnrm.cloud.google.com/allow-stopping-for-update: "true"
+  name: site1-dev-app
+spec:
+  machineType: e2-medium
+  zone: europe-west2-a
+  bootDisk:
+    initializeParams:
+      size: 50
+      type: pd-ssd
+      sourceImageRef:
+        external: ubuntu-os-cloud/ubuntu-2204-lts
+  networkInterface:
+    - subnetworkRef:
+        name: site1-dev
+  canIpForward: true
+  metadataStartupScript: sudo apt-get update; sudo apt-get install -yq python3-pip iperf
+  metadata:
+    - key: ssh-keys
+      value: admin_briannaughton_altostrat_co:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN57YanONs2q/Eor4Tjv1NRhBGrB59vPFAMZbvlOVtkX briannaughton
+  tags:
+    - ssh
+    - iperf
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeInstance
+metadata:
+  annotations:
+    cnrm.cloud.google.com/allow-stopping-for-update: "true"
+  name: site1-prod-app
+spec:
+  machineType: e2-medium
+  zone: europe-west2-a
+  bootDisk:
+    initializeParams:
+      size: 50
+      type: pd-ssd
+      sourceImageRef:
+        external: ubuntu-os-cloud/ubuntu-2204-lts
+  networkInterface:
+    - subnetworkRef:
+        name: site1-prod
+  canIpForward: true
+  metadataStartupScript: sudo apt-get update; sudo apt-get install -yq python3-pip iperf
+  metadata:
+    - key: ssh-keys
+      value: admin_briannaughton_altostrat_co:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN57YanONs2q/Eor4Tjv1NRhBGrB59vPFAMZbvlOVtkX briannaughton
+  tags:
+    - ssh
+    - iperf
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeInstance
+metadata:
+  annotations:
+    cnrm.cloud.google.com/allow-stopping-for-update: "true"
+  name: site2-dev-app
+spec:
+  machineType: e2-medium
+  zone: europe-west2-a
+  bootDisk:
+    initializeParams:
+      size: 50
+      type: pd-ssd
+      sourceImageRef:
+        external: ubuntu-os-cloud/ubuntu-2204-lts
+  networkInterface:
+    - subnetworkRef:
+        name: site2-dev
+  canIpForward: true
+  metadataStartupScript: sudo apt-get update; sudo apt-get install -yq python3-pip iperf
+  metadata:
+    - key: ssh-keys
+      value: admin_briannaughton_altostrat_co:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN57YanONs2q/Eor4Tjv1NRhBGrB59vPFAMZbvlOVtkX briannaughton
+  tags:
+    - ssh
+    - iperf
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeInstance
+metadata:
+  annotations:
+    cnrm.cloud.google.com/allow-stopping-for-update: "true"
+  name: site2-prod-app
+spec:
+  machineType: e2-medium
+  zone: europe-west2-a
+  bootDisk:
+    initializeParams:
+      size: 50
+      type: pd-ssd
+      sourceImageRef:
+        external: ubuntu-os-cloud/ubuntu-2204-lts
+  networkInterface:
+    - subnetworkRef:
+        name: site2-prod
+  canIpForward: true
+  metadataStartupScript: sudo apt-get update; sudo apt-get install -yq python3-pip iperf
+  metadata:
+    - key: ssh-keys
+      value: admin_briannaughton_altostrat_co:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN57YanONs2q/Eor4Tjv1NRhBGrB59vPFAMZbvlOVtkX briannaughton
+  tags:
+    - ssh
+    - iperf
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeFirewall
+metadata:
+  name: site1-ssh
+spec:
+  allow:
+    - protocol: tcp
+      ports:
+       - "22"
+  networkRef:
+    name: site1
+  direction: INGRESS
+  sourceRanges:
+    - 0.0.0.0/0
+  targetTags:
+    - ssh
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeFirewall
+metadata:
+  name: site2-ssh
+spec:
+  allow:
+    - protocol: tcp
+      ports:
+       - "22"
+  networkRef:
+    name: site2
+  direction: INGRESS
+  sourceRanges:
+    - 0.0.0.0/0
+  targetTags:
+    - ssh
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeFirewall
+metadata:
+  name: site1-iperf
+spec:
+  allow:
+    - protocol: tcp
+      ports:
+       - "5000"
+  networkRef:
+    name: site1
+  direction: INGRESS
+  sourceRanges:
+    - 0.0.0.0/0
+  targetTags:
+    - iperf
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeFirewall
+metadata:
+  name: site2-iperf
+spec:
+  allow:
+    - protocol: tcp
+      ports:
+       - "5000"
+  networkRef:
+    name: site2
+  direction: INGRESS
+  sourceRanges:
+    - 0.0.0.0/0
+  targetTags:
+    - iperf

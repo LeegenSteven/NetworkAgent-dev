@@ -20,3 +20,15 @@
       import_role:
         name: install
       when: vyos_exists.stat.isdir is not defined
+
+    - name: Ensure VyOS is running
+      docker_container:
+        name: vyos
+        recreate: yes
+        image: vyos:1.5
+        privileged: yes
+        command: /sbin/init
+        network_mode: host
+        volumes:
+          - /lib/modules:/lib/modules
+

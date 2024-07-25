@@ -1,6 +1,0 @@
----
-# tasks file for EdgeAppliance
-# change status to pending
-# start the docker container
-# configure whatever
-# update the status to say done

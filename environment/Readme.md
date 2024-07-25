@@ -53,7 +53,7 @@ kubectl apply -f configconnector.yaml
 Check the config connector is running
 
 ```
-kubectl wait -n cnrm-system --for=condition=Ready pod --all
+pwd
 ```
 
 ## Create Demo VPC Networks

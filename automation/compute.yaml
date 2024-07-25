@@ -5,14 +5,14 @@ metadata:
     cnrm.cloud.google.com/allow-stopping-for-update: "true"
   name: edge1
 spec:
-  machineType: n1-standard-1
+  machineType: e2-medium
   zone: europe-west2-a
   bootDisk:
+    autoDelete: false
     initializeParams:
-      size: 50
-      type: pd-standard
       sourceImageRef:
-        external: debian-cloud/debian-11
+        external: https://www.googleapis.com/compute/v1/projects/free5gc-384814/global/machineImages/vyos-edge
   networkInterface:    
     - subnetworkRef:
         name: site1-dev
+  canIpForward: true

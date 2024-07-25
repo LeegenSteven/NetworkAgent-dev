@@ -1,0 +1,7 @@
+---
+# Use the 'create api' subcommand to add watches to this file.
+- version: v1
+  group: network.example.com
+  kind: EdgeAppliance
+  role: edgeappliance
+#+kubebuilder:scaffold:watch

@@ -1,3 +1,4 @@
 */playbooks/artifacts
 **/__pycache__
 .venv
+launch.json

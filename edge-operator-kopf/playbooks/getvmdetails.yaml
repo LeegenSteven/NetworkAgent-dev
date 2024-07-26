@@ -1,0 +1,9 @@
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Get an existing Service object
+      kubernetes.core.k8s_info:
+        api_version: compute.cnrm.cloud.google.com/v1beta1
+        kind: ComputeInstance
+        name: edge1
+        namespace: automation

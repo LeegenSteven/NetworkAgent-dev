@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edge-appliance-operator
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      application: edge-appliance-operator
+  template:
+    metadata:
+      labels:
+        application: edge-appliance-operator
+    spec:
+      containers:
+      - name: edge-appliance-operator
+        image: edge-appliance-operator

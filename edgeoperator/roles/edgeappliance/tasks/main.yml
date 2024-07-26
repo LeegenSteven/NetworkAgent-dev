@@ -3,9 +3,9 @@
   debug: 
     msg: name of the edge virtual machine CR = {{ edgemachine}}
 
-# get the CR for the vm
+# get the Object for the vm
 # get the ip address for the VM
-# create a dynamic host
+# create a dynamic host with the IP address
 - name: Add a host alias that we reach through a tunnel (Ansible 1.9 and older)
   ansible.builtin.add_host:
     hostname: '{{ new_ip }}'

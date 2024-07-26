@@ -15,10 +15,16 @@ spec:
         external: ubuntu-os-cloud/ubuntu-2204-lts
   networkInterface:
     - subnetworkRef:
-        name: site1-dev
+        name: mgmt-subnet
+    - subnetworkRef:
+        name: site2-dev
+    - subnetworkRef:
+        name: site2-prod
+    - subnetworkRef:
+        name: site2-external
       accessConfig:
         - natIpRef:
-            name: edge-ip
+            name: edge2-ip
   canIpForward: true
   metadataStartupScript: sudo apt-get update; sudo apt-get install -yq build-essential python3-pip
   metadata:
@@ -30,7 +36,7 @@ spec:
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeAddress
 metadata:
-  name: edge-ip
+  name: edge2-ip
 spec:
   addressType: EXTERNAL
   description: external address

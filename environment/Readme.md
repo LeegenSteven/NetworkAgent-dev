@@ -1,19 +1,22 @@
 # Setup GCP Environment
 
+## Setup gcloud on your laptop
+
 ```
 gcloud init --no-launch-browser
 ```
 
 ## GCP Project(s)
 
+TBD - create projects and service accounts etc
 
 ## GKE Automation Platform
 
-Create Mgmt network
+First, create a __mgmt__ VPC to attach GKE and the edge appliances to. 
 
 ```
 gcloud compute networks create mgmt --subnet-mode=auto 
-gcloud compute networks subnets create mgmt-subnet --network=mgmt --range=10.100.0.0/24 --region=europe-west2
+gcloud compute networks subnets create mgmt-subnet --network=mgmt --range=10.0.100.0/24 --region=europe-west2
 ```
 
 Create GKE Cluster and install kubectl
@@ -36,7 +39,6 @@ Install kubectl and get cluster credentials
 ```
 gcloud components install kubectl
 gcloud container clusters get-credentials networkautomation --region=europe-west2-a
-kubectl get namespaces
 ```
 
 Attach service account to config connector
@@ -48,7 +50,7 @@ free5gc-vm@free5gc-384814.iam.gserviceaccount.com \
     --role="roles/iam.workloadIdentityUser"
 ```
 
-Specify the project to create resources in
+Specify the GKE namespace and project for Config Connector to create resources in
 
 ```
 kubectl create namespace automation
@@ -57,11 +59,9 @@ kubectl config set-context --current --namespace automation
 kubectl apply -f configconnector.yaml
 ```
 
-Check the config connector is running
-
 ## Create Demo VPC Networks
 
-Create the VPCs and Subnets for the demo
+Create the Base VPCs, Subnets and dummy IT apps for the demo.
 
 ```
 kubectl apply -f demo-networks.yaml

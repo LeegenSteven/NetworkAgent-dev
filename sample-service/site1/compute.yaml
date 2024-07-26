@@ -3,7 +3,7 @@ kind: ComputeInstance
 metadata:
   annotations:
     cnrm.cloud.google.com/allow-stopping-for-update: "true"
-  name: edge
+  name: edge1
 spec:
   machineType: e2-medium
   zone: europe-west2-a
@@ -15,10 +15,16 @@ spec:
         external: ubuntu-os-cloud/ubuntu-2204-lts
   networkInterface:
     - subnetworkRef:
+        name: mgmt-subnet
+    - subnetworkRef:
         name: site1-dev
+    - subnetworkRef:
+        name: site1-prod
+    - subnetworkRef:
+        name: site1-external
       accessConfig:
         - natIpRef:
-            name: edge-ip
+            name: edge1-ip
   canIpForward: true
   metadataStartupScript: sudo apt-get update; sudo apt-get install -yq build-essential python3-pip
   metadata:
@@ -30,7 +36,7 @@ spec:
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeAddress
 metadata:
-  name: edge-ip
+  name: edge1-ip
 spec:
   addressType: EXTERNAL
   description: external address

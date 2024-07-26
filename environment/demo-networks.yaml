@@ -77,3 +77,105 @@ metadata:
 spec:
   routingMode: REGIONAL
   autoCreateSubnetworks: false
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeFirewall
+metadata:
+  name: site1-ssh-allow
+spec:
+  allow:
+    - protocol: tcp
+      ports:
+       - "22"
+  networkRef:
+    name: site1
+  direction: INGRESS
+  sourceRanges:
+    - 0.0.0.0/0
+  targetTags:
+    - ssh
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeFirewall
+metadata:
+  name: mgmt-ssh-allow
+spec:
+  allow:
+    - protocol: tcp
+      ports:
+       - "22"
+  networkRef:
+    name: mgmt
+  direction: INGRESS
+  sourceRanges:
+    - 0.0.0.0/0
+  targetTags:
+    - ssh
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeFirewall
+metadata:
+  name: site2-ssh-allow
+spec:
+  allow:
+    - protocol: tcp
+      ports:
+       - "22"
+  networkRef:
+    name: site2
+  direction: INGRESS
+  sourceRanges:
+    - 0.0.0.0/0
+  targetTags:
+    - ssh
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeFirewall
+metadata:
+  name: site3-ssh-allow
+spec:
+  allow:
+    - protocol: tcp
+      ports:
+       - "22"
+  networkRef:
+    name: site3
+  direction: INGRESS
+  sourceRanges:
+    - 0.0.0.0/0
+  targetTags:
+    - ssh
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeFirewall
+metadata:
+  name: site1-iperf
+spec:
+  allow:
+    - protocol: tcp
+      ports:
+       - "5000"
+  networkRef:
+    name: site1
+  direction: INGRESS
+  sourceRanges:
+    - 0.0.0.0/0
+  targetTags:
+    - iperf
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeFirewall
+metadata:
+  name: site2-iperf
+spec:
+  allow:
+    - protocol: tcp
+      ports:
+       - "5000"
+  networkRef:
+    name: site2
+  direction: INGRESS
+  sourceRanges:
+    - 0.0.0.0/0
+  targetTags:
+    - iperf

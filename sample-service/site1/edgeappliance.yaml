@@ -1,0 +1,13 @@
+apiVersion: network.example.com/v1
+kind: EdgeAppliance
+metadata:
+  labels:
+    app.kubernetes.io/name: edgeappliance
+    app.kubernetes.io/instance: edgeappliance-sample
+    app.kubernetes.io/part-of: operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: operator
+  name: edgeappliance-sample
+spec:
+  edgemachine: edge1
+  

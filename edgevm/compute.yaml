@@ -15,7 +15,7 @@ spec:
         external: ubuntu-os-cloud/ubuntu-2204-lts
   networkInterface:
     - subnetworkRef:
-        name: site1-dev-internal
+        name: site1-dev
       accessConfig:
         - natIpRef:
             name: edge-ip

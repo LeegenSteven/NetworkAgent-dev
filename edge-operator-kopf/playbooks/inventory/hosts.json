@@ -1,1 +1,0 @@
-{"all": {"hosts": {"edgevm": {"ansible_host": "10.0.100.16", "ansible_user": "admin_briannaughton_altostrat_co", "ansible_connection": "ssh", "ansible_ssh_private_key_file": "google-compute"}}}}

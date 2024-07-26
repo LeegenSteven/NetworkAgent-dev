@@ -11,20 +11,22 @@ logger = logging.getLogger(__name__)
 
 class Events:
     def __init__(self):
-        self.mgmt_ip=None
+        self.external_ip_name=None
+        self.external_ip_address=None
 
-    def get_vm_details_event_handler(self, data):
-        # logger.info("event caught for get vm details")
+    def get_vm_event_handler(self, data):
         if 'event' in data and data['event']=='runner_on_ok':
-            # pp=pprint.PrettyPrinter(indent=4)
-            # pp.pprint(data['event_data']['res']['resources'][0]['spec']['networkInterface'])
             interfaces = data['event_data']['res']['resources'][0]['spec']['networkInterface']
             for int in interfaces:
-                if 'mgmt' in int['networkRef']['external']:
-                    mgmt_ip=int['networkIpRef']['external']
-                    logger.info("found mgmt_ip %s", mgmt_ip)
-                    self.mgmt_ip=mgmt_ip
+                if 'accessConfig' in int:
+                    self.external_ip_name=int['accessConfig'][0]['natIpRef']['name']
+                    logger.info("found external_ip_name %s", self.external_ip_name)
                     break
+
+    def get_address_event_handler(self, data):
+        if 'event' in data and data['event']=='runner_on_ok':
+            self.external_ip_address = data['event_data']['res']['resources'][0]['spec']['address']
+            logger.info("found external ip address %s", self.external_ip_address)
 
 @kopf.on.create('edgeappliances')
 def create_fn(spec, name, namespace, logger, **kwargs):
@@ -40,23 +42,45 @@ def create_fn(spec, name, namespace, logger, **kwargs):
     pdir = cwd+"/playbooks"
     logger.info("path = %s", pdir)
 
-    r = ansible_runner.run(private_data_dir=pdir, playbook='getvmdetails.yaml', event_handler=events.get_vm_details_event_handler)
+    # find the VM and get the name of the external computeaddress
+    extravars = {'edge_vm_name': edgevm}
+    r = ansible_runner.run(private_data_dir=pdir, 
+                           playbook='getvm.yaml',
+                           extravars=extravars,
+                           event_handler=events.get_vm_event_handler)
+
     logger.info("status = %s", r.status)
-    logger.info("status = %s", r.stdout)
+    if r.status != 'successful':
+        raise kopf.TemporaryError("Ansible Error.", delay=15)
+    if events.external_ip_name is None:
+        raise kopf.TemporaryError("No Edge VM found", delay=15)
 
-    logger.info("running playbook on edgevm = %s", edgevm)
+    # get the public ip address of the VM on the computeaddress object
+    extravars = {'edge_ip_name': events.external_ip_name}
+    r = ansible_runner.run(private_data_dir=pdir, 
+                           playbook='getaddress.yaml', 
+                           extravars=extravars,
+                           event_handler=events.get_address_event_handler)
 
+    logger.info("status = %s", r.status)
+    if r.status != 'successful':
+        raise kopf.TemporaryError("Ansible Error.", delay=15)
+    if events.external_ip_address is None:
+        raise kopf.TemporaryError("No Edge External IP address found", delay=15)
+
+    logger.info("about to run playbook on edgevm = %s", edgevm)
     hosts = {
         'hosts': {
             'edgevm': {
-                'ansible_host': events.mgmt_ip,
+                'ansible_host': events.external_ip_address,
                 'ansible_user': 'admin_briannaughton_altostrat_co',
                 'ansible_connection': 'ssh',
                 'ansible_ssh_private_key_file': 'google-compute'
             }
         }
     }
-    logger.info(hosts)
-    r = ansible_runner.run(inventory={'all': hosts}, private_data_dir=pdir, playbook='install.yaml')#, event_handler=my_event_handler)
+    r = ansible_runner.run(inventory={'all': hosts}, private_data_dir=pdir, playbook='setup.yaml')
+    if r.status != 'successful':
+        raise kopf.TemporaryError("Ansible Error.", delay=15)
 
 # https://gist.github.com/privateip/879683a0172415c408fb2afb82a97511

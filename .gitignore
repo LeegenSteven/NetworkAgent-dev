@@ -1,4 +1,6 @@
-*/playbooks/artifacts
+**/playbooks/artifacts
+**/playbooks/extravars
+**/playbooks/inventory
 **/__pycache__
 .venv
 launch.json

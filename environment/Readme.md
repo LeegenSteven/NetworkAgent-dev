@@ -15,8 +15,10 @@ TBD - create projects and service accounts etc
 First, create a __mgmt__ VPC to attach GKE and the edge appliances to. 
 
 ```
-gcloud compute networks create mgmt --subnet-mode=auto 
+gcloud compute networks create mgmt --subnet-mode=custom
 gcloud compute networks subnets create mgmt-subnet --network=mgmt --range=10.0.100.0/24 --region=europe-west2
+gcloud compute firewall-rules create mgmt-fw --network mgmt --allow tcp,udp,icmp --source-ranges 0.0.0.0/0
+gcloud compute firewall-rules update mgmt-fw --allow tcp:22,tcp:3389,icmp
 ```
 
 Create GKE Cluster and install kubectl
@@ -31,7 +33,8 @@ gcloud container clusters create networkautomation \
     --zone europe-west2-a\
     --node-locations europe-west2-a \
     --num-nodes 4 \
-    --network mgmt 
+    --network mgmt \
+    --subnetwork mgmt-subnet
 ```
 
 Install kubectl and get cluster credentials

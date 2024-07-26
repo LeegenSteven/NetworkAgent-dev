@@ -17,8 +17,8 @@ First, create a __mgmt__ VPC to attach GKE and the edge appliances to.
 ```
 gcloud compute networks create mgmt --subnet-mode=custom
 gcloud compute networks subnets create mgmt-subnet --network=mgmt --range=10.0.100.0/24 --region=europe-west2
-gcloud compute firewall-rules create mgmt-fw --network mgmt --allow tcp:22,tcp:3389,tcp:53,tcp:443,icmp --direction INGRESS --source-ranges 0.0.0.0/0
-gcloud compute firewall-rules update mgmt-fw --allow udp:53 --direction EGRESS
+gcloud compute firewall-rules create mgmt-ingress --network mgmt --allow tcp:22,tcp:3389,tcp:53,tcp:443,icmp --direction INGRESS --source-ranges 0.0.0.0/0
+gcloud compute firewall-rules create mgmt-egress --network mgmt --allow udp:53 --direction EGRESS
 ```
 
 Create GKE Cluster and install kubectl
@@ -32,7 +32,7 @@ gcloud container clusters create networkautomation \
     --monitoring SYSTEM \
     --zone europe-west2-a\
     --node-locations europe-west2-a \
-    --num-nodes 2 \
+    --num-nodes 4 \
     --network mgmt \
     --subnetwork mgmt-subnet
 ```

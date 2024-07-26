@@ -5,7 +5,7 @@ metadata:
     cnrm.cloud.google.com/allow-stopping-for-update: "true"
   name: site1-dev-app
 spec:
-  machineType: e2-medium
+  machineType: e2-micro
   zone: europe-west2-a
   bootDisk:
     initializeParams:
@@ -32,7 +32,7 @@ metadata:
     cnrm.cloud.google.com/allow-stopping-for-update: "true"
   name: site1-prod-app
 spec:
-  machineType: e2-medium
+  machineType: e2-micro
   zone: europe-west2-a
   bootDisk:
     initializeParams:
@@ -59,7 +59,7 @@ metadata:
     cnrm.cloud.google.com/allow-stopping-for-update: "true"
   name: site2-dev-app
 spec:
-  machineType: e2-medium
+  machineType: e2-micro
   zone: europe-west2-a
   bootDisk:
     initializeParams:
@@ -86,7 +86,7 @@ metadata:
     cnrm.cloud.google.com/allow-stopping-for-update: "true"
   name: site2-prod-app
 spec:
-  machineType: e2-medium
+  machineType: e2-micro
   zone: europe-west2-a
   bootDisk:
     initializeParams:

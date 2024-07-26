@@ -10,4 +10,7 @@ metadata:
   name: edgeappliance-sample
 spec:
   edgemachine: edge1
-  
+  vpn:
+    type: ipsec
+    edges:
+      - edge2

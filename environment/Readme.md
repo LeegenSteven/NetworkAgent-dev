@@ -17,8 +17,8 @@ First, create a __mgmt__ VPC to attach GKE and the edge appliances to.
 ```
 gcloud compute networks create mgmt --subnet-mode=custom
 gcloud compute networks subnets create mgmt-subnet --network=mgmt --range=10.0.100.0/24 --region=europe-west2
-gcloud compute firewall-rules create mgmt-fw --network mgmt --allow tcp,udp,icmp --source-ranges 0.0.0.0/0
-gcloud compute firewall-rules update mgmt-fw --allow tcp:22,tcp:3389,icmp
+gcloud compute firewall-rules create mgmt-fw --network mgmt --allow tcp:22,tcp:3389,tcp:53,tcp:443,icmp --direction INGRESS --source-ranges 0.0.0.0/0
+gcloud compute firewall-rules update mgmt-fw --allow udp:53 --direction EGRESS
 ```
 
 Create GKE Cluster and install kubectl
@@ -32,7 +32,7 @@ gcloud container clusters create networkautomation \
     --monitoring SYSTEM \
     --zone europe-west2-a\
     --node-locations europe-west2-a \
-    --num-nodes 4 \
+    --num-nodes 2 \
     --network mgmt \
     --subnetwork mgmt-subnet
 ```
@@ -68,11 +68,16 @@ Verify the config connector installation
 kubectl wait -n cnrm-system --for=condition=Ready pod --all
 ```
 
+## Setup config sync
+
+[setup manually](https://cloud.google.com/kubernetes-engine/enterprise/config-sync/docs/how-to/installing-kubectl#deploying)
+
 ## Create Demo VPC Networks
 
 Create the Base VPCs, Subnets and dummy IT apps for the demo.
 
 ```
 kubectl apply -f demo-networks.yaml
-kubectl apply -f apps.yaml
+kubectl apply -f dummy-apps.yaml
 ```
+

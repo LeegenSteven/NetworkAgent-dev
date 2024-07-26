@@ -1,5 +1,10 @@
 # NetworkAgent
 
+Demonstrate orchestration of the simple service below. 
+
+![simple service](drawings/simple-service.drawio.svg)
+
+
 To run the demo, do the following:
 
 * [Setup GCP environment](environment/Readme.md)

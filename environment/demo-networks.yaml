@@ -2,29 +2,29 @@
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeSubnetwork
 metadata:
-  name: site1-dev
+  name: site1-dev-internal
 spec:
   ipCidrRange: 10.10.0.0/24
   region: europe-west2
   description: Site1 Dev Network
   networkRef:
-    name: site1
+    name: site1-internal
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeSubnetwork
 metadata:
-  name: site1-prod
+  name: site1-prod-internal
 spec:
   ipCidrRange: 10.11.0.0/24
   region: europe-west2
   description: Site1 Prod Network
   networkRef:
-    name: site1
+    name: site1-internal
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeNetwork
 metadata:
-  name: site1
+  name: site1-internal
 spec:
   routingMode: REGIONAL
   autoCreateSubnetworks: false
@@ -32,48 +32,29 @@ spec:
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeSubnetwork
 metadata:
-  name: site2-dev
+  name: site2-dev-internal
 spec:
   ipCidrRange: 10.20.0.0/24
   region: europe-west2
   description: site2-dev
   networkRef:
-    name: site2
+    name: site2-internal
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeSubnetwork
 metadata:
-  name: site2-prod
+  name: site2-prod-internal
 spec:
   ipCidrRange: 10.21.0.0/24
   region: europe-west2
   description: site2-prod
   networkRef:
-    name: site2
+    name: site2-internal
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeNetwork
 metadata:
-  name: site2
-spec:
-  routingMode: REGIONAL
-  autoCreateSubnetworks: false
----
-apiVersion: compute.cnrm.cloud.google.com/v1beta1
-kind: ComputeSubnetwork
-metadata:
-  name: site3-prod
-spec:
-  ipCidrRange: 10.50.0.0/24
-  region: europe-west2
-  description: site3-prod
-  networkRef:
-    name: site3
----
-apiVersion: compute.cnrm.cloud.google.com/v1beta1
-kind: ComputeNetwork
-metadata:
-  name: site3
+  name: site2-internal
 spec:
   routingMode: REGIONAL
   autoCreateSubnetworks: false
@@ -81,14 +62,14 @@ spec:
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeFirewall
 metadata:
-  name: site1-ssh-allow
+  name: site1-internal-ssh-allow
 spec:
   allow:
     - protocol: tcp
       ports:
        - "22"
   networkRef:
-    name: site1
+    name: site1-internal
   direction: INGRESS
   sourceRanges:
     - 0.0.0.0/0
@@ -105,7 +86,7 @@ spec:
       ports:
        - "22"
   networkRef:
-    name: mgmt
+    external: https://www.googleapis.com/compute/v1/projects/free5gc-384814/global/networks/mgmt
   direction: INGRESS
   sourceRanges:
     - 0.0.0.0/0
@@ -115,31 +96,14 @@ spec:
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeFirewall
 metadata:
-  name: site2-ssh-allow
+  name: site2-internal-ssh-allow
 spec:
   allow:
     - protocol: tcp
       ports:
        - "22"
   networkRef:
-    name: site2
-  direction: INGRESS
-  sourceRanges:
-    - 0.0.0.0/0
-  targetTags:
-    - ssh
----
-apiVersion: compute.cnrm.cloud.google.com/v1beta1
-kind: ComputeFirewall
-metadata:
-  name: site3-ssh-allow
-spec:
-  allow:
-    - protocol: tcp
-      ports:
-       - "22"
-  networkRef:
-    name: site3
+    name: site2-internal
   direction: INGRESS
   sourceRanges:
     - 0.0.0.0/0
@@ -156,7 +120,7 @@ spec:
       ports:
        - "5000"
   networkRef:
-    name: site1
+    name: site1-internal
   direction: INGRESS
   sourceRanges:
     - 0.0.0.0/0
@@ -173,7 +137,7 @@ spec:
       ports:
        - "5000"
   networkRef:
-    name: site2
+    name: site2-internal
   direction: INGRESS
   sourceRanges:
     - 0.0.0.0/0

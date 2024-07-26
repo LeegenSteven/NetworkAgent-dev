@@ -62,6 +62,12 @@ kubectl config set-context --current --namespace automation
 kubectl apply -f configconnector.yaml
 ```
 
+Verify the config connector installation
+
+```
+kubectl wait -n cnrm-system --for=condition=Ready pod --all
+```
+
 ## Create Demo VPC Networks
 
 Create the Base VPCs, Subnets and dummy IT apps for the demo.

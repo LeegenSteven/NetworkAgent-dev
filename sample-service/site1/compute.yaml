@@ -5,7 +5,7 @@ metadata:
     cnrm.cloud.google.com/allow-stopping-for-update: "true"
   name: edge1
 spec:
-  machineType: e2-medium
+  machineType: e2-highcpu-4
   zone: europe-west2-a
   bootDisk:
     initializeParams:
@@ -15,13 +15,13 @@ spec:
         external: ubuntu-os-cloud/ubuntu-2204-lts
   networkInterface:
     - subnetworkRef:
-        name: mgmt-subnet
+        external: https://www.googleapis.com/compute/v1/projects/free5gc-384814/regions/europe-west2/subnetworks/mgmt-subnet
     - subnetworkRef:
-        name: site1-dev
+        name: site1-dev-internal
     - subnetworkRef:
-        name: site1-prod
+        name: site1-prod-internal
     - subnetworkRef:
-        name: site1-external
+        name: site1-external-subnet
       accessConfig:
         - natIpRef:
             name: edge1-ip

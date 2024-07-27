@@ -14,4 +14,5 @@ To run the demo, do the following:
 
 * [Setup GCP environment](environment/Readme.md)
 * [Deploy the VyOS Edge Appliance Operator](edge-operator-kopf/Readme.md)
-* [Deploy a simple connectivity service](sample-service/Readme.md)
+* [Test a simple connectivity service](sample-service/Readme.md)
+* [Run the Network Agent](agent/Readme.md)

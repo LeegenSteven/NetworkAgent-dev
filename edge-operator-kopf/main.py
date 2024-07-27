@@ -2,7 +2,6 @@ import kopf
 import logging
 import ansible_runner
 import os
-import pprint
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
@@ -29,7 +28,7 @@ class Events:
             logger.info("found external ip address %s", self.external_ip_address)
 
 @kopf.on.create('edgeappliances')
-def create_fn(spec, name, namespace, logger, **kwargs):
+def create_edge_appliances(spec, name, namespace, logger, **kwargs):
     logger.info(f"A handler is called with spec: {spec}")
 
     events=Events()
@@ -86,7 +85,7 @@ def create_fn(spec, name, namespace, logger, **kwargs):
     return {'edgestatus': 'running'}
 
 @kopf.on.update('edgeappliances')
-def update_fn(spec, name, namespace, logger, **kwargs):
+def update_edge_appliances(spec, name, namespace, logger, **kwargs):
     logger.info("update called")
 
 # https://gist.github.com/privateip/879683a0172415c408fb2afb82a97511

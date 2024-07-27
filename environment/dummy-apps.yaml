@@ -17,7 +17,7 @@ spec:
     - subnetworkRef:
         name: site1-dev
   canIpForward: true
-  metadataStartupScript: sudo apt-get update; sudo apt-get install -yq python3-pip iperf
+  metadataStartupScript: "sudo apt-get update; sudo apt-get install -yq python3-pip iperf"
   metadata:
     - key: ssh-keys
       value: admin_briannaughton_altostrat_co:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN57YanONs2q/Eor4Tjv1NRhBGrB59vPFAMZbvlOVtkX briannaughton
@@ -44,7 +44,7 @@ spec:
     - subnetworkRef:
         name: site1-prod
   canIpForward: true
-  metadataStartupScript: sudo apt-get update; sudo apt-get install -yq python3-pip iperf
+  metadataStartupScript: "sudo apt-get update; sudo apt-get install -yq python3-pip iperf"
   metadata:
     - key: ssh-keys
       value: admin_briannaughton_altostrat_co:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN57YanONs2q/Eor4Tjv1NRhBGrB59vPFAMZbvlOVtkX briannaughton
@@ -71,7 +71,7 @@ spec:
     - subnetworkRef:
         name: site2-dev
   canIpForward: true
-  metadataStartupScript: sudo apt-get update; sudo apt-get install -yq python3-pip iperf
+  metadataStartupScript: "sudo apt-get update; sudo apt-get install -yq python3-pip iperf"
   metadata:
     - key: ssh-keys
       value: admin_briannaughton_altostrat_co:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN57YanONs2q/Eor4Tjv1NRhBGrB59vPFAMZbvlOVtkX briannaughton
@@ -98,7 +98,7 @@ spec:
     - subnetworkRef:
         name: site2-prod
   canIpForward: true
-  metadataStartupScript: sudo apt-get update; sudo apt-get install -yq python3-pip iperf
+  metadataStartupScript: "sudo apt-get update; sudo apt-get install -yq python3-pip iperf"
   metadata:
     - key: ssh-keys
       value: admin_briannaughton_altostrat_co:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN57YanONs2q/Eor4Tjv1NRhBGrB59vPFAMZbvlOVtkX briannaughton

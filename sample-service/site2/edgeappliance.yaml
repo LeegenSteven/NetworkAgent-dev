@@ -10,7 +10,15 @@ metadata:
   name: edgeappliance-sample
 spec:
   edgemachine: edge2
-  vpn:
+  service:
     type: ipsec
-    edges:
-      - edge2
+    name: test-vpn
+    secret: some-secret
+    sourceSubnets:
+      - site2-dev
+      - site2-prod
+    targetSubnets:
+      - site1-dev
+      - site1-prod
+    peerEdge:
+      - edge1

@@ -83,4 +83,10 @@ def create_fn(spec, name, namespace, logger, **kwargs):
     if r.status != 'successful':
         raise kopf.TemporaryError("Ansible Error.", delay=15)
 
+    return {'edgestatus': 'running'}
+
+@kopf.on.update('edgeappliances')
+def update_fn(spec, name, namespace, logger, **kwargs):
+    logger.info("update called")
+
 # https://gist.github.com/privateip/879683a0172415c408fb2afb82a97511

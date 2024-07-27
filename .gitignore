@@ -3,4 +3,5 @@
 **/playbooks/inventory
 **/__pycache__
 .venv
+.vscode
 launch.json

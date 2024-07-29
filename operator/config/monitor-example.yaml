@@ -1,0 +1,7 @@
+apiVersion: google.dev/v1
+kind: Monitor
+metadata:
+  name: brian
+spec:
+  service: edge1
+  

@@ -1,0 +1,7 @@
+apiVersion: google.dev/v1
+kind: VPNService
+metadata:
+  name: brians-service
+spec:
+  edgevm: edge1
+  

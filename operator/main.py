@@ -78,6 +78,7 @@ def create_edge_appliances(spec, name, namespace, logger, **kwargs):
             }
         }
     }
+    
     r = ansible_runner.run(inventory={'all': hosts}, private_data_dir=pdir, playbook='setup.yaml')
     if r.status != 'successful':
         raise kopf.TemporaryError("Ansible Error.", delay=15)
@@ -87,5 +88,11 @@ def create_edge_appliances(spec, name, namespace, logger, **kwargs):
 @kopf.on.update('edgeappliances')
 def update_edge_appliances(spec, name, namespace, logger, **kwargs):
     logger.info("update called")
+
+
+@kopf.on.delete('edgeappliances')
+def delete_edge_appliances(spec, **_):
+    logger.info("delete called")
+
 
 # https://gist.github.com/privateip/879683a0172415c408fb2afb82a97511

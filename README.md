@@ -1,6 +1,9 @@
-# NetworkAgent
+# Network Agent Demonstration
 
-Demonstrate the orchestration of a simple Multi Cloud VPN service using Cloud Native orchestration techniques in GCP. 
+The Network Agent is an interactive AI service that helps Cloud Architects easily create and manage Enterprise connectivity services. The network agent demo shows the following:
+
+* Cloud native orchestration of an Enterprise connectivity service, deploying a set of virtual routers on GCP to connect IT applications across locations.
+* Natural language chat interface to auto-design and update Enterprise connectivity services.
 
 The initial service is a simple VPN connecting VPCs over an IPSEC tunnel. A pair of VyOS router VMs are connected to a set of VPCs and to the Internet. An IPSec tunnel is configured between the VyOS routers and appropriate routing tables updated in the VPCs to connect to route traffic. 
 

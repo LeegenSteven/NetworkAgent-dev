@@ -1,6 +1,7 @@
 **/playbooks/artifacts
 **/playbooks/extravars
 **/playbooks/inventory
+**/playbooks/env
 **/__pycache__
 .venv
 .vscode

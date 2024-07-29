@@ -28,8 +28,11 @@
         recreate: yes
         image: vyos:1.5
         privileged: yes
+        capabilities:
+         - audit_write
+         - audit_control
         command: /sbin/init
         network_mode: host
-        volumes:
-          - /lib/modules:/lib/modules
+        # volumes:
+        #   - /lib/modules:/lib/modules
 

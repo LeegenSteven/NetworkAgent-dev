@@ -1,0 +1,72 @@
+    - name: add docker key
+      become: yes
+      apt_key: 
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+    
+    - name: add repo
+      become: yes
+      apt_repository: 
+        repo: deb https://download.docker.com/linux/ubuntu focal stable
+        state: present
+
+    - name: install docker-ce
+      become: yes
+      apt:
+        pkg:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: latest
+        update_cache: true
+
+    - name: make vyos dir
+      become: yes
+      ansible.builtin.file:
+        path: /opt/vyos
+        state: directory
+        mode: '0777'
+    
+    - name: get vyos iso
+      become: yes
+      ansible.builtin.get_url:
+        url: https://github.com/vyos/vyos-rolling-nightly-builds/releases/download/1.5-rolling-202407171706/vyos-1.5-rolling-202407171706-amd64.iso
+        dest: /opt/vyos/vyos-1.5-amd64.iso
+        mode: '0777'
+
+    - name: make rootfs dir
+      become: yes
+      ansible.builtin.file:
+        path: /opt/vyos/rootfs
+        state: directory
+        mode: '0777'
+
+    - name: make squashfs dir
+      become: yes
+      ansible.builtin.file:
+        path: /opt/vyos/unsquashfs
+        state: directory
+        mode: '0777'
+
+    - name: mount iso
+      become: yes
+      command: mount -o loop /opt/vyos/vyos-1.5-amd64.iso /opt/vyos/rootfs
+
+    - name: get tools
+      become: yes
+      apt:
+        pkg:
+          - squashfs-tools
+        state: latest
+
+    - name: unsquash
+      become: yes
+      command: unsquashfs -f -d /opt/vyos/unsquashfs/ /opt/vyos/rootfs/live/filesystem.squashfs
+
+    - name: build image
+      become: yes
+      raw: tar -C /opt/vyos/unsquashfs -c . | docker import - vyos:1.5
+    
+    - name: unmount
+      become: yes
+      command: umount /opt/vyos/rootfs

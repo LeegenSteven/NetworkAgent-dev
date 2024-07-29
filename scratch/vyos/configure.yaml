@@ -1,0 +1,8 @@
+- hosts: edge
+  gather_facts: false
+  tasks:
+    - name: show config
+      become: yes
+      community.docker.docker_container_exec:
+        container: vyos
+        command: /bin/bash -c "su - vyos && show configuration"

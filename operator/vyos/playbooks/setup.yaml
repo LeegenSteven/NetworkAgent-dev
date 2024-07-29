@@ -1,6 +1,5 @@
 - hosts: edgevm
   tasks:
-
     - name: check if vyos exists
       ansible.builtin.stat:
         path: /opt/vyos

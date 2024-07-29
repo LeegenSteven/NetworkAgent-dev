@@ -5,7 +5,8 @@ metadata:
 spec:
   edgevm: edge1
   service:
-    type: ipsec
+    type: tunnel
+    vendor: openvpn
     name: test-vpn
     secret: some-secret
     sourceSubnets:

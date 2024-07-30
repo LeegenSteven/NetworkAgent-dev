@@ -3,10 +3,9 @@ kind: EdgeAppliance
 metadata:
   name: edgeappliance-sample
 spec:
-  edgevm: edge1
   service:
-    type: tunnel
-    vendor: openvpn
+    type: mesh
+    vendor: wireguard
     name: test-vpn
     secret: some-secret
     sourceSubnets:
@@ -15,5 +14,6 @@ spec:
     targetSubnets:
       - site2-dev
       - site2-prod
-    peerEdge:
+    peers:
+      - edge1
       - edge2

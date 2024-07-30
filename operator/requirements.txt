@@ -2,3 +2,5 @@ kopf
 kubernetes
 ansible
 ansible-runner
+jmespath
+netaddr

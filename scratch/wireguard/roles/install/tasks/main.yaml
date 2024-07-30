@@ -1,0 +1,40 @@
+- name: install wireguard
+  become: yes
+  ansible.builtin.apt:
+    name: wireguard
+    state: present
+
+- name: set ip forwarding
+  become: yes
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    sysctl_set: true
+    reload: true
+
+# - name: generate keys
+#   become: yes
+#   raw: "wg genkey | tee privatekey | wg pubkey > publickey"
+#   args:
+#     chdir: /etc/wireguard
+
+# - name: get public key
+#   become: yes
+#   slurp:
+#     src: '/etc/wireguard/publickey'
+#   register: publicKey
+
+# - debug:
+#     var: publicKey
+
+# - name: get private key
+#   become: yes
+#   slurp:
+#     src: '/etc/wireguard/privatekey'
+#   register: privateKey
+
+- name: generate server config
+  become: yes
+  template:
+    src: server.conf
+    dest: /etc/wireguard/wg0.conf

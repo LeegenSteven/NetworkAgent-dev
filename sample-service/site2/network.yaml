@@ -21,17 +21,16 @@ spec:
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeFirewall
 metadata:
-  name: site2-external-ipsec
+  name: site2-external-wg
 spec:
   allow:
     - protocol: udp
       ports:
-       - "500"
-       - "4500"
+       - "5180"
   networkRef:
     name: site2-external
   direction: INGRESS
   sourceRanges:
     - 0.0.0.0/0
   targetTags:
-    - ipsec
+    - wireguard

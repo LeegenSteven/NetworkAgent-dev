@@ -20,6 +20,9 @@ pip install -r requirements.txt
 kopf run main.py --verbose
 ```
 
+
+https://www.procustodibus.com/blog/2022/06/multi-hop-wireguard/
+
 ## References
 
 

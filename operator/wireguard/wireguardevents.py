@@ -2,53 +2,11 @@ import kopf
 import ansible_runner
 import os
 import logging
+from wireguard.utils.discover import WireguardEvents
+
+# https://wireguard.how/server/google-cloud-platform/
 
 logger = logging.getLogger(__name__)
-
-class WireguardEvents:
-    def __init__(self):
-        self.external_ip_name = None
-        self.external_ip_address = None
-        self.vm_k8s_object = None
-        self.vm_ansible_facts = None
-        self.interface_cidr = None
-        self.peer_ip_name = None
-        self.peer_ip = None
-
-    def get_vm_event_handler(self, data):
-        if 'event' in data and data['event']=='runner_on_ok':
-            self.vm_k8s_object = data['event_data']['res']['resources'][0]['spec']
-            # get the external ip address of the vm    
-            interfaces = data['event_data']['res']['resources'][0]['spec']['networkInterface']
-            for int in interfaces:
-                if 'accessConfig' in int:
-                    if self.external_ip_name is None:
-                        self.external_ip_name=int['accessConfig'][0]['natIpRef']['name']
-                        logger.info("found external_ip_name %s", self.external_ip_name)
-                    else:
-                        self.peer_ip_name = int['accessConfig'][0]['natIpRef']['name']
-                        logger.info("found peer_ip_name %s", self.peer_ip_name)
-                    break
-
-    def get_address_event_handler(self, data):
-        if 'event' in data and data['event']=='runner_on_ok':
-            if self.external_ip_address is None:
-                self.external_ip_address = data['event_data']['res']['resources'][0]['spec']['address']
-                logger.info("found external ip address %s", self.external_ip_address)
-            else:
-                self.peer_ip_address = data['event_data']['res']['resources'][0]['spec']['address']            
-                logger.info("found peer ip address %s", self.peer_ip_address)
-
-    def get_vm_facts_handler(self, data):
-        if 'event' in data and data['event']=='runner_on_ok':
-            self.vm_ansible_facts = data['event_data']['res']['ansible_facts']
-            logger.info("got vm facts")
-
-    def get_interface_event_handler(self, data):
-        if 'event' in data and data['event']=='runner_on_ok':
-            logger.info("interface discover complete")
-            self.interface_cidr = data['event_data']['res']['resources'][0]['spec']['ipCidrRange']
-            logger.info("found interface cidr %s", self.interface_cidr)
 
 @kopf.on.create('wireguardappliance')
 def create_wireguard_instance(spec, name, namespace, logger, **kwargs):
@@ -154,12 +112,13 @@ def create_wireguard_instance(spec, name, namespace, logger, **kwargs):
         raise kopf.TemporaryError("No Edge External IP address found", delay=15)
     extravars = {
         'tunnel_address': spec.get('tunnelAddress'),
-        'default_interface': 'ens4' , 
+        'default_interface': 'ens5' , 
         'interface_cidr' : events.interface_cidr,
         'peer_name': spec.get('peer'),
         'peer_ip_address' : events.peer_ip_address
     }
-    # Install and configure
+
+    # Install and configure wireguard
     hosts = {
         'hosts': {
             spec.get('vmname'): {
@@ -180,7 +139,7 @@ def create_wireguard_instance(spec, name, namespace, logger, **kwargs):
     if r.status != 'successful':
         raise kopf.TemporaryError("Ansible Error.", delay=15)
 
-    return {"status": "ok"}
+    return {"status": "running"}
 
 @kopf.on.update('wireguardappliance')
 def update_wireguard_instance(spec, name, namespace, logger, **kwargs):

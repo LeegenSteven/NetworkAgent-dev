@@ -20,9 +20,9 @@ spec:
         - natIpRef:
             name: edge1-ip
     - subnetworkRef:
-        external: https://www.googleapis.com/compute/v1/projects/free5gc-384814/regions/europe-west2/subnetworks/mgmt-subnet
-    - subnetworkRef:
         name: site1-dev
+    - subnetworkRef:
+        external: https://www.googleapis.com/compute/v1/projects/free5gc-384814/regions/europe-west2/subnetworks/mgmt-subnet
   canIpForward: true
   metadataStartupScript: "sudo apt-get update; sudo apt-get install -yq build-essential python3-pip"
   metadata:

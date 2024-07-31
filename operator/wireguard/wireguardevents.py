@@ -11,6 +11,9 @@ class WireguardEvents:
         self.external_ip_address = None
         self.vm_k8s_object = None
         self.vm_ansible_facts = None
+        self.interface_cidr = None
+        self.peer_ip_name = None
+        self.peer_ip = None
 
     def get_vm_event_handler(self, data):
         if 'event' in data and data['event']=='runner_on_ok':
@@ -19,30 +22,36 @@ class WireguardEvents:
             interfaces = data['event_data']['res']['resources'][0]['spec']['networkInterface']
             for int in interfaces:
                 if 'accessConfig' in int:
-                    self.external_ip_name=int['accessConfig'][0]['natIpRef']['name']
-                    logger.info("found external_ip_name %s", self.external_ip_name)
+                    if self.external_ip_name is None:
+                        self.external_ip_name=int['accessConfig'][0]['natIpRef']['name']
+                        logger.info("found external_ip_name %s", self.external_ip_name)
+                    else:
+                        self.peer_ip_name = int['accessConfig'][0]['natIpRef']['name']
+                        logger.info("found peer_ip_name %s", self.peer_ip_name)
                     break
 
     def get_address_event_handler(self, data):
         if 'event' in data and data['event']=='runner_on_ok':
-            self.external_ip_address = data['event_data']['res']['resources'][0]['spec']['address']
-            logger.info("found external ip address %s", self.external_ip_address)
+            if self.external_ip_address is None:
+                self.external_ip_address = data['event_data']['res']['resources'][0]['spec']['address']
+                logger.info("found external ip address %s", self.external_ip_address)
+            else:
+                self.peer_ip_address = data['event_data']['res']['resources'][0]['spec']['address']            
+                logger.info("found peer ip address %s", self.peer_ip_address)
 
     def get_vm_facts_handler(self, data):
-        logger.info(data)
+        if 'event' in data and data['event']=='runner_on_ok':
+            self.vm_ansible_facts = data['event_data']['res']['ansible_facts']
+            logger.info("got vm facts")
 
     def get_interface_event_handler(self, data):
         if 'event' in data and data['event']=='runner_on_ok':
             logger.info("interface discover complete")
-            logger.info(data)
-
-    def get_peer_event_handler(self, data):
-        if 'event' in data and data['event']=='runner_on_ok':
-            logger.info("peer discover complete")
-            logger.info(data)
+            self.interface_cidr = data['event_data']['res']['resources'][0]['spec']['ipCidrRange']
+            logger.info("found interface cidr %s", self.interface_cidr)
 
 @kopf.on.create('wireguardappliance')
-def create_edge_appliances(spec, name, namespace, logger, **kwargs):
+def create_wireguard_instance(spec, name, namespace, logger, **kwargs):
     logger.info(f"A handler is called with spec: {spec}")
 
     events=WireguardEvents()
@@ -88,7 +97,8 @@ def create_edge_appliances(spec, name, namespace, logger, **kwargs):
                 'ansible_host': events.external_ip_address,
                 'ansible_user': 'admin_briannaughton_altostrat_co',
                 'ansible_connection': 'ssh',
-                'ansible_ssh_private_key_file': 'google-compute'
+                'ansible_ssh_private_key_file': 'google-compute',
+                'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'
             }
         }
     }
@@ -98,46 +108,85 @@ def create_edge_appliances(spec, name, namespace, logger, **kwargs):
                            extravars=extravars,
                            event_handler=events.get_vm_facts_handler)
 
-    # logger.info("status = %s", r.status)
-    # if r.status != 'successful':
-    #     raise kopf.TemporaryError("Ansible Error.", delay=15)
-    # if events.vm_k8s_object is None:
-    #     raise kopf.TemporaryError("No Wireguard VM found", delay=15)
+    logger.info("status = %s", r.status)
+    if r.status != 'successful':
+        raise kopf.TemporaryError("Ansible Error.", delay=15)
+    if events.vm_ansible_facts is None:
+        raise kopf.TemporaryError("No VM facts", delay=15)
 
+    # find the interface facts
+    extravars = {'interface': spec.get('interface')}
+    r = ansible_runner.run(private_data_dir=pdir, 
+                           playbook='interfaceinfo.yaml',
+                           extravars=extravars,
+                           event_handler=events.get_interface_event_handler)
 
-    # # find the interface facts
-    # extravars = {'interface': spec.get('interface')}
-    # r = ansible_runner.run(private_data_dir=pdir, 
-    #                        playbook='interfaceinfo.yaml',
-    #                        extravars=extravars,
-    #                        event_handler=events.get_interface_event_handler)
+    logger.info("status = %s", r.status)
+    if r.status != 'successful':
+        raise kopf.TemporaryError("Ansible Error.", delay=15)
+    if events.interface_cidr is None:
+        raise kopf.TemporaryError("No Interface found", delay=15)
 
-    # logger.info("status = %s", r.status)
-    # if r.status != 'successful':
-    #     raise kopf.TemporaryError("Ansible Error.", delay=15)
-    # # if events.interface_facts is None or events.vm_k8s_object is None:
-    # #     raise kopf.TemporaryError("No Interface found", delay=15)
+    # find the peer k8s object
+    extravars = {'vmname': spec.get('peer')}
+    r = ansible_runner.run(private_data_dir=pdir,
+                           playbook='vminfo.yaml',
+                           extravars=extravars,
+                           event_handler=events.get_vm_event_handler)
 
-    # # find the peer facts
-    # extravars = {'peer': spec.get('peer')}
-    # r = ansible_runner.run(private_data_dir=pdir,
-    #                        playbook='peerinfo.yaml',
-    #                        extravars=extravars,
-    #                        event_handler=events.get_peer_event_handler)
+    logger.info("status = %s", r.status)
+    if r.status != 'successful':
+        raise kopf.TemporaryError("Ansible Error.", delay=15)
+    if events.peer_ip_name is None or events.vm_k8s_object is None:
+        raise kopf.TemporaryError("No peer found", delay=15)
 
-    # logger.info("status = %s", r.status)
-    # if r.status != 'successful':
-    #     raise kopf.TemporaryError("Ansible Error.", delay=15)
-    # # if events.interface_facts is None or events.vm_k8s_object is None:
-    # #     raise kopf.TemporaryError("No Interface found", delay=15)
+    # get the public ip address of the VM on the computeaddress object
+    extravars = {'edge_ip_name': events.peer_ip_name}
+    r = ansible_runner.run(private_data_dir=pdir, 
+                           playbook='getaddress.yaml', 
+                           extravars=extravars,
+                           event_handler=events.get_address_event_handler)
+
+    logger.info("status = %s", r.status)
+    if r.status != 'successful':
+        raise kopf.TemporaryError("Ansible Error.", delay=15)
+    if events.peer_ip_address is None:
+        raise kopf.TemporaryError("No Edge External IP address found", delay=15)
+    extravars = {
+        'tunnel_address': spec.get('tunnelAddress'),
+        'default_interface': 'ens4' , 
+        'interface_cidr' : events.interface_cidr,
+        'peer_name': spec.get('peer'),
+        'peer_ip_address' : events.peer_ip_address
+    }
+    # Install and configure
+    hosts = {
+        'hosts': {
+            spec.get('vmname'): {
+                'ansible_host': events.external_ip_address,
+                'ansible_user': 'admin_briannaughton_altostrat_co',
+                'ansible_connection': 'ssh',
+                'ansible_ssh_private_key_file': 'google-compute',
+                'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'
+            }
+        }
+    }
+    r = ansible_runner.run(private_data_dir=pdir, 
+                           inventory={'all': hosts},
+                           playbook='install.yaml',
+                           extravars=extravars)
+
+    logger.info("status = %s", r.status)
+    if r.status != 'successful':
+        raise kopf.TemporaryError("Ansible Error.", delay=15)
 
     return {"status": "ok"}
 
 @kopf.on.update('wireguardappliance')
-def update_edge_appliances(spec, name, namespace, logger, **kwargs):
+def update_wireguard_instance(spec, name, namespace, logger, **kwargs):
     logger.info("update called")
 
 
 @kopf.on.delete('wireguardappliance')
-def delete_edge_appliances(spec, **_):
+def delete_wireguard_instances(spec, **_):
     logger.info("delete called")

@@ -1,0 +1,9 @@
+- hosts: edges
+  tasks:
+    - name: Get Subnetwork Interface Instance
+      kubernetes.core.k8s_info:
+        api_version: compute.cnrm.cloud.google.com/v1beta1
+        kind: ComputeSubnetwork
+        name: '{{ interface }}'
+        namespace: automation
+

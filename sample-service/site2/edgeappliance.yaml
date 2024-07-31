@@ -1,24 +1,10 @@
-apiVersion: network.example.com/v1
-kind: EdgeAppliance
+apiVersion: google.dev/v1
+kind: WireguardAppliance
 metadata:
-  labels:
-    app.kubernetes.io/name: edgeappliance
-    app.kubernetes.io/instance: edgeappliance-sample
-    app.kubernetes.io/part-of: operator
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/created-by: operator
-  name: edgeappliance-sample
+  name: wg2
 spec:
-  edgemachine: edge2
-  service:
-    type: ipsec
-    name: test-vpn
-    secret: some-secret
-    sourceSubnets:
-      - site2-dev
-      - site2-prod
-    targetSubnets:
-      - site1-dev
-      - site1-prod
-    peerEdge:
-      - edge1
+  vmname: edge2
+  tunnelSubnet: 192.168.11.0/24
+  tunnelAddress: 192.168.11.1
+  interface: site2-dev
+  peer: edge1

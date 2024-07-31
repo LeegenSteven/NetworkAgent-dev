@@ -9,12 +9,9 @@ metadata:
     app.kubernetes.io/created-by: operator
   name: vpnservice-sample
 spec:
-  type: ipsec
+  type: wireguard
   name: test-vpn
-  secret: some-secret
   sourceSubnets:
     - site1-dev
-    - site1-prod
   targetSubnets:
     - site2-dev
-    - site2-prod

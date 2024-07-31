@@ -1,19 +1,10 @@
 apiVersion: google.dev/v1
-kind: EdgeAppliance
+kind: WireguardAppliance
 metadata:
-  name: edgeappliance-sample
+  name: wg1
 spec:
-  service:
-    type: mesh
-    vendor: wireguard
-    name: test-vpn
-    secret: some-secret
-    sourceSubnets:
-      - site1-dev
-      - site1-prod
-    targetSubnets:
-      - site2-dev
-      - site2-prod
-    peers:
-      - edge1
-      - edge2
+  vmname: edge1
+  tunnelSubnet: 192.168.1.0/24
+  tunnelAddress: 192.168.1.1
+  interface: site1-dev
+  peer: edge2

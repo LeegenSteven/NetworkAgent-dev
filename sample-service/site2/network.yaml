@@ -1,5 +1,13 @@
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeNetwork
+metadata:
+  name: site2-external
+spec:
+  routingMode: REGIONAL
+  autoCreateSubnetworks: false
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeSubnetwork
 metadata:
   name: site2-external
@@ -11,12 +19,25 @@ spec:
     name: site2-external
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
-kind: ComputeNetwork
+kind: ComputeRouter
 metadata:
-  name: site2-external
+  name: site2-external-router
 spec:
-  routingMode: REGIONAL
-  autoCreateSubnetworks: false
+  description: site1 external router
+  region: europe-west2
+  networkRef:
+    name: site2-external
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeRouterNAT
+metadata:
+  name: 'site2-external-nat'
+spec:
+  region: europe-west2
+  routerRef:
+    name: site2-external-router
+  natIpAllocateOption: AUTO_ONLY
+  sourceSubnetworkIpRangesToNat: ALL_SUBNETWORKS_ALL_IP_RANGES
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeFirewall
@@ -34,3 +55,20 @@ spec:
     - 0.0.0.0/0
   targetTags:
     - wireguard
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeFirewall
+metadata:
+  name: site2-external-ssh
+spec:
+  allow:
+    - protocol: tcp
+      ports:
+       - "22"
+  networkRef:
+    name: site2-external
+  direction: INGRESS
+  sourceRanges:
+    - 0.0.0.0/0
+  targetTags:
+    - ssh

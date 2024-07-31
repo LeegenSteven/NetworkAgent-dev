@@ -1,5 +1,13 @@
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeNetwork
+metadata:
+  name: site1-external
+spec:
+  routingMode: REGIONAL
+  autoCreateSubnetworks: false
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeSubnetwork
 metadata:
   name: site1-external
@@ -9,14 +17,6 @@ spec:
   description: Site1 External Network
   networkRef:
     name: site1-external
----
-apiVersion: compute.cnrm.cloud.google.com/v1beta1
-kind: ComputeNetwork
-metadata:
-  name: site1-external
-spec:
-  routingMode: REGIONAL
-  autoCreateSubnetworks: false
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeRouter

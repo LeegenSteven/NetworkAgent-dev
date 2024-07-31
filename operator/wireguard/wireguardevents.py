@@ -3,13 +3,15 @@ import ansible_runner
 import os
 import logging
 from wireguard.utils.discover import WireguardEvents
+import asyncio
 
 # https://wireguard.how/server/google-cloud-platform/
+# https://ubuntu.com/server/docs/wireguard-vpn-site-to-site
 
 logger = logging.getLogger(__name__)
 
 @kopf.on.create('wireguardappliance')
-def create_wireguard_instance(spec, name, namespace, logger, **kwargs):
+async def create_wireguard_instance(spec, name, namespace, logger, **kwargs):
     logger.info(f"A handler is called with spec: {spec}")
 
     events=WireguardEvents()
@@ -24,7 +26,7 @@ def create_wireguard_instance(spec, name, namespace, logger, **kwargs):
 
     # find the VM k8s object
     extravars = {'vmname': vmname}
-    r = ansible_runner.run(private_data_dir=pdir, 
+    r = ansible_runner.run(private_data_dir=pdir,
                            playbook='vminfo.yaml',
                            extravars=extravars,
                            event_handler=events.get_vm_event_handler)
@@ -48,32 +50,32 @@ def create_wireguard_instance(spec, name, namespace, logger, **kwargs):
     if events.external_ip_address is None:
         raise kopf.TemporaryError("No Edge External IP address found", delay=15)
 
-    # find the VM ansible facts
-    hosts = {
-        'hosts': {
-            'edgevm': {
-                'ansible_host': events.external_ip_address,
-                'ansible_user': 'admin_briannaughton_altostrat_co',
-                'ansible_connection': 'ssh',
-                'ansible_ssh_private_key_file': 'google-compute',
-                'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'
-            }
-        }
-    }
-    r = ansible_runner.run(private_data_dir=pdir, 
-                           inventory={'all': hosts},
-                           playbook='vmfacts.yaml',
-                           extravars=extravars,
-                           event_handler=events.get_vm_facts_handler)
+    # # find the VM ansible facts
+    # hosts = {
+    #     'hosts': {
+    #         'edgevm': {
+    #             'ansible_host': events.external_ip_address,
+    #             'ansible_user': 'admin_briannaughton_altostrat_co',
+    #             'ansible_connection': 'ssh',
+    #             'ansible_ssh_private_key_file': 'google-compute',
+    #             'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'
+    #         }
+    #     }
+    # }
+    # r = ansible_runner.run(private_data_dir=pdir, 
+    #                        inventory={'all': hosts},
+    #                        playbook='vmfacts.yaml',
+    #                        extravars=extravars,
+    #                        event_handler=events.get_vm_facts_handler)
 
-    logger.info("status = %s", r.status)
-    if r.status != 'successful':
-        raise kopf.TemporaryError("Ansible Error.", delay=15)
-    if events.vm_ansible_facts is None:
-        raise kopf.TemporaryError("No VM facts", delay=15)
+    # logger.info("status = %s", r.status)
+    # if r.status != 'successful':
+    #     raise kopf.TemporaryError("Ansible Error.", delay=15)
+    # if events.vm_ansible_facts is None:
+    #     raise kopf.TemporaryError("No VM facts", delay=15)
 
-    # find the interface facts
-    extravars = {'interface': spec.get('interface')}
+    # find the allowed interface
+    extravars = {'interface': spec.get('allowedInterface')}
     r = ansible_runner.run(private_data_dir=pdir, 
                            playbook='interfaceinfo.yaml',
                            extravars=extravars,
@@ -110,8 +112,10 @@ def create_wireguard_instance(spec, name, namespace, logger, **kwargs):
         raise kopf.TemporaryError("Ansible Error.", delay=15)
     if events.peer_ip_address is None:
         raise kopf.TemporaryError("No Edge External IP address found", delay=15)
+
     extravars = {
         'tunnel_address': spec.get('tunnelAddress'),
+        'tunnel_cidr': spec.get('tunnelSubnet'),
         'default_interface': 'ens5' , 
         'interface_cidr' : events.interface_cidr,
         'peer_name': spec.get('peer'),
@@ -130,6 +134,8 @@ def create_wireguard_instance(spec, name, namespace, logger, **kwargs):
             }
         }
     }
+    logger.info(hosts)
+    logger.info(extravars)
     r = ansible_runner.run(private_data_dir=pdir, 
                            inventory={'all': hosts},
                            playbook='install.yaml',

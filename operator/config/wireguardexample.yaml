@@ -6,7 +6,7 @@ spec:
   vmname: edge1
   tunnelSubnet: 192.168.1.0/24
   tunnelAddress: 192.168.1.1
-  interface: site1-dev
+  allowedInterface: site2-dev
   peer: edge2
 ---
 apiVersion: google.dev/v1
@@ -15,7 +15,7 @@ metadata:
   name: wg2
 spec:
   vmname: edge2
-  tunnelSubnet: 192.168.10.0/24
-  tunnelAddress: 192.168.10.1
-  interface: site2-dev
+  tunnelSubnet: 192.168.1.0/24
+  tunnelAddress: 192.168.1.2
+  allowedInterface: site1-dev
   peer: edge1

@@ -1,3 +1,6 @@
+- debug:
+    var: inventory_hostname
+
 - name: install wireguard
   become: yes
   ansible.builtin.apt:

@@ -47,7 +47,7 @@ spec:
   allow:
     - protocol: udp
       ports:
-       - "5180"
+       - "51820"
   networkRef:
     name: site2-external
   direction: INGRESS

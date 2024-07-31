@@ -1,0 +1,4 @@
+- hosts: edgevm
+  gather_facts: false
+  tasks:
+    - setup:

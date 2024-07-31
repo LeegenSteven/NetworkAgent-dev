@@ -13,32 +13,32 @@ kind: ComputeSubnetwork
 metadata:
   name: site1-dev
 spec:
-  ipCidrRange: 10.10.0.0/24
+  ipCidrRange: 10.0.10.0/24
   region: europe-west2
   description: Site1 Dev Network
   networkRef:
     name: site1-dev
----
-apiVersion: compute.cnrm.cloud.google.com/v1beta1
-kind: ComputeRouter
-metadata:
-  name: site1-dev-router
-spec:
-  description: site1 router
-  region: europe-west2
-  networkRef:
-    name: site1-dev
----
-apiVersion: compute.cnrm.cloud.google.com/v1beta1
-kind: ComputeRouterNAT
-metadata:
-  name: computerouternat-sample-forallsubnets
-spec:
-  region: europe-west2
-  routerRef:
-    name: site1-dev-router
-  natIpAllocateOption: AUTO_ONLY
-  sourceSubnetworkIpRangesToNat: ALL_SUBNETWORKS_ALL_IP_RANGES
+# ---
+# apiVersion: compute.cnrm.cloud.google.com/v1beta1
+# kind: ComputeRouter
+# metadata:
+#   name: site1-dev-router
+# spec:
+#   description: site1 router
+#   region: europe-west2
+#   networkRef:
+#     name: site1-dev
+# ---
+# apiVersion: compute.cnrm.cloud.google.com/v1beta1
+# kind: ComputeRouterNAT
+# metadata:
+#   name: computerouternat-sample-forallsubnets
+# spec:
+#   region: europe-west2
+#   routerRef:
+#     name: site1-dev-router
+#   natIpAllocateOption: AUTO_ONLY
+#   sourceSubnetworkIpRangesToNat: ALL_SUBNETWORKS_ALL_IP_RANGES
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeFirewall
@@ -89,38 +89,38 @@ kind: ComputeSubnetwork
 metadata:
   name: site1-prod
 spec:
-  ipCidrRange: 10.11.0.0/24
+  ipCidrRange: 10.0.11.0/24
   region: europe-west2
   description: Site1 Prod Network
   networkRef:
     name: site1-prod
----
-apiVersion: compute.cnrm.cloud.google.com/v1beta1
-kind: ComputeFirewall
-metadata:
-  name: site1-prod-ssh-allow
-spec:
-  allow:
-    - protocol: tcp
-      ports:
-       - "22"
-  networkRef:
-    name: site1-prod
-  direction: INGRESS
-  sourceRanges:
-    - 0.0.0.0/0
-  targetTags:
-    - ssh
----
-apiVersion: compute.cnrm.cloud.google.com/v1beta1
-kind: ComputeRouter
-metadata:
-  name: site1-prod-router
-spec:
-  description: site1 router
-  region: europe-west2
-  networkRef:
-    name: site1-prod
+# ---
+# apiVersion: compute.cnrm.cloud.google.com/v1beta1
+# kind: ComputeFirewall
+# metadata:
+#   name: site1-prod-ssh-allow
+# spec:
+#   allow:
+#     - protocol: tcp
+#       ports:
+#        - "22"
+#   networkRef:
+#     name: site1-prod
+#   direction: INGRESS
+#   sourceRanges:
+#     - 0.0.0.0/0
+#   targetTags:
+#     - ssh
+# ---
+# apiVersion: compute.cnrm.cloud.google.com/v1beta1
+# kind: ComputeRouter
+# metadata:
+#   name: site1-prod-router
+# spec:
+#   description: site1 router
+#   region: europe-west2
+#   networkRef:
+#     name: site1-prod
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeRouterNAT
@@ -165,32 +165,32 @@ kind: ComputeSubnetwork
 metadata:
   name: site2-dev
 spec:
-  ipCidrRange: 10.20.0.0/24
+  ipCidrRange: 10.0.20.0/24
   region: europe-west2
   description: site2-dev
   networkRef:
     name: site2-dev
----
-apiVersion: compute.cnrm.cloud.google.com/v1beta1
-kind: ComputeRouter
-metadata:
-  name: site2-dev-router
-spec:
-  description: site2 router
-  region: europe-west2
-  networkRef:
-    name: site2-dev
----
-apiVersion: compute.cnrm.cloud.google.com/v1beta1
-kind: ComputeRouterNAT
-metadata:
-  name: site2-dev-nat
-spec:
-  region: europe-west2
-  routerRef:
-    name: site2-dev-router
-  natIpAllocateOption: AUTO_ONLY
-  sourceSubnetworkIpRangesToNat: ALL_SUBNETWORKS_ALL_IP_RANGES
+# ---
+# apiVersion: compute.cnrm.cloud.google.com/v1beta1
+# kind: ComputeRouter
+# metadata:
+#   name: site2-dev-router
+# spec:
+#   description: site2 router
+#   region: europe-west2
+#   networkRef:
+#     name: site2-dev
+# ---
+# apiVersion: compute.cnrm.cloud.google.com/v1beta1
+# kind: ComputeRouterNAT
+# metadata:
+#   name: site2-dev-nat
+# spec:
+#   region: europe-west2
+#   routerRef:
+#     name: site2-dev-router
+#   natIpAllocateOption: AUTO_ONLY
+#   sourceSubnetworkIpRangesToNat: ALL_SUBNETWORKS_ALL_IP_RANGES
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeFirewall
@@ -241,32 +241,32 @@ kind: ComputeSubnetwork
 metadata:
   name: site2-prod
 spec:
-  ipCidrRange: 10.21.0.0/24
+  ipCidrRange: 10.0.21.0/24
   region: europe-west2
   description: site2-prod
   networkRef:
     name: site2-prod
 ---
-apiVersion: compute.cnrm.cloud.google.com/v1beta1
-kind: ComputeRouter
-metadata:
-  name: site2-prod-router
-spec:
-  description: site2 prod router
-  region: europe-west2
-  networkRef:
-    name: site2-prod
----
-apiVersion: compute.cnrm.cloud.google.com/v1beta1
-kind: ComputeRouterNAT
-metadata:
-  name: site2-prod-nat
-spec:
-  region: europe-west2
-  routerRef:
-    name: site2-prod-router
-  natIpAllocateOption: AUTO_ONLY
-  sourceSubnetworkIpRangesToNat: ALL_SUBNETWORKS_ALL_IP_RANGES
+# apiVersion: compute.cnrm.cloud.google.com/v1beta1
+# kind: ComputeRouter
+# metadata:
+#   name: site2-prod-router
+# spec:
+#   description: site2 prod router
+#   region: europe-west2
+#   networkRef:
+#     name: site2-prod
+# ---
+# apiVersion: compute.cnrm.cloud.google.com/v1beta1
+# kind: ComputeRouterNAT
+# metadata:
+#   name: site2-prod-nat
+# spec:
+#   region: europe-west2
+#   routerRef:
+#     name: site2-prod-router
+#   natIpAllocateOption: AUTO_ONLY
+#   sourceSubnetworkIpRangesToNat: ALL_SUBNETWORKS_ALL_IP_RANGES
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeFirewall

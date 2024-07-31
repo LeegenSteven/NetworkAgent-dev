@@ -12,7 +12,7 @@ kind: ComputeSubnetwork
 metadata:
   name: site2-external
 spec:
-  ipCidrRange: 10.200.0.0/24
+  ipCidrRange: 10.0.60.0/24
   region: europe-west2
   description: Site2 External Network
   networkRef:

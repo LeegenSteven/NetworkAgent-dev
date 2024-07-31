@@ -1,4 +1,5 @@
-- hosts: edges
+- hosts: localhost
+  gather_facts: false
   tasks:
     - name: Get Wireguard VM Instance
       kubernetes.core.k8s_info:
@@ -6,3 +7,4 @@
         kind: ComputeInstance
         name: '{{ vmname }}'
         namespace: automation
+      

@@ -15,16 +15,14 @@ spec:
         external: ubuntu-os-cloud/ubuntu-2204-lts
   networkInterface:
     - subnetworkRef:
-        external: https://www.googleapis.com/compute/v1/projects/free5gc-384814/regions/europe-west2/subnetworks/mgmt-subnet
-    - subnetworkRef:
-        name: site2-dev
-    - subnetworkRef:
-        name: site2-prod
-    - subnetworkRef:
         name: site2-external
       accessConfig:
         - natIpRef:
             name: edge2-ip
+    - subnetworkRef:
+        external: https://www.googleapis.com/compute/v1/projects/free5gc-384814/regions/europe-west2/subnetworks/mgmt-subnet
+    - subnetworkRef:
+        name: site2-dev
   canIpForward: true
   metadataStartupScript: "sudo apt-get update; sudo apt-get install -yq build-essential python3-pip"
   metadata:

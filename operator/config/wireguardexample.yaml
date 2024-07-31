@@ -8,14 +8,14 @@ spec:
   tunnelAddress: 192.168.1.1
   interface: site1-dev
   peer: edge2
----
-apiVersion: google.dev/v1
-kind: WireguardAppliance
-metadata:
-  name: wg2
-spec:
-  vmname: edge2
-  tunnelSubnet: 192.168.10.0/24
-  tunnelAddress: 192.168.10.1
-  interface: site2-dev
-  peer: edge1
+# ---
+# apiVersion: google.dev/v1
+# kind: WireguardAppliance
+# metadata:
+#   name: wg2
+# spec:
+#   vmname: edge2
+#   tunnelSubnet: 192.168.10.0/24
+#   tunnelAddress: 192.168.10.1
+#   interface: site2-dev
+#   peer: edge1

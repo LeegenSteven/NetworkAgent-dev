@@ -1,3 +1,0 @@
-- hosts: edge
-  gather_facts: false
-  tasks:

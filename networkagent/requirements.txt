@@ -1,8 +1,7 @@
 langchain
 langchain-core
 langchain-community
-langchain-google-genai
-langchain-google-vertexai
+langchain-google-vertexai==1.0.8
 langgraph
 gradio
 kubernetes

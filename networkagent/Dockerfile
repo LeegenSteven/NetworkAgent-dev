@@ -6,6 +6,8 @@ RUN apt update && apt install -y python3-pip
 # ENV KUBECONFIG
 # ENV 
 
+# Add service credentials file also
+
 ADD . /
 RUN pip install -r requirements.txt
 

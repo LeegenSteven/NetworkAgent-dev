@@ -1,0 +1,6 @@
+aiohttp
+aiohttp_cors
+kubernetes
+google-cloud-container
+google-api-python-client
+ruamel.yaml

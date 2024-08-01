@@ -17,8 +17,7 @@ First, create a __mgmt__ VPC to attach GKE and the edge appliances to.
 ```
 gcloud compute networks create mgmt --subnet-mode=custom
 gcloud compute networks subnets create mgmt-subnet --network=mgmt --range=10.0.100.0/24 --region=europe-west2
-gcloud compute firewall-rules create mgmt-ingress --network mgmt --allow tcp:22,tcp:3389,tcp:53,tcp:443,icmp --direction INGRESS --source-ranges 0.0.0.0/0
-gcloud compute firewall-rules create mgmt-egress --network mgmt --allow udp:53 --direction EGRESS
+gcloud compute firewall-rules create mgmt-ingress --network mgmt --allow tcp:22,tcp:3389,tcp:443,icmp --direction INGRESS --source-ranges 0.0.0.0/0
 ```
 
 Create GKE Cluster and install kubectl
@@ -56,6 +55,7 @@ free5gc-vm@free5gc-384814.iam.gserviceaccount.com \
 Specify the GKE namespace and project for Config Connector to create resources in
 
 ```
+cd NetworkAgent/environment
 kubectl create namespace automation
 kubectl annotate namespace automation cnrm.cloud.google.com/project-id=free5gc-384814
 kubectl config set-context --current --namespace automation
@@ -77,6 +77,7 @@ kubectl wait -n cnrm-system --for=condition=Ready pod --all
 Create the Base VPCs, Subnets and dummy IT apps for the demo.
 
 ```
+cd NetworkAgent/environment
 kubectl apply -f demo-networks.yaml
 kubectl apply -f dummy-apps.yaml
 ```

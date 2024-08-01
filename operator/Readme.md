@@ -10,6 +10,12 @@ The operator is based on the [kopf](https://kopf.readthedocs.io/en/latest/) oper
 
 ## Build and deploy the Edge Network Appliance Operator
 
+To build and push the edge appliance operator image, run the following commands
+
+```
+cd NetworkAgent/operator
+gcloud builds submit --region=europe-west1 --tag europe-west1-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/edgeoperator:1.0
+```
 
 ## Running the operator locally on your laptop
 

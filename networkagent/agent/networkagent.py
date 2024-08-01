@@ -1,9 +1,10 @@
-from langchain_google_vertexai import ChatVertexAI
+from langchain_google_vertexai.chat_models import ChatVertexAI
 from langchain.callbacks.manager import CallbackManager
-from langchain.callbacks.streaming_stdout import StreamingStdCallbackHandler
-from langgraph import StateGraph, END
+from langchain_core.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
-from typing import TypedDict, Annotated
+from typing import TypedDict, Annotated, Literal
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables.config import RunnableConfig
@@ -24,18 +25,24 @@ class NetworkAgent:
         unsafe_tools=[]
         tools = safe_tools+unsafe_tools
 
-        llm = ChatVertexAI(model_name="gemini-1.5-pro-preview-0409", 
+        memory = SqliteSaver.from_conn_string(":memory:")
+
+        llm = ChatVertexAI(model_name="gemini-1.5-flash-001", 
                            temperature=0,
-                           credentials="",
-                           project="",
-                           callback_manager=CallbackManager([StreamingStdCallbackHandler()]))
+                        #    credentials="",
+                           max_tokens=None,
+                           max_retries=6,
+                           stop=None,
+                           project="free5gc-384814",
+                           location="europe-west2",
+                           callback_manager=CallbackManager([StreamingStdOutCallbackHandler()]))
 
         network_agent_prompt=ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
                     """
-                    You are a network engineering assistant. 
+                    You are a network engineering assistant. Be nice
 
                     """
                 )
@@ -56,10 +63,12 @@ class NetworkAgent:
             "agent",
             self.should_continue
         )
+
         self.networkAgentApp = networkGraph.compile(
-            interrupt_before=[
-                "unsafe_tools"
-            ]
+            # checkpointer=memory,
+            # interrupt_before=[
+            #     "unsafe_tools"
+            # ]
         )
 
     def should_continue(self, state: NetworkAgentState) -> Literal["__end__", "tools"]:
@@ -88,4 +97,5 @@ class NetworkAgent:
         logger.info("running network agent with question %s", question)
         config = {"configurable":{"thread_id": "1"}}
         inputs = {"messages": [HumanMessage(content=question)]}
-        await self.networkAgentApp.ainvoke(inputs, config)
+        response = await self.networkAgentApp.ainvoke(inputs, config)
+        return response

@@ -6,3 +6,4 @@
 .venv
 .vscode
 launch.json
+networkagent.json

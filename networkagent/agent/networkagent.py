@@ -10,7 +10,9 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.prebuilt import ToolNode
 from agent.tools import *
+import google.auth
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +22,9 @@ class NetworkAgentState(TypedDict):
 
 class NetworkAgent:
     def __init__(self):
+        logger.info("loading networkagent credentials from path = %s", os.getcwd())
+
+        credentials = google.auth.load_credentials_from_file(os.getcwd()+"/networkagent/networkagent.json")[0]
 
         safe_tools=[getServiceInfo]
         unsafe_tools=[]
@@ -29,7 +34,7 @@ class NetworkAgent:
 
         llm = ChatVertexAI(model_name="gemini-1.5-flash-001", 
                            temperature=0,
-                        #    credentials="",
+                           credentials=credentials,
                            max_tokens=None,
                            max_retries=6,
                            stop=None,

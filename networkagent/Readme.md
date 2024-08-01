@@ -5,7 +5,7 @@
 Install the [gcloud cli tools](https://cloud.google.com/sdk/gcloud). Then run the following comands in a terminal to configure your google project and target region.
 
 ```
-export GOOGLE_PROJECT=XXXXX
+export GOOGLE_PROJECT=free5gc-384814
 gcloud auth login --no-launch-browser
 gcloud config set project $GOOGLE_PROJECT
 gcloud config set compute/region "europe-west2"
@@ -14,10 +14,10 @@ gcloud config set compute/zone "europe-west2-b"
 
 ## Create service account credentials
 
-Need to create service account and add credentials to network agent
+Need to create service account and add credentials to network agent. Ensure __constraints/iam.disableServiceAccountKeyCreation__ is not enforced. 
 
 ```
-cd NetworkAgent/agent
+cd NetworkAgent/networkagent
 gcloud iam service-accounts create networkagent --description="Network Agent Service Account" --display-name="networkagent account"
 export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)"  --filter=name:"networkagent@"`
 gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/editor"

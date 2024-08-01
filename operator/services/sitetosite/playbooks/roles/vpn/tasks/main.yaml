@@ -1,0 +1,14 @@
+- name: Create vpn edge
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: google.dev/v1
+      kind: WireguardAppliance
+      metadata:
+        name: '{{vpnname}}'
+      spec:
+        vmname: '{{edgename}}'
+        tunnelSubnet: '{{tunnelsubnet}}'
+        tunnelAddress: '{{tunneladdress}}'
+        allowedInterface: '{{sitename}}-dev'
+        peer: '{{peername}}'

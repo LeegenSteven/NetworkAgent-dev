@@ -1,7 +1,7 @@
 FROM ubuntu:22.04
 
 RUN apt update
-RUN apt upgrade -y
+RUN apt upgrade -y && apt install -y python3 python3-pip
 RUN DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata
 
 RUN mkdir /app

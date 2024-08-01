@@ -3,9 +3,12 @@ kind: ConnectivityService
 metadata:
   name: vpnservice-sample
 spec:
-  type: wireguard
+  type: site-to-site
   name: test-vpn
-  sourceSubnets:
+  sites:
     - site1-dev
-  targetSubnets:
     - site2-dev
+  rules:
+    - protocol: tcp
+      ports:
+        - 80

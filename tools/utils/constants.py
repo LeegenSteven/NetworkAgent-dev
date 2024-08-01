@@ -1,4 +1,4 @@
-SERVICE_FILE_LOCATION="tools/tools.json"
+SERVICE_FILE_LOCATION="tools/tools.json" #os.getenv("SERVICE_LOCATION")
 PROJECT = "free5gc-384814" #os.getenv("PROJECT")
 ZONE = "europe-west2-a" #os.getenv("ZONE")
 CLUSTER = "networkautomation" #os.getenv("CLUSTER")

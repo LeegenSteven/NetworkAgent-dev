@@ -1,0 +1,16 @@
+- hosts: all
+  become: yes
+  gather_facts: no
+  tasks:
+
+    - name: Create site network
+      import_role:
+        name: network
+
+    - name: Create site compute
+      import_role:
+        name: compute
+
+    - name: Create site vpn
+      import_role:
+        name: vpn

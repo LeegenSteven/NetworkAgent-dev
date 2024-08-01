@@ -5,6 +5,7 @@ logging.basicConfig(level='INFO', format=log_format)
 
 logger = logging.getLogger(__name__)
 
+from services.servicesevents import *
 from resources.wireguard.wireguardevents import *
 
 @kopf.on.login()

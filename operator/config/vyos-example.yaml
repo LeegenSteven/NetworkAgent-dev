@@ -1,7 +1,0 @@
-apiVersion: google.dev/v1
-kind: EdgeAppliance
-metadata:
-  name: brian
-spec:
-  edgevm: edge1
-  

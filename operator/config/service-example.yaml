@@ -1,7 +1,14 @@
-apiVersion: google.dev/v1
-kind: VPNService
+apiVersion: network.example.com/v1
+kind: ConnectivityService
 metadata:
-  name: brians-service
+  name: vpnservice-sample
 spec:
-  edgevm: edge1
-  
+  type: site-to-site
+  name: test-vpn
+  sites:
+    - site1-dev
+    - site2-dev
+  rules:
+    - protocol: tcp
+      ports:
+        - 80

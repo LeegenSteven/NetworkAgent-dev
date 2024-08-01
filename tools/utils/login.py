@@ -17,9 +17,7 @@ def login():
   SERVER = cluster.endpoint
   CERT = cluster.master_auth.cluster_ca_certificate
 
-
-  # Create's a `kubectl` config
-  NAME="freddie" # arbitrary
+  NAME="networkautomation" # arbitrary
   CONFIG=f"""
   apiVersion: v1
   kind: Config

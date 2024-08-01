@@ -23,7 +23,15 @@ corsOptions={
 cors = aiohttp_cors.setup(app, defaults=corsOptions)
 
 async def getServices(request):
-    logger.info("Getting Service")
+    """
+    Query a customers connectivity services
+    Args:
+        - Customer name: 
+    Returns:
+        Service descriptions
+    """
+    
+    logger.info("Getting Service for customer %s", )
 
 
     # # get the resource and print out data

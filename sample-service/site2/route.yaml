@@ -1,0 +1,11 @@
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeRoute
+metadata:
+  name: site2-dev-route
+spec:
+  description: "A sample compute route"
+  destRange: 10.0.10.0/24
+  networkRef:
+    name: site2-dev-route
+  priority: 100
+  nextHopIp: 10.0.20.4

@@ -3,35 +3,63 @@
 The Network Agent is an interactive AI service that helps Cloud Architects easily create and manage Enterprise connectivity services. The network agent demo shows the following:
 
 * Cloud native orchestration of an Enterprise connectivity service, deploying a set of virtual routers on GCP to connect IT applications across locations.
-* Natural language chat interface to auto-design and update Enterprise connectivity services.
-
-The main components of the demo can be seen in the figure below. 
+* Natural language chat interface to discover, design and update Enterprise connectivity services.
 
 ![demo system](drawings/system.drawio.svg)
 
-The main functional components of the demo are as follows:
+The main components of the demo can be seen in the figure above. 
 
-* Chat Interface
-* Network Agent
-* Cloud Native Service Orchestration
-* Service Monitoring
+* __Chat Interface__: Multi modal chat interface to allow Cloud architects to use natural language and images to manage their network services
+* __Network Agent__: GenAI based agent that can run a set of tools to report and action changes on the network services
+* __Cloud Native Service Orchestration__: Kubernetes based orchestration of cloud and virtual network resources
+* __Service Monitoring__: Collection of edge appliance metrics for performance and fault monitoring. 
+
+## Network Services
+
+The demo supports edge appliance to be deployed in a number of service topologies, i.e. 
+
+* __Site to site__: connecting 2 sites together with a VPN tunnel
+* __Mesh__: connecting 3 or more sites in a full mesg
+* __Muti hop__: connecting 2 or more sites across a series of edge gateways
+
+The Network Agent is trained on the information needed to deploy each of these servies and also how to monitor their performance from the metrics captured. The sections below describe these network service in more detail.
+
+Note: Initially the network software used is based on opensource linux software, e.g. wireguard, iptables etc. In later iterations of the demo, 3rd party virtual firewalls/VPN will be "plugged" into the demo. 
 
 
-## Demo Network Service
+### Site to Site
 
-The initial service is a simple VPN connecting VPCs over an IPSEC tunnel. A pair of VyOS router VMs are connected to a set of VPCs and to the Internet. An IPSec tunnel is configured between the VyOS routers and appropriate routing tables updated in the VPCs to connect to route traffic. 
+This service connects private VPCs over a wireguard tunnel. A pair of virtual edge appliances are connected to a the private VPCs and to the Internet. A wireguard tunnel is configured between the edge appliances and static routes updated in the VPCs to route private traffic over the VPN tunnel.
 
-![Simple IP Sec Tunnel](drawings/vpnflow..drawio.svg)
+![Simple VPN Tunnel](drawings/vpnflow..drawio.svg)
+
+
+### Mesh (TBD)
+
+https://www.zenarmor.com/docs/network-security-tutorials/how-to-configure-wireguard-mesh-vpn
+
+### Multi Hop
+
+https://www.procustodibus.com/blog/2022/06/multi-hop-wireguard/
+
+## GCP Environment
 
 A single GCP environment is used to demonstrate the orchestration of all the Cloud moving parts from scratch needed to bring the connectivity service into an operational state. 
 
 ![Final environment](drawings/simple-service.drawio.svg)
 
+The figure above shows a GCP environment for a simple site to site service connecting IT applications across 4 private VPC locations. 
+
+Each demo environment will have the following:
+
+* __Customer VPCs__: The customer brings their own VPCs
+* __Mgmt VPC__: A management VPC with all orchestration and monitoring tools deployed. 
+* __Edge Appliance VPCs__: The VPCs created to host the edge virtual network appliances. 
+
 ## Running the demo
 
 To run the demo, do the following:
 
-* [Setup GCP environment](environment/Readme.md)
-* [Deploy the VyOS Edge Appliance Operator](operator/Readme.md)
+* [Setup base GCP environment](environment/Readme.md)
 * [Test a simple connectivity service](sample-service/Readme.md)
 * [Run the Network Agent](networkagent/Readme.md)

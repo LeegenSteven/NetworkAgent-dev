@@ -6,7 +6,7 @@ This kubernetes operator manages the lifecycle of the following components:
 * __VPNService__: Logical VPN service. 
 * __Monitor__: Observability of the end to end service and VyOS virtual machines. 
 
-The operator is based on the [kopf](https://kopf.readthedocs.io/en/latest/) operator framework and embeds [anisble playbooks](https://docs.ansible.com/) to configure VyOS components.
+The operator is based on the [kopf](https://kopf.readthedocs.io/en/latest/) operator framework and embeds [anisble playbooks](https://docs.ansible.com/) to configure virtual network components.
 
 ## Build and deploy the Edge Network Appliance Operator
 
@@ -20,10 +20,8 @@ pip install -r requirements.txt
 kopf run main.py --verbose
 ```
 
-
 https://www.procustodibus.com/blog/2022/06/multi-hop-wireguard/
 
 ## References
-
 
 * [ansible runner](https://ansible.readthedocs.io/projects/runner/en/latest/python_interface/)

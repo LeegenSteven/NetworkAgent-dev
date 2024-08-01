@@ -90,3 +90,8 @@ To allow orchestration operators to log into the network virtual machines we cre
 ssh-keygen -o -a 100 -t ed25519 -f google-compute -C briannaughton
 gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=free5gc-384814 --ttl=1d
 ```
+
+
+## Deploy the network edge operator
+
+...

@@ -2,7 +2,7 @@ import kopf
 import ansible_runner
 import os
 import logging
-from wireguard.utils.discover import WireguardEvents
+from resources.wireguard.utils.discover import WireguardEvents
 import asyncio
 
 # https://wireguard.how/server/google-cloud-platform/
@@ -21,7 +21,7 @@ async def create_wireguard_instance(spec, name, namespace, logger, **kwargs):
         raise kopf.PermanentError(f"edgevm must be set. Got {vmname!r}.")
 
     cwd = os.getcwd()
-    pdir = cwd+"/wireguard/playbooks"
+    pdir = cwd+"/resources/wireguard/playbooks"
     logger.info("path = %s", pdir)
 
     # find the VM k8s object

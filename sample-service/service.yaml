@@ -1,12 +1,6 @@
 apiVersion: network.example.com/v1
 kind: ConnectivityService
 metadata:
-  labels:
-    app.kubernetes.io/name: connectivityservice
-    app.kubernetes.io/instance: connectivityservice-sample
-    app.kubernetes.io/part-of: operator
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/created-by: operator
   name: vpnservice-sample
 spec:
   type: wireguard

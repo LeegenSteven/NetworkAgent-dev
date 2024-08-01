@@ -5,7 +5,11 @@ logging.basicConfig(level='INFO', format=log_format)
 
 logger = logging.getLogger(__name__)
 
-from wireguard.wireguardevents import *
+from resources.wireguard.wireguardevents import *
+
+@kopf.on.login()
+def login_fn(**kwargs):
+    return kopf.login_via_client(**kwargs)
 
 if __name__ == '__main__':
     logger.info("starting Network Agent")

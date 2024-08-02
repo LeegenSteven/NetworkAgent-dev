@@ -1,4 +1,4 @@
-apiVersion: network.example.com/v1
+apiVersion: google.dev/v1
 kind: ConnectivityService
 metadata:
   name: vpnservice-sample

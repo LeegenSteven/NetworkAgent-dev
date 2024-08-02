@@ -4,7 +4,7 @@ from aiohttp import web
 from aiohttp_swagger import *
 import aiohttp_cors
 from kubernetes import dynamic
-from kubernetes.client import api_client
+import os
 from kubernetes.dynamic.exceptions import ResourceNotFoundError
 from utils.login import *
 import utils.constants as constants
@@ -107,17 +107,19 @@ async def createService():
 # Start the server and load routes
 ######################################################################
 async def init():
-    logger.info('starting server on 0.0.0.0:'+constants.PORT)
+    logger.info('starting server on 0.0.0.0:'+str(os.environ.get("PORT", 8080)))
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner,host='0.0.0.0', port=constants.PORT, ssl_context=None)
+    site = web.TCPSite(runner,host='0.0.0.0', port=int(os.environ.get("PORT", 8080)), ssl_context=None)
     await site.start()
 
 def addRoutes():
     getLocationsRoute=app.router.add_get("/locations/{name}", getCustomerLocations)
     cors.add(getLocationsRoute, corsOptions)
+
     getServiceRoute=app.router.add_get("/services/{name}", getServices)
     cors.add(getServiceRoute, corsOptions)
+
     createServiceRoute=app.router.add_post("/service", createService)
     cors.add(createServiceRoute, corsOptions)
 

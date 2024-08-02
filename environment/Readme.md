@@ -97,6 +97,6 @@ gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=fre
 Create a docker repository to push our Pathway Gateway container image to.
 
 ```
-gcloud artifacts repositories create networkagent --repository-format=docker --location=europe-west1 --description="Network Agent Repository"
+gcloud artifacts repositories create networkagent --repository-format=docker --location=europe-west2 --description="Network Agent Repository"
 ```
 

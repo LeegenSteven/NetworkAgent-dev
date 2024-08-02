@@ -1,0 +1,9 @@
+SERVICE_FILE_LOCATION="tools.json"
+PROJECT = 'free5gc-384814'
+REGION = 'europe-west2'
+ZONE = 'europe-west2-a'
+CLUSTER = 'networkautomation'
+KUBECONFIG = None
+api_client = None
+v1_api_instance = None
+custom_api_instance = None

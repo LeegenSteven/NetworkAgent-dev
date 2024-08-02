@@ -8,6 +8,7 @@
         annotations:
           cnrm.cloud.google.com/allow-stopping-for-update: "true"
         name: '{{vmname}}'
+        namespace: automation
       spec:
         machineType: e2-highcpu-4
         zone: '{{zone}}'
@@ -19,14 +20,14 @@
               external: ubuntu-os-cloud/ubuntu-2204-lts
         networkInterface:
           - subnetworkRef:
-              name: '{{sitename}}-external'
+              name: '{{sitename}}'
             accessConfig:
               - natIpRef:
                   name: '{{vmname}}-ip'
           - subnetworkRef:
               name: '{{interface}}'
           - subnetworkRef:
-              external: 'https://www.googleapis.com/compute/v1/projects/{{project}}/regions/{{region}}/subnetworks/{{mgmtsubnet}}'
+              external: 'https://www.googleapis.com/compute/v1/projects/{{project}}/regions/{{region}}/subnetworks/{{mgmtsubnetname}}'
         canIpForward: true
         metadataStartupScript: "sudo apt-get update; sudo apt-get install -yq python3-pip"
         metadata:
@@ -43,6 +44,7 @@
       kind: ComputeAddress
       metadata:
         name: '{{vmname}}-ip'
+        namespace: automation
       spec:
         addressType: EXTERNAL
         description: external address

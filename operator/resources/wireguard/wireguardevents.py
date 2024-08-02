@@ -30,7 +30,6 @@ async def create_wireguard_instance(spec, name, namespace, logger, **kwargs):
                            playbook='vminfo.yaml',
                            extravars=extravars,
                            event_handler=events.get_vm_event_handler)
-
     logger.info("status = %s", r.status)
     if r.status != 'successful':
         raise kopf.TemporaryError("Ansible Error.", delay=15)

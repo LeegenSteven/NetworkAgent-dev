@@ -5,10 +5,11 @@
       apiVersion: google.dev/v1
       kind: WireguardAppliance
       metadata:
-        name: '{{vpnname}}'
+        name: '{{sitename}}'
+        namespace: automation
       spec:
-        vmname: '{{edgename}}'
+        vmname: '{{vmname}}'
         tunnelSubnet: '{{tunnelsubnet}}'
         tunnelAddress: '{{tunneladdress}}'
-        allowedInterface: '{{sitename}}-dev'
+        allowedInterface: '{{peerinterface}}'
         peer: '{{peername}}'

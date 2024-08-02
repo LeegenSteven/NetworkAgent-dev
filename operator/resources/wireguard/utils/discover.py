@@ -1,4 +1,6 @@
 import logging
+import kopf
+
 logger = logging.getLogger(__name__)
 
 class WireguardEvents:
@@ -13,18 +15,19 @@ class WireguardEvents:
 
     def get_vm_event_handler(self, data):
         if 'event' in data and data['event']=='runner_on_ok':
-            self.vm_k8s_object = data['event_data']['res']['resources'][0]['spec']
-            # get the external ip address of the vm    
-            interfaces = data['event_data']['res']['resources'][0]['spec']['networkInterface']
-            for int in interfaces:
-                if 'accessConfig' in int:
-                    if self.external_ip_name is None:
-                        self.external_ip_name=int['accessConfig'][0]['natIpRef']['name']
-                        logger.info("found external_ip_name %s", self.external_ip_name)
-                    else:
-                        self.peer_ip_name = int['accessConfig'][0]['natIpRef']['name']
-                        logger.info("found peer_ip_name %s", self.peer_ip_name)
-                    break
+            if len(data['event_data']['res']['resources']) > 0:
+                self.vm_k8s_object = data['event_data']['res']['resources'][0]['spec']
+                # get the external ip address of the vm    
+                interfaces = data['event_data']['res']['resources'][0]['spec']['networkInterface']
+                for int in interfaces:
+                    if 'accessConfig' in int:
+                        if self.external_ip_name is None:
+                            self.external_ip_name=int['accessConfig'][0]['natIpRef']['name']
+                            logger.info("found external_ip_name %s", self.external_ip_name)
+                        else:
+                            self.peer_ip_name = int['accessConfig'][0]['natIpRef']['name']
+                            logger.info("found peer_ip_name %s", self.peer_ip_name)
+                        break
 
     def get_address_event_handler(self, data):
         if 'event' in data and data['event']=='runner_on_ok':

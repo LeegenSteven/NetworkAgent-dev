@@ -13,8 +13,14 @@ The operator is based on the [kopf](https://kopf.readthedocs.io/en/latest/) oper
 To build and push the edge appliance operator image, run the following commands
 
 ```
-cd NetworkAgent/operator
-gcloud builds submit --region=europe-west1 --tag europe-west1-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/edgeoperator:1.0
+gcloud auth configure-docker europe-west2-docker.pkg.dev
+```
+
+To build locally and push, run the following commands from the __NetworkAgent/operator__ directory
+
+```
+docker build . -t europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networkoperator:latest
+docker push europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networkoperator:latest
 ```
 
 ## Running the operator locally on your laptop

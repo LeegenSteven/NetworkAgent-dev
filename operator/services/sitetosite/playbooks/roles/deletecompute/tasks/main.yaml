@@ -1,49 +1,14 @@
-- name: Create compute for site
+- name: delete compute for site
   kubernetes.core.k8s:
     state: absent
-    definition:
-      apiVersion: compute.cnrm.cloud.google.com/v1beta1
-      kind: ComputeInstance
-      metadata:
-        annotations:
-          cnrm.cloud.google.com/allow-stopping-for-update: "true"
-        name: '{{vmname}}'
-      spec:
-        machineType: e2-highcpu-4
-        zone: '{{zone}}'
-        bootDisk:
-          initializeParams:
-            size: 50
-            type: pd-ssd
-            sourceImageRef:
-              external: ubuntu-os-cloud/ubuntu-2204-lts
-        networkInterface:
-          - subnetworkRef:
-              name: '{{sitename}}-external'
-            accessConfig:
-              - natIpRef:
-                  name: '{{vmname}}-ip'
-          - subnetworkRef:
-              name: '{{interface}}'
-          - subnetworkRef:
-              external: 'https://www.googleapis.com/compute/v1/projects/{{project}}/regions/{{region}}/subnetworks/{{mgmtsubnet}}'
-        canIpForward: true
-        metadataStartupScript: "sudo apt-get update; sudo apt-get install -yq python3-pip"
-        metadata:
-          - key: ssh-keys
-            value: admin_briannaughton_altostrat_co:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN57YanONs2q/Eor4Tjv1NRhBGrB59vPFAMZbvlOVtkX briannaughton
-        tags:
-          - ssh
+    apiVersion: compute.cnrm.cloud.google.com/v1beta1
+    kind: ComputeInstance
+    namespace: automation
+    name: '{{ vmname }}'
 
-- name: Create external IP for site
+- name: delete external IP for site
   kubernetes.core.k8s:
     state: absent
-    definition:
-      apiVersion: compute.cnrm.cloud.google.com/v1beta1
-      kind: ComputeAddress
-      metadata:
-        name: '{{vmname}}-ip'
-      spec:
-        addressType: EXTERNAL
-        description: external address
-        location: '{{region}}'
+    apiVersion: compute.cnrm.cloud.google.com/v1beta1
+    kind: ComputeAddress
+    name: '{{vmname}}-ip'

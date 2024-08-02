@@ -2,7 +2,6 @@
 
 This folder contains a set of tools that can be used by LLMs to interact with the Kubernetes network orchestration layer.
 
-
 ## Build
 
 Authenticate with the repo

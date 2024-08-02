@@ -2,11 +2,11 @@
 
 This kubernetes operator manages the lifecycle of the following components:
 
-* __EdgeAppliance__: VyOS virtual machine. 
-* __VPNService__: Logical VPN service. 
+* __WireguardAppliancee__: Wireguard based VPN appliance. 
+* __ConnectivityService__: Logical VPN service. 
 * __Monitor__: Observability of the end to end service and VyOS virtual machines. 
 
-The operator is based on the [kopf](https://kopf.readthedocs.io/en/latest/) operator framework and embeds [anisble playbooks](https://docs.ansible.com/) to configure virtual network components.
+The operator is based on the [kopf](https://kopf.readthedocs.io/en/latest/) operator framework and embeds [anisble playbooks](https://docs.ansible.com/).
 
 ## Build and deploy the Edge Network Appliance Operator
 

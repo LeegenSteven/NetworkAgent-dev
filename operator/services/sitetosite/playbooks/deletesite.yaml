@@ -1,0 +1,14 @@
+- hosts: all
+  become: yes
+  gather_facts: no
+  tasks:
+
+    - name: Delete site compute
+      import_role:
+        name: deletecompute
+
+    - name: Delete site network
+      import_role:
+        name: deletenetwork
+
+

@@ -1,0 +1,97 @@
+- name: Create compute network
+  kubernetes.core.k8s:
+    state: absent
+    definition:
+      apiVersion: compute.cnrm.cloud.google.com/v1beta1
+      kind: ComputeNetwork
+      metadata:
+        name: '{{sitename}}-external'
+      spec:
+        routingMode: REGIONAL
+        autoCreateSubnetworks: false
+
+- name: Create subnetwork
+  kubernetes.core.k8s:
+    state: absent
+    definition:
+      apiVersion: compute.cnrm.cloud.google.com/v1beta1
+      kind: ComputeSubnetwork
+      metadata:
+        name: '{{sitename}}-external'
+      spec:
+        ipCidrRange: '{{cidr}}'
+        region: '{{region}}'
+        description: '{{sitename}} External Network'
+        networkRef:
+          name: '{{sitename}}-external'
+
+- name: Create router
+  kubernetes.core.k8s:
+    state: absent
+    definition:
+      apiVersion: compute.cnrm.cloud.google.com/v1beta1
+      kind: ComputeRouter
+      metadata:
+        name: '{{sitename}}-external-router'
+      spec:
+        description: {{sitename}} external router
+        region: '{{region}}'
+        networkRef:
+          name: '{{sitename}}-external'
+
+- name: Create NAT
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: compute.cnrm.cloud.google.com/v1beta1
+      kind: ComputeRouterNAT
+      metadata:
+        name: '{{sitename}}-external-nat'
+      spec:
+        region: '{{region}}'
+        routerRef:
+          name: '{{sitename}}-external-router'
+        natIpAllocateOption: AUTO_ONLY
+        sourceSubnetworkIpRangesToNat: ALL_SUBNETWORKS_ALL_IP_RANGES
+
+- name: Create wireguard rule
+  kubernetes.core.k8s:
+    state: absent
+    definition:
+      apiVersion: compute.cnrm.cloud.google.com/v1beta1
+      kind: ComputeFirewall
+      metadata:
+        name: '{{sitename}}-external-wg'
+      spec:
+        allow:
+          - protocol: udp
+            ports:
+            - "51820"
+        networkRef:
+          name: '{{sitename}}-external'
+        direction: INGRESS
+        sourceRanges:
+          - 0.0.0.0/0
+        targetTags:
+          - wireguard
+
+- name: Create ssh rule
+  kubernetes.core.k8s:
+    state: absent
+    definition:
+      apiVersion: compute.cnrm.cloud.google.com/v1beta1
+      kind: ComputeFirewall
+      metadata:
+        name: '{{sitename}}-external-ssh'
+      spec:
+        allow:
+          - protocol: tcp
+            ports:
+            - "22"
+        networkRef:
+          name: '{{sitename}}-external'
+        direction: INGRESS
+        sourceRanges:
+          - 0.0.0.0/0
+        targetTags:
+          - ssh

@@ -1,10 +1,14 @@
 import asyncio
 import logging
 from aiohttp import web
+from aiohttp_swagger import *
 import aiohttp_cors
-from kubernetes import client
+from kubernetes import dynamic
+from kubernetes.client import api_client
+from kubernetes.dynamic.exceptions import ResourceNotFoundError
 from utils.login import *
 import utils.constants as constants
+from utils.args import *
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
@@ -22,6 +26,54 @@ corsOptions={
 }
 cors = aiohttp_cors.setup(app, defaults=corsOptions)
 
+async def getCustomerLocations(request):
+    """
+    ---
+    description: Retrieve all customer VPC locations
+    tags:
+    - Locations
+    produces:
+    - text/json
+    responses:
+        "200":
+            description: successful operation. Return json object with VPC location informastion
+        "405":
+            description: invalid HTTP Method
+    """
+    logger.info("Getting locations for customer %s", )
+
+    if 'name' not in request.match_info:
+        return web.json_response({"errro": "name is required"})
+
+    # get the customer name
+    name = request.match_info['name']
+
+    logger.info("finding networks for %s", name)
+
+    client = dynamic.DynamicClient(
+        constants.api_client
+    )
+
+    try:
+        network_api = client.resources.get(
+            api_version="compute.cnrm.cloud.google.com/v1beta1", 
+            kind="ComputeSubnetwork",
+        )
+        items=network_api.get(label_selector=f"customer={name}")
+        locations=[]
+        for item in items.items:
+            logger.info(item)
+            location = {
+                'name': item['metadata']['name'],
+                'description': item['spec']['description'],
+                'cidr': item['spec']['ipCidrRange']
+            }
+            locations.append(location)
+
+        return web.json_response(locations)
+    except ResourceNotFoundError:
+        return web.json_response({"result": []})
+
 async def getServices(request):
     """
     Query a customers connectivity services
@@ -33,25 +85,19 @@ async def getServices(request):
     
     logger.info("Getting Service for customer %s", )
 
-
-    # # get the resource and print out data
-    # resource = constants.custom_api_instance.get_namespaced_custom_object(
-    #     group="compute.cnrm.cloud.google.com",
-    #     version="v1beta1",
-    #     name="site1-dev",
-    #     namespace="automation",
-    #     plural="computernetworks",
-    # )
-
-    # Enumerate e.g. Pods
-    resp = constants.v1_api_instance.list_pod_for_all_namespaces()
-    for i in resp.items:
-        print(f"{i.status.pod_ip}\t{i.metadata.namespace}\t{i.metadata.name}")
-
     return web.json_response({"result": "ok"})
 
 
 async def createService():
+    """
+    Create a customer connectivity services
+    Args:
+        - Customer name: 
+        - list of VPC locations to connect
+        - list of firewall rules
+    Returns:
+        Service description
+    """
     logger.info("Create a new Service")
 
     return web.json_response({"result": "ok"})
@@ -61,19 +107,25 @@ async def createService():
 # Start the server and load routes
 ######################################################################
 async def init():
-    logger.info('starting server on 0.0.0.0:8080')
+    logger.info('starting server on 0.0.0.0:'+constants.PORT)
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner,host='0.0.0.0', port=8080, ssl_context=None)
+    site = web.TCPSite(runner,host='0.0.0.0', port=constants.PORT, ssl_context=None)
     await site.start()
 
 def addRoutes():
-    getServiceRoute=app.router.add_get("/services", getServices)
+    getLocationsRoute=app.router.add_get("/locations/{name}", getCustomerLocations)
+    cors.add(getLocationsRoute, corsOptions)
+    getServiceRoute=app.router.add_get("/services/{name}", getServices)
     cors.add(getServiceRoute, corsOptions)
     createServiceRoute=app.router.add_post("/service", createService)
     cors.add(createServiceRoute, corsOptions)
 
 if __name__ == "__main__":
+    # collect arguments
+    parseargs()
+
+    # login to k8s cluster
     login()
 
     # add rest endpoints

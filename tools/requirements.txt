@@ -1,5 +1,6 @@
 aiohttp
 aiohttp_cors
+aiohttp-swagger
 kubernetes
 google-cloud-container
 google-api-python-client

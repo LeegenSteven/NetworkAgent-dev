@@ -5,7 +5,7 @@ metadata:
 spec:
   type: site-to-site
   name: test-vpn
-  sites:
+  vpcs:
     - site1-dev
     - site2-dev
   rules:

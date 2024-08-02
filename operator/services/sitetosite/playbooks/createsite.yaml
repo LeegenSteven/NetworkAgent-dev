@@ -5,12 +5,14 @@
 
     - name: Create site network
       import_role:
-        name: network
+        name: addnetwork
 
     - name: Create site compute
       import_role:
-        name: compute
+        name: addcompute
 
     - name: Create site vpn
       import_role:
-        name: vpn
+        name: addvpn
+
+    # create route

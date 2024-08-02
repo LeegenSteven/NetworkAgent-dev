@@ -43,7 +43,8 @@ def login():
 
   yaml = YAML(typ='safe', pure=True)
   constants.KUBECONFIG = yaml.load(CONFIG)
-  logger.info(constants.KUBECONFIG)
+
+  logger.info("successfully logged into cluster - "+constants.CLUSTER)
 
   configuration = client.Configuration()
   loader = config.kube_config.KubeConfigLoader(constants.KUBECONFIG)

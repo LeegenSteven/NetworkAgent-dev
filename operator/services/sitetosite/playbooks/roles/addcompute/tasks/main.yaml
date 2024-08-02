@@ -7,7 +7,7 @@
       metadata:
         annotations:
           cnrm.cloud.google.com/allow-stopping-for-update: "true"
-        name: '{{edgename}}'
+        name: '{{vmname}}'
       spec:
         machineType: e2-highcpu-4
         zone: '{{zone}}'
@@ -22,7 +22,7 @@
               name: '{{sitename}}-external'
             accessConfig:
               - natIpRef:
-                  name: '{{name}}-ip'
+                  name: '{{vmname}}-ip'
           - subnetworkRef:
               name: '{{interface}}'
           - subnetworkRef:
@@ -42,7 +42,7 @@
       apiVersion: compute.cnrm.cloud.google.com/v1beta1
       kind: ComputeAddress
       metadata:
-        name: '{{edgename}}-ip'
+        name: '{{vmname}}-ip'
       spec:
         addressType: EXTERNAL
         description: external address

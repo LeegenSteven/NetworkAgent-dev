@@ -12,6 +12,3 @@ from resources.wireguard.wireguardevents import *
 def login_fn(**kwargs):
     return kopf.login_via_client(**kwargs)
 
-if __name__ == '__main__':
-    logger.info("starting Network Agent")
-    logger.info("generating login details")

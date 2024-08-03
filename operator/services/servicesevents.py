@@ -13,9 +13,12 @@ class SubnetworkEvent:
 
     def handle_event(self, data):
         if 'event' in data and data['event']=='runner_on_ok':
+            # if no result then wait
+            if len(data['event_data']['res']['resources']) == 0:
+                raise kopf.TemporaryError("No subnet object", delay=15)
+
             vm_k8s_object = data['event_data']['res']['resources'][0]['spec']
             self.cidr = vm_k8s_object['ipCidrRange']
-
 
 def getSubnetInfo(pdir, subnet_event, vpc):
 
@@ -36,6 +39,23 @@ def getSubnetInfo(pdir, subnet_event, vpc):
 
     logger.info('%s subnet cidr = %s', vpc, subnet_event.cidr)
 
+def create_vars(aend, bend):
+    extravars = {
+        'sitename': aend+'-external',
+        'cidr': '10.0.50.0/24', 
+        'project': constants.PROJECT,
+        'region': constants.REGION,
+        'zone': constants.ZONE,
+        'mgmtsubnetname': 'mgmt-subnet',
+        'vmname': aend+'-external',
+        'interface': aend,
+        'peerinterface': bend,
+        'tunnelsubnet': '192.168.1.0/24',
+        'tunneladdress': '192.168.1.1',
+        'peername': bend+'-external'
+    }
+    logger.info(extravars)
+    return extravars
 
 @kopf.on.create('connectivityservice')
 async def create_connectivityservice_instance(spec, name, namespace, logger, **kwargs):
@@ -60,22 +80,8 @@ async def create_connectivityservice_instance(spec, name, namespace, logger, **k
     bendevent = SubnetworkEvent()
     getSubnetInfo(pdir, bendevent, bend)
 
-    extravars = {
-        'sitename': aend+'-external',
-        'cidr': '10.0.50.0/24', 
-        'project': constants.PROJECT,
-        'region': constants.REGION,
-        'zone': constants.ZONE,
-        'mgmtsubnetname': 'mgmt-subnet',
-        'vmname': aend+'-external',
-        'interface': aend,
-        'peerinterface': bend,
-        'tunnelsubnet': '192.168.1.0/24',
-        'tunneladdress': '192.168.1.1',
-        'peername': bend+'-external'
-    }
-    logger.info(extravars)
-
+    # create site1
+    extravars = create_vars(aend, bend)
     r = ansible_runner.run(
             private_data_dir=pdir,
             playbook='createsite.yaml',
@@ -85,22 +91,8 @@ async def create_connectivityservice_instance(spec, name, namespace, logger, **k
     if r.status != 'successful':
         raise kopf.TemporaryError("Ansible Error.", delay=15)
 
-    # for each site run the following
-    extravars = {
-        'sitename': bend+'-external',
-        'cidr': '10.0.60.0/24', 
-        'project': constants.PROJECT,
-        'region': constants.REGION,
-        'zone': constants.ZONE,
-        'mgmtsubnetname': 'mgmt-subnet',
-        'vmname': bend+'-external',
-        'interface': bend,
-        'peerinterface': aend,
-        'tunnelsubnet': '192.168.1.0/24',
-        'tunneladdress': '192.168.1.2',
-        'peername': aend+'-external'
-    }
-    logger.info(extravars)
+    # create site2
+    extravars=create_vars(bend, aend)
     r = ansible_runner.run(
             private_data_dir=pdir,
             playbook='createsite.yaml',
@@ -122,20 +114,7 @@ async def delete_connectivityservice_instance(spec, name, namespace, logger, **k
     aend=spec.get('vpcs')[0]
     bend=spec.get('vpcs')[1]
 
-    extravars = {
-        'sitename': aend+'-external',
-        'cidr': '10.0.50.0/24', 
-        'region': constants.REGION,
-        'zone': constants.ZONE,
-        'vmname': aend+'-external-vm',
-        'interface': aend,
-        'peerinterface': bend,
-        'tunnelsubnet': '192.168.1.0/24',
-        'tunneladdress': '192.168.1.1',
-        'peername': bend+'-external-vm'
-    }
-    logger.info(extravars)
-
+    extravars=create_vars(aend, bend)
     r = ansible_runner.run(
             private_data_dir=pdir,
             playbook='deletesite.yaml',
@@ -145,20 +124,7 @@ async def delete_connectivityservice_instance(spec, name, namespace, logger, **k
     if r.status != 'successful':
         raise kopf.TemporaryError("Ansible Error.", delay=15)
 
-    # for each site run the following
-    extravars = {
-        'sitename': bend+'-external',
-        'cidr': '10.0.60.0/24', 
-        'region': constants.REGION,
-        'zone': constants.ZONE,
-        'vmname': bend+'-external-vm',
-        'interface': bend,
-        'peerinterface': aend,
-        'tunnelsubnet': '192.168.1.0/24',
-        'tunneladdress': '192.168.1.2',
-        'peername': aend+'-external-vm'
-    }
-    logger.info(extravars)
+    extravars=create_vars(bend, aend)
     r = ansible_runner.run(
             private_data_dir=pdir,
             playbook='deletesite.yaml',

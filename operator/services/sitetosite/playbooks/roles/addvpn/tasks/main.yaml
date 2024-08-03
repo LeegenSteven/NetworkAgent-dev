@@ -1,6 +1,11 @@
 - name: Create vpn edge
   kubernetes.core.k8s:
     state: present
+    # wait: yes
+    # wait_condition:
+    #   type: Progressing
+    #   status: Unknown
+    #   reason: DeploymentPaused
     definition:
       apiVersion: google.dev/v1
       kind: WireguardAppliance

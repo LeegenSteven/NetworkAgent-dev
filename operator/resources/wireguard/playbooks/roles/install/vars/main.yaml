@@ -1,7 +1,7 @@
 wgKeys:
-  edge1:
+  site1-dev-external:
     privateKey: KJ/HkhQJ8TrU40Nh3NDznxYO+6Ev0hFLbjJAn1wuMWg=
     publicKey: +b7Y2OeMKhyhTnsFBo/1wuw6oEXa/8JnXwSrp1JUwgs=
-  edge2:
+  site2-dev-external:
     privateKey: yN+/wI5idW6uVF5HAf28Vq6MEVoRgn5pI7ls8/xSaE4=
     publicKey: dKI4NcMWJj2uF97VztQEvhR+4aW5a7sBGB+y6wb9AXA=

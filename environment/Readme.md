@@ -68,6 +68,15 @@ Verify the config connector installation
 kubectl wait -n cnrm-system --for=condition=Ready pod --all
 ```
 
+## Create SSH keys 
+
+To allow orchestration operators to log into the network virtual machines we create SSH keys and register with GCP.
+
+```
+ssh-keygen -o -a 100 -t ed25519 -f google-compute -C briannaughton
+gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=free5gc-384814 --ttl=1d
+```
+
 ## Setup config sync
 
 [setup manually](https://cloud.google.com/kubernetes-engine/enterprise/config-sync/docs/how-to/installing-kubectl#deploying)
@@ -80,16 +89,6 @@ Create the Base VPCs, Subnets and dummy IT apps for the demo.
 cd NetworkAgent/environment
 kubectl apply -f demo-networks.yaml
 kubectl apply -f dummy-apps.yaml
-```
-
-
-## Create SSH keys 
-
-To allow orchestration operators to log into the network virtual machines we create SSH keys and register with GCP.
-
-```
-ssh-keygen -o -a 100 -t ed25519 -f google-compute -C briannaughton
-gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=free5gc-384814 --ttl=1d
 ```
 
 ## Docker repo

@@ -1,7 +1,7 @@
 - name: delete compute for site
   kubernetes.core.k8s:
     state: absent
-    apiVersion: compute.cnrm.cloud.google.com/v1beta1
+    api_version: compute.cnrm.cloud.google.com/v1beta1
     kind: ComputeInstance
     namespace: automation
     name: '{{ vmname }}'
@@ -9,6 +9,7 @@
 - name: delete external IP for site
   kubernetes.core.k8s:
     state: absent
-    apiVersion: compute.cnrm.cloud.google.com/v1beta1
+    api_version: compute.cnrm.cloud.google.com/v1beta1
+    namespace: automation
     kind: ComputeAddress
     name: '{{vmname}}-ip'

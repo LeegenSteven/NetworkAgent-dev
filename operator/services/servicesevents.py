@@ -39,20 +39,38 @@ def getSubnetInfo(pdir, subnet_event, vpc):
 
     logger.info('%s subnet cidr = %s', vpc, subnet_event.cidr)
 
-def create_vars(aend, bend):
+def create_aend_vars(aend, bend, event):
     extravars = {
-        'sitename': aend+'-external',
-        'cidr': '10.0.50.0/24', 
+        'sitename': aend+'-vpn',
+        'cidr': '10.10.10.0/24', 
         'project': constants.PROJECT,
         'region': constants.REGION,
         'zone': constants.ZONE,
         'mgmtsubnetname': 'mgmt-subnet',
-        'vmname': aend+'-external',
+        'vmname': aend+'-vpn',
         'interface': aend,
         'peerinterface': bend,
         'tunnelsubnet': '192.168.1.0/24',
         'tunneladdress': '192.168.1.1',
-        'peername': bend+'-external'
+        'peername': bend+'-vpn'
+    }
+    logger.info(extravars)
+    return extravars
+
+def create_bend_vars(aend, bend, event):
+    extravars = {
+        'sitename': bend+'-vpn',
+        'cidr': '10.10.11.0/24', 
+        'project': constants.PROJECT,
+        'region': constants.REGION,
+        'zone': constants.ZONE,
+        'mgmtsubnetname': 'mgmt-subnet',
+        'vmname': aend+'-vpn',
+        'interface': bend,
+        'peerinterface': aend,
+        'tunnelsubnet': '192.168.1.0/24',
+        'tunneladdress': '192.168.1.2',
+        'peername': aend+'-vpn'
     }
     logger.info(extravars)
     return extravars
@@ -65,14 +83,17 @@ async def create_connectivityservice_instance(spec, name, namespace, logger, **k
     pdir = cwd+"/services/sitetosite/playbooks"
     logger.info("playbook dir = %s", pdir)
 
+    if 'type' not in spec or 'interfaces' not in spec:
+        raise kopf.PermanentError("fields 'type' and 'interfaces' must be provided.")
+
     if spec.get("type") != "site-to-site":
         raise kopf.PermanentError("Only site-to-site supported.")
 
-    if len(spec.get('vpcs'))!=2:
-        raise kopf.PermanentError("Only two VPCs are allowed.")
+    if len(spec.get('interfaces'))!=2:
+        raise kopf.PermanentError("Only two interfaces are allowed.")
 
-    aend=spec.get('vpcs')[0]
-    bend=spec.get('vpcs')[1]
+    aend=spec.get('interfaces')[0]
+    bend=spec.get('interfaces')[1]
 
     logger.info("getting %s vpc object", aend)
     aendevent = SubnetworkEvent()
@@ -81,7 +102,7 @@ async def create_connectivityservice_instance(spec, name, namespace, logger, **k
     getSubnetInfo(pdir, bendevent, bend)
 
     # create site1
-    extravars = create_vars(aend, bend)
+    extravars = create_aend_vars(aend, bend)
     r = ansible_runner.run(
             private_data_dir=pdir,
             playbook='createsite.yaml',
@@ -92,7 +113,7 @@ async def create_connectivityservice_instance(spec, name, namespace, logger, **k
         raise kopf.TemporaryError("Ansible Error.", delay=15)
 
     # create site2
-    extravars=create_vars(bend, aend)
+    extravars=create_bend_vars(aend, bend)
     r = ansible_runner.run(
             private_data_dir=pdir,
             playbook='createsite.yaml',
@@ -111,10 +132,10 @@ async def delete_connectivityservice_instance(spec, name, namespace, logger, **k
     pdir = cwd+"/services/sitetosite/playbooks"
     logger.info("playbook dir = %s", pdir)
 
-    aend=spec.get('vpcs')[0]
-    bend=spec.get('vpcs')[1]
+    aend=spec.get('interfaces')[0]
+    bend=spec.get('interfaces')[1]
 
-    extravars=create_vars(aend, bend)
+    extravars=create_aend_vars(aend, bend)
     r = ansible_runner.run(
             private_data_dir=pdir,
             playbook='deletesite.yaml',
@@ -124,7 +145,7 @@ async def delete_connectivityservice_instance(spec, name, namespace, logger, **k
     if r.status != 'successful':
         raise kopf.TemporaryError("Ansible Error.", delay=15)
 
-    extravars=create_vars(bend, aend)
+    extravars=create_bend_vars(bend, aend)
     r = ansible_runner.run(
             private_data_dir=pdir,
             playbook='deletesite.yaml',

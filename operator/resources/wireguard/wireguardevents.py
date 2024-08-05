@@ -25,10 +25,10 @@ async def create_wireguard_instance(spec, name, namespace, logger, **kwargs):
     logger.info("path = %s", pdir)
 
     # discover the VM k8s object
-    get_vm_object(pdir, events.get_vm_event_handler, vmname)
+    get_vm_object(pdir, events, vmname)
 
     # discover the allowed interface
-    get_allowed_interface(pdir, spec.get('allowedInterface'))
+    get_allowed_interface(pdir, events, spec.get('allowedInterface'))
 
     # discover the peer k8s object
     get_peer_object(pdir, events, spec.get('peer'))

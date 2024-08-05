@@ -8,6 +8,16 @@ This kubernetes operator manages the lifecycle of the following components:
 
 The operator is based on the [kopf](https://kopf.readthedocs.io/en/latest/) operator framework and embeds [anisble playbooks](https://docs.ansible.com/).
 
+## Deploy the CRDs
+
+Deploy the appliance and service CRDs
+
+```
+cd NetworkAgent/operator/config
+kubectl apply -f wireguard.yaml
+kubectl apply -f service.yaml
+```
+
 ## Build and deploy the Edge Network Appliance Operator
 
 To build and push the edge appliance operator image, run the following commands

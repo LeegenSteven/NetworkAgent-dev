@@ -35,6 +35,7 @@
             value: admin_briannaughton_altostrat_co:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN57YanONs2q/Eor4Tjv1NRhBGrB59vPFAMZbvlOVtkX briannaughton
         tags:
           - ssh
+          - wireguard
 
 - name: Create external IP for site
   kubernetes.core.k8s:

@@ -38,10 +38,3 @@ https://www.procustodibus.com/blog/2022/06/multi-hop-wireguard/
 
 * [ansible runner](https://ansible.readthedocs.io/projects/runner/en/latest/python_interface/)
 
-## TODO
-
-* Update status when lifecycle us complete on resource and service
-* Wireguard: attach the config parameters to the spec/status and update the status field
-* Service: refer to the children objects created?, i.e. implement hierarchy -> service owns the resource objects, and when service is delete everything else is auto deleted. 
-* Ansible is not threaded or running in parallel
-* Deploy to GKE and test credentials are working correctly - may need a service account

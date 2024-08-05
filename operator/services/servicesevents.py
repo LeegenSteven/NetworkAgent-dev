@@ -35,7 +35,7 @@ def getSubnetInfo(pdir, subnet_event, vpc):
     if r.status != 'successful':
         raise kopf.TemporaryError("Ansible Error.", delay=15)
     if subnet_event.cidr is None:
-        raise kopf.TemporaryError("No CIDR found", delay=15)
+        raise kopf.TemporaryError("No interface found", delay=15)
 
     logger.info('%s subnet cidr = %s', vpc, subnet_event.cidr)
 

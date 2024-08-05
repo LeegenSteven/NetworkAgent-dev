@@ -1,10 +1,10 @@
 apiVersion: google.dev/v1
 kind: WireguardAppliance
 metadata:
-  name: wg2
+  name: newyork-vpn
 spec:
-  vmname: edge2
+  vmname: newyork-vpn
   tunnelSubnet: 192.168.1.0/24
   tunnelAddress: 192.168.1.2/24
-  allowedInterface: site1-dev
-  peer: edge1
+  allowedInterface: london-internal
+  peer: london-vpn

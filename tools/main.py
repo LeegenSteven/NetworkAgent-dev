@@ -3,9 +3,9 @@ import logging
 from aiohttp import web
 from aiohttp_swagger import *
 import aiohttp_cors
-from kubernetes import dynamic
+import kubernetes
 import os
-from kubernetes.dynamic.exceptions import ResourceNotFoundError
+import json
 from utils.login import *
 import utils.constants as constants
 from utils.args import *
@@ -26,12 +26,13 @@ corsOptions={
 }
 cors = aiohttp_cors.setup(app, defaults=corsOptions)
 
+######################################################################
+# Get existing customer locations
+######################################################################
 async def getCustomerLocations(request):
     """
     ---
     description: Retrieve all customer VPC locations
-    tags:
-    - Locations
     produces:
     - text/json
     responses:
@@ -50,7 +51,7 @@ async def getCustomerLocations(request):
 
     logger.info("finding networks for %s", name)
 
-    client = dynamic.DynamicClient(
+    client = kubernetes.dynamic.DynamicClient(
         constants.api_client
     )
 
@@ -71,9 +72,12 @@ async def getCustomerLocations(request):
             locations.append(location)
 
         return web.json_response(locations)
-    except ResourceNotFoundError:
+    except kubernetes.ResourceNotFoundError:
         return web.json_response({"result": []})
 
+######################################################################
+# Get existing connectivity services
+######################################################################
 async def getServices(request):
     """
     Query a customers connectivity services
@@ -85,23 +89,77 @@ async def getServices(request):
     
     logger.info("Getting Service for customer %s", )
 
+    if 'name' not in request.match_info:
+        return web.json_response({"errro": "name is required"})
+
+    # get the customer name
+    name = request.match_info['name']
+
+    logger.info("finding networks for %s", name)
+
+    client = kubernetes.dynamic.DynamicClient(
+        constants.api_client
+    )
+
+    try:
+        network_api = client.resources.get(
+            api_version="google.dev/v1", 
+            kind="ConnectivityService",
+        )
+        items=network_api.get(label_selector=f"customer={name}")
+        locations=[]
+        for item in items.items:
+            logger.info(item)
+            location = {
+                'name': item['metadata']['name'],
+            }
+            locations.append(location)
+
+        return web.json_response(locations)
+    except kubernetes.ResourceNotFoundError:
+        return web.json_response({"result": []})
+
     return web.json_response({"result": "ok"})
 
-
-async def createService():
+######################################################################
+# Create a new connectivity service
+######################################################################
+async def createService(request):
     """
     Create a customer connectivity services
     Args:
         - Customer name: 
-        - list of VPC locations to connect
-        - list of firewall rules
+        - 2 VPC locations to connect
+        - list of firewall rules (later)
     Returns:
         Service description
     """
     logger.info("Create a new Service")
+    params = await request.json()
 
-    return web.json_response({"result": "ok"})
-    
+    if (params['identifier'] is None) or (params['firstname'] is None) or (params['surname'] is None):
+        return web.json_response(json.dumps({'error': 'firstname and lastname are required'}))
+
+    name = params['name']
+    site1 = params['site1']
+    site2 = params['site2']
+
+    client = kubernetes.dynamic.DynamicClient(
+        constants.api_client
+    )
+
+    try:
+        network_api = client.resources.get(
+            api_version="google.dev/v1", 
+            kind="ConnectivityService",
+        )
+        # items=network_api.create(
+
+        # )
+
+        return web.json_response({"result": []})
+    except kubernetes.ResourceNotFoundError:
+        return web.json_response({"result": []})
 
 ######################################################################
 # Start the server and load routes

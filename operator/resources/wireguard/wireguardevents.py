@@ -31,7 +31,7 @@ async def create_wireguard_instance(spec, name, namespace, logger, **kwargs):
     get_allowed_interface(pdir, spec.get('allowedInterface'))
 
     # discover the peer k8s object
-    get_oeer_object(pdir, events, spec.get('peer'))
+    get_peer_object(pdir, events, spec.get('peer'))
 
     # get the public ip address of the VM 
     get_public_ip(pdir, events)

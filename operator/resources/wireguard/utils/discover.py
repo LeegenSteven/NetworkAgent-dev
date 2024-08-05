@@ -114,7 +114,6 @@ def get_vm_facts(pdir, events):
     r = ansible_runner.run(private_data_dir=pdir, 
                            inventory={'all': hosts},
                            playbook='vmfacts.yaml',
-                           extravars=extravars,
                            event_handler=events.get_vm_facts_handler)
 
     logger.info("status = %s", r.status)
@@ -125,6 +124,7 @@ def get_vm_facts(pdir, events):
 
 def get_allowed_interface(pdir, events, interface):
     logger.info("get allowed interface")
+
     extravars = {'interface': interface}
     r = ansible_runner.run(private_data_dir=pdir, 
                            playbook='interfaceinfo.yaml',
@@ -138,10 +138,10 @@ def get_allowed_interface(pdir, events, interface):
         raise kopf.TemporaryError("No Interface found", delay=15)
 
 
-def get_oeer_object(pdir, events, peername):
+def get_peer_object(pdir, events, peername):
     logger.info("get peer object")
 
-    extravars = {'vmname': }
+    extravars = {'vmname': peername}
     r = ansible_runner.run(private_data_dir=pdir,
                            playbook='vminfo.yaml',
                            extravars=extravars,
@@ -156,6 +156,7 @@ def get_oeer_object(pdir, events, peername):
 
 def get_public_ip(pdir, events):
     logger.info("getting public ip address")
+
     extravars = {'edge_ip_name': events.peer_ip_name}
     r = ansible_runner.run(private_data_dir=pdir, 
                            playbook='getaddress.yaml', 
@@ -170,6 +171,8 @@ def get_public_ip(pdir, events):
 
 
 def install(pdir, events, spec ):
+    logger.info("install wireguard to VM")
+
     extravars = {
         'tunnel_address': spec.get('tunnelAddress'),
         'tunnel_cidr': spec.get('tunnelSubnet'),
@@ -178,8 +181,6 @@ def install(pdir, events, spec ):
         'peer_name': spec.get('peer'),
         'peer_ip_address' : events.peer_ip_address
     }
-
-    # Install and configure wireguard
     hosts = {
         'hosts': {
             spec.get('vmname'): {

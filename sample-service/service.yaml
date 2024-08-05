@@ -1,14 +1,14 @@
 apiVersion: google.dev/v1
 kind: ConnectivityService
 metadata:
-  name: vpnservice-sample
+  name: vpnservice1
 spec:
   type: site-to-site
   name: test-vpn
-  vpcs:
-    - site1-dev
-    - site2-dev
-  rules:
-    - protocol: tcp
-      ports:
-        - 80
+  interfaces: # the "remote" subnets to connect
+    - london-internal
+    - newyork-internal
+  # rules:
+  #   - protocol: tcp
+  #     ports:
+  #       - 80

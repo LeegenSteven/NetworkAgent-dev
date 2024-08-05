@@ -86,9 +86,9 @@ gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=fre
 Create the Base VPCs, Subnets and dummy IT apps for the demo.
 
 ```
-cd NetworkAgent/environment
-kubectl apply -f demo-networks.yaml
-kubectl apply -f dummy-apps.yaml
+cd NetworkAgent/sample-service/customersites
+kubectl apply -f london.yaml
+kubectl apply -f newyork.yaml
 ```
 
 ## Docker repo

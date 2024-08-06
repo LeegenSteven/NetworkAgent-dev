@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: edge-appliance-operator
+  name: networkoperator
 spec:
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      application: edge-appliance-operator
+      application: networkoperator
   template:
     metadata:
       labels:
-        application: edge-appliance-operator
+        application: networkoperator
     spec:
       containers:
-      - name: edge-appliance-operator
-        image: edge-appliance-operator
+      - name: networkoperator
+        image: europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networkoperator:latest

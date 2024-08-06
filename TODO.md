@@ -12,9 +12,9 @@ Candidate todo list. Each task rated as:
 
 ## Operator
 
-* __H__: generate wireguard keys for each edge rather than static key list?
+* __H__: Update status when lifecycle is complete on resource and service and better manage error reporting on CR
+* __H__: generate wireguard keys for each edge rather than static key list? Attach maybe to configmaps
 * __H__: Deploy to GKE and test credentials are working correctly - may need a service account
-* __H__: Update status when lifecycle is complete on resource and service (maybe dont need to do this)
 * __H__: Add firewall rule to allow allowed traffic from allowedinterface and add route between customer VPC/location and edge VM to route traffic to allowed interfaces
 * __H__: Service: refer to the children objects created?
   * generate unique name for instance

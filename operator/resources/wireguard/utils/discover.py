@@ -1,21 +1,28 @@
 import logging
 import kopf
 import ansible_runner
+import json 
 
 logger = logging.getLogger(__name__)
 
 class WireguardEvents:
     def __init__(self):
+        # VM info
+        self.vm_k8s_object = None
         self.external_ip_name = None
         self.external_ip_address = None
-        self.vm_k8s_object = None
         self.vm_ansible_facts = None
-        self.interface_cidr = None
+        # peer VM info
+        self.peer_vm_k8s_object = None
         self.peer_ip_name = None
         self.peer_ip = None
+        self.interface_cidr = None
 
     def get_vm_event_handler(self, data):
+        logger.debug("get_vm_event_handler")
+
         if 'event' in data and data['event']=='runner_on_ok':
+            logger.info(data['event_data']['res']['resources'])
             # if no result then wait
             if len(data['event_data']['res']['resources']) == 0:
                 raise kopf.TemporaryError("No VM object found", delay=15)
@@ -25,29 +32,56 @@ class WireguardEvents:
             interfaces = data['event_data']['res']['resources'][0]['spec']['networkInterface']
             for int in interfaces:
                 if 'accessConfig' in int:
-                    if self.external_ip_name is None:
-                        self.external_ip_name=int['accessConfig'][0]['natIpRef']['name']
-                        logger.info("found external_ip_name %s", self.external_ip_name)
-                    else:
-                        self.peer_ip_name = int['accessConfig'][0]['natIpRef']['name']
-                        logger.info("found peer_ip_name %s", self.peer_ip_name)
+                    self.external_ip_name=int['accessConfig'][0]['natIpRef']['name']
+                    logger.info("found external_ip_name %s", self.external_ip_name)
+                    break
+
+    def get_peer_vm_event_handler(self, data):
+        logger.debug("get_vm_event_handler")
+
+        if 'event' in data and data['event']=='runner_on_ok':
+            logger.info(data['event_data']['res']['resources'])
+            # if no result then wait
+            if len(data['event_data']['res']['resources']) == 0:
+                raise kopf.TemporaryError("No VM object found", delay=15)
+
+            self.vm_k8s_object = data['event_data']['res']['resources'][0]['spec']
+            # get the external ip address of the vm    
+            interfaces = data['event_data']['res']['resources'][0]['spec']['networkInterface']
+            for int in interfaces:
+                if 'accessConfig' in int:
+                    self.peer_ip_name = int['accessConfig'][0]['natIpRef']['name']
+                    logger.info("found peer_ip_name %s", self.peer_ip_name)
                     break
 
     def get_address_event_handler(self, data):
-        if 'event' in data and data['event']=='runner_on_ok':
+        logger.debug("get_address_event_handler")
 
+        if 'event' in data and data['event']=='runner_on_ok':
+            # if no result then wait
+            if len(data['event_data']['res']['resources']) == 0:
+                raise kopf.TemporaryError("No Resources found", delay=15)
+            if 'spec' not in data['event_data']['res']['resources'][0]:
+                raise kopf.TemporaryError("No Spec found", delay=15)
+            if 'address' not in data['event_data']['res']['resources'][0]['spec']:
+                raise kopf.TemporaryError("No Address found", delay=15)
+            self.external_ip_address = data['event_data']['res']['resources'][0]['spec']['address']
+            logger.info("found external ip address %s", self.external_ip_address)
+
+    def get_peer_address_event_handler(self, data):
+        logger.debug("get_address_event_handler")
+
+        if 'event' in data and data['event']=='runner_on_ok':
             # if no result then wait
             if len(data['event_data']['res']['resources']) == 0:
                 raise kopf.TemporaryError("No Address found", delay=15)
+            self.peer_ip_address = data['event_data']['res']['resources'][0]['spec']['address']            
+            logger.info("found peer ip address %s", self.peer_ip_address)
 
-            if self.external_ip_address is None:
-                self.external_ip_address = data['event_data']['res']['resources'][0]['spec']['address']
-                logger.info("found external ip address %s", self.external_ip_address)
-            else:
-                self.peer_ip_address = data['event_data']['res']['resources'][0]['spec']['address']            
-                logger.info("found peer ip address %s", self.peer_ip_address)
 
     def get_vm_facts_handler(self, data):
+        logger.debug("get_vm_facts_handler")
+
         if 'event' in data and data['event']=='runner_on_ok':
 
             # if no result then wait
@@ -58,6 +92,8 @@ class WireguardEvents:
             logger.info("got vm facts")
 
     def get_interface_event_handler(self, data):
+        logger.debug("get_interface_event_handler")
+
         if 'event' in data and data['event']=='runner_on_ok':
             logger.info("interface discover complete")
 
@@ -68,7 +104,7 @@ class WireguardEvents:
             self.interface_cidr = data['event_data']['res']['resources'][0]['spec']['ipCidrRange']
             logger.info("found interface cidr %s", self.interface_cidr)
 
-def get_vm_object(pdir, events, vmname):
+def get_vm_info(pdir, events, vmname):
     logger.info("getting VM object")
 
     extravars = {'vmname': vmname}
@@ -138,14 +174,14 @@ def get_allowed_interface(pdir, events, interface):
         raise kopf.TemporaryError("No Interface found", delay=15)
 
 
-def get_peer_object(pdir, events, peername):
+def get_peer_info(pdir, events, peername):
     logger.info("get peer object")
 
     extravars = {'vmname': peername}
     r = ansible_runner.run(private_data_dir=pdir,
                            playbook='vminfo.yaml',
                            extravars=extravars,
-                           event_handler=events.get_vm_event_handler)
+                           event_handler=events.get_peer_vm_event_handler)
 
     logger.info("status = %s", r.status)
     if r.status != 'successful':
@@ -153,15 +189,13 @@ def get_peer_object(pdir, events, peername):
     if events.peer_ip_name is None or events.vm_k8s_object is None:
         raise kopf.TemporaryError("No peer found", delay=15)
 
-
-def get_public_ip(pdir, events):
     logger.info("getting public ip address")
 
     extravars = {'edge_ip_name': events.peer_ip_name}
     r = ansible_runner.run(private_data_dir=pdir, 
                            playbook='getaddress.yaml', 
                            extravars=extravars,
-                           event_handler=events.get_address_event_handler)
+                           event_handler=events.get_peer_address_event_handler)
 
     logger.info("status = %s", r.status)
     if r.status != 'successful':

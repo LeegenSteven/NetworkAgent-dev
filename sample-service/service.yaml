@@ -7,7 +7,7 @@ spec:
   name: test-vpn
   interfaces: # the "remote" subnets to connect
     - london-internal
-    - newyork-internal
+    - sydney-internal
   # rules:
   #   - protocol: tcp
   #     ports:

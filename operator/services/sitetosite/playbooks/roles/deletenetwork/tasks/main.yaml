@@ -44,7 +44,7 @@
     state: absent
     # wait for the network to be deleted before completing. All 
     # dependencies above must be complete before this can be deleted
-    wait: yes
+    # wait: yes
     api_version: compute.cnrm.cloud.google.com/v1beta1
     kind: ComputeNetwork
     namespace: automation

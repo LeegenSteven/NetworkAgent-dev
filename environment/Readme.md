@@ -8,7 +8,7 @@ gcloud init --no-launch-browser
 
 ## GCP Project(s)
 
-TBD - create projects and service accounts etc
+TBD - create projects and service accounts etc.
 
 ## GKE Automation Platform
 
@@ -52,6 +52,8 @@ free5gc-vm@free5gc-384814.iam.gserviceaccount.com \
     --role="roles/iam.workloadIdentityUser"
 ```
 
+### Install Config Connector
+
 Specify the GKE namespace and project for Config Connector to create resources in
 
 ```
@@ -68,18 +70,34 @@ Verify the config connector installation
 kubectl wait -n cnrm-system --for=condition=Ready pod --all
 ```
 
-## Create SSH keys 
+## Create SSH keys for Virtual Machines
 
 To allow orchestration operators to log into the network virtual machines we create SSH keys and register with GCP.
 
 ```
+cd NetworkAgent/environment
 ssh-keygen -o -a 100 -t ed25519 -f google-compute -C briannaughton
 gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=free5gc-384814 --ttl=1d
 ```
 
-## Setup config sync
+## Setup config sync (TBD)
 
 [setup manually](https://cloud.google.com/kubernetes-engine/enterprise/config-sync/docs/how-to/installing-kubectl#deploying)
+
+
+## Docker repo
+
+Create a docker repository to push our container images to.
+
+```
+gcloud artifacts repositories create networkagent --repository-format=docker --location=europe-west2 --description="Network Agent Repository"
+```
+
+## Deploy Operator
+
+## Deploy Rest Tools
+
+## Deploy Network Agent
 
 ## Create Demo VPC Networks
 
@@ -89,13 +107,6 @@ Create the Base VPCs, Subnets and dummy IT apps for the demo.
 cd NetworkAgent/sample-service/customersites
 kubectl apply -f london.yaml
 kubectl apply -f newyork.yaml
+kubectl apply -f singapore.yaml
+kubectl apply -f sydney.yaml
 ```
-
-## Docker repo
-
-Create a docker repository to push our Pathway Gateway container image to.
-
-```
-gcloud artifacts repositories create networkagent --repository-format=docker --location=europe-west2 --description="Network Agent Repository"
-```
-

@@ -3,6 +3,7 @@ import ansible_runner
 import os
 import logging
 import kubernetes
+import json
 import utils.constants as constants
 
 logger = logging.getLogger(__name__)
@@ -20,13 +21,11 @@ class SubnetworkEvent:
             vm_k8s_object = data['event_data']['res']['resources'][0]['spec']
             self.cidr = vm_k8s_object['ipCidrRange']
 
-def getSubnetInfo(pdir, subnet_event, vpc):
-
+async def getSubnetInfo(pdir, subnet_event, vpc):
     logger.info("building service parameters")
-    logger.info("getting %s vpc object", vpc)
-    aendevent = SubnetworkEvent()    
-    extravars = {'subnetname': vpc}
+    logger.debug("getting %s vpc object", vpc)
 
+    extravars = {'subnetname': vpc}
     r = ansible_runner.run(private_data_dir=pdir,
                            playbook='subnet.yaml',
                            extravars=extravars,
@@ -39,7 +38,32 @@ def getSubnetInfo(pdir, subnet_event, vpc):
 
     logger.info('%s subnet cidr = %s', vpc, subnet_event.cidr)
 
-def create_aend_vars(aend, bend, event):
+async def createSite(pdir, extravars):
+    logger.info("Creating site %s", extravars['sitename'])
+    logger.debug(json.dumps(extravars, indent=4))
+    r = ansible_runner.run(
+            private_data_dir=pdir,
+            playbook='createsite.yaml',
+            extravars=extravars,
+    )
+    logger.info("status = %s", r.status)
+    if r.status != 'successful':
+        raise kopf.TemporaryError("Ansible Error.", delay=15)
+
+async def deleteSite(pdir, extravars):
+    logger.info("Deleting site %s", extravars['sitename'])
+    logger.debug(json.dumps(extravars, indent=4))
+    r = ansible_runner.run(
+            private_data_dir=pdir,
+            playbook='deletesite.yaml',
+            extravars=extravars,
+    )
+    logger.info("status = %s", r.status)
+    if r.status != 'successful':
+        raise kopf.TemporaryError("Ansible Error.", delay=15)
+
+
+def create_aend_vars(aend, bend):
     extravars = {
         'sitename': aend+'-vpn',
         'cidr': '10.10.10.0/24', 
@@ -54,10 +78,9 @@ def create_aend_vars(aend, bend, event):
         'tunneladdress': '192.168.1.1',
         'peername': bend+'-vpn'
     }
-    logger.info(extravars)
     return extravars
 
-def create_bend_vars(aend, bend, event):
+def create_bend_vars(aend, bend):
     extravars = {
         'sitename': bend+'-vpn',
         'cidr': '10.10.11.0/24', 
@@ -65,14 +88,13 @@ def create_bend_vars(aend, bend, event):
         'region': constants.REGION,
         'zone': constants.ZONE,
         'mgmtsubnetname': 'mgmt-subnet',
-        'vmname': aend+'-vpn',
+        'vmname': bend+'-vpn',
         'interface': bend,
         'peerinterface': aend,
         'tunnelsubnet': '192.168.1.0/24',
         'tunneladdress': '192.168.1.2',
         'peername': aend+'-vpn'
     }
-    logger.info(extravars)
     return extravars
 
 @kopf.on.create('connectivityservice')
@@ -95,34 +117,20 @@ async def create_connectivityservice_instance(spec, name, namespace, logger, **k
     aend=spec.get('interfaces')[0]
     bend=spec.get('interfaces')[1]
 
-    logger.info("getting %s vpc object", aend)
+    logger.info("getting %s subnet cidrs", aend)
     aendevent = SubnetworkEvent()
-    getSubnetInfo(pdir, aendevent, aend)
-    bendevent = SubnetworkEvent()
-    getSubnetInfo(pdir, bendevent, bend)
+    await getSubnetInfo(pdir, aendevent, aend)
 
-    # create site1
+    bendevent = SubnetworkEvent()
+    await getSubnetInfo(pdir, bendevent, bend)
+
+    # create first site
     extravars = create_aend_vars(aend, bend)
-    r = ansible_runner.run(
-            private_data_dir=pdir,
-            playbook='createsite.yaml',
-            extravars=extravars,
-    )
-    logger.info("status = %s", r.status)
-    if r.status != 'successful':
-        raise kopf.TemporaryError("Ansible Error.", delay=15)
+    await createSite(pdir, extravars)
 
     # create site2
     extravars=create_bend_vars(aend, bend)
-    r = ansible_runner.run(
-            private_data_dir=pdir,
-            playbook='createsite.yaml',
-            extravars=extravars,
-    )
-    logger.info("status = %s", r.status)
-    if r.status != 'successful':
-        raise kopf.TemporaryError("Ansible Error.", delay=15)
-
+    await createSite(pdir, extravars)
 
 @kopf.on.delete('connectivityservice')
 async def delete_connectivityservice_instance(spec, name, namespace, logger, **kwargs):
@@ -135,22 +143,10 @@ async def delete_connectivityservice_instance(spec, name, namespace, logger, **k
     aend=spec.get('interfaces')[0]
     bend=spec.get('interfaces')[1]
 
+    # delete first site
     extravars=create_aend_vars(aend, bend)
-    r = ansible_runner.run(
-            private_data_dir=pdir,
-            playbook='deletesite.yaml',
-            extravars=extravars,
-    )
-    logger.info("status = %s", r.status)
-    if r.status != 'successful':
-        raise kopf.TemporaryError("Ansible Error.", delay=15)
+    await deleteSite(pdir, extravars)
 
-    extravars=create_bend_vars(bend, aend)
-    r = ansible_runner.run(
-            private_data_dir=pdir,
-            playbook='deletesite.yaml',
-            extravars=extravars,
-    )
-    logger.info("status = %s", r.status)
-    if r.status != 'successful':
-        raise kopf.TemporaryError("Ansible Error.", delay=15)
+    # delete 2nd site
+    extravars=create_bend_vars(aend, bend)
+    await deleteSite(pdir, extravars)

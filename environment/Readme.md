@@ -10,6 +10,10 @@ gcloud init --no-launch-browser
 
 TBD - create projects and service accounts etc.
 
+* GKE needs a service account with compute admin + artifact registry read
+* Tools needs a service account with GKE Admin
+* Operator needs a service account with GKE Admin
+
 ## GKE Automation Platform
 
 First, create a __mgmt__ VPC to attach GKE and the edge appliances to. 
@@ -26,6 +30,8 @@ Create GKE Cluster and install kubectl
 gcloud container clusters create networkautomation \
     --release-channel stable \
     --addons ConfigConnector \
+    --service-account free5gc-vm@free5gc-384814.iam.gserviceaccount.com\
+    --scopes default,storage-full,cloud-platform,bigquery \
     --workload-pool free5gc-384814.svc.id.goog \
     --logging SYSTEM \
     --monitoring SYSTEM \

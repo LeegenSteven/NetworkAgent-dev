@@ -2,6 +2,7 @@ import logging
 import kopf
 import ansible_runner
 import json 
+import utils.constants as constants
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,6 @@ class WireguardEvents:
         logger.debug("get_vm_event_handler")
 
         if 'event' in data and data['event']=='runner_on_ok':
-            logger.info(data['event_data']['res']['resources'])
             # if no result then wait
             if len(data['event_data']['res']['resources']) == 0:
                 raise kopf.TemporaryError("No VM object found", delay=15)
@@ -104,11 +104,11 @@ class WireguardEvents:
             self.interface_cidr = data['event_data']['res']['resources'][0]['spec']['ipCidrRange']
             logger.info("found interface cidr %s", self.interface_cidr)
 
-def get_vm_info(pdir, events, vmname):
+def get_vm_info(events, vmname):
     logger.info("getting VM object")
 
     extravars = {'vmname': vmname}
-    r = ansible_runner.run(private_data_dir=pdir,
+    r = ansible_runner.run(private_data_dir=constants.basedir+"/resources/wireguard/playbooks",
                            playbook='vminfo.yaml',
                            extravars=extravars,
                            event_handler=events.get_vm_event_handler)
@@ -120,7 +120,7 @@ def get_vm_info(pdir, events, vmname):
 
     # get the public ip address of the VM on the computeaddress object
     extravars = {'edge_ip_name': events.external_ip_name}
-    r = ansible_runner.run(private_data_dir=pdir, 
+    r = ansible_runner.run(private_data_dir=constants.basedir+"/resources/wireguard/playbooks", 
                            playbook='getaddress.yaml', 
                            extravars=extravars,
                            event_handler=events.get_address_event_handler)
@@ -132,7 +132,7 @@ def get_vm_info(pdir, events, vmname):
         raise kopf.TemporaryError("No Edge External IP address found", delay=15)
 
 
-def get_vm_facts(pdir, events):
+def get_vm_facts(events):
     logger.info("getting VM facts")
 
     # find the VM ansible facts
@@ -147,7 +147,7 @@ def get_vm_facts(pdir, events):
             }
         }
     }
-    r = ansible_runner.run(private_data_dir=pdir, 
+    r = ansible_runner.run(private_data_dir=constants.basedir+"/resources/wireguard/playbooks", 
                            inventory={'all': hosts},
                            playbook='vmfacts.yaml',
                            event_handler=events.get_vm_facts_handler)
@@ -158,11 +158,11 @@ def get_vm_facts(pdir, events):
     if events.vm_ansible_facts is None:
         raise kopf.TemporaryError("No VM facts", delay=15)
 
-def get_allowed_interface(pdir, events, interface):
+def get_allowed_interface(events, interface):
     logger.info("get allowed interface")
 
     extravars = {'interface': interface}
-    r = ansible_runner.run(private_data_dir=pdir, 
+    r = ansible_runner.run(private_data_dir=constants.basedir+"/resources/wireguard/playbooks", 
                            playbook='interfaceinfo.yaml',
                            extravars=extravars,
                            event_handler=events.get_interface_event_handler)
@@ -174,7 +174,7 @@ def get_allowed_interface(pdir, events, interface):
         raise kopf.TemporaryError("No Interface found", delay=15)
 
 
-def get_peer_info(pdir, events, peername):
+def get_peer_info(events, peername):
     logger.info("get peer object")
 
     extravars = {'vmname': peername}
@@ -192,7 +192,7 @@ def get_peer_info(pdir, events, peername):
     logger.info("getting public ip address")
 
     extravars = {'edge_ip_name': events.peer_ip_name}
-    r = ansible_runner.run(private_data_dir=pdir, 
+    r = ansible_runner.run(private_data_dir=constants.basedir+"/resources/wireguard/playbooks", 
                            playbook='getaddress.yaml', 
                            extravars=extravars,
                            event_handler=events.get_peer_address_event_handler)
@@ -204,7 +204,7 @@ def get_peer_info(pdir, events, peername):
         raise kopf.TemporaryError("No Edge External IP address found", delay=15)
 
 
-def install(pdir, events, spec ):
+def install(events, spec ):
     logger.info("install wireguard to VM")
 
     extravars = {
@@ -228,7 +228,7 @@ def install(pdir, events, spec ):
     }
     logger.info(hosts)
     logger.info(extravars)
-    r = ansible_runner.run(private_data_dir=pdir, 
+    r = ansible_runner.run(private_data_dir=constants.basedir+"/resources/wireguard/playbooks", 
                            inventory={'all': hosts},
                            playbook='install.yaml',
                            extravars=extravars)

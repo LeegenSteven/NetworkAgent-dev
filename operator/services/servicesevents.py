@@ -101,8 +101,7 @@ def create_bend_vars(aend, bend):
 async def create_connectivityservice_instance(spec, name, namespace, logger, **kwargs):
     logger.info(f"Create connectivityservice service handler is called with spec: {spec}")
 
-    cwd = os.getcwd()
-    pdir = cwd+"/services/sitetosite/playbooks"
+    pdir = constants.basedir+"/services/sitetosite/playbooks"
     logger.info("playbook dir = %s", pdir)
 
     if 'type' not in spec or 'interfaces' not in spec:

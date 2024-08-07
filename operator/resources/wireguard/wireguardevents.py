@@ -20,20 +20,16 @@ async def create_wireguard_instance(spec, name, namespace, logger, **kwargs):
     if not vmname:
         raise kopf.PermanentError(f"edgevm must be set. Got {vmname!r}.")
 
-    cwd = os.getcwd()
-    pdir = cwd+"/resources/wireguard/playbooks"
-    logger.info("path = %s", pdir)
-
     # discover the VM k8s object and get its public ip address
-    get_vm_info(pdir, events, vmname)
+    get_vm_info( events, vmname)
 
     # discover the allowed interface's cidr
-    get_allowed_interface(pdir, events, spec.get('allowedInterface'))
+    get_allowed_interface( events, spec.get('allowedInterface'))
 
     # discover the peer k8s object
-    get_peer_info(pdir, events, spec.get('peer'))
+    get_peer_info(events, spec.get('peer'))
 
-    install(pdir, events, spec)
+    install( events, spec)
 
     return {"status": "running"}
 

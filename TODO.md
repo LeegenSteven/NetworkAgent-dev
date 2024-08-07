@@ -12,9 +12,10 @@ Candidate todo list. Each task rated as:
 
 ## Operator
 
+* __H__: Use environment variable for location of playbooks, and cloud region/locations etc. Constants are hard coded
 * __H__: Update status when lifecycle is complete on resource and service and better manage error reporting on CR
-* __H__: generate wireguard keys for each edge rather than static key list? Attach maybe to configmaps
-* __H__: Deploy to GKE and test credentials are working correctly - may need a service account
+* __H__: generate wireguard keys for each edge rather than static key list? Attach maybe to configmaps?
+* __H__: Deploy to GKE and test credentials are working correctly
 * __H__: Add firewall rule to allow allowed traffic from allowedinterface and add route between customer VPC/location and edge VM to route traffic to allowed interfaces
 * __H__: Service: refer to the children objects created?
   * generate unique name for instance
@@ -28,7 +29,7 @@ Candidate todo list. Each task rated as:
 
 * __H__: Hook up read/create service APIs
 * __L__: Create Swagger spec for API that can be loaded into LLM
-* __M__: Move back end for rest to config sync rather than direc to k8s
+* __M__: Move back end for rest to config sync rather than direct to k8s
 
 ## Monitoring
 
@@ -43,11 +44,15 @@ Candidate todo list. Each task rated as:
 * __M__: Blueprints? Figure out how to include the service/resource CRs in a blueprint package story
 * __M__: Definitely make changes to cluster through this interface rather than direct to k8s
 
-## Services
+## Network Services
 
 * __H__: Site to site: Get simplest 2 site vpn working end to end
 * __M__: Hub and spoke: 
 * __M__: Mesh: 
+
+## Netbox
+
+??
 
 ## Network Agent
 

@@ -5,6 +5,15 @@ logging.basicConfig(level='INFO', format=log_format)
 
 logger = logging.getLogger(__name__)
 
+# get base directory
+import os
+import utils.constants as constants
+constants.basedir=os.getcwd()
+if constants.basedir == '/':
+    constants.basedir = ''
+logger.info("Base directory is %s", constants.basedir)
+
+# register events
 from services.servicesevents import *
 from resources.wireguard.wireguardevents import *
 

@@ -26,15 +26,20 @@ docker push europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networkopera
 
 ## Deploy the CRDs & Operator
 
-Deploy the appliance and service CRDs and operator
+Deploy the appliance and service CRDs.
 
 ```
 cd NetworkAgent/operator/config
 kubectl apply -f wireguard.yaml
 kubectl apply -f service.yaml
-kubectl apply -f deployment.yaml
 ```
 
+Deploy the operator
+
+```
+cd NetworkAgent/operator
+kubectl apply -f deployment.yaml
+```
 
 ## Running the operator locally on your laptop
 

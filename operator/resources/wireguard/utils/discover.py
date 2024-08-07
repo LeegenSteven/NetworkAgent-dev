@@ -40,7 +40,6 @@ class WireguardEvents:
         logger.debug("get_vm_event_handler")
 
         if 'event' in data and data['event']=='runner_on_ok':
-            logger.info(data['event_data']['res']['resources'])
             # if no result then wait
             if len(data['event_data']['res']['resources']) == 0:
                 raise kopf.TemporaryError("No VM object found", delay=15)
@@ -178,7 +177,7 @@ def get_peer_info(events, peername):
     logger.info("get peer object")
 
     extravars = {'vmname': peername}
-    r = ansible_runner.run(private_data_dir=pdir,
+    r = ansible_runner.run(private_data_dir=constants.basedir+"/resources/wireguard/playbooks",
                            playbook='vminfo.yaml',
                            extravars=extravars,
                            event_handler=events.get_peer_vm_event_handler)

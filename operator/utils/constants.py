@@ -6,6 +6,7 @@ ZONE = 'europe-west2-a'
 CLUSTER = 'networkautomation'
 
 # Kubernetes client authentication variables
+KUBELOCATION = None
 KUBECONFIG = None
 api_client = None
 v1_api_instance = None

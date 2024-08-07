@@ -4,6 +4,7 @@ from kubernetes import client,config
 from ruamel.yaml import YAML
 import utils.constants as constants
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,10 @@ def login():
 
   yaml = YAML(typ='safe', pure=True)
   constants.KUBECONFIG = yaml.load(CONFIG)
+
+  logger.info("writing KUBECONFIG file")
+  with open(os.getenv("K8S_AUTH_KUBECONFIG"), 'w') as yaml_file:
+    yaml.dump(constants.KUBECONFIG, yaml_file)
 
   logger.info("successfully logged into cluster - "+constants.CLUSTER)
 

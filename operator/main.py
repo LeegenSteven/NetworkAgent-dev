@@ -16,8 +16,11 @@ logger.info("Base directory is %s", constants.basedir)
 # register events
 from services.servicesevents import *
 from resources.wireguard.wireguardevents import *
+import utils.login as k8slogin
 
 @kopf.on.login()
 def login_fn(**kwargs):
+    if os.getenv("K8S_AUTH_KUBECONFIG") is not None:
+        k8slogin.login()
     return kopf.login_via_client(**kwargs)
 

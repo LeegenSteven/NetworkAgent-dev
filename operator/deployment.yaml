@@ -112,3 +112,6 @@ spec:
       - name: networkoperator
         image: europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networkoperator:latest
         imagePullPolicy: Always
+        env:
+        - name: K8S_AUTH_KUBECONFIG
+          value: "/kubeconfig"

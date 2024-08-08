@@ -21,7 +21,7 @@ First, create a __mgmt__ VPC to attach GKE and the edge appliances to.
 ```
 gcloud compute networks create mgmt --subnet-mode=custom
 gcloud compute networks subnets create mgmt-subnet --network=mgmt --range=10.0.100.0/24 --region=europe-west2
-gcloud compute firewall-rules create mgmt-ingress --network mgmt --allow tcp:22,tcp:3389,tcp:443,icmp --direction INGRESS --source-ranges 0.0.0.0/0
+gcloud compute firewall-rules create mgmt-ingress --network mgmt --allow tcp:8080,tcp:22,tcp:3389,tcp:443,icmp --direction INGRESS --source-ranges 0.0.0.0/0
 ```
 
 Create GKE Cluster and install kubectl
@@ -86,7 +86,43 @@ ssh-keygen -o -a 100 -t ed25519 -f google-compute -C briannaughton
 gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=free5gc-384814 --ttl=1d
 ```
 
-## Setup config sync (TBD)
+## Setup git and config sync
+
+Deploy git to GKE
+
+```
+kubectl apply -f git.yaml
+```
+
+To find the external IP assigned to git run the following command
+
+```
+kubectl get service gitea-lb-service --output yaml
+```
+
+You should see an external IP address under loadbalancer:ingress
+
+```
+spec:
+  ...
+  ports:
+  - ...
+    port: 60000
+    protocol: TCP
+    targetPort: 50001
+  selector:
+    app: products
+    department: sales
+  sessionAffinity: None
+  type: LoadBalancer
+status:
+  loadBalancer:
+    ingress:
+    - ip: <<YOUR EXTERNAL IP>>
+```
+
+You can reach git at __http://<<YOUR EXTERNAL IP>>0:8080__
+
 
 [setup manually](https://cloud.google.com/kubernetes-engine/enterprise/config-sync/docs/how-to/installing-kubectl#deploying)
 
@@ -99,12 +135,6 @@ Create a docker repository to push our container images to.
 gcloud artifacts repositories create networkagent --repository-format=docker --location=europe-west2 --description="Network Agent Repository"
 ```
 
-## Deploy Operator
-
-## Deploy Rest Tools
-
-## Deploy Network Agent
-
 ## Create Demo VPC Networks
 
 Create the Base VPCs, Subnets and dummy IT apps for the demo.
@@ -116,3 +146,17 @@ kubectl apply -f newyork.yaml
 kubectl apply -f singapore.yaml
 kubectl apply -f sydney.yaml
 ```
+
+## Deploy Network Service Operator
+
+[Instructions here](/operator/Readme.md)
+
+## Deploy Rest Tools
+
+[Instructions here](/tools/Readme.md)
+
+## Deploy Network Agent
+
+[Instructions here](/networkagent/Readme.md)
+
+

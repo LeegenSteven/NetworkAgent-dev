@@ -24,12 +24,12 @@ rules:
   # Application: read-only access for watching cluster-wide.
   - apiGroups: [google.dev]
     resources: [connectivityservices, wireguardappliances]
-    verbs: [list, create, watch, patch]
+    verbs: [list, get, create, watch, patch, delete]
 
   # Application: other resources managed.
   - apiGroups: [compute.cnrm.cloud.google.com]
-    resources: [computenetworks, computesubnetworks, computeinstances, computerouters]
-    verbs: [list, create, watch, patch]
+    resources: [computenetworks, computeaddresses, computesubnetworks, computeinstances, computerouters, computerouternats, computefirewalls]
+    verbs: [list, get, create, watch, patch, delete]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -67,3 +67,12 @@ spec:
       - name: networkoperator
         image: europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networkoperator:latest
         imagePullPolicy: Always
+        env:
+        - name: BASEDIR
+          value: "/operator"
+        - name: PROJECT
+          value: "free5gc-384814"
+        - name: REGION
+          value: "europe-west2"
+        - name: ZONE
+          value: "europe-west2-a"

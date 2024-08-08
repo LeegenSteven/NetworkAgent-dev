@@ -34,6 +34,22 @@ kubectl apply -f wireguard.yaml
 kubectl apply -f service.yaml
 ```
 
+Update the operator deployment manifest with your PROJECT, REGION and ZONE details as follows: 
+
+```
+  containers:
+  - name: networkoperator
+    image: europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networkoperator:latest
+    imagePullPolicy: Always
+    env:
+    - name: PROJECT
+      value: <<YOUR PROJECT>>
+    - name: REGION
+      value: <<YOUR REGION>>
+    - name: ZONE
+      value: <<YOUR ZONE>>
+```
+
 Deploy the operator
 
 ```
@@ -43,10 +59,19 @@ kubectl apply -f deployment.yaml
 
 ## Running the operator locally on your laptop
 
+Set the following environment variables
+
+```
+export PROJECT=free5gc-384814
+export REGION=europe-west2
+export ZONE=europe-west2-a
+```
+
 ```
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+cd src
 kopf run main.py --verbose
 ```
 

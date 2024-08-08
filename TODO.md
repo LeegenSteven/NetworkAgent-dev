@@ -12,18 +12,9 @@ Candidate todo list. Each task rated as:
 
 ## Operator
 
-* __H__: Use environment variable for location of playbooks, and cloud region/locations etc. Constants are hard coded
-* __H__: Update status when lifecycle is complete on resource and service and better manage error reporting on CR
 * __H__: generate wireguard keys for each edge rather than static key list? Attach maybe to configmaps?
-* __H__: Deploy to GKE and test credentials are working correctly
 * __H__: Add firewall rule to allow allowed traffic from allowedinterface and add route between customer VPC/location and edge VM to route traffic to allowed interfaces
-* __H__: Service: refer to the children objects created?
-  * generate unique name for instance
-  * initially tag each child metadata with service name
-  * maybe implement parent-child hierarchy -> service owns the resource objects, and when service is delete everything else is auto deleted
 * __M__: Run a test after VMs are up to test the tunnels are working - then mark service operational.
-* __M__: Wireguard: attach the config parameters to the spec/status and update the status field
-* __L__: Ansible is not threaded (all running sequentially)
 
 ## Tools/Rest endpoint
 

@@ -1,0 +1,68 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: "automation"
+  name: networktools-account
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: networktools-role-cluster
+rules:
+  - apiGroups: [google.dev]
+    resources: [connectivityservices, wireguardappliances]
+    verbs: [list, get, create, watch, patch, delete]
+
+  - apiGroups: [compute.cnrm.cloud.google.com]
+    resources: [computenetworks, computeaddresses, computesubnetworks, computeinstances, computerouters, computerouternats, computefirewalls]
+    verbs: [list, get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: networktools-rolebinding-cluster
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: networktools-role-cluster
+subjects:
+  - kind: ServiceAccount
+    name: networktools-account
+    namespace: "automation"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: networktools
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      application: networktools
+  template:
+    metadata:
+      labels:
+        application: networktools
+    spec:
+      serviceAccountName: networktools-account
+      containers:
+      - name: networktools
+        image: europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networktools:latest
+        imagePullPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: networktools-lb-service
+spec:
+  type: LoadBalancer
+  selector:
+    application: networktools
+  ports:
+  - name: web
+    protocol: TCP
+    port: 8080
+    targetPort: 8080

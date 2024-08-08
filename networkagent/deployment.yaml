@@ -1,0 +1,35 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: networkagent
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      application: networkagent
+  template:
+    metadata:
+      labels:
+        application: networkagent
+    spec:
+      containers:
+      - name: networkagent
+        image: europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networkagent:latest
+        imagePullPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: networkagent-lb-service
+spec:
+  type: LoadBalancer
+  selector:
+    application: networkagent
+  ports:
+  - name: web
+    protocol: TCP
+    port: 8080
+    targetPort: 8080

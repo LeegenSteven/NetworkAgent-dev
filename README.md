@@ -69,10 +69,24 @@ Each demo environment will have the following:
 * __Mgmt VPC__: A management VPC with all orchestration and monitoring tools deployed. 
 * __Edge Appliance VPCs__: The VPCs created to host the edge virtual network appliances. 
 
-## Running the demo
+## Create the demo environment
 
-To run the demo, do the following:
+To build the demo environment, do the following:
 
 * [Setup base GCP environment](environment/Readme.md)
 * [Test a simple connectivity service](sample-service/Readme.md)
 * [Run the Network Agent](networkagent/Readme.md)
+
+## Demo Scenario
+
+* Add 2 locations and show 
+* Ask LLM about your locations and see those added above
+* Ask LLM about available services
+* Create point to point service with both locations
+* Show k8s objects created
+* Run traffic across locations over VPN
+* Show traffic running
+* Add two more locations
+* Ask LLM about locations again
+* Delete the existing service and create a new mesh service across all of the locations
+* Run traffic again and show

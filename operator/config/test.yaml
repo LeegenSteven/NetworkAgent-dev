@@ -1,16 +1,16 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: monitors.google.dev
+  name: connectivitytests.google.dev
 spec:
   scope: Namespaced
   group: google.dev
   names:
-    kind: Monitor
-    plural: monitors
-    singular: monitor
+    kind: ConnectivityTest
+    plural: connectivitytests
+    singular: connectivitytest
     shortNames:
-      - mon
+      - test
   versions:
     - name: v1
       served: true

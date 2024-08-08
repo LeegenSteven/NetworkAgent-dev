@@ -1,6 +1,0 @@
-apiVersion: network.example.com/v1
-kind: Monitoring
-metadata:
-  name: monitoring-sample
-spec:
-  service: vpnservice-sample

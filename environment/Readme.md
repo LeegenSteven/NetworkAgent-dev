@@ -24,6 +24,12 @@ gcloud compute networks subnets create mgmt-subnet --network=mgmt --range=10.0.1
 gcloud compute firewall-rules create mgmt-ingress --network mgmt --allow tcp:8080,tcp:22,tcp:3389,tcp:443,icmp --direction INGRESS --source-ranges 0.0.0.0/0
 ```
 
+Enable GKE APIs
+
+```
+gcloud services enable container.googleapis.com
+```
+
 Create GKE Cluster and install kubectl
 
 ```
@@ -37,7 +43,7 @@ gcloud container clusters create networkautomation \
     --monitoring SYSTEM \
     --zone europe-west2-a\
     --node-locations europe-west2-a \
-    --num-nodes 4 \
+    --num-nodes 5 \
     --network mgmt \
     --subnetwork mgmt-subnet
 ```
@@ -123,9 +129,15 @@ status:
 
 You can reach git at __http://<<YOUR EXTERNAL IP>>0:8080__
 
+[Install Porch and config sync by following these instructions](https://kpt.dev/guides/porch-installation)
 
-[setup manually](https://cloud.google.com/kubernetes-engine/enterprise/config-sync/docs/how-to/installing-kubectl#deploying)
-
+```
+kpt alpha repo register \
+  --namespace automation \
+  --repo-basic-username=<<username>> \
+  --repo-basic-password=<<password>> \
+  http://<<YOUR EXTERNAL IP>>/brian/test.git
+```
 
 ## Docker repo
 

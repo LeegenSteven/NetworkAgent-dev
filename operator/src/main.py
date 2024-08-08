@@ -18,6 +18,7 @@ logger.info("Base directory is %s", constants.basedir)
 # register lifecycle events
 from services.servicesevents import *
 from resources.wireguard.lifecycle import *
+from tests.lifecycle import *
 
 # Login with k8s client
 @kopf.on.login()

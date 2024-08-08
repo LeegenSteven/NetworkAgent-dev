@@ -1,9 +1,0 @@
-PORT=None
-SERVICE_FILE_LOCATION=None
-PROJECT = None
-ZONE = None
-CLUSTER = None
-KUBECONFIG = None
-api_client = None
-v1_api_instance = None
-custom_api_instance = None

@@ -6,9 +6,6 @@ import aiohttp_cors
 import kubernetes
 import os
 import json
-from utils.login import *
-import utils.constants as constants
-from utils.args import *
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
@@ -51,9 +48,7 @@ async def getCustomerLocations(request):
 
     logger.info("finding networks for %s", name)
 
-    client = kubernetes.dynamic.DynamicClient(
-        constants.api_client
-    )
+    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
 
     try:
         network_api = client.resources.get(
@@ -97,9 +92,7 @@ async def getServices(request):
 
     logger.info("finding networks for %s", name)
 
-    client = kubernetes.dynamic.DynamicClient(
-        constants.api_client
-    )
+    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
 
     try:
         network_api = client.resources.get(
@@ -144,9 +137,7 @@ async def createService(request):
     site1 = params['site1']
     site2 = params['site2']
 
-    client = kubernetes.dynamic.DynamicClient(
-        constants.api_client
-    )
+    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
 
     try:
         network_api = client.resources.get(
@@ -181,13 +172,8 @@ def addRoutes():
     createServiceRoute=app.router.add_post("/service", createService)
     cors.add(createServiceRoute, corsOptions)
 
+
 if __name__ == "__main__":
-    # collect arguments
-    parseargs()
-
-    # login to k8s cluster
-    login()
-
     # add rest endpoints
     addRoutes()
 

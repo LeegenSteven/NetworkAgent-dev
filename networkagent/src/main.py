@@ -1,9 +1,7 @@
-import os
 import logging
 import gradio as gr
 from agent.networkagent import NetworkAgent
 from langchain.schema import AIMessage, HumanMessage
-import vertexai
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
@@ -30,6 +28,5 @@ async def agent_interaction(message, history):
 if __name__ == '__main__':
     logger.info("starting Network Agent")
 
-    # os.environ.get('KUBECONFIG')
     gr.ChatInterface(agent_interaction).launch()
 

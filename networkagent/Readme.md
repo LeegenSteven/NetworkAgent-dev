@@ -1,43 +1,51 @@
 # Network Agent
 
-## Setup gcloud CLI
-
-Install the [gcloud cli tools](https://cloud.google.com/sdk/gcloud). Then run the following comands in a terminal to configure your google project and target region.
-
-```
-export GOOGLE_PROJECT=free5gc-384814
-gcloud auth login --no-launch-browser
-gcloud config set project $GOOGLE_PROJECT
-gcloud config set compute/region "europe-west2"
-gcloud config set compute/zone "europe-west2-b"
-```
-
-## Create service account credentials
-
-Need to create service account and add credentials to network agent. Ensure __constraints/iam.disableServiceAccountKeyCreation__ is not enforced. 
+## Build and deploy the agent docker image
 
 ```
 cd NetworkAgent/networkagent
-gcloud iam service-accounts create networkagent --description="Network Agent Service Account" --display-name="networkagent account"
-export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)"  --filter=name:"networkagent@"`
-gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/editor"
-gcloud iam service-accounts keys create "./networkagent.json" --iam-account=$GOOGLE_SERVICE_ACCOUNT
+docker build . -t europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networkagent:latest
+docker push europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networkagent:latest
 ```
 
-## Build and deploy the docker image
+To deploy run the following command
 
 ```
-gcloud builds submit --region=europe-west1 --tag europe-west1-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networkagent:1.0
+kubectl apply -f deployment.yaml
 ```
+
+To find the external IP assigned to the network agent service run the following command
+
+```
+kubectl get service networkagent-lb-service --output yaml
+```
+
+You should see an external IP address under __loadbalancer:ingress__
+
+```
+spec:
+  ...
+  ports:
+  - ...
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: products
+    department: sales
+  sessionAffinity: None
+  type: LoadBalancer
+status:
+  loadBalancer:
+    ingress:
+    - ip: <<YOUR EXTERNAL IP>>
+```
+
+You can reach the network agent at __http://<<YOUR EXTERNAL IP>>0:8080__
+
 
 ## Running the Agent on your laptop
 
 ```
-export KUBECONFIG
-export ...
 python3 main.py
 ```
-
-## Running the Agent on GCP
-
-Deploy to k8s cluster...

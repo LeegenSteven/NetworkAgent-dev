@@ -3,14 +3,7 @@
 This folder contains a set of tools that can be used by LLMs to interact with the Kubernetes network orchestration layer.
 
 
-## Authentication
-
-create service account, download credentials to tools.json
-
-update environment variables ??
-
-
-## Build and deploy
+## Build and deploy tools docker image
 
 Authenticate with the docker repo
 
@@ -28,10 +21,39 @@ docker push europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networktools
 https://cloud.google.com/run/docs/deploying?skip_cache=true
 
 
-## Cloud Run
+## Deploy the tools service
 
-To run the service
+To run the network tools service run the following command
 
 ```
-gcloud run deploy --image europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networktools:latest --service-account networktools@free5gc-384814.iam.gserviceaccount.com
+kubectl apply -f deployment.yaml
 ```
+
+To find the external IP assigned to the network tools service run the following command
+
+```
+kubectl get service networktools-lb-service --output yaml
+```
+
+You should see an external IP address under __loadbalancer:ingress__
+
+```
+spec:
+  ...
+  ports:
+  - ...
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: products
+    department: sales
+  sessionAffinity: None
+  type: LoadBalancer
+status:
+  loadBalancer:
+    ingress:
+    - ip: <<YOUR EXTERNAL IP>>
+```
+
+You can reach the network tools rest endpoint at __http://<<YOUR EXTERNAL IP>>0:8080__

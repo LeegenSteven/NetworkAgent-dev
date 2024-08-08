@@ -1,0 +1,8 @@
+apiVersion: network.example.com/v1
+kind: Test
+metadata:
+  name: test-sample
+spec:
+  virtualmachines:
+  - london-app1
+  - sydney-app1

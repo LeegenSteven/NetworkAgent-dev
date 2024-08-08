@@ -1,0 +1,106 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: netbox-configmap
+  namespace: netbox-community
+data:
+  # NetBox environment variables
+  # More configuration can be added via: https://netbox.readthedocs.io/en/stable/configuration/optional-settings/
+  #changeme
+  ALLOWED_HOSTS: '*'
+  CHANGELOG_RETENTION: "90"
+  DB_HOST: netbox-postgresql
+  DB_NAME: netbox
+  DB_USER: netbox
+  EMAIL_FROM: netbox@bar.com
+  EMAIL_PORT: "25"
+  EMAIL_SERVER: localhost
+  EMAIL_TIMEOUT: "10"
+  EMAIL_USERNAME: foo
+  EXEMPT_VIEW_PERMISSIONS: ''
+  LOGIN_REQUIRED: "true"
+  MEDIA_ROOT: /opt/netbox/netbox/media
+  METRICS_ENABLED: "true"
+  NETBOX_USERNAME: guest
+  REDIS_HOST: netbox-redis-master
+  REDIS_CACHE_HOST: netbox-redis-master
+  REDIS_PORT: "6379"
+  REDIS_CACHE_PORT: "6379"
+  REDIS_DATABASE: "0"
+  REDIS_CACHE_DATABASE: "1"
+  SUPERUSER_EMAIL: admin@example.com
+  SUPERUSER_NAME: admin
+  MAINTENANCE_MODE: 'False'
+  DEBUG: 'False'
+  REMOTE_AUTH_ENABLED: 'True'
+  REMOTE_AUTH_AUTO_CREATE_USER: 'True'
+  # Regular LDAP Backend
+  REMOTE_AUTH_BACKEND: netbox.authentication.LDAPBackend
+  # SSO Enabled Backend
+  #REMOTE_AUTH_BACKEND: 'django3_saml2_nbplugin.backends.SAML2CustomAttrUserBackend'
+  REMOTE_AUTH_HEADER: 'HTTP_REMOTE_USER'
+  REMOTE_AUTH_DEFAULT_GROUPS: 'sso-default-user' #changeme
+
+  # LDAP configuration against Microsoft Acive Directory
+  # For more information around LDAP, see https://netbox.readthedocs.io/en/stable/installation/4-ldap/
+  ldap_config.py: |
+    import ldap
+    from django_auth_ldap.config import LDAPSearch, NestedGroupOfNamesType
+
+    # Read secret from file
+    def read_secret(secret_name):
+        try:
+            f = open('/run/secrets/' + secret_name, 'r', encoding='utf-8')
+        except EnvironmentError:
+            return ''
+        else:
+            with f:
+                return f.readline().strip()
+
+    AUTH_LDAP_SERVER_URI = "<LDAP_server_URI>" #changeme
+    AUTH_LDAP_CONNECTION_OPTIONS = {
+      ldap.OPT_REFERRALS: 0
+    }
+    # Uncomment line below if using TLS
+    #AUTH_LDAP_START_TLS = True
+
+    # Service user credentials. This account will be making all the queries when users attempt to log in
+    AUTH_LDAP_BIND_DN = "<LDAP_bind_DN>" #changeme
+    AUTH_LDAP_BIND_PASSWORD = read_secret('auth_ldap_bind_password')
+    LDAP_IGNORE_CERT_ERRORS = True
+
+    # Where to look for users
+    AUTH_LDAP_USER_SEARCH = LDAPSearch("<LDAP_user_search>") #changeme
+
+    AUTH_LDAP_USER_DN_TEMPLATE = None
+
+    # Map user attributes to Django attributes
+    AUTH_LDAP_USER_ATTR_MAP = {
+        "first_name": "givenName",
+        "last_name": "sn",
+        "username": "uid",
+        "email": "mail"
+    }
+
+    AUTH_LDAP_GROUP_SEARCH = LDAPSearch("<LDAP_group_search>") #changeme
+
+    # Choose type applicable to your LDAP
+    #AUTH_LDAP_GROUP_TYPE = NestedGroupOfNamesType()
+    AUTH_LDAP_GROUP_TYPE = GroupOfNamesType()
+
+    # Groups defined in LDAP source and described here will be assigned the following permissions
+    AUTH_LDAP_USER_FLAGS_BY_GROUP = {
+      # Allowed to navigate regular NetBox interface. Specific available actions are determined by individual user and group permissions
+      "is_active": ["<LDAP_group>"], #changeme
+      # Allowed to navigate NetBox Administration menu. Specific available actions are determined by individual user and group permissions
+      "is_staff": ["<LDAP_group>"], #changeme
+      # Is given full admin permissions across this NetBox deployment, regardless of individual user or group permissions
+      "is_superuser": ["<LDAP_group>"], #changeme
+    }
+
+    # Groups defined in LDAP source and described here will be created within NetBox Authentication
+    AUTH_LDAP_MIRROR_GROUPS = {"<LDAP_groups_to_mirror>"} #changeme
+
+    AUTH_LDAP_FIND_GROUP_PERMS = True
+    #AUTH_LDAP_CACHE_GROUPS = False
+    AUTH_LDAP_GROUP_CACHE_TIMEOUT = 3600

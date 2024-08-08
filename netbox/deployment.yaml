@@ -1,0 +1,35 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netbox-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: netbox
+  template:
+    metadata:
+      labels:
+        app: netbox
+    spec:
+      containers:
+      - name: netbox-container
+        image: netbox:latest
+        ports:
+        - containerPort: 5000
+          name: netbox-web
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: netbpx-lb-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: netbox
+  ports:
+  - name: web
+    protocol: TCP
+    port: 8080
+    targetPort: 5000

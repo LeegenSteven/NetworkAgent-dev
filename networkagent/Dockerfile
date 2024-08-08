@@ -1,14 +1,6 @@
-FROM ubuntu:22.04
-
-RUN apt update && apt install -y python3-pip
-
-# Environment variables for k8s and Gemini
-# ENV KUBECONFIG
-# ENV 
-
-# Add service credentials file also
-
-ADD . /
-RUN pip install -r requirements.txt
-
-CMD kpof run /main.py 
+FROM python:3.12
+ADD ./requirements.txt /
+RUN pip install -r /requirements.txt
+ADD ./src/ /agent
+WORKDIR /agent
+CMD python3 main.py

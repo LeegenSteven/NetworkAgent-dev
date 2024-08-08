@@ -1,6 +1,5 @@
 import kopf
 import logging
-import json
 from resources.wireguard.lifecycle_tasks import *
 
 # https://wireguard.how/server/google-cloud-platform/

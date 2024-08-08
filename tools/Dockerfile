@@ -1,15 +1,6 @@
-FROM ubuntu:22.04
-
-RUN apt update
-RUN apt upgrade -y && apt install -y python3 python3-pip
-RUN DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata
-
-RUN mkdir /app
-WORKDIR /app
-ADD . /app
-
-RUN pip install --upgrade pip setuptools wheel
-RUN pip install -r requirements.txt
-RUN chmod +x /app/startup.sh
-
-ENTRYPOINT /app/startup.sh
+FROM python:3.12
+ADD ./requirements.txt /
+RUN pip install -r /requirements.txt
+ADD ./src/ /tools
+WORKDIR /tools
+CMD python3 main.py

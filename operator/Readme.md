@@ -67,6 +67,8 @@ export REGION=europe-west2
 export ZONE=europe-west2-a
 ```
 
+Run the following to start the operator
+
 ```
 python -m venv .venv
 source .venv/bin/activate

@@ -2,9 +2,10 @@ apiVersion: google.dev/v1
 kind: ConnectivityService
 metadata:
   name: vpnservice1
+  labels:
+    customer: acme
 spec:
   type: site-to-site
-  name: test-vpn
   interfaces: # the "remote" subnets to connect
     - london-internal
     - sydney-internal

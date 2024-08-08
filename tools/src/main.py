@@ -6,6 +6,7 @@ import aiohttp_cors
 import kubernetes
 import os
 import json
+from pathlib import Path
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
@@ -30,15 +31,19 @@ async def getCustomerLocations(request):
     """
     ---
     description: Retrieve all customer VPC locations
+    parameters: 
+    - in: path
+      name: name
+      description: Customer Name
+      required: true
+      schema:
+          type: string
     produces:
     - text/json
     responses:
         "200":
             description: successful operation. Return json object with VPC location informastion
-        "405":
-            description: invalid HTTP Method
     """
-    logger.info("Getting locations for customer %s", )
 
     if 'name' not in request.match_info:
         return web.json_response({"errro": "name is required"})
@@ -46,7 +51,7 @@ async def getCustomerLocations(request):
     # get the customer name
     name = request.match_info['name']
 
-    logger.info("finding networks for %s", name)
+    logger.info("Getting locations for customer %s", name )
 
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
 
@@ -55,9 +60,9 @@ async def getCustomerLocations(request):
             api_version="compute.cnrm.cloud.google.com/v1beta1", 
             kind="ComputeSubnetwork",
         )
-        items=network_api.get(label_selector=f"customer={name}")
+        result=network_api.get(label_selector=f"customer={name}")
         locations=[]
-        for item in items.items:
+        for item in result.items:
             logger.info(item)
             location = {
                 'name': item['metadata']['name'],
@@ -75,11 +80,20 @@ async def getCustomerLocations(request):
 ######################################################################
 async def getServices(request):
     """
-    Query a customers connectivity services
-    Args:
-        - Customer name: 
-    Returns:
-        Service descriptions
+    ---
+    description: Get Services
+    parameters: 
+    - in: path
+      name: name
+      description: Customer Name
+      required: true
+      schema:
+          type: string
+    produces:
+    - text/json
+    responses:
+        "200":
+            description: successful operation. Return json object with Services
     """
     
     logger.info("Getting Service for customer %s", )
@@ -100,32 +114,47 @@ async def getServices(request):
             kind="ConnectivityService",
         )
         items=network_api.get(label_selector=f"customer={name}")
-        locations=[]
+        services=[]
         for item in items.items:
             logger.info(item)
-            location = {
+            service = {
+                'customer': item['metadata']['labels']['customer'],
                 'name': item['metadata']['name'],
+                'type': item['spec']['type'],
+                'interfaces': item['spec']['interfaces'],
             }
-            locations.append(location)
+            services.append(service)
 
-        return web.json_response(locations)
-    except kubernetes.ResourceNotFoundError:
-        return web.json_response({"result": []})
-
-    return web.json_response({"result": "ok"})
+        return web.json_response(services)
+    except kubernetes.dynamic.exceptions.ResourceNotFoundError:
+        return web.json_response([])
 
 ######################################################################
 # Create a new connectivity service
 ######################################################################
 async def createService(request):
     """
-    Create a customer connectivity services
-    Args:
-        - Customer name: 
-        - 2 VPC locations to connect
-        - list of firewall rules (later)
-    Returns:
-        Service description
+    ---
+    description: Create a new connectivity service
+    parameters:
+    - in: body
+        name: body
+        description: Created user object
+        required: false
+        schema:
+        type: object
+        properties:
+            username:
+            type:
+                - "string"
+                - "null"
+            firstName:
+            type: string
+    produces:
+    - text/json
+    responses:
+        "201":
+            description: successful operation. Return json object with new connectivity service informastion
     """
     logger.info("Create a new Service")
     params = await request.json()
@@ -176,6 +205,13 @@ def addRoutes():
 if __name__ == "__main__":
     # add rest endpoints
     addRoutes()
+    setup_swagger(app)
+
+    # check if kubeconfig path exists
+    if os.path.exists(Path.home()/".kube"):
+        kubernetes.config.load_kube_config()
+    else:
+        kubernetes.config.load_incluster_config()
 
     # start the server   
     loop = asyncio.get_event_loop()

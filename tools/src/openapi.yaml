@@ -1,0 +1,83 @@
+openapi: 3.0.3
+info:
+  title: Network Agent Tools
+  description: |-
+    These rest apis provide a set of tools that can query and create
+    network connectivity services. 
+  version: 0.0.1
+servers:
+  - url: http://0.0.0.0:8080/ui/
+paths:
+  /locations/{name}:
+    get:
+      summary: Retrive a set of network locations
+      description: Return a set of Customer specific GCP Subnetworks that can be connected over a connectivity service tunnel
+      operationId: main.getCustomerLocations
+      parameters:
+        - name: name
+          in: path
+          description: A string representing the customer name
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: successful operation
+        '400':
+          description: Invalid status value
+  /definitions:
+    get:
+      summary: Retrive a set of network definitions
+      description: Return a set of definition CRDs
+      operationId: main.getServiceDefinitions
+      responses:
+        '200':
+          description: successful operation
+        '400':
+          description: Invalid status value
+  /deployed/{name}:
+    get:
+      summary: Get the deployed connectivity services for this customer
+      description: Get the deployed connectivity services for this customer
+      operationId: main.getServices
+      parameters:
+        - name: name
+          in: path
+          description: A string representing the customer name
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: successful operation
+        '400':
+          description: Invalid status value
+  /service:
+    post:
+      summary: creates a request to create a new connectivity service
+      description: Create a New Connectivity Service between two GCE Subnetwork Locations
+      operationId: main.createService
+      requestBody:
+        x-body-name: payload
+        content:
+          application/json:
+            schema:
+                $ref : "#/components/schemas/Service"
+      responses:
+        '201':
+          description: successful request to create new service received
+        '409':
+          description: service with that name already exists
+components:
+  schemas:
+    Service:
+      type: object
+      properties:
+        customername:
+          type: string
+        servicename:
+          type: string
+        locations:
+          type: array
+          items:
+            type: string

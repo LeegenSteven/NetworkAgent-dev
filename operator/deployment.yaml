@@ -23,7 +23,7 @@ rules:
 
   # Application: read-only access for watching cluster-wide.
   - apiGroups: [google.dev]
-    resources: [connectivityservices, wireguardappliances]
+    resources: [pointtopointservices, wireguardappliances, connectivitytests]
     verbs: [list, get, create, watch, patch, delete]
 
   # Application: other resources managed.

@@ -1,58 +1,28 @@
-import asyncio
 import logging
-from aiohttp import web
-from aiohttp_swagger import *
-import aiohttp_cors
 import kubernetes
-import os
-import json
+from utils.k8s import login
 from pathlib import Path
+from connexion import FlaskApp
+# from connexion.options import SwaggerUIOptions
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
 logging.basicConfig(level='INFO', format=log_format)
 logger = logging.getLogger(__name__)
 
-app = web.Application()
-corsOptions={
-    "*": aiohttp_cors.ResourceOptions(
-        allow_credentials=True,
-        expose_headers="*",
-        allow_headers="*",
-        allow_methods="*"
-    )
-}
-cors = aiohttp_cors.setup(app, defaults=corsOptions)
+# options = SwaggerUIOptions(swagger_ui_path="/docs")
+# app = FlaskApp(__name__, swagger_ui_options=options)
+# app.add_api("openapi.yaml",swagger_ui_options=options)
+app = FlaskApp(__name__)
+app.add_api("openapi.yaml")
 
 ######################################################################
 # Get existing customer locations
 ######################################################################
-async def getCustomerLocations(request):
-    """
-    ---
-    description: Retrieve all customer VPC locations
-    parameters: 
-    - in: path
-      name: name
-      description: Customer Name
-      required: true
-      schema:
-          type: string
-    produces:
-    - text/json
-    responses:
-        "200":
-            description: successful operation. Return json object with VPC location informastion
-    """
-
-    if 'name' not in request.match_info:
-        return web.json_response({"errro": "name is required"})
-
-    # get the customer name
-    name = request.match_info['name']
-
+def getCustomerLocations(name):
     logger.info("Getting locations for customer %s", name )
 
+    login()
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
 
     try:
@@ -71,26 +41,17 @@ async def getCustomerLocations(request):
             }
             locations.append(location)
 
-        return web.json_response(locations)
+        return locations
     except kubernetes.ResourceNotFoundError:
-        return web.json_response({"result": []})
+        return {"result": []}
 
 ######################################################################
 # Get a list of Service Definitions
 ######################################################################
-async def getServiceDefinitions(request):
-    """
-    ---
-    description: Get Connectivity Service Definitions
-    produces:
-    - text/json
-    responses:
-        "200":
-            description: successful operation. Return json object with Service Definition CRD descriptors
-    """
-    
+def getServiceDefinitions():
     logger.info("Getting Service definitions")
 
+    login()
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
 
     try:
@@ -104,47 +65,23 @@ async def getServiceDefinitions(request):
             logger.info(item)
             services.append(str(item))
 
-        return web.json_response(services)
+        return services
     except kubernetes.dynamic.exceptions.ResourceNotFoundError:
-        return web.json_response([])
+        return []
 
 ######################################################################
 # Get existing connectivity services
 ######################################################################
-async def getServices(request):
-    """
-    ---
-    description: Get Services
-    parameters: 
-    - in: path
-      name: name
-      description: Customer Name
-      required: true
-      schema:
-          type: string
-    produces:
-    - text/json
-    responses:
-        "200":
-            description: successful operation. Return json object with Services
-    """
-    
-    logger.info("Getting Service for customer %s", )
+def getServices(name):
+    logger.info("finding service instances for %s", name)
 
-    if 'name' not in request.match_info:
-        return web.json_response({"errro": "name is required"})
-
-    # get the customer name
-    name = request.match_info['name']
-
-    logger.info("finding networks for %s", name)
-
+    login()
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
 
     try:
         network_api = client.resources.get(
             api_version="google.dev/v1", 
-            kind="ConnectivityService",
+            kind="PointToPointService",
         )
         items=network_api.get(label_selector=f"customer={name}")
         services=[]
@@ -152,107 +89,61 @@ async def getServices(request):
             logger.info(item)
             service = {
                 'customer': item['metadata']['labels']['customer'],
-                'name': item['metadata']['name'],
-                'type': item['spec']['type'],
-                'interfaces': item['spec']['interfaces'],
+                'servicename': item['metadata']['name'],
+                'locations': item['spec']['interfaces'],
             }
             services.append(service)
 
-        return web.json_response(services)
+        return services
     except kubernetes.dynamic.exceptions.ResourceNotFoundError:
-        return web.json_response([])
-
-
+        return []
 
 ######################################################################
 # Create a new connectivity service
 ######################################################################
-async def createService(request):
-    """
-    ---
-    description: Create a new connectivity service
-    parameters:
-    - in: body
-        name: body
-        schema:
-            id: User
-            required:
-            - email
-            - name
-            properties:
-            email:
-                type: string
-                description: email for user
-            name:
-                type: string
-                description: name for user
-    produces:
-    - text/json
-    responses:
-        "201":
-            description: successful operation. Return json object with new connectivity service informastion
-    """
-    logger.info("Create a new Service")
-    params = await request.json()
+def createService(payload):
+    logger.info("Create a new Service from %s", str(payload))
 
-    if (params['identifier'] is None) or (params['firstname'] is None) or (params['surname'] is None):
-        return web.json_response(json.dumps({'error': 'firstname and lastname are required'}))
+    customername = payload['customername']
+    servicename = payload['servicename']
+    sites = payload['locations']
 
-    name = params['name']
-    site1 = params['site1']
-    site2 = params['site2']
-
+    login()
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
 
     try:
         network_api = client.resources.get(
             api_version="google.dev/v1", 
-            kind="ConnectivityService",
+            kind="PointToPointService",
         )
-        # items=network_api.create(
+        crd_manifest= { 
+            "apiVersion": "google.dev/v1",
+            "kind": "PointToPointService",
+            "metadata": {
+                "name": servicename,
+                "namespace": "automation",
+                "labels": {
+                    "customer": customername
+                },
+            },
+            "spec": {
+                "interfaces": sites
+            }
+        }
+        result = network_api.create(crd_manifest)
 
-        # )
-
-        return web.json_response({"result": []})
-    except kubernetes.ResourceNotFoundError:
-        return web.json_response({"result": []})
+        return {"result": str(result)}, 201
+    except kubernetes.client.rest.ApiException as e: 
+        logger.info(e.status)
+        logger.debug(e)
+        if e.status == 409:
+            logger.info("Already exists - skipping")
+            return {}, 409
 
 ######################################################################
 # Start the server and load routes
 ######################################################################
-async def init():
-    logger.info('starting server on 0.0.0.0:'+str(os.environ.get("PORT", 8080)))
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner,host='0.0.0.0', port=int(os.environ.get("PORT", 8080)), ssl_context=None)
-    await site.start()
-
-def addRoutes():
-    getLocationsRoute=app.router.add_get("/locations/{name}", getCustomerLocations)
-    cors.add(getLocationsRoute, corsOptions)
-
-    getServiceRoute=app.router.add_get("/services/{name}", getServices)
-    cors.add(getServiceRoute, corsOptions)
-
-    createServiceRoute=app.router.add_post("/service", createService)
-    cors.add(createServiceRoute, corsOptions)
-
-    getServiceDefinitionsRoute=app.router.add_get("/definitions", getServiceDefinitions)
-    cors.add(getServiceDefinitionsRoute, corsOptions)
-
-
 if __name__ == "__main__":
-    # add rest endpoints
-    addRoutes()
-    setup_swagger(app)
-
-    # check if kubeconfig path exists
-    if os.path.exists(Path.home()/".kube"):
-        kubernetes.config.load_kube_config()
-    else:
-        kubernetes.config.load_incluster_config()
 
     # start the server   
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(init())
-    loop.run_forever()
+    app.run(f"{Path(__file__).stem}:app", host='0.0.0.0', port=8080)

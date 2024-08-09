@@ -18,8 +18,6 @@ docker build . -t europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networ
 docker push europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networktools:latest
 ```
 
-https://cloud.google.com/run/docs/deploying?skip_cache=true
-
 
 ## Deploy the tools service
 
@@ -56,4 +54,4 @@ status:
     - ip: <<YOUR EXTERNAL IP>>
 ```
 
-You can reach the network tools rest endpoint at __http://<<YOUR EXTERNAL IP>>0:8080__
+You can reach the network tools swagger endpoint at __http://<<YOUR EXTERNAL IP>>:8080/ui/ui__

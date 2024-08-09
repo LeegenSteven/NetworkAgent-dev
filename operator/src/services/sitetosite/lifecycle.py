@@ -6,10 +6,14 @@ import os
 logger = logging.getLogger(__name__)
 
 ##########################################
-# Create a new VPN site
+# Create a new PTP VPN
 ##########################################
-async def create(spec):
-  logger.info("Create site to site")
+@kopf.on.create('pointtopointservice')
+async def ptpservice(spec, name, namespace, logger, **kwargs):
+  logger.info(f"Create pointtopoint service handler is called with spec: {spec}")
+
+  if len(spec.get('interfaces'))!=2:
+      raise kopf.PermanentError("Two interfaces must be provided.")
 
   # build the a and b end variables
   aend=spec.get('interfaces')[0]
@@ -68,25 +72,6 @@ async def create(spec):
          'computename': avars['vmname']
         }
   }
-
-##########################################
-# Delete a VPN site
-##########################################
-async def delete(spec):
-  logger.info("Delete site to site")
-
-  aend=spec.get('interfaces')[0]
-  bend=spec.get('interfaces')[1]
-
-  avars = create_aend_vars(aend, bend)
-  logger.info(json.dumps(avars, indent=4))
-
-  await delete_network(avars['vmname'])
-
-  bvars = create_bend_vars(aend, bend)
-  logger.info(json.dumps(bvars, indent=4))
-
-  await delete_network(avars['vmname'])
 
 ###########################################
 # Simple variable creation for a and b ends

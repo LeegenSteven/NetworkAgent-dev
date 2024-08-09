@@ -1,6 +1,7 @@
 import logging
 import kubernetes
 import kopf
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +33,13 @@ async def create_network(network_name):
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
 
+  logger.debug(json.dumps(crd_manifest, indent=4))
+
   try:
     result = network_api.create(crd_manifest)
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
+    logger.debug(e)
     if e.status == 409:
       # raise kopf.PermanentError("Conflict error, resource already exists.")
       logger.info("already exists - skipping")
@@ -54,6 +58,7 @@ async def delete_network(network_name):
     result = network_api.delete(name=network_name, body={}, namespace="automation")
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
+    logger.debug(e)
 
 ########################################################################
 # ComputeSubNetwork
@@ -87,10 +92,13 @@ async def create_subnetwork(network_name, subnet_name, cidr, region):
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
 
+  logger.debug(json.dumps(crd_manifest, indent=4))
+
   try:
     result = network_api.create(crd_manifest)
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
+    logger.debug(e)
     if e.status == 409:
       # raise kopf.PermanentError("Conflict error, resource already exists.")
       logger.info("Already exists - skipping")
@@ -126,10 +134,13 @@ async def create_router(network_name, region):
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
 
+  logger.debug(json.dumps(crd_manifest, indent=4))
+
   try:
     result = network_api.create(crd_manifest)
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
+    logger.debug(e)
     if e.status == 409:
       # raise kopf.PermanentError("Conflict error, resource already exists.")
       logger.info("Already exists - skipping")
@@ -166,10 +177,13 @@ async def create_nat(network_name, region):
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
 
+  logger.debug(json.dumps(crd_manifest, indent=4))
+
   try:
     result = network_api.create(crd_manifest)
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
+    logger.debug(e)
     if e.status == 409:
       # raise kopf.PermanentError("Conflict error, resource already exists.")
       logger.info("Already exists - skipping")
@@ -217,10 +231,13 @@ async def create_wg_rule(network_name):
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
 
+  logger.debug(json.dumps(crd_manifest, indent=4))
+
   try:
     result = network_api.create(crd_manifest)
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
+    logger.debug(e)
     if e.status == 409:
       # raise kopf.PermanentError("Conflict error, resource already exists.")
       logger.info("Already exists - skipping")
@@ -266,10 +283,13 @@ async def create_ssh_rule(network_name):
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
 
+  logger.debug(json.dumps(crd_manifest, indent=4))
+
   try:
     result = network_api.create(crd_manifest)
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
+    logger.debug(e)
     if e.status == 409:
       # raise kopf.PermanentError("Conflict error, resource already exists.")
       logger.info("Already exists - skipping")
@@ -350,10 +370,13 @@ async def create_compute(vm_name, subnet_name, interface, project, region, zone,
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
 
+  logger.debug(json.dumps(crd_manifest, indent=4))
+
   try:
     result = network_api.create(crd_manifest)
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
+    logger.debug(e)
     if e.status == 422:
       raise kopf.PermanentError("Unprocessable entity.")
     if e.status == 409:
@@ -390,10 +413,13 @@ async def create_external_ip(vmname, region):
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
 
+  logger.debug(json.dumps(crd_manifest, indent=4))
+
   try:
     result = network_api.create(crd_manifest)
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
+    logger.debug(e)
     if e.status == 409:
       # raise kopf.PermanentError("Conflict error, resource already exists.")
       logger.info("Already exists - skipping")
@@ -430,9 +456,12 @@ async def create_vpn_edge(vpn_name, vm_name, tunnel_subnet, tunnel_ip, peer_inte
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
 
+  logger.debug(json.dumps(crd_manifest, indent=4))
+
   try:
     result = network_api.create(crd_manifest)
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
+    logger.debug(e)
     if e.status == 409:
       raise kopf.PermanentError("Conflict error, resource already exists.")

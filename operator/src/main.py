@@ -6,6 +6,7 @@ logging.basicConfig(level='INFO', format=log_format)
 logger = logging.getLogger(__name__)
 
 import os
+import sys
 import utils.constants as constants
 
 # get base directory to figure out where playbooks are located
@@ -16,9 +17,13 @@ else:
 logger.info("Base directory is %s", constants.basedir)
 
 # register lifecycle events
-from services.servicesevents import *
+from services.sitetosite.lifecycle import *
 from resources.wireguard.lifecycle import *
 from tests.lifecycle import *
+
+if os.getenv("REGION") is None or os.getenv("ZONE") is None or os.getenv("PROJECT") is None:
+    logger.error("You must set REGION/ZONE/PROJECT environment variables")
+    sys.exit(0)
 
 # Login with k8s client
 @kopf.on.login()

@@ -1,0 +1,10 @@
+apiVersion: google.dev/v1
+kind: PointToPointService
+metadata:
+  name: vpnservice1
+  labels:
+    customer: acme
+spec:
+  interfaces: # the "remote" customer subnets to connect
+    - london-internal
+    - sydney-internal

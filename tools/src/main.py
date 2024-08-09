@@ -76,6 +76,39 @@ async def getCustomerLocations(request):
         return web.json_response({"result": []})
 
 ######################################################################
+# Get a list of Service Definitions
+######################################################################
+async def getServiceDefinitions(request):
+    """
+    ---
+    description: Get Connectivity Service Definitions
+    produces:
+    - text/json
+    responses:
+        "200":
+            description: successful operation. Return json object with Service Definition CRD descriptors
+    """
+    
+    logger.info("Getting Service definitions")
+
+    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+
+    try:
+        network_api = client.resources.get(
+            api_version="apiextensions.k8s.io/v1", 
+            kind="CustomResourceDefinition",
+        )
+        items=network_api.get(label_selector="type=connectivityservice")
+        services=[]
+        for item in items.items:
+            logger.info(item)
+            services.append(str(item))
+
+        return web.json_response(services)
+    except kubernetes.dynamic.exceptions.ResourceNotFoundError:
+        return web.json_response([])
+
+######################################################################
 # Get existing connectivity services
 ######################################################################
 async def getServices(request):
@@ -129,6 +162,8 @@ async def getServices(request):
     except kubernetes.dynamic.exceptions.ResourceNotFoundError:
         return web.json_response([])
 
+
+
 ######################################################################
 # Create a new connectivity service
 ######################################################################
@@ -139,17 +174,18 @@ async def createService(request):
     parameters:
     - in: body
         name: body
-        description: Created user object
-        required: false
         schema:
-        type: object
-        properties:
-            username:
-            type:
-                - "string"
-                - "null"
-            firstName:
-            type: string
+            id: User
+            required:
+            - email
+            - name
+            properties:
+            email:
+                type: string
+                description: email for user
+            name:
+                type: string
+                description: name for user
     produces:
     - text/json
     responses:
@@ -200,6 +236,9 @@ def addRoutes():
 
     createServiceRoute=app.router.add_post("/service", createService)
     cors.add(createServiceRoute, corsOptions)
+
+    getServiceDefinitionsRoute=app.router.add_get("/definitions", getServiceDefinitions)
+    cors.add(getServiceDefinitionsRoute, corsOptions)
 
 
 if __name__ == "__main__":

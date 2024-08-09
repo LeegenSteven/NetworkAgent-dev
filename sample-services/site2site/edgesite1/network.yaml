@@ -1,0 +1,74 @@
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeNetwork
+metadata:
+  name: london-vpn
+spec:
+  routingMode: REGIONAL
+  autoCreateSubnetworks: false
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeSubnetwork
+metadata:
+  name: london-external
+spec:
+  ipCidrRange: 10.0.110.0/24
+  region: europe-west2
+  description: Site1 External Network
+  networkRef:
+    name: london-vpn
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeRouter
+metadata:
+  name: london-vpn-router
+spec:
+  description: site1 external router
+  region: europe-west2
+  networkRef:
+    name: london-vpn
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeRouterNAT
+metadata:
+  name: 'london-vpn-nat'
+spec:
+  region: europe-west2
+  routerRef:
+    name: london-vpn-router
+  natIpAllocateOption: AUTO_ONLY
+  sourceSubnetworkIpRangesToNat: ALL_SUBNETWORKS_ALL_IP_RANGES
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeFirewall
+metadata:
+  name: london-vpn-wg
+spec:
+  allow:
+    - protocol: udp
+      ports:
+       - "51820"
+  networkRef:
+    name: london-vpn
+  direction: INGRESS
+  sourceRanges:
+    - 0.0.0.0/0
+  targetTags:
+    - wireguard
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeFirewall
+metadata:
+  name: london-vpn-ssh
+spec:
+  allow:
+    - protocol: tcp
+      ports:
+       - "22"
+  networkRef:
+    name: london-vpn
+  direction: INGRESS
+  sourceRanges:
+    - 0.0.0.0/0
+  targetTags:
+    - ssh

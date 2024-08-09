@@ -13,9 +13,10 @@ Candidate todo list. Each task rated as:
 ## Operator
 
 * __H__: Add firewall rule to allow allowed traffic from allowedinterface and add route between customer VPC/location and edge VM to route traffic to allowed interfaces
+* __H__: Break CRDs into service types, e.g. site2site, mesh etc and implement openapi schema for each so LLM can figure out what info is needed
 * __H__: Create a CR that runs an iperf test between two VMs in customer locations
 * __H__: Add monitoring agent to each VPN VM and connect to back end pipeline (discover details from config connector objects in k8s)
-* __M__: move all k8s objects related to wireguard edge appliance under the wireguard object
+* __M__: move compute k8s objects related to wireguard edge appliance under the wireguard object
 * __M__: put VM certificate in one place/maybe in mounted configmap rather than in the container 
 * __M__: create correct schemas for the VPN CRDs - can then be queried by the LLM dynamically
 * __H__: generate wireguard keys for each edge rather than static key list
@@ -23,21 +24,20 @@ Candidate todo list. Each task rated as:
 
 ## Tools/Rest endpoint
 
-* __H__: Convert from cloud run to run on GKE
+* __H__: https://github.com/flasgger/flasgger convert from aiohttp to flask with this swagger addition?
 * __H__: Hook up read/create service APIs with connectivity service object in GKE
-* __L__: Create Swagger spec for API that can be loaded into LLM
 * __M__: Move back end for creating new services to porch rather than direct to k8s
 
 ## Monitoring
 
-* __H__: Create collection infra and pipeline into BQ/pubsub
+* __H__: Create monitoring infra and pipeline into BQ/pubsub
 * __M__: Dashboards? Can we see the network hierarchy/topology at all and overlay performance metrics?
 
 ## Config Sync/Nephio Change Mgmt
 
 * __M__: Setup porch and configsync and register git instance
 * __M__: Blueprints? Figure out how to include the service/resource CRs in a blueprint package story
-* __M__: Definitely make changes to cluster through this interface rather than direct to k8s
+* __M__: Automate pipeline from LLM to deployment
 
 ## Network Services
 
@@ -47,16 +47,19 @@ Candidate todo list. Each task rated as:
 
 ## Netbox
 
-* __M__: Deploy Netbox 
-* __M__: Connect to ...
+* __M__: Use Netbox to visualise maybe?
 
 ## Network Agent
 
-* __H__: Query locations
-* __H__: Query existing services
-* __H__: Query available services and the info available
-* __H__: Q&A to create new services
+* __H__: Snag Gemini end to end flow
+* __H__: Connect agent to internal tools service - no need for external IP for tools
+* __H__: Query customer locations
+* __H__: Query existing services deployed
+* __H__: Query available services and the info required to deploy
+* __H__: Q&A to collect all infor needed to create new services
 * __H__: How is service performing
+* __H__: What tests are available
+* __H__: Run/Stop a test
 
 ## Network Tests
 

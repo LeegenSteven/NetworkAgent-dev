@@ -29,12 +29,10 @@ docker push europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networkopera
 Deploy the appliance and service CRDs.
 
 ```
-cd NetworkAgent/operator/config
-kubectl apply -f wireguard.yaml
-kubectl apply -f service.yaml
+kubectl apply -f NetworkAgent/operator/config
 ```
 
-Update the operator deployment manifest with your PROJECT, REGION and ZONE details as follows: 
+Update the deployment manifest with your PROJECT, REGION and ZONE details as follows: 
 
 ```
   containers:

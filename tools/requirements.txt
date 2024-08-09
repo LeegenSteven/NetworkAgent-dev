@@ -1,7 +1,4 @@
-aiohttp
-aiohttp_cors
-aiohttp-swagger
 kubernetes
 google-cloud-container
 google-api-python-client
-ruamel.yaml
+connexion[swagger-ui, flask, uvicorn]

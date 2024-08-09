@@ -10,8 +10,12 @@ kind: ClusterRole
 metadata:
   name: networktools-role-cluster
 rules:
+  - apiGroups: [apiextensions.k8s.io]
+    resources: [customresourcedefinitions]
+    verbs: [list, get]
+
   - apiGroups: [google.dev]
-    resources: [connectivityservices, wireguardappliances]
+    resources: [pointtopointservices, wireguardappliances, connectivitytests]
     verbs: [list, get, create, watch, patch, delete]
 
   - apiGroups: [compute.cnrm.cloud.google.com]

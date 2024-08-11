@@ -8,14 +8,14 @@ This folder contains a set of tools that can be used by LLMs to interact with th
 Authenticate with the docker repo
 
 ```
-gcloud auth configure-docker europe-west2-docker.pkg.dev
+gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev
 ```
 
 To build and push run the following from the __NetworkAgent/tools__ directory
 
 ```
-docker build . -t europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networktools:latest
-docker push europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networktools:latest
+docker build . -t $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networktools:latest
+docker push $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networktools:latest
 ```
 
 

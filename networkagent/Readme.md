@@ -1,11 +1,12 @@
 # Network Agent
 
+
 ## Build and deploy the agent docker image
 
 ```
 cd NetworkAgent/networkagent
-docker build . -t europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networkagent:latest
-docker push europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networkagent:latest
+docker build . -t $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networkagent:latest
+docker push $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networkagent:latest
 ```
 
 To deploy run the following command
@@ -41,11 +42,49 @@ status:
     - ip: <<YOUR EXTERNAL IP>>
 ```
 
-You can reach the network agent at __http://<<YOUR EXTERNAL IP>>0:8080__
+You can reach the network agent at __http://<<YOUR EXTERNAL IP>>>:8080__
 
 
 ## Running the Agent on your laptop
 
+Setup ADC to impersonate the service account bound to GKE workload identity. 
+
+```
+gcloud auth application-default login --impersonate-service-account $GOOGLE_SERVICE_ACCOUNT
+```
+
+Set the following environment variables
+
+```
+export PROJECT=free5gc-384814
+export REGION=europe-west2
+export ZONE=europe-west2-a
+```
+
+To run the agent run the following:
+
 ```
 python3 main.py
+```
+
+In VSCode you can set environment variables in your __launch.json__ file as below. 
+
+```
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "env": {
+                "PROJECT": "free5gc-384814",
+                "REGION": "europe-west2",
+                "ZONE": "europe-west2-a",
+            }
+        }
+    ]
+}
 ```

@@ -1,22 +1,35 @@
 # Setup GCP Environment
 
+
+
 ## Setup gcloud on your laptop
 
 ```
 gcloud init --no-launch-browser
 ```
 
-## GCP Project(s)
+Setup the following environment variables. They are used throughout the setup docs.
 
-TBD - create projects and service accounts etc.
+```
+export GOOGLE_PROJECT=free5gc-384814
+export GOOGLE_REGION=europe-west2
+export GOOGLE_ZONE=europe-west2-a
+```
 
-* GKE needs a service account with compute admin + artifact registry read
-* Tools needs a service account with GKE Admin
-* Operator needs a service account with GKE Admin
+## Create service account
+
+Run the following to create a new service account
+
+```
+gcloud iam service-accounts create networkagent --description="Network Agent Service Account" --display-name="Network Agent"
+export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
+gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/editor"
+gcloud iam service-accounts keys create "./networkagent.json" --iam-account=$GOOGLE_SERVICE_ACCOUNT
+```
 
 ## GKE Automation Platform
 
-First, create a __mgmt__ VPC to attach GKE and the edge appliances to. 
+Create a __mgmt__ VPC to attach GKE and the edge appliances to. 
 
 ```
 gcloud compute networks create mgmt --subnet-mode=custom
@@ -36,9 +49,9 @@ Create GKE Cluster and install kubectl
 gcloud container clusters create networkautomation \
     --release-channel stable \
     --addons ConfigConnector \
-    --service-account free5gc-vm@free5gc-384814.iam.gserviceaccount.com\
+    --service-account $GOOGLE_SERVICE_ACCOUNT\
     --scopes default,storage-full,cloud-platform,bigquery \
-    --workload-pool free5gc-384814.svc.id.goog \
+    --workload-pool $GOOGLE_PROJECT.svc.id.goog \
     --logging SYSTEM \
     --monitoring SYSTEM \
     --zone europe-west2-a\
@@ -52,15 +65,15 @@ Install kubectl and get cluster credentials
 
 ```
 gcloud components install kubectl
-gcloud container clusters get-credentials networkautomation --region=europe-west2-a
+gcloud container clusters get-credentials networkautomation --region=$GOOGLE_REGION
 ```
 
 Attach service account to config connector
 
 ```
 gcloud iam service-accounts add-iam-policy-binding \
-free5gc-vm@free5gc-384814.iam.gserviceaccount.com \
-    --member="serviceAccount:free5gc-384814.svc.id.goog[cnrm-system/cnrm-controller-manager]" \
+$GOOGLE_SERVICE_ACCOUNT \
+    --member="serviceAccount:$GOOGLE_PROJECT.svc.id.goog[cnrm-system/cnrm-controller-manager]" \
     --role="roles/iam.workloadIdentityUser"
 ```
 
@@ -71,7 +84,7 @@ Specify the GKE namespace and project for Config Connector to create resources i
 ```
 cd NetworkAgent/environment
 kubectl create namespace automation
-kubectl annotate namespace automation cnrm.cloud.google.com/project-id=free5gc-384814
+kubectl annotate namespace automation cnrm.cloud.google.com/project-id=$GOOGLE_PROJECT
 kubectl config set-context --current --namespace automation
 kubectl apply -f configconnector.yaml
 ```
@@ -82,14 +95,14 @@ Verify the config connector installation
 kubectl wait -n cnrm-system --for=condition=Ready pod --all
 ```
 
-## Create SSH keys for Virtual Machines
+## Create SSH keys
 
 To allow orchestration operators to log into the network virtual machines we create SSH keys and register with GCP.
 
 ```
 cd NetworkAgent/environment
 ssh-keygen -o -a 100 -t ed25519 -f google-compute -C briannaughton
-gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=free5gc-384814 --ttl=1d
+gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=$GOOGLE_PROJECT --ttl=1d
 ```
 
 ## Setup git and config sync
@@ -144,7 +157,7 @@ kpt alpha repo register \
 Create a docker repository to push our container images to.
 
 ```
-gcloud artifacts repositories create networkagent --repository-format=docker --location=europe-west2 --description="Network Agent Repository"
+gcloud artifacts repositories create networkagent --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository"
 ```
 
 ## Create Demo VPC Networks
@@ -152,11 +165,8 @@ gcloud artifacts repositories create networkagent --repository-format=docker --l
 Create the Base VPCs, Subnets and dummy IT apps for the demo.
 
 ```
-cd NetworkAgent/sample-service/customersites
-kubectl apply -f london.yaml
-kubectl apply -f newyork.yaml
-kubectl apply -f singapore.yaml
-kubectl apply -f sydney.yaml
+cd NetworkAgent/environment/
+kubectl apply -f customersites
 ```
 
 ## Deploy Network Service Operator

@@ -4,7 +4,6 @@ from langchain_core.callbacks.streaming_stdout import StreamingStdOutCallbackHan
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from typing import TypedDict, Annotated, Literal
-from langgraph.checkpoint.sqlite import SqliteSaver
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables.config import RunnableConfig
@@ -24,13 +23,12 @@ class NetworkAgent:
     def __init__(self):
         logger.info("loading networkagent credentials from path = %s", os.getcwd())
 
-        credentials = google.auth.load_credentials_from_file(os.getcwd()+"/networkagent/networkagent.json")[0]
+        credentials = google.auth.default()
+        # credentials = google.auth.load_credentials_from_file(os.getcwd()+"/networkagent/networkagent.json")[0]
 
         safe_tools=[getServiceInfo]
         unsafe_tools=[]
         tools = safe_tools+unsafe_tools
-
-        memory = SqliteSaver.from_conn_string(":memory:")
 
         llm = ChatVertexAI(model_name="gemini-1.5-flash-001", 
                            temperature=0,

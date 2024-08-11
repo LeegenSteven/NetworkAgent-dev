@@ -14,7 +14,7 @@ Candidate todo list. Each task rated as:
 
 * __H__: Add firewall rule to allow allowed traffic from allowedinterface and add route between customer VPC/location and edge VM to route traffic to allowed interfaces
 * __H__: Create a CR that runs an iperf test between two VMs in customer locations
-* __H__: Add monitoring agent to each VPN VM and connect to back end pipeline (discover details from config connector objects in k8s)
+* __H__: Add monitoring agent to each VPN VM and connect to back end pipeline (discover details from config connector objects in k8s) https://thepythoncode.com/article/make-a-network-usage-monitor-in-python?utm_content=cmp-true
 * __M__: move compute k8s objects related to wireguard edge appliance under the wireguard object
 * __M__: put VM certificate in one place/maybe in mounted configmap rather than in the container 
 * __H__: generate wireguard keys for each edge rather than static key list

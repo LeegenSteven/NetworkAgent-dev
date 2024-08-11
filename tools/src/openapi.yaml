@@ -70,6 +70,11 @@ paths:
           description: service with that name already exists
 components:
   schemas:
+    Definition:
+      type: object
+      properties:
+        crd:
+          type: string
     Service:
       type: object
       properties:

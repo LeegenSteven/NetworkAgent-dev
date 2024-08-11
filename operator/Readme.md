@@ -14,14 +14,14 @@ The operator is based on the [kopf](https://kopf.readthedocs.io/en/latest/) oper
 To build and push the edge appliance operator image, run the following commands
 
 ```
-gcloud auth configure-docker europe-west2-docker.pkg.dev
+gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev
 ```
 
 To build locally and push, run the following commands from the __NetworkAgent/operator__ directory
 
 ```
-docker build . -t europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networkoperator:latest
-docker push europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networkoperator:latest
+docker build . -t $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networkoperator:latest
+docker push $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networkoperator:latest
 ```
 
 ## Deploy the CRDs & Operator

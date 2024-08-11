@@ -1,15 +1,16 @@
 # Network Agent
 
 
-## Build and deploy the agent docker image
+## Build and network agent docker image
+
+In the __NetworkAgent/networkagent__ directory, run the following commands. 
 
 ```
-cd NetworkAgent/networkagent
 docker build . -t $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networkagent:latest
 docker push $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networkagent:latest
 ```
 
-To deploy run the following command
+To deploy the network agent run the following command
 
 ```
 kubectl apply -f deployment.yaml
@@ -53,13 +54,7 @@ Setup ADC to impersonate the service account bound to GKE workload identity.
 gcloud auth application-default login --impersonate-service-account $GOOGLE_SERVICE_ACCOUNT
 ```
 
-Set the following environment variables
-
-```
-export PROJECT=free5gc-384814
-export REGION=europe-west2
-export ZONE=europe-west2-a
-```
+Ensure the GOOGLE_PROJECT, GOOGLE_REGION and GOOGLE_ZONE environment variables are set (as described in the initial GCP setup readme)
 
 To run the agent run the following:
 
@@ -80,9 +75,11 @@ In VSCode you can set environment variables in your __launch.json__ file as belo
             "program": "${file}",
             "console": "integratedTerminal",
             "env": {
-                "PROJECT": "free5gc-384814",
-                "REGION": "europe-west2",
-                "ZONE": "europe-west2-a",
+                "GOOGLE_PROJECT": "free5gc-384814",
+                "GOOGLE_REGION": "europe-west2",
+                "GOOGLE_ZONE": "europe-west2-a",
+                "NETWORK_TOOLS_URL": "http://35.189.94.231:8080",
+                "NETWORK_AGENT_FILE": "./environment/networkagent.json"
             }
         }
     ]

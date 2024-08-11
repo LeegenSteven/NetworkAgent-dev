@@ -1,14 +1,16 @@
 import logging
 import gradio as gr
 from agent.networkagent import NetworkAgent
+import requests
+import json
+from langchain_community.agent_toolkits.openapi.spec import reduce_openapi_spec
 from langchain_google_vertexai.chat_models import ChatVertexAI
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.callbacks.manager import CallbackManager
 from langchain_core.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.schema import AIMessage, HumanMessage
 import google.auth
-# from langchain.requests import RequestsWrapper
-# from langchain_community.agent_toolkits.openapi import planner
+from langchain.requests import RequestsWrapper
+from langchain_community.agent_toolkits.openapi import planner
 import os
 import sys
 from langchain_core.prompts import ChatPromptTemplate
@@ -20,14 +22,18 @@ logging.basicConfig(level='INFO', format=log_format)
 logger = logging.getLogger(__name__)
 
 assitant_runnable = None
+agent=None
 
 def do_vertex():
+    global assistant_runnable
+    global agent
     assistant_prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
                 """
-                you are a helpful network assistant
+                You are a helpful network assistant
+                
                 Current time: {time}.
                 """
             ),
@@ -35,9 +41,8 @@ def do_vertex():
         ]
     ).partial(time=datetime.now())
 
-    global assistant_runnable
 
-    credentials = google.auth.load_credentials_from_file("./networkagent.json")[0]
+    credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE", "/networkagent.json"))[0]
     logger.info(credentials)
 
     llm = ChatVertexAI(model_name="gemini-1.5-pro-001",
@@ -46,24 +51,28 @@ def do_vertex():
                         max_tokens=None,
                         max_retries=2,
                         stop=None,
-                        project=os.getenv("PROJECT"),
-                        location=os.getenv("REGION"),
+                        project=os.getenv("GOOGLE_PROJECT"),
+                        location=os.getenv("GOOGLE_REGION"),
                         callback_manager=CallbackManager([StreamingStdOutCallbackHandler()]))
 
     assistant_runnable = assistant_prompt | llm
 
-    # import requests
-    # url = os.getenv("NETWORKTOOLS_URL","http://networktools.automation:8080/ui/openapi.json")
-    # response = requests.get(url)
+    url = os.getenv("NETWORK_TOOLS_URL","http://networktools-lb-service:8080")+"/ui/openapi.json"
+    logger.info("url = %s", url)
+    response = requests.get(url)
 
-    # logger.info(response.json())
-    # requests_wrapper = RequestsWrapper()
+    logger.info(json.dumps(response.json(),indent=4))
+    api_spec = reduce_openapi_spec(response.json())
+    logger.info(api_spec)
 
-    # agent = planner.create_openapi_agent(
-    #     response.json(),
-    #     requests_wrapper,
-    #     llm
-    # )
+    requests_wrapper = RequestsWrapper()
+
+    agent = planner.create_openapi_agent(
+        api_spec,
+        requests_wrapper,
+        llm,
+        allow_dangerous_requests=True,
+    )
 
 def agent_interaction(message, history):
     logger.info("new interaction %s", message)
@@ -75,7 +84,7 @@ def agent_interaction(message, history):
 
     history_langchain_format.append(HumanMessage(content=message))
 
-    gpt_response = assistant_runnable.invoke({"messages": history_langchain_format})
+    gpt_response = agent.invoke(message)
     logger.info(gpt_response)
 
     return gpt_response.content
@@ -83,8 +92,8 @@ def agent_interaction(message, history):
 if __name__ == '__main__':
     logger.info("starting Network Agent")
 
-    if os.getenv("REGION") is None or os.getenv("ZONE") is None or os.getenv("PROJECT") is None:
-        logger.error("You must set REGION/ZONE/PROJECT environment variables")
+    if os.getenv("GOOGLE_REGION") is None or os.getenv("GOOGLE_ZONE") is None or os.getenv("GOOGLE_PROJECT") is None:
+        logger.error("You must set GOOGLE_REGION/GOOGLE_ZONE/GOOGLEPROJECT environment variables")
         sys.exit(0)
 
     do_vertex()

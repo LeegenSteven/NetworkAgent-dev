@@ -74,8 +74,9 @@ Each demo environment will have the following:
 To build the demo environment, do the following:
 
 * [Setup base GCP environment](environment/Readme.md)
-* [Test a simple connectivity service](sample-service/Readme.md)
-* [Run the Network Agent](networkagent/Readme.md)
+* [Deploy the network operator](/operator/Readme.md)
+* [Deploy the network tools REST endpoint](/tools/Readme.md)
+* [Deploy the network agent](/networkagent/Readme.md)
 
 ## Demo Scenario
 

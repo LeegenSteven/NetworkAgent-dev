@@ -1,9 +1,9 @@
 # LLM Tools
 
-This folder contains a set of tools that can be used by LLMs to interact with the Kubernetes network orchestration layer.
+This folder contains a rest endpoint can be used by LLMs to interact with the Kubernetes network orchestration layer.
 
 
-## Build and deploy tools docker image
+## Build and deploy docker image
 
 Authenticate with the docker repo
 
@@ -17,7 +17,6 @@ To build and push run the following from the __NetworkAgent/tools__ directory
 docker build . -t $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networktools:latest
 docker push $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networktools:latest
 ```
-
 
 ## Deploy the tools service
 

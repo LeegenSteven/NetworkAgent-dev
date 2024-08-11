@@ -1,17 +1,15 @@
-# Edge Network Appliance Operator
+# Network Operator
 
 This kubernetes operator manages the lifecycle of the following components:
 
 * __WireguardAppliancee__: Wireguard based VPN appliance. 
-* __ConnectivityService__: Logical VPN service. 
-* __Monitor__: Observability of the end to end service and VyOS virtual machines. 
+* __PointToPointService__: A VPN tunnel between two customer sites
 
-The operator is based on the [kopf](https://kopf.readthedocs.io/en/latest/) operator framework and embeds [anisble playbooks](https://docs.ansible.com/).
+The operator code is based on the [kopf](https://kopf.readthedocs.io/en/latest/) operator framework and embeds [ansible playbooks](https://docs.ansible.com/) to run commands inside the network VMs.
 
+## Build the Network Operator
 
-## Build the Edge Network Appliance Operator
-
-To build and push the edge appliance operator image, run the following commands
+To build and push the network operator image, run the following commands
 
 ```
 gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev
@@ -26,13 +24,13 @@ docker push $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networkop
 
 ## Deploy the CRDs & Operator
 
-Deploy the appliance and service CRDs.
+Deploy the resource and service CRDs. In the __NetworkAgent/operator__ directory run the following commands
 
 ```
-kubectl apply -f NetworkAgent/operator/config
+kubectl apply -f config
 ```
 
-Update the deployment manifest with your PROJECT, REGION and ZONE details as follows: 
+Update the __deployment.yaml__ manifest with your PROJECT, REGION and ZONE details as follows: 
 
 ```
   containers:
@@ -48,24 +46,17 @@ Update the deployment manifest with your PROJECT, REGION and ZONE details as fol
       value: <<YOUR ZONE>>
 ```
 
-Deploy the operator
+Deploy the operator, from the __NetworkAgent/operator__ directory run the following commands. 
 
 ```
-cd NetworkAgent/operator
 kubectl apply -f deployment.yaml
 ```
 
 ## Running the operator locally on your laptop
 
-Set the following environment variables
+Ensure the GOOGLE_PROJECT, GOOGLE_REGION and GOOGLE_ZONE environment variables are set (as described in the initial GCP setup readme)
 
-```
-export PROJECT=free5gc-384814
-export REGION=europe-west2
-export ZONE=europe-west2-a
-```
-
-Run the following to start the operator
+Run the following to start the operator on your laptop. 
 
 ```
 python -m venv .venv
@@ -75,9 +66,4 @@ cd src
 kopf run main.py --verbose
 ```
 
-https://www.procustodibus.com/blog/2022/06/multi-hop-wireguard/
-
-## References
-
-* [ansible runner](https://ansible.readthedocs.io/projects/runner/en/latest/python_interface/)
 

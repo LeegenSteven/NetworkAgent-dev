@@ -21,8 +21,8 @@ from services.sitetosite.lifecycle import *
 from resources.wireguard.lifecycle import *
 from tests.lifecycle import *
 
-if os.getenv("REGION") is None or os.getenv("ZONE") is None or os.getenv("PROJECT") is None:
-    logger.error("You must set REGION/ZONE/PROJECT environment variables")
+if os.getenv("GOOGLE_REGION") is None or os.getenv("GOOGLE_ZONE") is None or os.getenv("GOOGLE_PROJECT") is None:
+    logger.error("You must set GOOGLE_REGION/GOOGLE_ZONE/GOOGLE_PROJECT environment variables")
     sys.exit(0)
 
 # Login with k8s client

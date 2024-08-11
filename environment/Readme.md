@@ -1,12 +1,16 @@
 # Setup GCP Environment
 
-
+This section describes how to set up a base Network Agent demo environment. 
 
 ## Setup gcloud on your laptop
+
+Install gcloud
 
 ```
 gcloud init --no-launch-browser
 ```
+
+## Setup GCP environment variables
 
 Setup the following environment variables. They are used throughout the setup docs.
 
@@ -18,7 +22,7 @@ export GOOGLE_ZONE=europe-west2-a
 
 ## Create service account
 
-Run the following to create a new service account
+Run the following commands to create a new service account.
 
 ```
 gcloud iam service-accounts create networkagent --description="Network Agent Service Account" --display-name="Network Agent"
@@ -27,13 +31,13 @@ gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:
 gcloud iam service-accounts keys create "./networkagent.json" --iam-account=$GOOGLE_SERVICE_ACCOUNT
 ```
 
-## GKE Automation Platform
+## Create GKE Automation Platform
 
 Create a __mgmt__ VPC to attach GKE and the edge appliances to. 
 
 ```
 gcloud compute networks create mgmt --subnet-mode=custom
-gcloud compute networks subnets create mgmt-subnet --network=mgmt --range=10.0.100.0/24 --region=europe-west2
+gcloud compute networks subnets create mgmt-subnet --network=mgmt --range=10.0.100.0/24 --region=$GOOGLE_REGION
 gcloud compute firewall-rules create mgmt-ingress --network mgmt --allow tcp:8080,tcp:22,tcp:3389,tcp:443,icmp --direction INGRESS --source-ranges 0.0.0.0/0
 ```
 
@@ -65,10 +69,12 @@ Install kubectl and get cluster credentials
 
 ```
 gcloud components install kubectl
-gcloud container clusters get-credentials networkautomation --region=$GOOGLE_REGION
+gcloud container clusters get-credentials networkautomation --region=$GOOGLE_ZONE
 ```
 
-Attach service account to config connector
+### Install Config Connector
+
+First, attach the service account to config connector
 
 ```
 gcloud iam service-accounts add-iam-policy-binding \
@@ -76,8 +82,6 @@ $GOOGLE_SERVICE_ACCOUNT \
     --member="serviceAccount:$GOOGLE_PROJECT.svc.id.goog[cnrm-system/cnrm-controller-manager]" \
     --role="roles/iam.workloadIdentityUser"
 ```
-
-### Install Config Connector
 
 Specify the GKE namespace and project for Config Connector to create resources in
 
@@ -97,17 +101,16 @@ kubectl wait -n cnrm-system --for=condition=Ready pod --all
 
 ## Create SSH keys
 
-To allow orchestration operators to log into the network virtual machines we create SSH keys and register with GCP.
+To allow the network operator to log into the demo virtual machines create SSH keys and register with GCP. From the __NetworkAgent/environment__ directory run the following commands. 
 
 ```
-cd NetworkAgent/environment
 ssh-keygen -o -a 100 -t ed25519 -f google-compute -C briannaughton
 gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=$GOOGLE_PROJECT --ttl=1d
 ```
 
-## Setup git and config sync
+## Setup git and config sync (TBD)
 
-Deploy git to GKE
+To deploy git to GKE run the following command from the __NetworkAgent/environment__ directory.
 
 ```
 kubectl apply -f git.yaml
@@ -119,7 +122,7 @@ To find the external IP assigned to git run the following command
 kubectl get service gitea-lb-service --output yaml
 ```
 
-You should see an external IP address under loadbalancer:ingress
+After a couple of minutes, you should see an external IP address under loadbalancer:ingress
 
 ```
 spec:
@@ -154,7 +157,7 @@ kpt alpha repo register \
 
 ## Docker repo
 
-Create a docker repository to push our container images to.
+Create a docker repository to push network agent container images to.
 
 ```
 gcloud artifacts repositories create networkagent --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository"
@@ -162,23 +165,11 @@ gcloud artifacts repositories create networkagent --repository-format=docker --l
 
 ## Create Demo VPC Networks
 
-Create the Base VPCs, Subnets and dummy IT apps for the demo.
+Create the base VPCs, Subnets and dummy IT apps for the demo. Run the following command from the __NetworkAgent/environment__ directory.
 
 ```
-cd NetworkAgent/environment/
 kubectl apply -f customersites
 ```
 
-## Deploy Network Service Operator
-
-[Instructions here](/operator/Readme.md)
-
-## Deploy Rest Tools
-
-[Instructions here](/tools/Readme.md)
-
-## Deploy Network Agent
-
-[Instructions here](/networkagent/Readme.md)
 
 

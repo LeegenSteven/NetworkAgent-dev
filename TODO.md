@@ -14,6 +14,7 @@ Candidate todo list. Each task rated as:
 
 * __H__: Add firewall rule to allow allowed traffic from allowedinterface and add route between customer VPC/location and edge VM to route traffic to allowed interfaces
 * __H__: Create a CR that runs an iperf test between two VMs in customer locations
+* __H__: use envFrom to seed container google environment variables
 * __H__: Add monitoring agent to each VPN VM and connect to back end pipeline (discover details from config connector objects in k8s) https://thepythoncode.com/article/make-a-network-usage-monitor-in-python?utm_content=cmp-true
 * __M__: move compute k8s objects related to wireguard edge appliance under the wireguard object
 * __M__: put VM certificate in one place/maybe in mounted configmap rather than in the container 
@@ -23,6 +24,7 @@ Candidate todo list. Each task rated as:
 ## Tools/Rest endpoint
 
 * __H__: Add status of waiting/ready to connectivity services and pass back through tools. Add to swagger description also
+* __H__: use envFrom to seed container google environment variables
 * __H__: Describe all the return schemas in swagger
 * __M__: Move back end for creating new services to porch rather than direct to k8s
 
@@ -49,7 +51,7 @@ Candidate todo list. Each task rated as:
 
 ## Network Agent
 
-* __H__: Snag Gemini end to end flow
+* __H__: use envFrom to seed container google environment variables
 * __H__: Connect agent to internal tools service - no need for external IP for tools
 * __H__: Query customer locations
 * __H__: Query existing services deployed

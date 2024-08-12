@@ -2,8 +2,12 @@ openapi: 3.0.3
 info:
   title: Network Agent Tools
   description: |-
-    These rest apis provide a set of tools that can query and create
+    These rest apis provide a set of endpoints that can query and create
     network connectivity services. 
+
+    A set of available network connectivity services whose lifecycle can be 
+    managed through this rest endpoint.
+
   version: 0.0.1
 servers:
   - url: http://networktools-lb-service:8080/ui/
@@ -11,7 +15,9 @@ paths:
   /locations/{name}:
     get:
       summary: Retrive a set of network locations
-      description: Return a set of Customer specific GCP Subnetworks that can be connected over a connectivity service tunnel
+      description: |-
+        Return a set of Customer specific GCP networks and locations that can be connected together with 
+        available connectivity services
       operationId: main.getCustomerLocations
       parameters:
         - name: name
@@ -20,25 +26,32 @@ paths:
           required: true
           schema:
             type: string
+          examples:
+            Acme:
+              value: acme
       responses:
-        '200':
+        "200":
           description: successful operation
-        '400':
-          description: Invalid status value
+        "400":
+          description: Incorrect information provided
   /definitions:
     get:
-      summary: Retrive a set of network definitions
-      description: Return a set of definition CRDs
+      summary: Retrive a set of network connectivity definitions
+      description: |-
+        Return a set of k8s CRDs that describe the available types of connetivity services available.
+
+        Each CRD provides an OpenAPI schema with the information required to instantiate the service
       operationId: main.getServiceDefinitions
       responses:
-        '200':
+        "200":
           description: successful operation
-        '400':
-          description: Invalid status value
+        "404":
+          description: Not found
   /deployed/{name}:
     get:
       summary: Get the deployed connectivity services for this customer
-      description: Get the deployed connectivity services for this customer
+      description: |-
+        Get the connectivity services that have already been deployed for this customer
       operationId: main.getServices
       parameters:
         - name: name
@@ -47,27 +60,71 @@ paths:
           required: true
           schema:
             type: string
+          examples:
+            Acme:
+              value: acme
       responses:
-        '200':
+        "200":
           description: successful operation
-        '400':
-          description: Invalid status value
+        "400":
+          description: Incorrect information provided
   /service:
+    delete:
+      summary: delete a deployed connectivity service
+      operationId: main.deleteService
+      parameters:
+        - name: name
+          in: query
+          description: A string representing the name of the deployed connectivity service
+          required: true
+          schema:
+            type: string
+          examples:
+            Acme:
+              value: acme
+        - name: kind
+          in: query
+          description: A string representing the kind of the connectivity service
+          required: true
+          schema:
+            type: string
+          examples:
+            Acme:
+              value: PointToPointService
+      responses:
+        "200":
+          description: successful request to delete an existing service
+        "404":
+          description: service does not exist
     post:
-      summary: creates a request to create a new connectivity service
-      description: Create a New Connectivity Service between two GCE Subnetwork Locations
+      summary: creates a request to for a new connectivity service
+      description: |-
+        Create a New Connectivity service.
       operationId: main.createService
       requestBody:
         x-body-name: payload
         content:
           application/json:
             schema:
-                $ref : "#/components/schemas/Service"
+              $ref: "#/components/schemas/Service"
+            example:
+              customerName: acme
+              serviceInfo:
+                kind: PointToPointService
+                apiVersion: google.dev/v1
+                spec:
+                  interfaces:
+                  - london-internal
+                  - sydney-internal
       responses:
-        '201':
+        "201":
           description: successful request to create new service received
-        '409':
+        "400":
+          description: Incorrect information provided
+        "409":
           description: service with that name already exists
+        "422":
+          description: Schema validation errors 
 components:
   schemas:
     Definition:
@@ -78,11 +135,27 @@ components:
     Service:
       type: object
       properties:
-        customername:
+        customerName:
+          description: Name of the customer requesting the new service
           type: string
-        servicename:
-          type: string
-        locations:
-          type: array
-          items:
-            type: string
+        serviceInfo:
+          description: |-
+            The type of the connectivity service to instantiate. This maps to the 
+          type: object
+          properties:
+            kind:
+              description: Kubernetes kind for the chosen connectivity service
+              type: string
+            apiVersion:
+              description: Kubernetes apiVersion for the chosen connectivity service
+              type: string
+            spec:
+              type: object
+              description: |-
+                Object describing the spec section of the CRD manifest for the chosen service type
+                For example, for a PointToPoint connectivity service the string payload would look like as follows
+
+                spec:
+                  interfaces: # the "remote" customer subnets to connect
+                    - london-internal
+                    - sydney-internal

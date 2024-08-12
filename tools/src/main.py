@@ -3,16 +3,12 @@ import kubernetes
 from utils.k8s import login
 from pathlib import Path
 from connexion import FlaskApp
-# from connexion.options import SwaggerUIOptions
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
 logging.basicConfig(level='INFO', format=log_format)
 logger = logging.getLogger(__name__)
 
-# options = SwaggerUIOptions(swagger_ui_path="/docs")
-# app = FlaskApp(__name__, swagger_ui_options=options)
-# app.add_api("openapi.yaml",swagger_ui_options=options)
 app = FlaskApp(__name__)
 app.add_api("openapi.yaml")
 
@@ -21,6 +17,9 @@ app.add_api("openapi.yaml")
 ######################################################################
 def getCustomerLocations(name):
     logger.info("Getting locations for customer %s", name )
+
+    if name is None:
+        return {}, 400
 
     login()
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
@@ -75,6 +74,9 @@ def getServiceDefinitions():
 def getServices(name):
     logger.info("finding service instances for %s", name)
 
+    if name is None:
+        return {}, 400
+
     login()
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
 
@@ -104,31 +106,34 @@ def getServices(name):
 def createService(payload):
     logger.info("Create a new Service from %s", str(payload))
 
-    customername = payload['customername']
-    servicename = payload['servicename']
-    sites = payload['locations']
+    if 'customerName' not in payload or 'serviceInfo' not in payload or 'apiVersion' not in payload['serviceInfo'] or 'spec' not in payload['serviceInfo'] or 'kind' not in payload['serviceInfo']:
+        return {}, 400
+
+    customerName = payload['customerName']
+    serviceKind = payload['serviceInfo']['kind']
+    serviceApiVersion = payload['serviceInfo']['apiVersion']
+    serviceSpec = payload['serviceInfo']['spec']
 
     login()
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+    name = customerName.lower()
 
     try:
         network_api = client.resources.get(
-            api_version="google.dev/v1", 
-            kind="PointToPointService",
+            api_version=serviceApiVersion, 
+            kind=serviceKind,
         )
         crd_manifest= { 
-            "apiVersion": "google.dev/v1",
-            "kind": "PointToPointService",
+            "apiVersion": serviceApiVersion,
+            "kind": serviceKind,
             "metadata": {
-                "name": servicename,
+                "name": name,
                 "namespace": "automation",
                 "labels": {
-                    "customer": customername
+                    "customer": customerName
                 },
             },
-            "spec": {
-                "interfaces": sites
-            }
+            "spec": serviceSpec
         }
         result = network_api.create(crd_manifest)
 
@@ -139,6 +144,38 @@ def createService(payload):
         if e.status == 409:
             logger.info("Already exists - skipping")
             return {}, 409
+        else:
+            logger.info(e)
+            return {}, e.status
+
+######################################################################
+# Delete an existing connectivity service
+######################################################################
+def deleteService(name, kind):
+    if name is None or kind is None:
+        return {}, 400
+
+    login()
+    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+
+    try:
+
+        network_api = client.resources.get(
+            api_version="google.dev/v1", 
+            kind=kind,
+        )
+        network_api.delete(name=name, namespace="automation")
+        return {}, 200
+
+    except kubernetes.client.rest.ApiException as e: 
+        logger.info(e.status)
+        logger.debug(e)
+        if e.status == 404:
+            logger.info("No service found")
+            return {}, 404
+        else:
+            logger.info(e)
+            return {}, e.status
 
 ######################################################################
 # Start the server and load routes

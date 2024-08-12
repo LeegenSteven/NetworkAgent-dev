@@ -50,6 +50,8 @@ def getCustomerLocations(name):
 def getServiceDefinitions():
     logger.info("Getting Service definitions")
 
+    import json
+
     login()
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
 
@@ -61,8 +63,7 @@ def getServiceDefinitions():
         items=network_api.get(label_selector="type=connectivityservice")
         services=[]
         for item in items.items:
-            logger.info(item)
-            services.append(str(item))
+            services.append(item.to_dict())
 
         return services
     except kubernetes.dynamic.exceptions.ResourceNotFoundError:

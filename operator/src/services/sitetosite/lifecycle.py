@@ -29,16 +29,16 @@ async def ptpservice(spec, name, namespace, logger, **kwargs):
   await create_network(bvars['vmname'])
 
   # Create subnets and NAT for a & b VPCs
-  await create_subnetwork(avars['vmname'], avars['vmname'], avars['cidr'], os.getenv("REGION"))
-  await create_subnetwork(bvars['vmname'], bvars['vmname'], avars['cidr'], os.getenv("REGION"))
+  await create_subnetwork(avars['vmname'], avars['vmname'], avars['cidr'], os.getenv("GOOGLE_REGION"))
+  await create_subnetwork(bvars['vmname'], bvars['vmname'], avars['cidr'], os.getenv("GOOGLE_REGION"))
 
   # Create compute routers for a & b VPCs
-  await create_router(avars['vmname'], os.getenv("REGION"))
-  await create_router(bvars['vmname'], os.getenv("REGION"))
+  await create_router(avars['vmname'], os.getenv("GOOGLE_REGION"))
+  await create_router(bvars['vmname'], os.getenv("GOOGLE_REGION"))
 
   # Create NAT to allow outbound for a & b VPCs
-  await create_nat(avars['vmname'], os.getenv("REGION"))
-  await create_nat(bvars['vmname'], os.getenv("REGION"))
+  await create_nat(avars['vmname'], os.getenv("GOOGLE_REGION"))
+  await create_nat(bvars['vmname'], os.getenv("GOOGLE_REGION"))
 
   # Open ports for a & b VPCs
   await create_wg_rule(avars['vmname'])
@@ -47,12 +47,12 @@ async def ptpservice(spec, name, namespace, logger, **kwargs):
   await create_ssh_rule(bvars['vmname'])
 
   # Create VMs for a & b ends
-  await create_compute(avars['vmname'], avars['vmname'], aend, os.getenv("PROJECT"),os.getenv("REGION"),os.getenv("ZONE"), avars['mgmtsubnetname'])
-  await create_compute(bvars['vmname'], bvars['vmname'], bend, os.getenv("PROJECT"),os.getenv("REGION"),os.getenv("ZONE"), bvars['mgmtsubnetname'])
+  await create_compute(avars['vmname'], avars['vmname'], aend, os.getenv("GOOGLE_PROJECT"),os.getenv("GOOGLE_REGION"),os.getenv("GOOGLE_ZONE"), avars['mgmtsubnetname'])
+  await create_compute(bvars['vmname'], bvars['vmname'], bend, os.getenv("GOOGLE_PROJECT"),os.getenv("GOOGLE_REGION"),os.getenv("GOOGLE_ZONE"), bvars['mgmtsubnetname'])
 
   # Create external ips for bot compute ends
-  await create_external_ip(avars['vmname'], os.getenv("REGION"))
-  await create_external_ip(bvars['vmname'], os.getenv("REGION"))
+  await create_external_ip(avars['vmname'], os.getenv("GOOGLE_REGION"))
+  await create_external_ip(bvars['vmname'], os.getenv("GOOGLE_REGION"))
 
   # Provision the VPNs in each compute
   await create_vpn_edge(avars['vmname'], avars['vmname'], avars['tunnelsubnet'], avars['tunneladdress'], avars['peerinterface'], avars['peername'])

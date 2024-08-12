@@ -70,9 +70,9 @@ spec:
         env:
         - name: BASEDIR
           value: "/operator"
-        - name: PROJECT
+        - name: GOOGLE_PROJECT
           value: "free5gc-384814"
-        - name: REGION
+        - name: GOOGLE_REGION
           value: "europe-west2"
-        - name: ZONE
+        - name: GOOGLE_ZONE
           value: "europe-west2-a"

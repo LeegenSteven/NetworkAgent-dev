@@ -58,8 +58,8 @@ gcloud container clusters create networkautomation \
     --workload-pool $GOOGLE_PROJECT.svc.id.goog \
     --logging SYSTEM \
     --monitoring SYSTEM \
-    --zone europe-west2-a\
-    --node-locations europe-west2-a \
+    --zone $GOOGLE_ZONE\
+    --node-locations $GOOGLE_ZONE \
     --num-nodes 5 \
     --network mgmt \
     --subnetwork mgmt-subnet

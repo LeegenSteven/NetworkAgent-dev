@@ -32,6 +32,8 @@ paths:
       responses:
         "200":
           description: successful operation
+        "404":
+          description: No locations found
         "400":
           description: Incorrect information provided
   /definitions:
@@ -46,7 +48,7 @@ paths:
         "200":
           description: successful operation
         "404":
-          description: Not found
+          description: No definitions found
   /deployed/{name}:
     get:
       summary: Get the deployed connectivity services for this customer
@@ -66,6 +68,8 @@ paths:
       responses:
         "200":
           description: successful operation
+        "404":
+          description: No deployed services found
         "400":
           description: Incorrect information provided
   /service:

@@ -40,9 +40,12 @@ def getCustomerLocations(name):
             }
             locations.append(location)
 
+        if len(locations)==0:
+            return {}, 404
+
         return locations
     except kubernetes.ResourceNotFoundError:
-        return {"result": []}
+        return {}, 404
 
 ######################################################################
 # Get a list of Service Definitions
@@ -65,9 +68,12 @@ def getServiceDefinitions():
         for item in items.items:
             services.append(item.to_dict())
 
+        if len(services)==0:
+            return {}, 404
+
         return services
     except kubernetes.dynamic.exceptions.ResourceNotFoundError:
-        return []
+        return {}, 404
 
 ######################################################################
 # Get existing connectivity services
@@ -94,7 +100,9 @@ def getServices(name):
                 kind=item['spec']['names']['kind'],
                 api_version=item['spec']['group']+'/'+item['spec']['versions'][0]['name'],
             )
+
             services=svc_api.get(label_selector=f"customer={name}")
+                
             for item in services.items:
                 logger.debug(item)
                 svc= {
@@ -105,9 +113,16 @@ def getServices(name):
                 }
                 services_list.append(svc)
 
+        if len(services_list)==0:
+            return {}, 404
+
         return services_list, 200
+
     except  kubernetes.client.rest.ApiException as e:
-        return []
+        if e.status == 404:
+            return {}, 404
+        else:
+            logger.info(e)
 
 def getServiceStatus(client, resources):
     logger.info("get status for service")

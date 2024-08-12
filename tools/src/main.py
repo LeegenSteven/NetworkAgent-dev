@@ -81,24 +81,53 @@ def getServices(name):
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
 
     try:
-        network_api = client.resources.get(
-            api_version="google.dev/v1", 
-            kind="PointToPointService",
-        )
-        items=network_api.get(label_selector=f"customer={name}")
-        services=[]
-        for item in items.items:
-            logger.info(item)
-            service = {
-                'customer': item['metadata']['labels']['customer'],
-                'servicename': item['metadata']['name'],
-                'locations': item['spec']['interfaces'],
-            }
-            services.append(service)
+        services_list=[]
 
-        return services
-    except kubernetes.dynamic.exceptions.ResourceNotFoundError:
+        network_api = client.resources.get(
+            api_version="apiextensions.k8s.io/v1", 
+            kind="CustomResourceDefinition",
+        )
+        service_descriptors=network_api.get(label_selector="type=connectivityservice")
+        for item in service_descriptors.items:
+            svc_api = client.resources.get(
+                kind=item['spec']['names']['kind'],
+                api_version=item['spec']['group']+'/'+item['spec']['versions'][0]['name'],
+            )
+            services=svc_api.get(label_selector=f"customer={name}")
+            for item in services.items:
+                logger.debug(item)
+                svc= {
+                    'customer': item['metadata']['labels']['customer'],
+                    'kind': item['kind'],
+                    'servicename': item['metadata']['name'],
+                    'resources': getServiceStatus(client, item['status']['service_resources']),
+                }
+                services_list.append(svc)
+
+        return services_list, 200
+    except  kubernetes.client.rest.ApiException as e:
         return []
+
+def getServiceStatus(client, resources):
+    logger.info("get status for service")
+    resources_status=[]
+
+    for resource in resources:
+        status_message = getResourceStatus(client, resource['api_version'], resource['kind'], resource['name'])
+        status = {'kind': resource['kind'], 'name': resource['name'], 'status': status_message }
+        resources_status.append(status)
+
+    return resources_status
+
+def getResourceStatus(client, api_version, kind, name):
+    network_api = client.resources.get(
+        api_version=api_version, 
+        kind=kind,
+    )
+    resource=network_api.get(namespace="automation", name = name)
+    message = resource['status']['conditions'][0]['message']
+
+    return message
 
 ######################################################################
 # Create a new connectivity service

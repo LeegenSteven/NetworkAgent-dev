@@ -24,8 +24,8 @@ Candidate todo list. Each task rated as:
 ## Tools/Rest endpoint
 
 * __H__: Add status of waiting/ready to connectivity services and pass back through tools. Add to swagger description also
+* __H__: Loop over all connectivity CRDs and get any instances deployed against each and return each  with their current status
 * __H__: use Kustomizer/envFrom to seed container google environment variables and image name
-* __H__: Describe all the return schemas in swagger
 * __M__: Move back end for creating new services to porch rather than direct to k8s
 
 ## Monitoring

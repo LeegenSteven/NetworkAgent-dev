@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 # Create a new PTP VPN
 ##########################################
 @kopf.on.create('pointtopointservice')
-async def ptpservice(spec, name, namespace, logger, **kwargs):
+async def service_resources(spec, name, namespace, logger, **kwargs):
   logger.info(f"Create pointtopoint service handler is called with spec: {spec}")
 
   if len(spec.get('interfaces'))!=2:
@@ -58,20 +58,69 @@ async def ptpservice(spec, name, namespace, logger, **kwargs):
   await create_vpn_edge(avars['vmname'], avars['vmname'], avars['tunnelsubnet'], avars['tunneladdress'], avars['peerinterface'], avars['peername'])
   await create_vpn_edge(bvars['vmname'], bvars['vmname'], bvars['tunnelsubnet'], bvars['tunneladdress'], bvars['peerinterface'], bvars['peername'])
 
-  return {
-    'a':{'networkname': avars['vmname'], 
-         'subnetworkname': avars['vmname'], 
-         'routername': f"{avars['vmname']}-router",
-         'routernatname': f"{avars['vmname']}-nat",
-         'computename': avars['vmname']
-        },
-    'b':{'networkname': bvars['vmname'],
-         'subnetworkname': bvars['vmname'], 
-         'routername': f"{bvars['vmname']}-router",
-         'routernatname': f"{bvars['vmname']}-nat",
-         'computename': avars['vmname']
-        }
-  }
+  return [
+      #  {
+      #   'kind': 'Wireguard',
+      #   'api_version': "google.dev/v1",
+      #   'name': avars['vmname']
+      #  },     
+       {
+        'kind': 'ComputeInstance',
+        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
+        'name': avars['vmname']
+       },
+       {
+        'kind': 'ComputeNetwork',
+        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
+        'name': avars['vmname']
+       },
+       {
+        'kind': 'ComputeSubnetwork',
+        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
+        'name': avars['vmname']
+       },
+       {
+        'kind': 'ComputeRouter',
+        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
+        'name': f"{avars['vmname']}-router"
+       },
+       {
+        'kind': 'ComputeRouterNAT',
+        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
+        'name': f"{avars['vmname']}-nat"
+       },
+      #  {
+      #   'kind': 'Wireguard',
+      #   'api_version': "google.dev/v1",
+      #   'name': bvars['vmname']
+      #  },
+       {
+        'kind': 'ComputeInstance',
+        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
+        'name': bvars['vmname']
+       },
+       {
+        'kind': 'ComputeNetwork',
+        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
+        'name': bvars['vmname']
+       },
+       {
+        'kind': 'ComputeSubnetwork',
+        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
+        'name': bvars['vmname']
+       },
+       {
+        'kind': 'ComputeRouter',
+        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
+        'name': f"{bvars['vmname']}-router"
+       },
+       {
+        'kind': 'ComputeRouterNAT',
+        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
+        'name': f"{bvars['vmname']}-nat"
+       },
+    ] 
+  
 
 ###########################################
 # Simple variable creation for a and b ends

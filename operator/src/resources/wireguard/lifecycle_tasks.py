@@ -78,7 +78,7 @@ async def get_subnet_info(subnetname):
 #####################################################################
 # Install VPN software on VM
 #####################################################################
-async def install_vpn(vmname, external_ip_address, tunnel_address, tunnel_cidr, interface_cidr, peer_name, peer_ip_address):
+async def install_vpn(vmname, external_ip_address, tunnel_address, tunnel_cidr, interface_cidr, peer_name, peer_ip_address, keys, peer_keys):
     logger.info("Install VPN")
 
     extravars = {
@@ -87,7 +87,9 @@ async def install_vpn(vmname, external_ip_address, tunnel_address, tunnel_cidr, 
         'default_interface': 'ens5' ,
         'interface_cidr' : interface_cidr,
         'peer_name': peer_name,
-        'peer_ip_address' : peer_ip_address
+        'peer_ip_address' : peer_ip_address,
+        'keys': keys, 
+        'peer_keys': peer_keys
     }
     hosts = {
         'hosts': {

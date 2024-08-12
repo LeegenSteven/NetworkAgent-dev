@@ -72,7 +72,9 @@ async def create(spec, name, namespace, logger, **kwargs):
                 spec.get('tunnelSubnet'),
                 allowed_cidr,
                 spec.get('peer'),
-                peer_ip_address
+                peer_ip_address,
+                spec.get('keys'),
+                spec.get('peerKeys')     
             )
 
     return {

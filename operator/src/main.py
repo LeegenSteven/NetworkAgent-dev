@@ -25,6 +25,12 @@ if os.getenv("GOOGLE_REGION") is None or os.getenv("GOOGLE_ZONE") is None or os.
     logger.error("You must set GOOGLE_REGION/GOOGLE_ZONE/GOOGLE_PROJECT environment variables")
     sys.exit(0)
 
+@kopf.on.startup()
+def configure(settings: kopf.OperatorSettings, **_):
+    settings.posting.level = logging.DEBUG
+    settings.watching.connect_timeout = 1 * 60
+    settings.watching.server_timeout = 10 * 60
+
 # Login with k8s client
 @kopf.on.login()
 def login_fn(**kwargs):

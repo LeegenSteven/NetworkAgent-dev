@@ -24,7 +24,7 @@ Candidate todo list. Each task rated as:
 ## Tools/Rest endpoint
 
 * __H__: Add status of waiting/ready to connectivity services and pass back through tools. Add to swagger description also
-* __H__: use envFrom to seed container google environment variables
+* __H__: use Kustomizer/envFrom to seed container google environment variables and image name
 * __H__: Describe all the return schemas in swagger
 * __M__: Move back end for creating new services to porch rather than direct to k8s
 
@@ -51,12 +51,10 @@ Candidate todo list. Each task rated as:
 
 ## Network Agent
 
-* __H__: use envFrom to seed container google environment variables
+* __H__: use envFrom or maybe Kustomize to seed container google environment variables and image name
+* __H__: Move from gradio to streamlit https://medium.com/@jedrzejplucinski/4-steps-to-create-chat-bot-for-your-api-e563c897ef85
 * __H__: Connect agent to internal tools service - no need for external IP for tools
-* __H__: Query customer locations
-* __H__: Query existing services deployed
-* __H__: Query available services and the info required to deploy
-* __H__: Q&A to collect all infor needed to create new services
+* __H__: Q&A to collect all info needed to create new services
 * __H__: How is service performing
 * __H__: What tests are available
 * __H__: Run/Stop a test
@@ -64,4 +62,3 @@ Candidate todo list. Each task rated as:
 ## Network Tests
 
 * __H__: Test CRD/Operator that logs onto customer VMs and installs/runs software to emulate web traffic or general iperf
-* __L__: Chaos monkey like tests to throttle or break network interfaces

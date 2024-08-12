@@ -6,7 +6,7 @@ info:
     network connectivity services. 
   version: 0.0.1
 servers:
-  - url: http://0.0.0.0:8080/ui/
+  - url: http://networktools-lb-service:8080/ui/
 paths:
   /locations/{name}:
     get:

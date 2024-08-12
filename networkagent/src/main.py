@@ -61,8 +61,12 @@ def do_vertex():
     logger.info("url = %s", url)
     response = requests.get(url)
 
-    logger.info(json.dumps(response.json(),indent=4))
-    api_spec = reduce_openapi_spec(response.json())
+    response_json = response.json()
+    # update the server url because it doesnt contain the server address
+    response_json['servers'][0]['url']=os.getenv("NETWORK_TOOLS_URL","http://networktools-lb-service:8080")+"/ui"
+    logger.info(json.dumps(response_json,indent=4))
+
+    api_spec = reduce_openapi_spec(response_json)
     logger.info(api_spec)
 
     requests_wrapper = RequestsWrapper()
@@ -87,7 +91,7 @@ def agent_interaction(message, history):
     gpt_response = agent.invoke(message)
     logger.info(gpt_response)
 
-    return gpt_response.content
+    return gpt_response['output']
 
 if __name__ == '__main__':
     logger.info("starting Network Agent")

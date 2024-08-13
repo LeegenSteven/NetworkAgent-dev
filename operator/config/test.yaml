@@ -23,6 +23,16 @@ spec:
           properties:
             spec:
               type: object
+              properties:
+                virtualmachines:
+                  description: |
+                    Two virtual machines to run traffic between.
+                  type: array
+                  items:
+                    type: string
+                  oneOf:
+                    - minItems: 2
+                      maxItems: 2
               x-kubernetes-preserve-unknown-fields: true
             status:
               type: object

@@ -7,7 +7,7 @@ import os
 logger = logging.getLogger(__name__)
 
 ########################################################################
-# ComputeNetwork
+# Create ComputeNetwork
 ########################################################################
 async def create_network(network_name):
   logger.info("Create compute network %s", network_name)
@@ -33,19 +33,21 @@ async def create_network(network_name):
 
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
-
   logger.debug(json.dumps(crd_manifest, indent=4))
 
   try:
     result = network_api.create(crd_manifest)
+    return result
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
-    logger.debug(e)
     if e.status == 409:
-      # raise kopf.PermanentError("Conflict error, resource already exists.")
       logger.info("already exists - skipping")
+    else:
+      logger.debug(e)
 
-
+########################################################################
+# Delete ComputeNetwork
+########################################################################
 async def delete_network(network_name):
   logger.info("Delete compute network %s", network_name)
 
@@ -62,7 +64,7 @@ async def delete_network(network_name):
     logger.debug(e)
 
 ########################################################################
-# ComputeSubNetwork
+# Create ComputeSubNetwork
 ########################################################################
 async def create_subnetwork(network_name, subnet_name, cidr, region):
   logger.info("Create compute subnetwork")
@@ -92,20 +94,37 @@ async def create_subnetwork(network_name, subnet_name, cidr, region):
 
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
-
   logger.debug(json.dumps(crd_manifest, indent=4))
 
   try:
     result = network_api.create(crd_manifest)
+    return result
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
-    logger.debug(e)
     if e.status == 409:
-      # raise kopf.PermanentError("Conflict error, resource already exists.")
       logger.info("Already exists - skipping")
+    else:
+      logger.debug(e)
 
 ########################################################################
-# ComputeRouter
+# Get Subnetwork
+########################################################################
+async def get_subnetwork(name):
+  logger.info("Get compute subnetwork %s", name)
+
+  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+  network_api = client.resources.get(
+      api_version="compute.cnrm.cloud.google.com/v1beta1", 
+      kind="ComputeSubnetwork",
+  )
+  try:
+    result = network_api.get(namespace="automation", name=name)
+    return result
+  except kubernetes.client.rest.ApiException as e:
+    logger.info(e)
+
+########################################################################
+# Create ComputeRouter
 ########################################################################
 async def create_router(network_name, region):
   logger.info("Create Router")
@@ -134,17 +153,16 @@ async def create_router(network_name, region):
 
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
-
   logger.debug(json.dumps(crd_manifest, indent=4))
 
   try:
     result = network_api.create(crd_manifest)
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
-    logger.debug(e)
     if e.status == 409:
-      # raise kopf.PermanentError("Conflict error, resource already exists.")
       logger.info("Already exists - skipping")
+    else:
+      logger.debug(e)
 
 ########################################################################
 # ComputeRouterNAT
@@ -177,20 +195,19 @@ async def create_nat(network_name, region):
 
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
-
   logger.debug(json.dumps(crd_manifest, indent=4))
 
   try:
     result = network_api.create(crd_manifest)
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
-    logger.debug(e)
     if e.status == 409:
-      # raise kopf.PermanentError("Conflict error, resource already exists.")
       logger.info("Already exists - skipping")
+    else:
+      logger.debug(e)
 
 ########################################################################
-# ComputeFirewall
+# Create wg ComputeFirewall rule
 ########################################################################
 async def create_wg_rule(network_name):
   logger.info("Create wireguard firewall rule")
@@ -223,26 +240,26 @@ async def create_wg_rule(network_name):
       "direction": "INGRESS",
       "sourceRanges": [
         "0.0.0.0/0"
-      ],
-      "targetTags": [
-        "wireguard"
       ]
     }
   }
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
-
   logger.debug(json.dumps(crd_manifest, indent=4))
 
   try:
     result = network_api.create(crd_manifest)
+    return result
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
-    logger.debug(e)
     if e.status == 409:
-      # raise kopf.PermanentError("Conflict error, resource already exists.")
       logger.info("Already exists - skipping")
+    else:
+      logger.debug(e)
 
+########################################################################
+# Create ssh ComputeFirewall rule
+########################################################################
 async def create_ssh_rule(network_name):
   logger.info("Create ssh firewall rule")
 
@@ -274,29 +291,25 @@ async def create_ssh_rule(network_name):
       "direction": "INGRESS",
       "sourceRanges": [
         "0.0.0.0/0"
-      ],
-      "targetTags": [
-        "ssh"
       ]
     }
   }
 
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
-
   logger.debug(json.dumps(crd_manifest, indent=4))
 
   try:
     result = network_api.create(crd_manifest)
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
-    logger.debug(e)
     if e.status == 409:
-      # raise kopf.PermanentError("Conflict error, resource already exists.")
       logger.info("Already exists - skipping")
+    else:
+      logger.debug(e)
 
 ########################################################################
-# ComputeInstance
+# Create ComputeInstance
 ########################################################################
 async def create_compute(vm_name, subnet_name, interface, project, region, zone, mgmtsubnetname):
   logger.info("Create compute %s", vm_name)
@@ -360,33 +373,51 @@ async def create_compute(vm_name, subnet_name, interface, project, region, zone,
           "key": "ssh-keys",
           "value": "admin_briannaughton_altostrat_co:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN57YanONs2q/Eor4Tjv1NRhBGrB59vPFAMZbvlOVtkX briannaughton"
         }
-      ],
-      "tags": [
-        "ssh",
-        "wireguard"
       ]
     }
   }
 
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
-
   logger.debug(json.dumps(crd_manifest, indent=4))
 
   try:
     result = network_api.create(crd_manifest)
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
-    logger.debug(e)
     if e.status == 422:
       raise kopf.PermanentError("Unprocessable entity.")
-    if e.status == 409:
-      # raise kopf.PermanentError("Conflict error, resource already exists.")
+    elif e.status == 409:
       logger.info("already exists - skipping")
-
+    else:
+      logger.debug(e)
 
 ########################################################################
-# ComputeAddress
+# Get ComputeInstance
+########################################################################
+async def get_compute(vm_name):
+  logger.info("Get compute %s", vm_name)
+
+  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+  network_api = client.resources.get(
+      api_version="compute.cnrm.cloud.google.com/v1beta1", 
+      kind="ComputeInstance",
+  )
+
+  try:
+
+    result = network_api.get(namespace="automation", name=vm_name)
+    return result
+
+  except kubernetes.client.rest.ApiException as e: 
+    logger.info(e.status)
+    if e.status == 422:
+      raise kopf.PermanentError("Unprocessable entity.")
+    if e.status == 404:
+      raise kopf.TemporaryError("Not found.")
+
+########################################################################
+# Create ComputeAddress
 ########################################################################
 async def create_external_ip(vmname, region):
   logger.info("Create external ip")
@@ -413,18 +444,85 @@ async def create_external_ip(vmname, region):
 
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
-
   logger.debug(json.dumps(crd_manifest, indent=4))
 
   try:
     result = network_api.create(crd_manifest)
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
-    logger.debug(e)
     if e.status == 409:
-      # raise kopf.PermanentError("Conflict error, resource already exists.")
       logger.info("Already exists - skipping")
+    else:
+      logger.debug(e)
 
+########################################################################
+# CreateRoute
+########################################################################
+async def create_route(vm_name, source_subnetwork_name, peer_subnetwork_name):
+  logger.info("Create route to vm %s from source %s to subnetwork %s", vm_name, source_subnetwork_name, peer_subnetwork_name)
+
+  route_ip=None
+
+  # find ip address on vm_name assigned to source_subnetwork_name
+  vmresult = await get_compute(vm_name)
+  # check the VM has a network and ip address, if not backoff until it does
+  if vmresult.get('spec') is not None:
+    logger.debug(vmresult.spec)
+    for interface in vmresult.spec['networkInterface']:
+      if interface.get('subnetworkRef').get('name') is not None:
+        if interface['subnetworkRef']['name']==source_subnetwork_name:
+          if interface.get('networkIpRef') is not None and interface.get('networkIpRef').get('external') is not None:
+            route_ip=interface['networkIpRef']['external']
+            break
+
+  if route_ip is None:
+    raise kopf.TemporaryError("Waiting for VM to come up", 20)
+
+  # find the cidr associated with peer_subnetwork_name
+  destresult = await get_subnetwork(peer_subnetwork_name)
+  peer_cidr = destresult.spec['ipCidrRange']
+
+  # find the network name from the source subnetwork
+  sourceresult = await get_subnetwork(source_subnetwork_name)
+  sourcenetwork = sourceresult.spec['networkRef']['name']
+
+  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+  network_api = client.resources.get(
+      api_version="compute.cnrm.cloud.google.com/v1beta1", 
+      kind="ComputeRoute",
+  )
+
+  crd_manifest= {
+    "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
+    "kind": "ComputeRoute",
+    "metadata": {
+      "name": vm_name
+    },
+    "spec": {
+      "description": f"{vm_name} route",
+      "destRange": peer_cidr,
+      "networkRef": {
+        "name": sourcenetwork
+      },
+      "priority": 100,
+      "nextHopIp": route_ip
+      }
+    }
+
+  kopf.adopt(crd_manifest)
+  logger.debug(json.dumps(crd_manifest, indent=4))
+
+  try:
+
+    result = network_api.create(crd_manifest)
+    return result
+
+  except kubernetes.client.rest.ApiException as e: 
+    logger.info(e.status)
+    if e.status == 409:
+      logger.info("Already exists - skipping")
+    else:
+      logger.debug(e)
 
 ########################################################################
 # WireguardAppliance
@@ -458,18 +556,19 @@ async def create_vpn_edge(vpn_name, vm_name, tunnel_subnet, tunnel_ip, peer_inte
 
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
-
-  logger.debug(json.dumps(crd_manifest, indent=4))
+  # logger.debug(json.dumps(crd_manifest, indent=4))
 
   try:
     result = network_api.create(crd_manifest)
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
-    logger.debug(e)
+    # logger.debug(e)
     if e.status == 409:
-      raise kopf.PermanentError("Conflict error, resource already exists.")
+      logger.info("WG already exists - skipping")
 
-
+########################################################################
+# Create Site
+########################################################################
 async def create_site(aend, bend, cidr, tunnel_address, uuid, akeys, bkeys):
   vars = {
       'vmname': aend+'-vpn-'+uuid,
@@ -494,5 +593,8 @@ async def create_site(aend, bend, cidr, tunnel_address, uuid, akeys, bkeys):
   await create_compute(vars['vmname'], vars['vmname'], aend, os.getenv("GOOGLE_PROJECT"),os.getenv("GOOGLE_REGION"),os.getenv("GOOGLE_ZONE"), vars['mgmtsubnetname'])
   await create_external_ip(vars['vmname'], os.getenv("GOOGLE_REGION"))
   await create_vpn_edge(vars['vmname'], vars['vmname'], vars['tunnelsubnet'], vars['tunneladdress'], vars['peerinterface'], vars['peername'], akeys, bkeys)
+
+  # Create the static routes to vpn tunnels
+  await create_route(vars['vmname'], aend, bend)
 
   return vars

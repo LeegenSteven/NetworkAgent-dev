@@ -103,17 +103,17 @@ def getServices(name):
 
             services=svc_api.get(label_selector=f"customer={name}")
 
-
             for item in services.items:
                 logger.debug(item)
-                if 'status' not in item:
-                    svc={"status": "waiting"}
-                svc= {
-                    'customer': item['metadata']['labels']['customer'],
-                    'kind': item['kind'],
-                    'servicename': item['metadata']['name'],
-                    'resources': getServiceStatus(client, item['status']['service_resources']),
-                }
+                if 'status' not in item or 'service_resources' not in item['status']:
+                    svc={"status": "waiting for service to come up"}
+                else:
+                    svc= {
+                        'customer': item['metadata']['labels']['customer'],
+                        'kind': item['kind'],
+                        'servicename': item['metadata']['name'],
+                        'resources': getServiceStatus(client, item['status']['service_resources']),
+                    }
                 services_list.append(svc)
 
         if len(services_list)==0:

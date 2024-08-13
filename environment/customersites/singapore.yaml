@@ -51,16 +51,16 @@ spec:
   allow:
     - protocol: tcp
       ports:
-       - "22"
-       - "80"
-    # - protocol: icmp
+       - "0-65535"
+    - protocol: udp
+      ports:
+       - "0-65535"
+    - protocol: icmp
   networkRef:
     name: singapore
   direction: INGRESS
   sourceRanges:
     - 0.0.0.0/0
-  targetTags:
-    - singapore-allowed
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeInstance
@@ -87,8 +87,6 @@ spec:
   metadata:
     - key: ssh-keys
       value: admin_briannaughton_altostrat_co:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN57YanONs2q/Eor4Tjv1NRhBGrB59vPFAMZbvlOVtkX briannaughton
-  tags:
-    - singapore-allowed
 # ---
 # apiVersion: compute.cnrm.cloud.google.com/v1beta1
 # kind: ComputeInstance
@@ -115,5 +113,3 @@ spec:
 #   metadata:
 #     - key: ssh-keys
 #       value: admin_briannaughton_altostrat_co:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN57YanONs2q/Eor4Tjv1NRhBGrB59vPFAMZbvlOVtkX briannaughton
-#   tags:
-#     - singapore-allowed

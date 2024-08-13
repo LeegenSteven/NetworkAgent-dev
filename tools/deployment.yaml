@@ -63,6 +63,7 @@ metadata:
   name: networktools-lb-service
 spec:
   type: LoadBalancer
+  loadBalancerIP: 34.142.51.177
   selector:
     application: networktools
   ports:

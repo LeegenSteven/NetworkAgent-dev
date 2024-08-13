@@ -12,11 +12,8 @@ Candidate todo list. Each task rated as:
 
 ## Operator
 
-* __H__: Kopf hangs after about 20 mins
-* __H__: Add firewall rule to allow allowed traffic from allowedinterface and add route between customer VPC/location and edge VM to route traffic to allowed interfaces
 * __H__: Create a CR that runs an iperf test between two VMs in customer locations
 * __H__: Add monitoring agent to each VPN VM and connect to back end pipeline (discover details from config connector objects in k8s) https://thepythoncode.com/article/make-a-network-usage-monitor-in-python?utm_content=cmp-true
-* __H__: Don't create a new UUID when connectivity service controller restarts before its finished - causes a lot of shrapnel, e.g. new vms to be created. Only an issue when the connectivity service doesnt run through, is fine with wireguard restarting because uuid is set
 * __M__: Validate the networks exist, and do permanent fail if not
 * __H__: use envFrom to seed container google environment variables
 * __M__: move compute k8s objects related to wireguard edge appliance under the wireguard object
@@ -24,6 +21,8 @@ Candidate todo list. Each task rated as:
 
 ## Tools/Rest endpoint
 
+* __M__: post and delete for running a test across two apps
+* __M__: find all apps running on each customer network, to figure out which vms to run tests on
 * __L__: use Kustomizer/envFrom to seed container google environment variables and image name
 * __M__: Move back end for creating new services to porch rather than direct to k8s
 

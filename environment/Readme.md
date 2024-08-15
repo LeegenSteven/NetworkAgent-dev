@@ -12,12 +12,12 @@ gcloud init --no-launch-browser
 
 ## Setup GCP environment variables
 
-Setup the following environment variables. They are used throughout the setup docs.
+Setup the following environment variables. They are used throughout the rest of the setup docs.
 
 ```
-export GOOGLE_PROJECT=free5gc-384814
-export GOOGLE_REGION=europe-west2
-export GOOGLE_ZONE=europe-west2-a
+export GOOGLE_PROJECT=<YOUR PROJECT>
+export GOOGLE_REGION=<YOUR REGION>
+export GOOGLE_ZONE=<YOUR ZONE>
 ```
 
 ## Create service account
@@ -35,7 +35,7 @@ gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:
 gcloud iam service-accounts keys create "./networkagent.json" --iam-account=$GOOGLE_SERVICE_ACCOUNT
 ```
 
-You must copy the __networkagent.json__ file to __NetworkAgent/tools__ directory to allow the tools rest server to access the GKE APIs.
+You must copy the __networkagent.json__ file to __NetworkAgent/tools__ and __NetworkAgent/networkagent__ directories to allow the tools server and genai agent to access APIs.
 
 ## Create GKE Automation Platform
 
@@ -89,7 +89,7 @@ $GOOGLE_SERVICE_ACCOUNT \
     --role="roles/iam.workloadIdentityUser"
 ```
 
-and update the file __NetworkAgent/environment/configconnector.yaml__ with your service account details, e.g. 
+and update the file __NetworkAgent/environment/configconnector.yaml__ with the networkagent service account details, e.g. 
 
 ```
 apiVersion: core.cnrm.cloud.google.com/v1beta1
@@ -101,7 +101,7 @@ metadata:
 spec:
   mode: cluster
   # deletion-policy: abandon
-  googleServiceAccount: "YOUR SERVICE ACCOUNT ADDRESS"
+  googleServiceAccount: networkagent@<YOUR PROJECT>.iam.gserviceaccount.com
 ```
 
 In the __NetworkAgent/environment__ run the following commands to start config connector in the __automation__ namespace
@@ -124,11 +124,44 @@ kubectl wait -n cnrm-system --for=condition=Ready pod --all
 To allow the network operator to log into the demo virtual machines create SSH keys and register with GCP. From the __NetworkAgent/environment__ directory run the following commands. 
 
 ```
-ssh-keygen -o -a 100 -t ed25519 -f google-compute -C briannaughton
+ssh-keygen -o -a 100 -t ed25519 -f google-compute -C networkagent
 gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=$GOOGLE_PROJECT --ttl=1d
 ```
 
 You must copy __google-compute__ file to __NetworkAgent/operator/src__ directory to allow the operator to log into the VMs.
+
+
+## Docker repo
+
+Create a docker repository to push network agent container images to.
+
+```
+gcloud artifacts repositories create networkagent --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository"
+```
+
+## Big query & PubSub
+
+Find your project number from the project details dashboard and add the following principal in IAM to allow pubsub accecss to your project.
+
+```
+service-553035247558@gcp-sa-pubsub.iam.gserviceaccount.com
+```
+
+In the __NetworkAgent/environment__ directory, run the following command to create the topic and big query pubsub subscription.
+
+```
+kubectl apply -f monitoring.yaml
+```
+
+At the moment need to go to pubsub subscription dashboard and delete the service performance subscription. It will be recreated correctly.
+
+## Create Demo VPC Networks
+
+Create the base customer VPCs, Subnets and dummy IT apps for the demo. Run the following command from the __NetworkAgent/sample-services__ directory.
+
+```
+kubectl apply -f customersites
+```
 
 ## Setup git and config sync (TBD)
 
@@ -176,38 +209,4 @@ kpt alpha repo register \
   --repo-basic-password=<<password>> \
   http://<<YOUR EXTERNAL IP>>/brian/test.git
 ```
-
-## Docker repo
-
-Create a docker repository to push network agent container images to.
-
-```
-gcloud artifacts repositories create networkagent --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository"
-```
-
-## Big query & PubSub
-
-Find your project number and add the following principal in your IAM 
-
-```
-service-553035247558@gcp-sa-pubsub.iam.gserviceaccount.com
-```
-
-In the __NetworkAgent/environment__ directory, run the following command to create the big query pubsub subscription.
-
-```
-kubectl apply -f monitoring.yaml
-```
-
-At the moment need to go to pubsub subscription dashboard and delete the service performance subscription. It will be recreated correctly.
-
-## Create Demo VPC Networks
-
-Create the base VPCs, Subnets and dummy IT apps for the demo. Run the following command from the __NetworkAgent/environment__ directory.
-
-```
-kubectl apply -f customersites
-```
-
-
 

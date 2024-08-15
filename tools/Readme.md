@@ -28,6 +28,17 @@ gcloud run deploy network-agent-api --image $GOOGLE_REGION-docker.pkg.dev/$GOOGL
 
 ## Deploy the tools service to GKE
 
+Update image address in the __deployment.yaml__ manifest with your PROJECT and REGION as follows: 
+
+```
+    spec:
+      serviceAccountName: networktools-account
+      containers:
+      - name: networktools
+        image: <YOUR_REGION>.pkg.dev/<YOUR PROJECT>/networkagent/networktools:latest
+        imagePullPolicy: Always
+```
+
 To run the network tools service run the following command
 
 ```

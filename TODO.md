@@ -1,6 +1,6 @@
 # TODO
 
-Candidate todo list. Each task rated as:
+Todo list. Each task rated as:
 
 * __H__: High
 * __M__: Medium
@@ -12,16 +12,13 @@ Candidate todo list. Each task rated as:
 
 ## Operator
 
-* __H__: Validate the networks or apps exist, and do permanent fail if not
 * __H__: General code refactoring
-* __H__: Figure out how to get service account file into playbooks without copying multiple times. Mayby copy from ../environment to root dir of container and reference from there in playbooks. 
 * __L__: use envFrom to seed container google environment variables
 * __M__: move compute k8s objects related to wireguard edge appliance under the wireguard object
 * __M__: put VM certificate in one place/maybe in mounted configmap rather than in the container 
 
 ## Tools/Rest endpoint
 
-* __H__: Figure out how to get service account file into container. Mayby copy from ../environment to root dir of container.
 * __L__: use Kustomize/envFrom to seed container google environment variables and image name
 * __M__: Move back end for creating new services to porch rather than direct to k8s
 
@@ -48,7 +45,6 @@ Candidate todo list. Each task rated as:
 
 ## Network Agent
 
-* __H__: grab the networkagent.json file from environment dir and put in / of container dir
 * __H__: use envFrom or maybe Kustomize to seed container google environment variables and image name - kustomize
 * __H__: Move from gradio to streamlit https://medium.com/@jedrzejplucinski/4-steps-to-create-chat-bot-for-your-api-e563c897ef85
 * __H__: Connect agent to internal tools service - no need for external IP for tools
@@ -59,4 +55,5 @@ Candidate todo list. Each task rated as:
 
 ## Network Tests
 
-* __H__: Test CRD/Operator that logs onto customer VMs and installs/runs software to emulate web traffic or general iperf
+* __L__: Web traffic simulation
+* __L__: Probe?

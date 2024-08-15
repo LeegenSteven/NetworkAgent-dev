@@ -35,7 +35,7 @@ Update the __deployment.yaml__ manifest with your PROJECT, REGION and ZONE detai
 ```
   containers:
   - name: networkoperator
-    image: europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networkoperator:latest
+    image: <YOUR REGION>-docker.pkg.dev/<YOUR PROJECT>/networkagent/networkoperator:latest
     imagePullPolicy: Always
     env:
     - name: PROJECT

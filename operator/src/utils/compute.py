@@ -393,30 +393,6 @@ async def create_compute(vm_name, subnet_name, interface, project, region, zone,
       logger.debug(e)
 
 ########################################################################
-# Get ComputeInstance
-########################################################################
-async def get_compute(vm_name):
-  logger.info("Get compute %s", vm_name)
-
-  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
-      api_version="compute.cnrm.cloud.google.com/v1beta1", 
-      kind="ComputeInstance",
-  )
-
-  try:
-
-    result = network_api.get(namespace="automation", name=vm_name)
-    return result
-
-  except kubernetes.client.rest.ApiException as e: 
-    logger.info(e.status)
-    if e.status == 422:
-      raise kopf.PermanentError("Unprocessable entity.")
-    if e.status == 404:
-      raise kopf.TemporaryError("Not found.")
-
-########################################################################
 # Create ComputeAddress
 ########################################################################
 async def create_external_ip(vmname, region):
@@ -465,6 +441,9 @@ async def create_route(vm_name, source_subnetwork_name, peer_subnetwork_name):
 
   # find ip address on vm_name assigned to source_subnetwork_name
   vmresult = await get_compute(vm_name)
+  if result is None:
+    raise kopf.TemporaryError("Waiting for VM")
+
   # check the VM has a network and ip address, if not backoff until it does
   if vmresult.get('spec') is not None:
     logger.debug(vmresult.spec)
@@ -706,7 +685,7 @@ async def get_compute(vm_name):
     if e.status == 422:
       raise kopf.PermanentError("Unprocessable entity.")
     if e.status == 404:
-      raise kopf.TemporaryError("Not found.")
+      return None
 
 ########################################################################
 # Create ComputeAddress
@@ -757,6 +736,9 @@ async def create_route(vm_name, source_subnetwork_name, peer_subnetwork_name):
 
   # find ip address on vm_name assigned to source_subnetwork_name
   vmresult = await get_compute(vm_name)
+  if vmresult is None:
+    raise kopf.TemporaryError("Waiting for VM")
+
   # check the VM has a network and ip address, if not backoff until it does
   if vmresult.get('spec') is not None:
     logger.debug(vmresult.spec)

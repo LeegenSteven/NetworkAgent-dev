@@ -79,10 +79,11 @@ async def get_subnet_info(subnetname):
 #####################################################################
 # Install VPN software on VM
 #####################################################################
-async def install_vpn(vmname, external_ip_address, tunnel_address, tunnel_cidr, interface_cidr, peer_name, peer_ip_address, keys, peer_keys):
+async def install_vpn(servicename, vmname, external_ip_address, tunnel_address, tunnel_cidr, interface_cidr, peer_name, peer_ip_address, keys, peer_keys):
     logger.info("Install VPN")
 
     extravars = {
+        'servicename': servicename,
         'tunnel_address': tunnel_address,
         'tunnel_cidr': tunnel_cidr,
         'default_interface': 'ens5' ,

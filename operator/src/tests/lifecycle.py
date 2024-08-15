@@ -10,6 +10,9 @@ logger = logging.getLogger(__name__)
 async def getExternalAddress(name):
     address_name=None
     result = await get_compute(name)
+    if result is None:
+        raise kopf.TemporaryError("Waiting for VM")
+
     interfaces = result.spec.get('networkInterface')
     for int in interfaces:
         accessConfig = int.get('accessConfig')
@@ -23,6 +26,9 @@ async def getExternalAddress(name):
 async def getMgmtAddress(name):
     address=None
     result = await get_compute(name)
+    if result is None:
+        raise kopf.TemporaryError("Waiting for VM")
+
     interfaces = result.spec.get('networkInterface')
     for int in interfaces:
         if 'mgmt' not in int['networkRef']['external']:
@@ -39,18 +45,10 @@ async def createtest(spec, name, namespace, logger, **kwargs):
 
     logger.info("Create test case between %s and %s", client, server)
 
-    # # check that vms exist
-    # client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-    # network_api = client.resources.get(
-    #     api_version="compute.cnrm.cloud.google.com/v1beta1", 
-    #     kind="ComputeInstance",
-    # )
-    # try:
-    #     network_api.get(namespace="automation", name=client)
-    #     network_api.get(namespace="automation", name=server)
-    # except kubernetes.client.rest.ApiException as e:
-    #     logger.info(e)
-    #     raise kopf.PermanentError("virtual machines not found")
+    result1 = await get_compute(client)
+    result2 = await get_compute(server)
+    if result1 is None or result2 is None:
+        raise kopf.PermanentError("VMs not found")
 
     client_external_ip=await getExternalAddress(client)
     server_external_ip=await getExternalAddress(server)
@@ -105,6 +103,11 @@ async def deletetest(spec, name, namespace, logger, **kwargs):
     # build the a and b end variables
     client=spec.get('virtualmachines')[0]
     server=spec.get('virtualmachines')[1]
+
+    result1 = await get_compute(client)
+    result2 = await get_compute(server)
+    if result1 is None or result2 is None:
+        return 
 
     client_external_ip=await getExternalAddress(client)
     server_external_ip=await getExternalAddress(server)

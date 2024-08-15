@@ -24,7 +24,7 @@ def poll():
         r = requests.get('http://127.0.0.1:9100/metrics')
 
         rawlines = r.text.splitlines()
-        metrics={"device": "wg0", "edgename": socket.gethostname(), "time": str(datetime.datetime.now())}
+        metrics={"servicename": "{{servicename}}", "device": "wg0", "edgename": socket.gethostname(), "time": str(datetime.datetime.now())}
         for line in rawlines:
             if not line.startswith('#') and "wg0" in line and ('transmit' in line or 'receive' in line):
                 strings=line.split()

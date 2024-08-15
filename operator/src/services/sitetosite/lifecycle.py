@@ -52,6 +52,10 @@ async def service_resources(spec, name, namespace, logger, **kwargs):
   site1 = await create_site(aend, bend, "10.0.10.0/24", "192.168.1.1", services[name]['uuid'], services[name]['akey'], services[name]['bkey'])
   site2 = await create_site(bend, aend, "10.0.11.0/24", "192.168.1.2", services[name]['uuid'], services[name]['bkey'], services[name]['akey'])
 
+  # Create the static routes to vpn tunnels
+  await create_route(site1['vmname'], aend, bend)
+  await create_route(site2['vmname'], bend, aend)
+
   # remove the services from the list so a service with the same name can be readded down the line
   logger.info("remove service from list")
 

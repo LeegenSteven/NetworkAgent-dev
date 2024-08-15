@@ -8,8 +8,10 @@ from resources.wireguard.lifecycle_tasks import *
 logger = logging.getLogger(__name__)
 
 @kopf.on.create('wireguardappliance')
-async def create(spec, name, namespace, logger, **kwargs):
+async def create(body,spec, name, namespace, logger, **kwargs):
     logger.info(f"A handler is called with spec: {spec}")
+
+    servicename = body['metadata']['ownerReferences'][0]['name']
 
     vmname = spec.get('vmname')
     if not vmname:
@@ -66,6 +68,7 @@ async def create(spec, name, namespace, logger, **kwargs):
 
     # Run ansible to install software on the VM
     await install_vpn(
+                servicename,
                 spec.get('vmname'),
                 external_ip_address,
                 spec.get('tunnelAddress'),

@@ -181,7 +181,4 @@ async def create_site(aend, bend, cidr, tunnel_address, uuid, akeys, bkeys):
   await create_external_ip(vars['vmname'], os.getenv("GOOGLE_REGION"))
   await create_vpn_edge(vars['vmname'], vars['vmname'], vars['tunnelsubnet'], vars['tunneladdress'], vars['peerinterface'], vars['peername'], akeys, bkeys)
 
-  # Create the static routes to vpn tunnels
-  await create_route(vars['vmname'], aend, bend)
-
   return vars

@@ -1,9 +1,10 @@
 import logging
 import kubernetes
-from utils.k8s import get_client
+from utils.k8s import get_client, get_credentials
 from pathlib import Path
 from connexion import FlaskApp
 import os
+from google.cloud import bigquery
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
@@ -44,6 +45,41 @@ def getCustomerLocations(name):
             return {}, 404
 
         return locations
+    except kubernetes.client.rest.ApiException as e:
+        if e.status == 404:
+            return {}, 404
+        else:
+            logger.debug(e)
+
+######################################################################
+# Get existing customer applications
+######################################################################
+def getCustomerApplications(name):
+    logger.info("Getting applications for customer %s", name )
+
+    if name is None:
+        return {}, 400
+
+    client = kubernetes.dynamic.DynamicClient(get_client())
+
+    try:
+        network_api = client.resources.get(
+            api_version="compute.cnrm.cloud.google.com/v1beta1", 
+            kind="ComputeInstance",
+        )
+        result=network_api.get(label_selector=f"customer={name}")
+        apps=[]
+        for item in result.items:
+            logger.info(item)
+            app = {
+                'name': item['metadata']['name'],
+            }
+            apps.append(app)
+
+        if len(apps)==0:
+            return {}, 404
+
+        return apps
     except kubernetes.client.rest.ApiException as e:
         if e.status == 404:
             return {}, 404
@@ -292,6 +328,29 @@ def deleteTest(name):
         else:
             logger.info(e)
             return {}, e.status
+
+######################################################################
+# Get Service Performance Metrics
+######################################################################
+def getServicePerformanceMetrics(name, period):
+    logger.info("Getting metrics for %s for the last %s mins", name, period)
+
+    # client = bigquery.Client(credentials=get_credentials())
+    # table_id = os.getenv("GOOGLE_PROJECT")+".serviceperformance.serviceperformance"
+
+    # job_config = bigquery.QueryJobConfig(
+    #     destination=table_id,
+    # )
+
+    # # Start the query, passing in the extra configuration.
+    # results = client.query_and_wait(
+    #     "SELECT 17 AS my_col;", job_config=job_config
+    # )
+
+    # for row in results:
+    #     logger.info(row.name)
+
+    return {"result": "TO BE IMPLEMENTED"},200
 
 ######################################################################
 # Start the server and load routes

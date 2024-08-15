@@ -36,6 +36,29 @@ paths:
           description: No locations found
         "400":
           description: Incorrect information provided
+  /apps/{name}:
+    get:
+      summary: Retrive a set of IT applications running in each network location
+      description: |-
+        Return a set of Customer specific IT applications that are deployed to each network location
+      operationId: main.getCustomerApplications
+      parameters:
+        - name: name
+          in: path
+          description: A string representing the customer name
+          required: true
+          schema:
+            type: string
+          examples:
+            Acme:
+              value: acme
+      responses:
+        "200":
+          description: successful operation
+        "404":
+          description: No applications found
+        "400":
+          description: Incorrect information provided
   /definitions:
     get:
       summary: Retrive a set of network connectivity definitions
@@ -149,7 +172,7 @@ paths:
         "404":
           description: test does not exist
     post:
-      summary: creates a request for a new network connectivity test
+      summary: creates a request for a new network connectivity test between two IT applications connected to customer locations
       description: |-
         Create a New network connectivity test.
       operationId: main.createTest
@@ -173,6 +196,63 @@ paths:
           description: test with that name already exists
         "422":
           description: Schema validation errors 
+  /metrics:
+    get:
+      summary: retrieve performance metrics for a deployed connectivity service
+      description: |-
+        Return a set JSON performance metrics for the last period specified with the following JSON schema
+
+        {
+            "timestamp": "",
+            "device": "wg0",
+            "node_network_receive_bytes_total": "0",
+            "node_network_receive_compressed_total": "0",
+            "node_network_receive_drop_total": "0",
+            "node_network_receive_errs_total": "0",
+            "node_network_receive_fifo_total": "0",
+            "node_network_receive_frame_total": "0",
+            "node_network_receive_multicast_total": "0",
+            "node_network_receive_nohandler_total": "0",
+            "node_network_receive_packets_total": "0",
+            "node_network_transmit_bytes_total": "0",
+            "node_network_transmit_carrier_total": "0",
+            "node_network_transmit_colls_total": "0",
+            "node_network_transmit_compressed_total": "0",
+            "node_network_transmit_drop_total": "0",
+            "node_network_transmit_errs_total": "0",
+            "node_network_transmit_fifo_total": "0",
+            "node_network_transmit_packets_total": "0",
+            "node_network_transmit_queue_length": "1000",
+            "edgename": ""
+        }
+
+      parameters:
+        - name: name
+          in: query
+          description: The name of the deployed service
+          required: true
+          schema:
+            type: string
+          examples:
+            Acme:
+              value: acme
+        - name: period
+          in: query
+          description: The period of time to collect performance metrics over in minutes
+          required: true
+          schema:
+            type: integer
+          examples:
+            Acme:
+              value: 10
+
+      operationId: main.getServicePerformanceMetrics
+      responses:
+        "200":
+          description: successful operation
+        "404":
+          description: No metrics found
+
 components:
   schemas:
     Definition:
@@ -214,7 +294,7 @@ components:
           description: a name for the test
           type: string
         virtualmachines:
-          description: virtual machines to run the test to/from
+          description: IT applications to run the test to/from
           type: array
           items:
             type: string

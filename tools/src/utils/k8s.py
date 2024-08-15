@@ -58,6 +58,9 @@ def external_service_account():
 
     return apiclient
 
+def get_credentials():
+    return google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/tools/networkagent.json"))[0]
+
 def get_client():
     # check if kubeconfig path exists
     if os.path.exists(Path.home()/".kube"):

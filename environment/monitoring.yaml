@@ -34,12 +34,7 @@ spec:
     name: serviceperformance
   schema: >
     [
-      {
-        "name": "data",
-        "type": "JSON",
-        "mode": "NULLABLE",
-        "description": "The data"
-      }
+      {"name": "data","type": "JSON","mode": "NULLABLE","description": "The data"}
     ]
 ---
 apiVersion: pubsub.cnrm.cloud.google.com/v1beta1

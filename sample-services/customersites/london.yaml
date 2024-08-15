@@ -26,6 +26,8 @@ apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeRouter
 metadata:
   name: london-router
+  labels:
+    customer: acme
 spec:
   description: london router
   region: europe-west2
@@ -36,6 +38,8 @@ apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeRouterNAT
 metadata:
   name: 'london-nat'
+  labels:
+    customer: acme
 spec:
   region: europe-west2
   routerRef:
@@ -47,6 +51,8 @@ apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeFirewall
 metadata:
   name: london-allowed
+  labels:
+    customer: acme
 spec:
   allow:
     - protocol: tcp
@@ -68,6 +74,8 @@ metadata:
   annotations:
     cnrm.cloud.google.com/allow-stopping-for-update: "true"
   name: london-app1
+  labels:
+    customer: acme
 spec:
   machineType: e2-small
   zone: europe-west2-a
@@ -95,6 +103,8 @@ apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeAddress
 metadata:
   name: london-app1-ip
+  labels:
+    customer: acme
 spec:
   addressType: EXTERNAL
   description: external address
@@ -106,6 +116,8 @@ spec:
 #   annotations:
 #     cnrm.cloud.google.com/allow-stopping-for-update: "true"
 #   name: london-app2
+  # labels:
+  #   customer: acme
 # spec:
 #   machineType: e2-small
 #   zone: europe-west2-a

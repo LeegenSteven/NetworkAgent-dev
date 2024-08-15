@@ -101,7 +101,7 @@ async def install_vpn(vmname, external_ip_address, tunnel_address, tunnel_cidr, 
                 'ansible_host': external_ip_address,
                 'ansible_user': 'admin_briannaughton_altostrat_co',
                 'ansible_connection': 'ssh',
-                'ansible_ssh_private_key_file': '/google-compute',
+                'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
                 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'
             }
         }

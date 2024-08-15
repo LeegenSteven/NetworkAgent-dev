@@ -35,6 +35,8 @@ gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:
 gcloud iam service-accounts keys create "./networkagent.json" --iam-account=$GOOGLE_SERVICE_ACCOUNT
 ```
 
+You must copy the __networkagent.json__ file to __NetworkAgent/tools__ directory to allow the tools rest server to access the GKE APIs.
+
 ## Create GKE Automation Platform
 
 Create a __mgmt__ VPC to attach GKE and the edge appliances to. 
@@ -125,6 +127,8 @@ To allow the network operator to log into the demo virtual machines create SSH k
 ssh-keygen -o -a 100 -t ed25519 -f google-compute -C briannaughton
 gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=$GOOGLE_PROJECT --ttl=1d
 ```
+
+You must copy __google-compute__ file to __NetworkAgent/operator/src__ directory to allow the operator to log into the VMs.
 
 ## Setup git and config sync (TBD)
 

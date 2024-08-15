@@ -39,6 +39,18 @@ async def createtest(spec, name, namespace, logger, **kwargs):
     client=spec.get('virtualmachines')[0]
     server=spec.get('virtualmachines')[1]
 
+    # check that vms exist
+    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+    network_api = client.resources.get(
+        api_version="compute.cnrm.cloud.google.com/v1beta1", 
+        kind="ComputeInstance",
+    )
+    try:
+        network_api.get(namespace="automation", name=client)
+        network_api.get(namespace="automation", name=server)
+    except:
+        raise kopf.PermanentError("virtual machines not found")
+
     client_external_ip=await getExternalAddress(client)
     server_external_ip=await getExternalAddress(server)
     client_mgmt_ip=await getMgmtAddress(client)
@@ -117,7 +129,7 @@ async def deletetest(spec, name, namespace, logger, **kwargs):
                 'mgmt_ip': client_mgmt_ip,
                 'ansible_user': 'admin_briannaughton_altostrat_co',
                 'ansible_connection': 'ssh',
-                'ansible_ssh_private_key_file': '/google-compute',
+                'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
                 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'
             },
             'server': {

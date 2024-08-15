@@ -23,7 +23,17 @@ async def service_resources(spec, name, namespace, logger, **kwargs):
   aend=spec.get('interfaces')[0]
   bend=spec.get('interfaces')[1]
 
-  # TODO check that aend and bend are valid computesubnetworks
+  # check that aend and bend are valid computesubnetworks
+  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+  network_api = client.resources.get(
+      api_version="compute.cnrm.cloud.google.com/v1beta1", 
+      kind="ComputeSubnetwork",
+  )
+  try:
+    network_api.get(namespace="automation", name=aend)
+    network_api.get(namespace="automation", name=bend)
+  except:
+    raise kopf.PermanentError("interfaces not found")
 
   # Create uuid and keys for this service instance
   if name not in services:

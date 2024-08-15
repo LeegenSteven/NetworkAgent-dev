@@ -1,8 +1,9 @@
 import logging
 import kubernetes
-from utils.k8s import login
+from utils.k8s import get_client
 from pathlib import Path
 from connexion import FlaskApp
+import os
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
@@ -21,8 +22,7 @@ def getCustomerLocations(name):
     if name is None:
         return {}, 400
 
-    login()
-    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+    client = kubernetes.dynamic.DynamicClient(get_client())
 
     try:
         network_api = client.resources.get(
@@ -44,8 +44,11 @@ def getCustomerLocations(name):
             return {}, 404
 
         return locations
-    except kubernetes.ResourceNotFoundError:
-        return {}, 404
+    except kubernetes.client.rest.ApiException as e:
+        if e.status == 404:
+            return {}, 404
+        else:
+            logger.debug(e)
 
 ######################################################################
 # Get a list of Service Definitions
@@ -53,10 +56,7 @@ def getCustomerLocations(name):
 def getServiceDefinitions():
     logger.info("Getting Service definitions")
 
-    import json
-
-    login()
-    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+    client = kubernetes.dynamic.DynamicClient(get_client())
 
     try:
         network_api = client.resources.get(
@@ -72,8 +72,11 @@ def getServiceDefinitions():
             return {}, 404
 
         return services
-    except kubernetes.dynamic.exceptions.ResourceNotFoundError:
-        return {}, 404
+    except kubernetes.client.rest.ApiException as e:
+        if e.status == 404:
+            return {}, 404
+        else:
+            logger.debug(e)
 
 ######################################################################
 # Get existing connectivity services
@@ -84,8 +87,7 @@ def getServices(name):
     if name is None:
         return {}, 400
 
-    login()
-    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+    client = kubernetes.dynamic.DynamicClient(get_client())
 
     try:
         services_list=[]
@@ -105,7 +107,7 @@ def getServices(name):
 
             for item in services.items:
                 logger.debug(item)
-                if 'status' not in item or 'service_resources' not in item['status']:
+                if item.get('status') is None or item.get('status').get('service_resources') is None:
                     svc={"status": "waiting for service to come up"}
                 else:
                     svc= {
@@ -162,8 +164,7 @@ def createService(payload):
     serviceApiVersion = payload['serviceInfo']['apiVersion']
     serviceSpec = payload['serviceInfo']['spec']
 
-    login()
-    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+    client = kubernetes.dynamic.DynamicClient(get_client())
     name = customerName.lower()
 
     try:
@@ -203,8 +204,7 @@ def deleteService(name, kind):
     if name is None or kind is None:
         return {}, 400
 
-    login()
-    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+    client = kubernetes.dynamic.DynamicClient(get_client())
 
     try:
 
@@ -226,9 +226,77 @@ def deleteService(name, kind):
             return {}, e.status
 
 ######################################################################
+# Create a new connectivity test
+######################################################################
+def createTest(payload):
+    logger.info("Create a new Test from %s", str(payload))
+
+    name = payload['name']
+    virtualmachines=payload['virtualmachines']
+
+    client = kubernetes.dynamic.DynamicClient(get_client())
+
+    try:
+        network_api = client.resources.get(
+            api_version="google.dev/v1", 
+            kind="ConnectivityTest",
+        )
+        crd_manifest= { 
+            "apiVersion": "google.dev.v1",
+            "kind": "ConnectivityTest",
+            "metadata": {
+                "name": name,
+                "namespace": "automation",
+            },
+            "spec": {
+                "virtualmachines": virtualmachines
+            }
+        }
+        result = network_api.create(crd_manifest)
+
+        return {"result": str(result)}, 201
+    except kubernetes.client.rest.ApiException as e: 
+        logger.info(e.status)
+        logger.debug(e)
+        if e.status == 409:
+            logger.info("Already exists - skipping")
+            return {}, 409
+        else:
+            logger.info(e)
+            return {}, e.status
+
+######################################################################
+# Delete a connectivity test
+######################################################################
+def deleteTest(name):
+    if name is None:
+        return {}, 400
+
+    client = kubernetes.dynamic.DynamicClient(get_client())
+
+    try:
+
+        network_api = client.resources.get(
+            api_version="google.dev/v1", 
+            kind="ConnectivityTest",
+        )
+        network_api.delete(name=name, namespace="automation")
+        return {}, 200
+
+    except kubernetes.client.rest.ApiException as e: 
+        logger.info(e.status)
+        logger.debug(e)
+        if e.status == 404:
+            logger.info("No service found")
+            return {}, 404
+        else:
+            logger.info(e)
+            return {}, e.status
+
+######################################################################
 # Start the server and load routes
 ######################################################################
 if __name__ == "__main__":
-
-    # start the server   
-    app.run(f"{Path(__file__).stem}:app", host='0.0.0.0', port=8080)
+    
+    # start the server
+    app.run(f"{Path(__file__).stem}:app", host='0.0.0.0', port=os.getenv("PORT",8080))

@@ -1,0 +1,2 @@
+- name: start iperf server on port 5201
+  shell: nohup iperf3 -s </dev/null >/dev/null 2>&1 &

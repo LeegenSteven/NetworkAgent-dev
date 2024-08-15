@@ -129,6 +129,50 @@ paths:
           description: service with that name already exists
         "422":
           description: Schema validation errors 
+  /test:
+    delete:
+      summary: delete a running connectivity test
+      operationId: main.deleteTest
+      parameters:
+        - name: name
+          in: query
+          description: The name of the running connectivity test
+          required: true
+          schema:
+            type: string
+          examples:
+            Acme:
+              value: acme
+      responses:
+        "200":
+          description: successful request to delete an test
+        "404":
+          description: test does not exist
+    post:
+      summary: creates a request for a new network connectivity test
+      description: |-
+        Create a New network connectivity test.
+      operationId: main.createTest
+      requestBody:
+        x-body-name: payload
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Test"
+            example:
+              name: acme
+              virtualmachines:
+              - london-app1
+              - sydney-app1
+      responses:
+        "201":
+          description: successful request to create new service received
+        "400":
+          description: Incorrect information provided
+        "409":
+          description: test with that name already exists
+        "422":
+          description: Schema validation errors 
 components:
   schemas:
     Definition:
@@ -163,3 +207,18 @@ components:
                   interfaces: # the "remote" customer subnets to connect
                     - london-internal
                     - sydney-internal
+    Test:
+      type: object
+      properties:
+        name:
+          description: a name for the test
+          type: string
+        virtualmachines:
+          description: virtual machines to run the test to/from
+          type: array
+          items:
+            type: string
+          oneOf:
+            - minItems: 2
+              maxItems: 2
+

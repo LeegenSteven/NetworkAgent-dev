@@ -1,11 +1,13 @@
 - name: install wireguard
-  become: yes
+  become: True
   ansible.builtin.apt:
-    name: wireguard
+    name: 
+     - wireguard
+     - python3-pip
     state: present
 
 - name: set ip forwarding
-  become: yes
+  become: True
   ansible.posix.sysctl:
     name: net.ipv4.ip_forward
     value: '1'
@@ -13,7 +15,7 @@
     reload: true
 
 - name: generate server config
-  become: yes
+  become: True
   template:
     src: server.conf
     dest: /etc/wireguard/wg0.conf

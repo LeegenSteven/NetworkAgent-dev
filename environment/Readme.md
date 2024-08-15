@@ -27,7 +27,11 @@ Run the following commands to create a new service account.
 ```
 gcloud iam service-accounts create networkagent --description="Network Agent Service Account" --display-name="Network Agent"
 export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
-gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/editor"
+gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/owner"
+gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/container.admin"
+gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/compute.admin"
+gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/compute.networkAdmin"
+gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/iam.serviceAccountAdmin"
 gcloud iam service-accounts keys create "./networkagent.json" --iam-account=$GOOGLE_SERVICE_ACCOUNT
 ```
 
@@ -83,17 +87,31 @@ $GOOGLE_SERVICE_ACCOUNT \
     --role="roles/iam.workloadIdentityUser"
 ```
 
-Specify the GKE namespace and project for Config Connector to create resources in
+and update the file __NetworkAgent/environment/configconnector.yaml__ with your service account details, e.g. 
 
 ```
-cd NetworkAgent/environment
+apiVersion: core.cnrm.cloud.google.com/v1beta1
+kind: ConfigConnector
+metadata:
+  # the name is restricted to ensure that there is only one
+  # ConfigConnector resource installed in your cluster
+  name: configconnector.core.cnrm.cloud.google.com
+spec:
+  mode: cluster
+  # deletion-policy: abandon
+  googleServiceAccount: "YOUR SERVICE ACCOUNT ADDRESS"
+```
+
+In the __NetworkAgent/environment__ run the following commands to start config connector in the __automation__ namespace
+
+```
 kubectl create namespace automation
 kubectl annotate namespace automation cnrm.cloud.google.com/project-id=$GOOGLE_PROJECT
 kubectl config set-context --current --namespace automation
 kubectl apply -f configconnector.yaml
 ```
 
-Verify the config connector installation
+Verify the config connector installation is ready with the following command
 
 ```
 kubectl wait -n cnrm-system --for=condition=Ready pod --all
@@ -162,6 +180,22 @@ Create a docker repository to push network agent container images to.
 ```
 gcloud artifacts repositories create networkagent --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository"
 ```
+
+## Big query & PubSub
+
+Find your project number and add the following principal in your IAM 
+
+```
+service-553035247558@gcp-sa-pubsub.iam.gserviceaccount.com
+```
+
+In the __NetworkAgent/environment__ directory, run the following command to create the big query pubsub subscription.
+
+```
+kubectl apply -f monitoring.yaml
+```
+
+At the moment need to go to pubsub subscription dashboard and delete the service performance subscription. It will be recreated correctly.
 
 ## Create Demo VPC Networks
 

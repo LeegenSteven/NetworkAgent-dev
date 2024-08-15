@@ -28,7 +28,7 @@ rules:
 
   # Application: other resources managed.
   - apiGroups: [compute.cnrm.cloud.google.com]
-    resources: [computenetworks, computeaddresses, computesubnetworks, computeinstances, computerouters, computerouternats, computefirewalls]
+    resources: [computenetworks, computeaddresses, computesubnetworks, computeinstances, computerouters, computerouternats, computefirewalls, computeroutes]
     verbs: [list, get, create, watch, patch, delete]
 
 ---

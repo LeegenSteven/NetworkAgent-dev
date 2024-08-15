@@ -1,15 +1,25 @@
 - hosts: all
-  become: yes
-  gather_facts: no
+  become: True
+  gather_facts: False
   tasks:
 
   - name: run install
     import_role:
       name: install
 
+  - name: install node exporter 
+    import_role:
+      name: nodeexporter
+
+  - name: install publisher
+    import_role:
+      name: publish
+
   - name: run wireguard
-    become: yes
+    become: True
     ansible.builtin.systemd_service:
       state: restarted
       enabled: true
       name: wg-quick@wg0
+
+    

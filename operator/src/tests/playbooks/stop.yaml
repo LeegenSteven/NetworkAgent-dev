@@ -1,0 +1,7 @@
+- hosts: all
+  become: True
+  gather_facts: False
+  tasks:
+  - name: stop iperf
+    import_role:
+      name: stop

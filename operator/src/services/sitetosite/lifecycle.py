@@ -76,6 +76,11 @@ async def service_resources(spec, name, namespace, logger, **kwargs):
         'api_version': "compute.cnrm.cloud.google.com/v1beta1",
         'name': f"{site1['vmname']}-nat"
        },
+       {
+        'kind': 'ComputeRoute',
+        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
+        'name': f"{site1['vmname']}"
+       },
       #  {
       #   'kind': 'Wireguard',
       #   'api_version': "google.dev/v1",
@@ -106,6 +111,11 @@ async def service_resources(spec, name, namespace, logger, **kwargs):
         'api_version': "compute.cnrm.cloud.google.com/v1beta1",
         'name': f"{site2['vmname']}-nat"
        },
+       {
+        'kind': 'ComputeRoute',
+        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
+        'name': f"{site2['vmname']}"
+       },
     ] 
   
 ##########################################
@@ -116,5 +126,6 @@ async def delete_service_resources(spec, name, namespace, logger, **kwargs):
   logger.info(f"Delete pointtopoint service {name} with spec: {spec}")
 
   global services
-  logger.info(services[name])
-  del services[name]
+  if services.get(name) is not None:
+    logger.info("deleting keys %s",str(services[name]))
+    del services[name]

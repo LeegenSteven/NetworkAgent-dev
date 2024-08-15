@@ -16,7 +16,7 @@ def external_service_account():
     GOOGLE_REGION = os.getenv("GOOGLE_REGION")
     GOOGLE_ZONE = os.getenv("GOOGLE_ZONE")
 
-    name=f"projects/{GOOGLE_PROJECT}/locations/{GOOGLE_REGION}/clusters/networkautomation"
+    name=f"projects/{GOOGLE_PROJECT}/locations/{GOOGLE_ZONE}/clusters/networkautomation"
     cluster = cluster_manager_client.get_cluster(name=name)
 
     SERVER = cluster.endpoint
@@ -54,9 +54,9 @@ def external_service_account():
     configuration = client.Configuration()
     loader = config.kube_config.KubeConfigLoader(KUBECONFIG)
     loader.load_and_set(configuration)
-    client = client.ApiClient(configuration=configuration)
+    apiclient = client.ApiClient(configuration=configuration)
 
-    return client
+    return apiclient
 
 def get_client():
     # check if kubeconfig path exists

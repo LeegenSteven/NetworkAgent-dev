@@ -299,4 +299,4 @@ def deleteTest(name):
 if __name__ == "__main__":
     
     # start the server
-    app.run(f"{Path(__file__).stem}:app", host='0.0.0.0', port=os.getenv("PORT",8080))
+    app.run(f"{Path(__file__).stem}:app", host='0.0.0.0', port=int(os.getenv("PORT","8080")))

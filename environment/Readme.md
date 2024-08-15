@@ -144,7 +144,7 @@ gcloud artifacts repositories create networkagent --repository-format=docker --l
 Find your project number from the project details dashboard and add the following principal in IAM to allow pubsub accecss to your project.
 
 ```
-service-553035247558@gcp-sa-pubsub.iam.gserviceaccount.com
+service-<YOUR PROJECT ID NUMBER>@gcp-sa-pubsub.iam.gserviceaccount.com
 ```
 
 In the __NetworkAgent/environment__ directory, run the following command to create the topic and big query pubsub subscription.

@@ -6,4 +6,6 @@
 .venv
 .vscode
 launch.json
+google-compute
+google-compute.pub
 networkagent.json

@@ -1,5 +1,5 @@
-apiVersion: network.example.com/v1
-kind: Test
+apiVersion: google.dev/v1
+kind: ConnectivityTest
 metadata:
   name: test-sample
 spec:

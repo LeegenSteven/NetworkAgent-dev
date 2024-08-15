@@ -80,6 +80,9 @@ spec:
   networkInterface:
     - subnetworkRef:
         name: newyork-internal
+      accessConfig:
+        - natIpRef:
+            name: newyork-app1-ip
     - subnetworkRef:
         external: https://www.googleapis.com/compute/v1/projects/free5gc-384814/regions/europe-west2/subnetworks/mgmt-subnet
   canIpForward: true
@@ -87,6 +90,15 @@ spec:
   metadata:
     - key: ssh-keys
       value: admin_briannaughton_altostrat_co:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN57YanONs2q/Eor4Tjv1NRhBGrB59vPFAMZbvlOVtkX briannaughton
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeAddress
+metadata:
+  name: newyork-app1-ip
+spec:
+  addressType: EXTERNAL
+  description: external address
+  location: europe-west2
 # ---
 # apiVersion: compute.cnrm.cloud.google.com/v1beta1
 # kind: ComputeInstance

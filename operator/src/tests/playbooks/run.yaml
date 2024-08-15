@@ -2,7 +2,22 @@
   become: True
   gather_facts: False
   tasks:
-
-  - name: run install
+  - name: install iperf
     import_role:
       name: install
+
+- hosts: server
+  become: True
+  gather_facts: False
+  tasks:
+  - name: run server
+    import_role:
+      name: server
+
+- hosts: client
+  become: True
+  gather_facts: False
+  tasks:
+  - name: run client
+    import_role:
+      name: client

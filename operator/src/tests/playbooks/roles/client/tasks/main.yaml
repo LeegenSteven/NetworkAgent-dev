@@ -1,0 +1,5 @@
+- debug:
+    var: hostvars['server']
+
+- name: start iperf client
+  shell: nohup iperf3 -c {{ hostvars['server'].mgmt_ip }} -t 1000  </dev/null >/dev/null 2>&1 &

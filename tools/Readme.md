@@ -18,7 +18,15 @@ docker build . -t $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/net
 docker push $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networktools:latest
 ```
 
-## Deploy the tools service
+## Deploy the tools service to Cloud Run
+
+Run following to deploy the rest endpoint on cloud run
+
+```
+gcloud run deploy network-agent-api --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networktools:latest --region $GOOGLE_REGION --service-account $GOOGLE_SERVICE_ACCOUNT --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT, GOOGLE_REGION=$GOOGLE_REGION, GOOGLE_ZONE=$GOOGLE_ZONE
+```
+
+## Deploy the tools service to GKE
 
 To run the network tools service run the following command
 

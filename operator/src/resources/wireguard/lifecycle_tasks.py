@@ -3,6 +3,7 @@ import kubernetes
 import kopf
 import ansible_runner
 import utils.constants as constants
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,10 @@ async def install_vpn(vmname, external_ip_address, tunnel_address, tunnel_cidr, 
         'peer_name': peer_name,
         'peer_ip_address' : peer_ip_address,
         'keys': keys, 
-        'peer_keys': peer_keys
+        'peer_keys': peer_keys,
+        'GOOGLE_PROJECT': os.getenv("GOOGLE_PROJECT"),
+        'GOOGLE_REGION': os.getenv("GOOGLE_REGION"),
+        'GOOGLE_ZONE': os.getenv("GOOGLE_ZONE")
     }
     hosts = {
         'hosts': {
@@ -97,7 +101,7 @@ async def install_vpn(vmname, external_ip_address, tunnel_address, tunnel_cidr, 
                 'ansible_host': external_ip_address,
                 'ansible_user': 'admin_briannaughton_altostrat_co',
                 'ansible_connection': 'ssh',
-                'ansible_ssh_private_key_file': 'google-compute',
+                'ansible_ssh_private_key_file': '/google-compute',
                 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'
             }
         }

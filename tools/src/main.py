@@ -4,6 +4,7 @@ from utils.k8s import get_client, get_credentials
 from pathlib import Path
 from connexion import FlaskApp
 import os
+import json
 from google.cloud import bigquery
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
@@ -335,22 +336,25 @@ def deleteTest(name):
 def getServicePerformanceMetrics(name, period):
     logger.info("Getting metrics for %s for the last %s mins", name, period)
 
-    # client = bigquery.Client(credentials=get_credentials())
-    # table_id = os.getenv("GOOGLE_PROJECT")+".serviceperformance.serviceperformance"
+    client = bigquery.Client(credentials=get_credentials())
+    table_id = os.getenv("GOOGLE_PROJECT")+".serviceperformance.serviceperformance"
 
-    # job_config = bigquery.QueryJobConfig(
-    #     destination=table_id,
-    # )
+    results = client.query_and_wait(
+        f"""
+        SELECT 
+        data.servicename, 
+        data.edgename, 
+        data.time,
+        data.node_network_receive_bytes_total, 
+        data.node_network_transmit_bytes_total 
+        FROM `{table_id}`
+        WHERE JSON_VALUE(data, '$.servicename')='{name}' AND publish_time BETWEEN TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL -{period} MINUTE) AND CURRENT_TIMESTAMP()
+        ORDER BY publish_time DESC
+        """
+    )
 
-    # # Start the query, passing in the extra configuration.
-    # results = client.query_and_wait(
-    #     "SELECT 17 AS my_col;", job_config=job_config
-    # )
-
-    # for row in results:
-    #     logger.info(row.name)
-
-    return {"result": "TO BE IMPLEMENTED"},200
+    records = [dict(row) for row in results]
+    return records,200
 
 ######################################################################
 # Start the server and load routes

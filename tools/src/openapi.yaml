@@ -200,32 +200,14 @@ paths:
     get:
       summary: retrieve performance metrics for a deployed connectivity service
       description: |-
-        Return a set JSON performance metrics for the last period specified with the following JSON schema
-
-        {
-            "timestamp": "",
-            "device": "wg0",
-            "node_network_receive_bytes_total": "0",
-            "node_network_receive_compressed_total": "0",
-            "node_network_receive_drop_total": "0",
-            "node_network_receive_errs_total": "0",
-            "node_network_receive_fifo_total": "0",
-            "node_network_receive_frame_total": "0",
-            "node_network_receive_multicast_total": "0",
-            "node_network_receive_nohandler_total": "0",
-            "node_network_receive_packets_total": "0",
-            "node_network_transmit_bytes_total": "0",
-            "node_network_transmit_carrier_total": "0",
-            "node_network_transmit_colls_total": "0",
-            "node_network_transmit_compressed_total": "0",
-            "node_network_transmit_drop_total": "0",
-            "node_network_transmit_errs_total": "0",
-            "node_network_transmit_fifo_total": "0",
-            "node_network_transmit_packets_total": "0",
-            "node_network_transmit_queue_length": "1000",
-            "edgename": ""
-        }
-
+        Return a set JSON performance metrics for the last period specified with the following JSONL schema
+        [
+          {"name": "data","type": "JSON","mode": "NULLABLE","description": "The data"},
+          {"name": "subscription_name","type": "string","mode": "NULLABLE","description": "service name"},
+          {"name": "attributes","type": "string","mode": "NULLABLE","description": "name of the vm"},
+          {"name": "publish_time","type": "TIMESTAMP","mode": "NULLABLE","description": "time published"},
+          {"name": "message_id","type": "string","mode": "NULLABLE","description": "name of nic reporting"}
+        ]
       parameters:
         - name: name
           in: query

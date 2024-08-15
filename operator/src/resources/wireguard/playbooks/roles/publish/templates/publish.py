@@ -26,11 +26,13 @@ def poll():
         rawlines = r.text.splitlines()
         metrics={"servicename": "{{servicename}}", "device": "wg0", "edgename": socket.gethostname(), "time": str(datetime.datetime.now())}
         for line in rawlines:
-            if not line.startswith('#') and "wg0" in line and ('transmit' in line or 'receive' in line):
-                strings=line.split()
-                key = strings[0].split('{')[0]
-                value = strings[1]
-                metrics[key]=value
+            if not line.startswith('#'):
+                if "wg0" in line and ('transmit' in line or 'receive' in line):
+                    if 'bytes' in line or 'drop' in line or 'packets' in line:
+                        strings=line.split()
+                        key = strings[0].split('{')[0]
+                        value = strings[1]
+                        metrics[key]=int(value)
 
         json_metrics=json.dumps(metrics)
         logger.info(json_metrics)

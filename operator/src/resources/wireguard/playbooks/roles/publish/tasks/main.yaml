@@ -6,7 +6,7 @@
 
 - name: upload agent service file
   ansible.builtin.copy:
-    src: networkagent.json
+    src: "{{BASEDIR}}/networkagent.json"
     dest: /opt/networkagent.json
     owner: root
     group: root

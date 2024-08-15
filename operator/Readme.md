@@ -9,7 +9,7 @@ The operator code is based on the [kopf](https://kopf.readthedocs.io/en/latest/)
 
 ## Build the Network Operator
 
-To build and push the network operator image, run the following commands
+To build and push the network operator image, run the following commands in the __NetworkAgent/operator__ directory
 
 ```
 gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev

@@ -35,7 +35,7 @@ gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:
 gcloud iam service-accounts keys create "./networkagent.json" --iam-account=$GOOGLE_SERVICE_ACCOUNT
 ```
 
-You must copy the __networkagent.json__ file to __NetworkAgent/tools__ and __NetworkAgent/networkagent__ directories to allow the tools server and genai agent to access APIs.
+You must copy the __networkagent.json__ file to __NetworkAgent/tools__, __NetworkAgent/operator and __NetworkAgent/networkagent__ directories to allow the tools server and genai agent to access APIs.
 
 ## Create GKE Automation Platform
 

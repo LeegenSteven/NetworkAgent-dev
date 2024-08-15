@@ -12,14 +12,11 @@ Todo list. Each task rated as:
 
 ## Operator
 
-* __H__: General code refactoring
-* __L__: use envFrom to seed container google environment variables
+* __H__: General code refactoring - copy networkagent.json from container root rather than store in playbook
 * __M__: move compute k8s objects related to wireguard edge appliance under the wireguard object
-* __M__: put VM certificate in one place/maybe in mounted configmap rather than in the container 
 
 ## Tools/Rest endpoint
 
-* __L__: use Kustomize/envFrom to seed container google environment variables and image name
 * __M__: Move back end for creating new services to porch rather than direct to k8s
 
 ## Monitoring
@@ -45,12 +42,10 @@ Todo list. Each task rated as:
 
 ## Network Agent
 
-* __H__: use envFrom or maybe Kustomize to seed container google environment variables and image name - kustomize
 * __H__: Move from gradio to streamlit https://medium.com/@jedrzejplucinski/4-steps-to-create-chat-bot-for-your-api-e563c897ef85
-* __H__: Connect agent to internal tools service - no need for external IP for tools
 * __H__: Q&A to collect all info needed to create new services
-* __H__: How is service performing
-* __H__: What tests are available
+* __H__: Add monitoring of how is service performing
+* __H__: Describe what tests are available, and run them
 * __H__: Run/Stop a test
 
 ## Network Tests

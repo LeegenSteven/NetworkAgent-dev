@@ -93,7 +93,8 @@ async def install_vpn(vmname, external_ip_address, tunnel_address, tunnel_cidr, 
         'peer_keys': peer_keys,
         'GOOGLE_PROJECT': os.getenv("GOOGLE_PROJECT"),
         'GOOGLE_REGION': os.getenv("GOOGLE_REGION"),
-        'GOOGLE_ZONE': os.getenv("GOOGLE_ZONE")
+        'GOOGLE_ZONE': os.getenv("GOOGLE_ZONE"),
+        'BASEDIR': constants.basedir
     }
     hosts = {
         'hosts': {

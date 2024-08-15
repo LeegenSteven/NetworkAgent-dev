@@ -242,7 +242,7 @@ def createTest(payload):
             kind="ConnectivityTest",
         )
         crd_manifest= { 
-            "apiVersion": "google.dev.v1",
+            "apiVersion": "google.dev/v1",
             "kind": "ConnectivityTest",
             "metadata": {
                 "name": name,

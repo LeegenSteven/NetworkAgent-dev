@@ -32,7 +32,7 @@ def poll():
                         strings=line.split()
                         key = strings[0].split('{')[0]
                         value = strings[1]
-                        metrics[key]=int(value)
+                        metrics[key]=float(value)
 
         json_metrics=json.dumps(metrics)
         logger.info(json_metrics)

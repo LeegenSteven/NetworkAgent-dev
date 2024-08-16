@@ -18,6 +18,27 @@ Setup the following environment variables. They are used throughout the rest of 
 export GOOGLE_PROJECT=<YOUR PROJECT>
 export GOOGLE_REGION=<YOUR REGION>
 export GOOGLE_ZONE=<YOUR ZONE>
+export GOOGLE_USER<YOUR GCP PROJECT USER ADDRESS>
+```
+
+## Create SSH keys
+
+To allow the network operator to log into the demo virtual machines create SSH keys and register with GCP. From the __NetworkAgent/environment__ directory run the following commands. 
+
+```
+ssh-keygen -o -a 100 -t ed25519 -f google-compute -C networkagent
+gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=$GOOGLE_PROJECT --ttl=1d
+```
+
+You must copy __google-compute__ file to __NetworkAgent/operator/src__ directory to allow the operator to log into the VMs.
+
+## Generate Manifest files
+
+Generate k8s manifest files used throughout the demo. In the __NetworkAgent/environment__ directory, run the following commands. 
+
+```
+pip install jinja-cli
+./updatemanifests.sh
 ```
 
 ## Create service account
@@ -118,18 +139,6 @@ Verify the config connector installation is ready with the following command
 ```
 kubectl wait -n cnrm-system --for=condition=Ready pod --all
 ```
-
-## Create SSH keys
-
-To allow the network operator to log into the demo virtual machines create SSH keys and register with GCP. From the __NetworkAgent/environment__ directory run the following commands. 
-
-```
-ssh-keygen -o -a 100 -t ed25519 -f google-compute -C networkagent
-gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=$GOOGLE_PROJECT --ttl=1d
-```
-
-You must copy __google-compute__ file to __NetworkAgent/operator/src__ directory to allow the operator to log into the VMs.
-
 
 ## Docker repo
 

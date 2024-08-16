@@ -2,7 +2,7 @@
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeNetwork
 metadata:
-  name: newyork
+  name: sydney
   labels:
     customer: acme
 spec:
@@ -12,45 +12,45 @@ spec:
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeSubnetwork
 metadata:
-  name: newyork-internal
+  name: sydney-internal
   labels:
     customer: acme
 spec:
-  ipCidrRange: 10.0.60.0/24
-  region: europe-west2
-  description: newyork Network
+  ipCidrRange: 10.0.70.0/24
+  region: "{{GOOGLE_REGION}}"
+  description: sydney Network
   networkRef:
-    name: newyork
+    name: sydney
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeRouter
 metadata:
-  name: newyork-router
+  name: sydney-router
   labels:
     customer: acme
 spec:
-  description: newyork router
-  region: europe-west2
+  description: sydney router
+  region: "{{GOOGLE_REGION}}"
   networkRef:
-    name: newyork
+    name: sydney
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeRouterNAT
 metadata:
-  name: 'newyork-nat'
+  name: 'sydney-nat'
   labels:
     customer: acme
 spec:
-  region: europe-west2
+  region: "{{GOOGLE_REGION}}"
   routerRef:
-    name: newyork-router
+    name: sydney-router
   natIpAllocateOption: AUTO_ONLY
   sourceSubnetworkIpRangesToNat: ALL_SUBNETWORKS_ALL_IP_RANGES
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeFirewall
 metadata:
-  name: newyork-allowed
+  name: sydney-allowed
   labels:
     customer: acme
 spec:
@@ -63,7 +63,7 @@ spec:
        - "0-65535"
     - protocol: icmp
   networkRef:
-    name: newyork
+    name: sydney
   direction: INGRESS
   sourceRanges:
     - 0.0.0.0/0
@@ -73,12 +73,12 @@ kind: ComputeInstance
 metadata:
   annotations:
     cnrm.cloud.google.com/allow-stopping-for-update: "true"
-  name: newyork-app1
+  name: sydney-app1
   labels:
     customer: acme
 spec:
   machineType: e2-small
-  zone: europe-west2-a
+  zone: <YOUR ZONE>
   bootDisk:
     initializeParams:
       size: 50
@@ -87,51 +87,25 @@ spec:
         external: ubuntu-os-cloud/ubuntu-2204-lts
   networkInterface:
     - subnetworkRef:
-        name: newyork-internal
+        name: sydney-internal
       accessConfig:
         - natIpRef:
-            name: newyork-app1-ip
+            name: sydney-app1-ip
     - subnetworkRef:
-        external: https://www.googleapis.com/compute/v1/projects/free5gc-384814/regions/europe-west2/subnetworks/mgmt-subnet
+        external: "https://www.googleapis.com/compute/v1/projects/{{GOOGLE_PROJECT}}/regions/{{GOOGLE_REGION}}/subnetworks/mgmt-subnet"
   canIpForward: true
   metadataStartupScript: "sudo apt-get update; sudo apt-get install -yq python3"
   metadata:
     - key: ssh-keys
-      value: admin_briannaughton_altostrat_co:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN57YanONs2q/Eor4Tjv1NRhBGrB59vPFAMZbvlOVtkX briannaughton
+      value: {{GOOGLE_USER}}:{{GOOGLE_SSH_KEY}}
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeAddress
 metadata:
-  name: newyork-app1-ip
+  name: sydney-app1-ip
   labels:
     customer: acme
 spec:
   addressType: EXTERNAL
   description: external address
-  location: europe-west2
-# ---
-# apiVersion: compute.cnrm.cloud.google.com/v1beta1
-# kind: ComputeInstance
-# metadata:
-#   annotations:
-#     cnrm.cloud.google.com/allow-stopping-for-update: "true"
-#   name: newyork-app2
-# spec:
-#   machineType: e2-small
-#   zone: europe-west2-a
-#   bootDisk:
-#     initializeParams:
-#       size: 50
-#       type: pd-ssd
-#       sourceImageRef:
-#         external: ubuntu-os-cloud/ubuntu-2204-lts
-#   networkInterface:
-#     - subnetworkRef:
-#         name: newyork-internal
-#     - subnetworkRef:
-#         external: https://www.googleapis.com/compute/v1/projects/free5gc-384814/regions/europe-west2/subnetworks/mgmt-subnet
-#   canIpForward: true
-#   metadataStartupScript: "sudo apt-get update; sudo apt-get install -yq python3"
-#   metadata:
-#     - key: ssh-keys
-#       value: admin_briannaughton_altostrat_co:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN57YanONs2q/Eor4Tjv1NRhBGrB59vPFAMZbvlOVtkX briannaughton
+  location: "{{GOOGLE_REGION}}"

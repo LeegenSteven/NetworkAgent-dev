@@ -8,7 +8,7 @@ metadata:
 spec:
   mode: cluster
   # deletion-policy: abandon
-  googleServiceAccount: "networkagent@free5gc-384814.iam.gserviceaccount.com"
+  googleServiceAccount: "networkagent@{{GOOGLE_PROJECT}}.iam.gserviceaccount.com"
   # Setting `stateIntoSpec` to `Absent` is recommended. It means setting `cnrm.cloud.google.com/state-into-spec`
   # annotation to `absent` for all Config Connector resources created in the cluster in the future.
   # It prevents Config Connector from populating unspecified fields into the spec.

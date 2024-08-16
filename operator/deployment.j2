@@ -65,14 +65,14 @@ spec:
       serviceAccountName: networkoperator-account
       containers:
       - name: networkoperator
-        image: europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networkoperator:latest
+        image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/networkagent/networkoperator:latest
         imagePullPolicy: Always
         env:
         - name: BASEDIR
           value: "/operator"
         - name: GOOGLE_PROJECT
-          value: "free5gc-384814"
+          value: "{{GOOGLE_PROJECT}}"
         - name: GOOGLE_REGION
-          value: "europe-west2"
+          value: "{{GOOGLE_REGION}}"
         - name: GOOGLE_ZONE
-          value: "europe-west2-a"
+          value: "{{GOOGLE_ZONE}}"

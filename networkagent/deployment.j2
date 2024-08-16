@@ -17,15 +17,15 @@ spec:
     spec:
       containers:
       - name: networkagent
-        image: europe-west2-docker.pkg.dev/free5gc-384814/networkagent/networkagent:latest
+        image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/networkagent/networkagent:latest
         imagePullPolicy: Always
         env:
         - name: PROJECT
-          value: "free5gc-384814"
+          value: {{GOOGLE_PROJECT}}
         - name: REGION
-          value: "europe-west2"
+          value: {{GOOGLE_REGION}}
         - name: ZONE
-          value: "europe-west2-a"
+          value: {{GOOGLE_ZONE}}
 ---
 apiVersion: v1
 kind: Service

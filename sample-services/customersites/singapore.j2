@@ -17,7 +17,7 @@ metadata:
     customer: acme
 spec:
   ipCidrRange: 10.0.80.0/24
-  region: "{{GOOGLE_REGION}}"
+  region: {{GOOGLE_REGION}}
   description: singapore Network
   networkRef:
     name: singapore
@@ -30,7 +30,7 @@ metadata:
     customer: acme
 spec:
   description: singapore router
-  region: "{{GOOGLE_REGION}}"
+  region: {{GOOGLE_REGION}}
   networkRef:
     name: singapore
 ---
@@ -41,7 +41,7 @@ metadata:
   labels:
     customer: acme
 spec:
-  region: "{{GOOGLE_REGION}}"
+  region: {{GOOGLE_REGION}}
   routerRef:
     name: singapore-router
   natIpAllocateOption: AUTO_ONLY
@@ -78,7 +78,7 @@ metadata:
     customer: acme
 spec:
   machineType: e2-small
-  zone: <YOUR ZONE>
+  zone: {{GOOGLE_ZONE}}
   bootDisk:
     initializeParams:
       size: 50
@@ -92,7 +92,7 @@ spec:
         - natIpRef:
             name: singapore-app1-ip
     - subnetworkRef:
-        external: "https://www.googleapis.com/compute/v1/projects/{{GOOGLE_PROJECT}}>/regions/{{GOOGLE_REGION}}/subnetworks/mgmt-subnet"
+        external: "https://www.googleapis.com/compute/v1/projects/{{GOOGLE_PROJECT}}/regions/{{GOOGLE_REGION}}/subnetworks/mgmt-subnet"
   canIpForward: true
   metadataStartupScript: "sudo apt-get update; sudo apt-get install -yq python3"
   metadata:
@@ -108,4 +108,4 @@ metadata:
 spec:
   addressType: EXTERNAL
   description: external address
-  location: "{{GOOGLE_REGION}}"
+  location: {{GOOGLE_REGION}}

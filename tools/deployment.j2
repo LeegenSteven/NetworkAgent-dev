@@ -54,7 +54,7 @@ spec:
       serviceAccountName: networktools-account
       containers:
       - name: networktools
-        image: "{{ GOOGLE_REGION }}-docker.pkg.dev/{{ GOOGLE_PROJECT }}/networkagent/networktools:latest"
+        image: {{ GOOGLE_REGION }}-docker.pkg.dev/{{ GOOGLE_PROJECT }}/networkagent/networktools:latest
         imagePullPolicy: Always
 ---
 apiVersion: v1

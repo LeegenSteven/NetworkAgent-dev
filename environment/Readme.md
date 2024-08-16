@@ -18,7 +18,7 @@ Setup the following environment variables. They are used throughout the rest of 
 export GOOGLE_PROJECT=<YOUR PROJECT>
 export GOOGLE_REGION=<YOUR REGION>
 export GOOGLE_ZONE=<YOUR ZONE>
-export GOOGLE_USER<YOUR GCP PROJECT USER ADDRESS>
+export GOOGLE_USER<YOUR GCP PROJECT USERNAME> 
 ```
 
 ## Create SSH keys
@@ -30,16 +30,8 @@ ssh-keygen -o -a 100 -t ed25519 -f google-compute -C networkagent
 gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=$GOOGLE_PROJECT --ttl=1d
 ```
 
-You must copy __google-compute__ file to __NetworkAgent/operator/src__ directory to allow the operator to log into the VMs.
+You must copy __google-compute__ file to __NetworkAgent/operator/__ directory to allow the network operator to log into the VMs.
 
-## Generate Manifest files
-
-Generate k8s manifest files used throughout the demo. In the __NetworkAgent/environment__ directory, run the following commands. 
-
-```
-pip install jinja-cli
-./updatemanifests.sh
-```
 
 ## Create service account
 
@@ -57,6 +49,17 @@ gcloud iam service-accounts keys create "./networkagent.json" --iam-account=$GOO
 ```
 
 You must copy the __networkagent.json__ file to __NetworkAgent/tools__, __NetworkAgent/operator and __NetworkAgent/networkagent__ directories to allow the tools server and genai agent to access APIs.
+
+## Generate Manifest files
+
+Generate k8s manifest files used throughout the demo. In the __NetworkAgent/environment__ directory, run the following commands. 
+
+```
+pip install jinja-cli
+./updatemanifests.sh
+```
+
+This set of installation steps will be automated in future. 
 
 ## Create GKE Automation Platform
 
@@ -108,21 +111,6 @@ gcloud iam service-accounts add-iam-policy-binding \
 $GOOGLE_SERVICE_ACCOUNT \
     --member="serviceAccount:$GOOGLE_PROJECT.svc.id.goog[cnrm-system/cnrm-controller-manager]" \
     --role="roles/iam.workloadIdentityUser"
-```
-
-and update the file __NetworkAgent/environment/configconnector.yaml__ with the networkagent service account details, e.g. 
-
-```
-apiVersion: core.cnrm.cloud.google.com/v1beta1
-kind: ConfigConnector
-metadata:
-  # the name is restricted to ensure that there is only one
-  # ConfigConnector resource installed in your cluster
-  name: configconnector.core.cnrm.cloud.google.com
-spec:
-  mode: cluster
-  # deletion-policy: abandon
-  googleServiceAccount: networkagent@<YOUR PROJECT>.iam.gserviceaccount.com
 ```
 
 In the __NetworkAgent/environment__ run the following commands to start config connector in the __automation__ namespace

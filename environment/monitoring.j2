@@ -3,7 +3,7 @@ kind: PubSubSubscription
 metadata:
   name: serviceperformance
   annotations:
-    cnrm.cloud.google.com/project-id: "{{GOOGLE_PROJECT}}"
+    cnrm.cloud.google.com/project-id: {{GOOGLE_PROJECT}}
 spec:
   bigqueryConfig:
     writeMetadata: True
@@ -17,7 +17,7 @@ kind: BigQueryDataset
 metadata:
   name: serviceperformance
   annotations:
-    cnrm.cloud.google.com/project-id: "{{GOOGLE_PROJECT}}"
+    cnrm.cloud.google.com/project-id: {{GOOGLE_PROJECT}}
 spec:
   resourceID: serviceperformance
   location: europe-west2
@@ -27,7 +27,7 @@ kind: BigQueryTable
 metadata:
   name: serviceperformance
   annotations:
-    cnrm.cloud.google.com/project-id: "{{GOOGLE_PROJECT}}"
+    cnrm.cloud.google.com/project-id: {{GOOGLE_PROJECT}}
 spec:
   resourceID: serviceperformance
   friendlyName: serviceperformance
@@ -47,4 +47,4 @@ kind: PubSubTopic
 metadata:
   name: serviceperformance
   annotations:
-    cnrm.cloud.google.com/project-id: "{{GOOGLE_PROJECT}}"
+    cnrm.cloud.google.com/project-id: {{GOOGLE_PROJECT}}

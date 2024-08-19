@@ -19,8 +19,8 @@ jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE monitoring.j2 >  monitor
 jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE configconnector.j2 > configconnector.yaml
 
 echo "generating networwkagent, tools and operator yaml files"
-jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE ../operator/deployment.j2 > ../operator/deployment.yaml
-jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE ../tools/deployment.j2 > ../tools/deployment.yaml
+jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE ../operator/deployment.j2 > ../operator/deployment.yaml
+jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE ../tools/deployment.j2 > ../tools/deployment.yaml
 jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE ../networkagent/deployment.j2 > ../networkagent/deployment.yaml
 
 echo "generating customer site files"

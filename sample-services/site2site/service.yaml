@@ -6,5 +6,5 @@ metadata:
     customer: acme
 spec:
   interfaces: # the "remote" customer subnets to connect
-    - london-internal
-    - sydney-internal
+    - london
+    - sydney

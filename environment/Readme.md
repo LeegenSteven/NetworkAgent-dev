@@ -18,7 +18,7 @@ Setup the following environment variables. They are used throughout the rest of 
 export GOOGLE_PROJECT=<YOUR PROJECT>
 export GOOGLE_REGION=<YOUR REGION>
 export GOOGLE_ZONE=<YOUR ZONE>
-export GOOGLE_USER<YOUR GCP PROJECT USERNAME> 
+export GOOGLE_USER=<YOUR GCP PROJECT USERNAME> 
 ```
 
 ## Create SSH keys
@@ -30,7 +30,7 @@ ssh-keygen -o -a 100 -t ed25519 -f google-compute -C networkagent
 gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=$GOOGLE_PROJECT --ttl=5d
 ```
 
-You must copy __google-compute__ file to __NetworkAgent/operator/__ directory to allow the network operator to log into the VMs.
+You must copy __google-compute__ and __google-compute.pub__ files to __NetworkAgent/operator/__ directory to allow the network operator to log into the VMs.
 
 
 ## Create service account

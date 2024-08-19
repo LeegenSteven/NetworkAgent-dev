@@ -320,276 +320,16 @@ async def create_compute(vm_name, subnet_name, interface, project, region, zone,
       kind="ComputeInstance",
   )
 
-  crd_manifest={
-    "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
-    "kind": "ComputeInstance",
-    "metadata": {
-      "annotations": {
-        "cnrm.cloud.google.com/allow-stopping-for-update": "true"
-      },
-      "name": vm_name,
-      "namespace": "automation"
-    },
-    "spec": {
-      "machineType": "e2-highcpu-4",
-      "zone": zone,
-      "bootDisk": {
-        "initializeParams": {
-          "size": 50,
-          "type": "pd-ssd",
-          "sourceImageRef": {
-            "external": "ubuntu-os-cloud/ubuntu-2204-lts"
-          },
-        },
-      },
-      "networkInterface": [
-        {
-          "subnetworkRef": {
-            "name": subnet_name
-          },
-          "accessConfig": [
-            {
-              "natIpRef": {
-                "name": f"{vm_name}-ip"
-              }
-            }
-          ]
-        },
-        {
-          "subnetworkRef": {
-            "name": interface
-          }
-        },
-        {
-          "subnetworkRef": {
-            "external": f"https://www.googleapis.com/compute/v1/projects/{project}/regions/{region}/subnetworks/{mgmtsubnetname}"
-          }
-        }
-      ],
-      "canIpForward": True,
-      "metadataStartupScript": "sudo apt-get update; sudo apt-get install -yq python3-pip",
-      "metadata": [
-        { 
-          "key": "ssh-keys",
-          "value": "admin_briannaughton_altostrat_co:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN57YanONs2q/Eor4Tjv1NRhBGrB59vPFAMZbvlOVtkX briannaughton"
-        }
-      ]
-    }
-  }
+  # get the google user
+  google_user = os.getenv("GOOGLE_USER")
+  if google_user is None:
+    raise kopf.PermanentError("No GOOGLE_USER environment variable.")
 
-  # update manifest to be child of site-to-site service
-  kopf.adopt(crd_manifest)
-  logger.debug(json.dumps(crd_manifest, indent=4))
-
-  try:
-    result = network_api.create(crd_manifest)
-  except kubernetes.client.rest.ApiException as e: 
-    logger.info(e.status)
-    if e.status == 422:
-      raise kopf.PermanentError("Unprocessable entity.")
-    elif e.status == 409:
-      logger.info("already exists - skipping")
-    else:
-      logger.debug(e)
-
-########################################################################
-# Create ComputeAddress
-########################################################################
-async def create_external_ip(vmname, region):
-  logger.info("Create external ip")
-
-  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
-      api_version="compute.cnrm.cloud.google.com/v1beta1", 
-      kind="ComputeAddress",
-  )
-
-  crd_manifest= {
-    "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
-    "kind": "ComputeAddress",
-    "metadata": {
-      "name": f"{vmname}-ip",
-      "namespace": "automation"
-    },
-    "spec": {
-      "addressType": "EXTERNAL",
-      "description": "external address",
-      "location": region
-    }
-  }
-
-  # update manifest to be child of site-to-site service
-  kopf.adopt(crd_manifest)
-  logger.debug(json.dumps(crd_manifest, indent=4))
-
-  try:
-    result = network_api.create(crd_manifest)
-  except kubernetes.client.rest.ApiException as e: 
-    logger.info(e.status)
-    if e.status == 409:
-      logger.info("Already exists - skipping")
-    else:
-      logger.debug(e)
-
-########################################################################
-# CreateRoute
-########################################################################
-async def create_route(vm_name, source_subnetwork_name, peer_subnetwork_name):
-  logger.info("Create route to vm %s from source %s to subnetwork %s", vm_name, source_subnetwork_name, peer_subnetwork_name)
-
-  route_ip=None
-
-  # find ip address on vm_name assigned to source_subnetwork_name
-  vmresult = await get_compute(vm_name)
-  if result is None:
-    raise kopf.TemporaryError("Waiting for VM")
-
-  # check the VM has a network and ip address, if not backoff until it does
-  if vmresult.get('spec') is not None:
-    logger.debug(vmresult.spec)
-    for interface in vmresult.spec['networkInterface']:
-      if interface.get('subnetworkRef').get('name') is not None:
-        if interface['subnetworkRef']['name']==source_subnetwork_name:
-          if interface.get('networkIpRef') is not None and interface.get('networkIpRef').get('external') is not None:
-            route_ip=interface['networkIpRef']['external']
-            break
-
-  if route_ip is None:
-    raise kopf.TemporaryError("Waiting for VM to come up", 20)
-
-  # find the cidr associated with peer_subnetwork_name
-  destresult = await get_subnetwork(peer_subnetwork_name)
-  peer_cidr = destresult.spec['ipCidrRange']
-
-  # find the network name from the source subnetwork
-  sourceresult = await get_subnetwork(source_subnetwork_name)
-  sourcenetwork = sourceresult.spec['networkRef']['name']
-
-  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
-      api_version="compute.cnrm.cloud.google.com/v1beta1", 
-      kind="ComputeRoute",
-  )
-
-  crd_manifest= {
-    "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
-    "kind": "ComputeRoute",
-    "metadata": {
-      "name": vm_name
-    },
-    "spec": {
-      "description": f"{vm_name} route",
-      "destRange": peer_cidr,
-      "networkRef": {
-        "name": sourcenetwork
-      },
-      "priority": 100,
-      "nextHopIp": route_ip
-      }
-    }
-
-  kopf.adopt(crd_manifest)
-  logger.debug(json.dumps(crd_manifest, indent=4))
-
-  try:
-
-    result = network_api.create(crd_manifest)
-    return result
-
-  except kubernetes.client.rest.ApiException as e: 
-    logger.info(e.status)
-    if e.status == 409:
-      logger.info("Already exists - skipping")
-    else:
-      logger.debug(e)
-
-########################################################################
-# WireguardAppliance
-########################################################################
-async def create_vpn_edge(vpn_name, vm_name, tunnel_subnet, tunnel_ip, peer_interface, peer_vm_name, my_keys, peer_keys):
-  logger.info("Create VPN Edge")
-
-  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
-      api_version="google.dev/v1", 
-      kind="WireguardAppliance",
-  )
-
-  crd_manifest = {
-    "apiVersion": "google.dev/v1",
-    "kind": "WireguardAppliance",
-    "metadata": {
-      "name": vpn_name,
-      "namespace": "automation"
-    },
-    "spec": {
-      "vmname": vm_name,
-      "tunnelSubnet": tunnel_subnet,
-      "tunnelAddress": tunnel_ip,
-      "allowedInterface": peer_interface,
-      "peer": peer_vm_name,
-      "keys": my_keys,
-      "peerKeys": peer_keys
-    }
-  }
-
-  # update manifest to be child of site-to-site service
-  kopf.adopt(crd_manifest)
-  # logger.debug(json.dumps(crd_manifest, indent=4))
-
-  try:
-    result = network_api.create(crd_manifest)
-  except kubernetes.client.rest.ApiException as e: 
-    logger.info(e.status)
-    # logger.debug(e)
-    if e.status == 409:
-      logger.info("WG already exists - skipping")
-
-########################################################################
-# Create Site
-########################################################################
-async def create_site(aend, bend, cidr, tunnel_address, uuid, akeys, bkeys):
-  vars = {
-      'vmname': aend+'-vpn-'+uuid,
-      'cidr': cidr, 
-      'mgmtsubnetname': 'mgmt-subnet',
-      'interface': aend,
-      'peerinterface': bend,
-      'tunnelsubnet': '192.168.1.0/24',
-      'tunneladdress': tunnel_address,
-      'peername': bend+'-vpn-'+uuid,
-  }
-
-  logger.info(json.dumps(vars, indent=4))
-
-  # create children resources
-  await create_network(vars['vmname'])
-  await create_subnetwork(vars['vmname'], vars['vmname'], vars['cidr'], os.getenv("GOOGLE_REGION"))
-  await create_router(vars['vmname'], os.getenv("GOOGLE_REGION"))
-  await create_nat(vars['vmname'], os.getenv("GOOGLE_REGION"))
-  await create_wg_rule(vars['vmname'])
-  await create_ssh_rule(vars['vmname'])
-  await create_compute(vars['vmname'], vars['vmname'], aend, os.getenv("GOOGLE_PROJECT"),os.getenv("GOOGLE_REGION"),os.getenv("GOOGLE_ZONE"), vars['mgmtsubnetname'])
-  await create_external_ip(vars['vmname'], os.getenv("GOOGLE_REGION"))
-  await create_vpn_edge(vars['vmname'], vars['vmname'], vars['tunnelsubnet'], vars['tunneladdress'], vars['peerinterface'], vars['peername'], akeys, bkeys)
-
-  # Create the static routes to vpn tunnels
-  await create_route(vars['vmname'], aend, bend)
-
-  return vars
-
-
-########################################################################
-# Create ComputeInstance
-########################################################################
-async def create_compute(vm_name, subnet_name, interface, project, region, zone, mgmtsubnetname):
-  logger.info("Create compute %s", vm_name)
-
-  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
-      api_version="compute.cnrm.cloud.google.com/v1beta1", 
-      kind="ComputeInstance",
-  )
+  google_ssh_pub=None
+  with open('/operator/google-compute.pub') as f:
+    google_ssh_pub=f.read()
+  if google_ssh_pub is None:
+    raise kopf.PermanentError("No public ssh key found")
 
   crd_manifest={
     "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
@@ -642,7 +382,7 @@ async def create_compute(vm_name, subnet_name, interface, project, region, zone,
       "metadata": [
         { 
           "key": "ssh-keys",
-          "value": "admin_briannaughton_altostrat_co:ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN57YanONs2q/Eor4Tjv1NRhBGrB59vPFAMZbvlOVtkX briannaughton"
+          "value": f"{google_user}:{google_ssh_pub}"
         }
       ]
     }
@@ -797,3 +537,79 @@ async def create_route(vm_name, source_subnetwork_name, peer_subnetwork_name):
       logger.info("Already exists - skipping")
     else:
       logger.debug(e)
+
+########################################################################
+# WireguardAppliance
+########################################################################
+async def create_vpn_edge(vpn_name, vm_name, tunnel_subnet, tunnel_ip, peer_interface, peer_vm_name, my_keys, peer_keys):
+  logger.info("Create VPN Edge")
+
+  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+  network_api = client.resources.get(
+      api_version="google.dev/v1", 
+      kind="WireguardAppliance",
+  )
+
+  crd_manifest = {
+    "apiVersion": "google.dev/v1",
+    "kind": "WireguardAppliance",
+    "metadata": {
+      "name": vpn_name,
+      "namespace": "automation"
+    },
+    "spec": {
+      "vmname": vm_name,
+      "tunnelSubnet": tunnel_subnet,
+      "tunnelAddress": tunnel_ip,
+      "allowedInterface": peer_interface,
+      "peer": peer_vm_name,
+      "keys": my_keys,
+      "peerKeys": peer_keys
+    }
+  }
+
+  # update manifest to be child of site-to-site service
+  kopf.adopt(crd_manifest)
+  # logger.debug(json.dumps(crd_manifest, indent=4))
+
+  try:
+    result = network_api.create(crd_manifest)
+  except kubernetes.client.rest.ApiException as e: 
+    logger.info(e.status)
+    # logger.debug(e)
+    if e.status == 409:
+      logger.info("WG already exists - skipping")
+
+########################################################################
+# Create Site
+########################################################################
+async def create_site(aend, bend, cidr, tunnel_address, uuid, akeys, bkeys):
+  vars = {
+      'vmname': aend+'-vpn-'+uuid,
+      'cidr': cidr, 
+      'mgmtsubnetname': 'mgmt-subnet',
+      'interface': aend,
+      'peerinterface': bend,
+      'tunnelsubnet': '192.168.1.0/24',
+      'tunneladdress': tunnel_address,
+      'peername': bend+'-vpn-'+uuid,
+  }
+
+  logger.info(json.dumps(vars, indent=4))
+
+  # create children resources
+  await create_network(vars['vmname'])
+  await create_subnetwork(vars['vmname'], vars['vmname'], vars['cidr'], os.getenv("GOOGLE_REGION"))
+  await create_router(vars['vmname'], os.getenv("GOOGLE_REGION"))
+  await create_nat(vars['vmname'], os.getenv("GOOGLE_REGION"))
+  await create_wg_rule(vars['vmname'])
+  await create_ssh_rule(vars['vmname'])
+  await create_compute(vars['vmname'], vars['vmname'], aend, os.getenv("GOOGLE_PROJECT"),os.getenv("GOOGLE_REGION"),os.getenv("GOOGLE_ZONE"), vars['mgmtsubnetname'])
+  await create_external_ip(vars['vmname'], os.getenv("GOOGLE_REGION"))
+  await create_vpn_edge(vars['vmname'], vars['vmname'], vars['tunnelsubnet'], vars['tunneladdress'], vars['peerinterface'], vars['peername'], akeys, bkeys)
+
+  # Create the static routes to vpn tunnels
+  await create_route(vars['vmname'], aend, bend)
+
+  return vars
+

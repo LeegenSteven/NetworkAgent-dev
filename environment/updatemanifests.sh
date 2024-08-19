@@ -7,6 +7,13 @@ then
     exit 1
 fi
 
+# test if jinja exists
+if ! command -v jinja &> /dev/null
+then
+    echo "jinja could not be found, you must install 'jinja-cli'"
+    exit 1
+fi
+
 # Test if google compute ssh keys exist, it not generate them
 if ! test -f google-compute; then
   echo "SSH key google-compute does not exist, generating new keys...\n\n"
@@ -24,18 +31,19 @@ fi
 echo "Setting project to $GOOGLE_PROJECT"
 gcloud config set project $GOOGLE_PROJECT
 
-
 # Need to turn off the policy that forbids service key creation for this project
-
+echo "TURN OFF POLICY THAT FORBIDS SERVICE KEY CREATION"
 
 echo "templating k8s manifest files"
-
 # grab the public ssh key for templating into VM manifests
 export GOOGLE_SSH_KEY=$(cat ./google-compute.pub)
 
+# check if SERVICE ACCOUNT doesnt exist
+export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
+
 # Create the service account if needed
 gcloud iam service-accounts create networkagent --description="Network Agent Service Account" --display-name="Network Agent"
-export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
+
 gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/owner"
 gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/container.admin"
 gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/compute.admin"

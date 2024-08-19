@@ -140,7 +140,6 @@ paths:
                 kind: PointToPointService
                 apiVersion: google.dev/v1
                 spec:
-                  name: myservice1
                   interfaces:
                   - london-internal
                   - sydney-internal
@@ -254,9 +253,6 @@ components:
             The type of the connectivity service to instantiate. This maps to the 
           type: object
           properties:
-            name: 
-              description: the name of the service instance
-              type: string
             kind:
               description: Kubernetes kind for the chosen connectivity service
               type: string

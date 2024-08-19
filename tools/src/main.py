@@ -6,6 +6,7 @@ from connexion import FlaskApp
 import os
 import json
 from google.cloud import bigquery
+import uuid
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
@@ -148,7 +149,8 @@ def getServices(name):
             for item in services.items:
                 logger.debug(item)
                 if item.get('status') is None or item.get('status').get('service_resources') is None:
-                    svc={"status": "waiting for service to come up"}
+                    svc={"servicename": item['metadata']['name'],
+                         "status": "waiting for service to come up"}
                 else:
                     svc= {
                         'customer': item['metadata']['labels']['customer'],
@@ -203,7 +205,6 @@ def createService(payload):
     serviceKind = payload['serviceInfo']['kind']
     serviceApiVersion = payload['serviceInfo']['apiVersion']
     serviceSpec = payload['serviceInfo']['spec']
-    serviceName = payload['serviceInfo']['spec']['name']
 
     client = kubernetes.dynamic.DynamicClient(get_client())
     name = customerName.lower()
@@ -217,7 +218,7 @@ def createService(payload):
             "apiVersion": serviceApiVersion,
             "kind": serviceKind,
             "metadata": {
-                "name": serviceName,
+                "name": name+str(uuid.uuid4())[:8],
                 "namespace": "automation",
                 "labels": {
                     "customer": name
@@ -349,7 +350,7 @@ def getServicePerformanceMetrics(name, period):
         data.servicename, 
         data.edgename, 
         data.time,
-        data.node_network_receive_bytes_total, 
+        data.node_network_receive_bytes_total,
         data.node_network_transmit_bytes_total 
         FROM `{table_id}`
         WHERE JSON_VALUE(data, '$.servicename')='{name}' AND publish_time BETWEEN TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL -{period} MINUTE) AND CURRENT_TIMESTAMP()
@@ -358,7 +359,10 @@ def getServicePerformanceMetrics(name, period):
     )
 
     records = [dict(row) for row in results]
-    return records,200
+    if len(records)>0:
+        return records[0],200
+    else:
+        return {}, 200
 
 ######################################################################
 # Start the server and load routes

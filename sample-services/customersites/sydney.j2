@@ -12,7 +12,7 @@ spec:
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeSubnetwork
 metadata:
-  name: sydney-internal
+  name: sydney
   labels:
     customer: acme
 spec:
@@ -87,7 +87,7 @@ spec:
         external: ubuntu-os-cloud/ubuntu-2204-lts
   networkInterface:
     - subnetworkRef:
-        name: sydney-internal
+        name: sydney
       accessConfig:
         - natIpRef:
             name: sydney-app1-ip

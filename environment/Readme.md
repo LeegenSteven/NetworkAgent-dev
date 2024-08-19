@@ -27,7 +27,7 @@ To allow the network operator to log into the demo virtual machines create SSH k
 
 ```
 ssh-keygen -o -a 100 -t ed25519 -f google-compute -C networkagent
-gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=$GOOGLE_PROJECT --ttl=1d
+gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=$GOOGLE_PROJECT --ttl=5d
 ```
 
 You must copy __google-compute__ file to __NetworkAgent/operator/__ directory to allow the network operator to log into the VMs.

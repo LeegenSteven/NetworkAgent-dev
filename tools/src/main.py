@@ -126,6 +126,9 @@ def getServices(name):
 
     client = kubernetes.dynamic.DynamicClient(get_client())
 
+    # need to flatten string or k8s freaks out
+    customerName = name.lower()
+
     try:
         services_list=[]
 
@@ -140,7 +143,7 @@ def getServices(name):
                 api_version=item['spec']['group']+'/'+item['spec']['versions'][0]['name'],
             )
 
-            services=svc_api.get(label_selector=f"customer={name}")
+            services=svc_api.get(label_selector=f"customer={customerName}")
 
             for item in services.items:
                 logger.debug(item)
@@ -193,14 +196,14 @@ def getResourceStatus(client, api_version, kind, name):
 def createService(payload):
     logger.info("Create a new Service from %s", str(payload))
 
-    if 'customerName' not in payload or 'serviceInfo' not in payload or 'apiVersion' not in payload['serviceInfo'] or 'spec' not in payload['serviceInfo'] or 'kind' not in payload['serviceInfo'] or 'serviceName' not in payload['serviceInfo']:
+    if 'customerName' not in payload or 'serviceInfo' not in payload or 'apiVersion' not in payload['serviceInfo'] or 'spec' not in payload['serviceInfo'] or 'kind' not in payload['serviceInfo']:
         return {}, 400
 
     customerName = payload['customerName']
     serviceKind = payload['serviceInfo']['kind']
     serviceApiVersion = payload['serviceInfo']['apiVersion']
     serviceSpec = payload['serviceInfo']['spec']
-    serviceName = payload['serviceInfo']['name']
+    serviceName = payload['serviceInfo']['spec']['name']
 
     client = kubernetes.dynamic.DynamicClient(get_client())
     name = customerName.lower()
@@ -217,7 +220,7 @@ def createService(payload):
                 "name": serviceName,
                 "namespace": "automation",
                 "labels": {
-                    "customer": customerName
+                    "customer": name
                 },
             },
             "spec": serviceSpec

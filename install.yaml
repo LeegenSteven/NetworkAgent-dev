@@ -1,0 +1,20 @@
+- hosts: localhost
+  gather_facts: True
+  connection: local
+  tasks:
+
+  - ansible.builtin.debug:
+      msg: "hello {{GCLOUD_SDK_LOCATION}}"
+
+  - name: list clusters
+    script: "{{GCLOUD_SDK_LOCATION}}/bin/gcloud container clusters list"
+
+
+
+# generate ssh keys
+
+# create mgmt network
+
+# start GKE
+## install config connector
+

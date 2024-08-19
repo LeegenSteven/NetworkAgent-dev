@@ -1,0 +1,10 @@
+# placeholder
+all:
+  hosts:
+    localhost:
+  vars:
+    GCLOUD_SDK_LOCATION: "/home/briannaughton/google-cloud-sdk"
+    GOOGLE_PROJECT: "bt-demo-999"
+    GOOGLE_REGION: "europe-west2"
+    GOOGLE_ZONE: "europe-west2-a"
+

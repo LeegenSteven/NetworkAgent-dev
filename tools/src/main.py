@@ -193,13 +193,14 @@ def getResourceStatus(client, api_version, kind, name):
 def createService(payload):
     logger.info("Create a new Service from %s", str(payload))
 
-    if 'customerName' not in payload or 'serviceInfo' not in payload or 'apiVersion' not in payload['serviceInfo'] or 'spec' not in payload['serviceInfo'] or 'kind' not in payload['serviceInfo']:
+    if 'customerName' not in payload or 'serviceInfo' not in payload or 'apiVersion' not in payload['serviceInfo'] or 'spec' not in payload['serviceInfo'] or 'kind' not in payload['serviceInfo'] or 'serviceName' not in payload['serviceInfo']:
         return {}, 400
 
     customerName = payload['customerName']
     serviceKind = payload['serviceInfo']['kind']
     serviceApiVersion = payload['serviceInfo']['apiVersion']
     serviceSpec = payload['serviceInfo']['spec']
+    serviceName = payload['serviceInfo']['name']
 
     client = kubernetes.dynamic.DynamicClient(get_client())
     name = customerName.lower()
@@ -213,7 +214,7 @@ def createService(payload):
             "apiVersion": serviceApiVersion,
             "kind": serviceKind,
             "metadata": {
-                "name": name,
+                "name": serviceName,
                 "namespace": "automation",
                 "labels": {
                     "customer": customerName

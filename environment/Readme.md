@@ -4,7 +4,7 @@ This section describes how to set up a base Network Agent demo environment.
 
 ## Setup gcloud on your laptop
 
-Install gcloud
+[Install](https://cloud.google.com/sdk/docs/install) and initialise gcloud as follows:
 
 ```
 gcloud init --no-launch-browser
@@ -21,9 +21,46 @@ export GOOGLE_ZONE=<YOUR ZONE>
 export GOOGLE_USER=<YOUR GCP PROJECT USERNAME> 
 ```
 
-## Create SSH keys
+## Installation script setup
 
-To allow the network operator to log into the demo virtual machines create SSH keys and register with GCP. From the __NetworkAgent/environment__ directory run the following commands. 
+The __install.sh__ script in the root directory automates the network agent setup tasks. The script options are as follows:
+
+```
+./install.sh
+Network Agent environment manager.
+
+Syntax: scriptTemplate [-c|-s|-d]
+options:
+  -c     create manifests.
+  -s     start network agent environment.
+  -d     delete the network agent environment.
+```
+
+The first step is to generate the various keys and deployment descriptors for each of the network agent components by running the following command. 
+
+```
+./install.sh -c
+```
+
+The run the following command to start the various GCP services. 
+
+```
+./install.sh -s
+```
+
+Finally, to clean up, run the following command to remove the GCP services. 
+
+```
+./install.sh -d
+```
+
+## Manual network agent environment setup
+
+The following sections describe how to manually stand up the environment. 
+
+### Create SSH keys
+
+To allow the network operator to log into the demo virtual machines create SSH keys and register with GCP. From the __NetworkAgent__ directory run the following commands. 
 
 ```
 ssh-keygen -o -a 100 -t ed25519 -f google-compute -C networkagent
@@ -33,9 +70,9 @@ gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=$GO
 You must copy __google-compute__ and __google-compute.pub__ files to __NetworkAgent/operator/__ directory to allow the network operator to log into the VMs.
 
 
-## Create service account
+### Create service account
 
-Run the following commands to create a new service account.
+Run the following commands form the __NetworkAgent__ to create a new network agent service account.
 
 ```
 gcloud iam service-accounts create networkagent --description="Network Agent Service Account" --display-name="Network Agent"
@@ -48,20 +85,17 @@ gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:
 gcloud iam service-accounts keys create "./networkagent.json" --iam-account=$GOOGLE_SERVICE_ACCOUNT
 ```
 
-You must copy the __networkagent.json__ file to __NetworkAgent/tools__, __NetworkAgent/operator and __NetworkAgent/networkagent__ directories to allow the tools server and genai agent to access APIs.
+You must copy the __networkagent.json__ file to __NetworkAgent/tools__, __NetworkAgent/operator__ and __NetworkAgent/networkagent__ directories to allow the tools server and genai agent to access APIs.
 
-## Generate Manifest files
+### Generate Manifest files
 
-Generate k8s manifest files used throughout the demo. In the __NetworkAgent/environment__ directory, run the following commands. 
+Generate k8s manifest files used throughout the demo. In the __NetworkAgent__ directory, run the following commands. 
 
 ```
-pip install jinja-cli
-./updatemanifests.sh
+./install -c
 ```
 
-This set of installation steps will be automated in future. 
-
-## Create GKE Automation Platform
+### Create GKE Automation Platform
 
 Create a __mgmt__ VPC to attach GKE and the edge appliances to. 
 
@@ -102,7 +136,7 @@ gcloud components install kubectl
 gcloud container clusters get-credentials networkautomation --region=$GOOGLE_ZONE
 ```
 
-### Install Config Connector
+#### Install Config Connector
 
 First, attach the service account to config connector
 
@@ -128,7 +162,7 @@ Verify the config connector installation is ready with the following command
 kubectl wait -n cnrm-system --for=condition=Ready pod --all
 ```
 
-## Docker repo
+### Create Docker repo
 
 Create a docker repository to push network agent container images to.
 
@@ -136,7 +170,7 @@ Create a docker repository to push network agent container images to.
 gcloud artifacts repositories create networkagent --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository"
 ```
 
-## Big query & PubSub
+### Setup Big query & PubSub subscription
 
 Find your project number from the project details dashboard and add the following principal in IAM to allow pubsub accecss to your project.
 
@@ -152,7 +186,7 @@ kubectl apply -f monitoring.yaml
 
 At the moment need to go to pubsub subscription dashboard and delete the service performance subscription. It will be recreated correctly.
 
-## Create Demo VPC Networks
+### Create Customer Locations
 
 Create the base customer VPCs, Subnets and dummy IT apps for the demo. Run the following command from the __NetworkAgent/sample-services__ directory.
 
@@ -160,7 +194,7 @@ Create the base customer VPCs, Subnets and dummy IT apps for the demo. Run the f
 kubectl apply -f customersites
 ```
 
-## Setup git and config sync (TBD)
+### Setup git and config sync (TBD)
 
 To deploy git to GKE run the following command from the __NetworkAgent/environment__ directory.
 

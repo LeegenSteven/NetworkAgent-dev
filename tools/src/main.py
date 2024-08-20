@@ -346,15 +346,20 @@ def getServicePerformanceMetrics(name, period):
 
     results = client.query_and_wait(
         f"""
-        SELECT 
-        data.servicename, 
-        data.edgename, 
-        data.time,
-        data.node_network_receive_bytes_total,
-        data.node_network_transmit_bytes_total 
+        SELECT servicename, AVG(receive) as average_receive_total, AVG(sent) as average_sent_total
+        FROM (
+        SELECT
+        JSON_VALUE(data, "$.servicename") as servicename,
+        FLOAT64(
+            JSON_EXTRACT(data, "$.node_network_receive_bytes_total")
+        )  as receive,
+        FLOAT64(
+            JSON_EXTRACT(data, "$.node_network_transmit_bytes_total")
+        )  as sent
         FROM `{table_id}`
         WHERE JSON_VALUE(data, '$.servicename')='{name}' AND publish_time BETWEEN TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL -{period} MINUTE) AND CURRENT_TIMESTAMP()
-        ORDER BY publish_time DESC
+        )
+        GROUP BY servicename
         """
     )
 

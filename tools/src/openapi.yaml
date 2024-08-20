@@ -141,8 +141,8 @@ paths:
                 apiVersion: google.dev/v1
                 spec:
                   interfaces:
-                  - london-internal
-                  - sydney-internal
+                  - london
+                  - sydney
       responses:
         "201":
           description: successful request to create new service received
@@ -267,8 +267,8 @@ components:
 
                 spec:
                   interfaces: # the "remote" customer subnets to connect
-                    - london-internal
-                    - sydney-internal
+                    - london
+                    - sydney
     Test:
       type: object
       properties:

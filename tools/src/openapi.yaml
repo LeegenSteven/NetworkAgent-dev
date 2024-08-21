@@ -200,18 +200,22 @@ paths:
     get:
       summary: retrieve performance metrics for a deployed connectivity service
       description: |-
-        Return a set JSON performance metrics for the last period specified with the following JSONL schema
-        [
-          {"name": "data","type": "JSON","mode": "NULLABLE","description": "The data"},
-          {"name": "subscription_name","type": "string","mode": "NULLABLE","description": "service name"},
-          {"name": "attributes","type": "string","mode": "NULLABLE","description": "name of the vm"},
-          {"name": "publish_time","type": "TIMESTAMP","mode": "NULLABLE","description": "time published"},
-          {"name": "message_id","type": "string","mode": "NULLABLE","description": "name of nic reporting"}
-        ]
+        Return a set of JSON performance metrics for the time period specified.
+        The performance metrics 
+
+        The metrics contain the total average bytes received and sent in that period. The metrics are 
+        returned in JSON format
+
+        An example metric is below: 
+        {
+          "average_receive_total": 66092197792.16807,
+          "average_sent_total": 64996880528.20168,
+          "servicename": "acme68ef4630"
+        }
       parameters:
         - name: name
           in: query
-          description: The name of the deployed service
+          description: The name of the deployed connectivity service
           required: true
           schema:
             type: string

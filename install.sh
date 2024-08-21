@@ -186,6 +186,16 @@ Delete()
 }
 
 ############################################################
+# Setup Monitoring                                         #
+############################################################
+Monitoring()
+{
+    export GOOGLE_PROJECT_NUMBER=gcloud projects describe $GOOGLE_PROJECT --format="value(projectNumber)"
+    service-$GOOGLE_PROJECT_NUMBER@gcp-sa-pubsub.iam.gserviceaccount.com
+
+}
+
+############################################################
 # Help                                                     #
 ############################################################
 Help()

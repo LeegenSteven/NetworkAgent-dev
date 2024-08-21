@@ -1,6 +1,5 @@
 import logging
 import gradio as gr
-from agent.networkagent import NetworkAgent
 import requests
 import json
 from langchain_community.agent_toolkits.openapi.spec import reduce_openapi_spec
@@ -9,7 +8,7 @@ from langchain.callbacks.manager import CallbackManager
 from langchain_core.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.schema import AIMessage, HumanMessage
 import google.auth
-from langchain.requests import RequestsWrapper
+from langchain_community.utilities import RequestsWrapper
 from langchain_community.agent_toolkits.openapi import planner
 import os
 import sys
@@ -32,7 +31,7 @@ def do_vertex():
             (
                 "system",
                 """
-                You are a helpful network assistant
+                You are a helpful network assistant called George.
                 
                 Current time: {time}.
                 """
@@ -45,7 +44,7 @@ def do_vertex():
     credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE", "/networkagent.json"))[0]
     logger.info(credentials)
 
-    llm = ChatVertexAI(model_name="gemini-1.5-pro-001",
+    llm = ChatVertexAI(model_name="gemini-1.5-flash",
                         temperature=0,
                         credentials=credentials,
                         max_tokens=None,
@@ -57,13 +56,13 @@ def do_vertex():
 
     assistant_runnable = assistant_prompt | llm
 
-    url = os.getenv("NETWORK_TOOLS_URL","http://networktools-lb-service:8080")+"/ui/openapi.json"
+    url = os.getenv("NETWORK_TOOLS_URL","https://network-agent-api-4q7fdnlzwa-nw.a.run.app")+"/ui/openapi.json"
     logger.info("url = %s", url)
     response = requests.get(url)
 
     response_json = response.json()
     # update the server url because it doesnt contain the server address
-    response_json['servers'][0]['url']=os.getenv("NETWORK_TOOLS_URL","http://networktools-lb-service:8080")+"/ui"
+    response_json['servers'][0]['url']=os.getenv("NETWORK_TOOLS_URL","https://network-agent-api-4q7fdnlzwa-nw.a.run.app")+"/ui"
     logger.info(json.dumps(response_json,indent=4))
 
     api_spec = reduce_openapi_spec(response_json)
@@ -88,7 +87,7 @@ def agent_interaction(message, history):
 
     history_langchain_format.append(HumanMessage(content=message))
 
-    gpt_response = agent.invoke(message)
+    gpt_response = agent.invoke(history_langchain_format)
     logger.info(gpt_response)
 
     return gpt_response['output']

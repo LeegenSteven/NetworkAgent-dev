@@ -7,86 +7,19 @@ import os
 
 logger = logging.getLogger(__name__)
 
-#####################################################################
-# Get Compute Instance Info
-#####################################################################
-async def get_vm_info(vmname):
-    logger.info("get info for vm %s", vmname)
-
-    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-    network_api = client.resources.get(
-        api_version="compute.cnrm.cloud.google.com/v1beta1", 
-        kind="ComputeInstance",
-    )
-
-    try:
-        result = network_api.get(name=vmname, namespace="automation")
-        status = result.get('status')
-        if status.get('currentStatus') != "RUNNING":
-            raise kopf.TemporaryError("Waiting for VM to come up")
-        return result
-    except kubernetes.client.rest.ApiException as e: 
-        logger.info(e.status)
-        if e.status == 404:
-            raise kopf.TemporaryError(f"No VM {vmname} found yet")
-
-#####################################################################
-# Get Compute Address Info
-#####################################################################
-async def get_address_info(addressname):
-    logger.info("get info for address %s", addressname)
-
-    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-    network_api = client.resources.get(
-        api_version="compute.cnrm.cloud.google.com/v1beta1", 
-        kind="ComputeAddress",
-    )
-
-    try:
-        result = network_api.get(name=addressname, namespace="automation")
-        conditions = result.get('status').get('conditions')
-        if conditions[-1].get('reason') != "UpToDate":
-            raise kopf.TemporaryError("Waiting for address to come up")
-        return result
-    except kubernetes.client.rest.ApiException as e: 
-        logger.info(e.status)
-        if e.status == 404:
-            raise kopf.TemporaryError(f"No address {addressname} found yet")
-
-#####################################################################
-# Get Compute Subnet Info
-#####################################################################
-async def get_subnet_info(subnetname):
-    logger.info("get info for subnet %s", subnetname)
-
-    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-    network_api = client.resources.get(
-        api_version="compute.cnrm.cloud.google.com/v1beta1", 
-        kind="ComputeSubnetwork",
-    )
-
-    try:
-        result = network_api.get(name=subnetname, namespace="automation")
-        conditions = result.get('status').get('conditions')
-        if conditions[-1].get('reason') != "UpToDate":
-            raise kopf.TemporaryError("Waiting for subnet to come up")
-        return result
-    except kubernetes.client.rest.ApiException as e: 
-        logger.info(e.status)
-        if e.status == 404:
-            raise kopf.TemporaryError(f"No subnet {subnetname} found yet")
 
 #####################################################################
 # Install VPN software on VM
 #####################################################################
-async def install_vpn(servicename, vmname, external_ip_address, tunnel_address, tunnel_cidr, interface_cidr, peer_name, peer_ip_address, keys, peer_keys):
+async def install_vpn(servicename, vmname, mgmt_ip_address, data_ip_address, tunnel_address, tunnel_cidr, interface_cidr, peer_name, peer_ip_address, keys, peer_keys):
     logger.info("Install VPN")
 
     extravars = {
         'servicename': servicename,
+        'data_ip_address': data_ip_address,
         'tunnel_address': tunnel_address,
         'tunnel_cidr': tunnel_cidr,
-        'default_interface': 'ens5' ,
+        'default_interface': 'ens6' ,
         'interface_cidr' : interface_cidr,
         'peer_name': peer_name,
         'peer_ip_address' : peer_ip_address,
@@ -100,8 +33,8 @@ async def install_vpn(servicename, vmname, external_ip_address, tunnel_address, 
     hosts = {
         'hosts': {
             vmname: {
-                'ansible_host': external_ip_address,
-                'ansible_user': 'admin_briannaughton_altostrat_co',
+                'ansible_host': mgmt_ip_address,
+                'ansible_user': os.getenv("GOOGLE_USER"),
                 'ansible_connection': 'ssh',
                 'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
                 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'

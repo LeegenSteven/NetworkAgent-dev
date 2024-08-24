@@ -27,21 +27,27 @@ fi
 ############################################################
 Create()
 {
+    echo "##################################\n"
     echo "Setting project to $GOOGLE_PROJECT"
+    echo "##################################\n"
     gcloud config set project $GOOGLE_PROJECT
 
     # Test if google compute ssh keys exist, it not generate them
     if ! test -f google-compute; then
-        echo "SSH key google-compute does not exist, generating new keys...\n\n"
+        echo "#############################################################"
+        echo "SSH key google-compute does not exist, generating new keys..."
+        echo "#############################################################"
         ssh-keygen -o -a 100 -t ed25519 -f google-compute -C networkagent -P ""
     fi
 
+    echo "###################################################"
     echo "Found google-compute ssh keys, copying where needed"
-    cp google-compute operator
-    cp google-compute.pub operator
+    echo "###################################################"
+    cp google-compute operator/src
+    cp google-compute.pub operator/src
 
     echo "Add ssh key to OS login"
-    gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=$GOOGLE_PROJECT --ttl=5d
+    gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=$GOOGLE_PROJECT --ttl=1d
 
     echo "Templating k8s manifest files"
 
@@ -53,7 +59,9 @@ Create()
 
     # Create the service account if it doesnt exist
     if [ -z "${GOOGLE_SERVICE_ACCOUNT}" ]; then
+        echo "########################################"
         echo "No Service Account, trying to create one"
+        echo "########################################"
         gcloud iam service-accounts create networkagent --description="Network Agent Service Account" --display-name="Network Agent"
         # recreate the service account environment variable
         export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
@@ -71,25 +79,36 @@ Create()
     # check networkagent.json is not zero size and copy around if it is
     if [[ -s "networkagent.json"  ]]
     then
+        echo "#########################"
         echo "copying networkagent.json"
-        cp networkagent.json tools
-        cp networkagent.json operator
-        cp networkagent.json networkagent
+        echo "#########################"
+        cp networkagent.json tools/src
+        cp networkagent.json operator/src
+        cp networkagent.json networkagent/src
     else
-        echo "networkagent.json is empty, check your project is allowed to create service account keys."
+        echo "###########################################################################################################################################"
+        echo "networkagent.json is empty, check your project is allowed to create service account keys or if you have exceeded the number of keys allowed."
+        echo "###########################################################################################################################################"
         exit 0
     fi
 
-    echo "generating monitoring and configconnector yaml files"
-    jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/monitoring.j2 >  environment/monitoring.yaml
+    echo "####################################################"
+    echo "generating environment yaml files"
+    echo "####################################################"
+    jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/bigquery.j2 >  environment/bigquery.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/configconnector.j2 > environment/configconnector.yaml
+    jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/networks.j2 > environment/networks.yaml
 
-    echo "generating networwkagent, tools and operator yaml files"
+    echo "#######################################################"
+    echo "generating networkkagent, tools and operator yaml files"
+    echo "#######################################################"
     jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE operator/deployment.j2 > operator/deployment.yaml
     jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE tools/deployment.j2 > tools/deployment.yaml
     jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE networkagent/deployment.j2 > networkagent/deployment.yaml
 
+    echo "##############################"
     echo "generating customer site files"
+    echo "##############################"
     jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customersites/london.j2 > sample-services/customersites/london.yaml
     jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customersites/sydney.j2 > sample-services/customersites/sydney.yaml
     jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customersites/singapore.j2 > sample-services/customersites/singapore.yaml
@@ -101,7 +120,9 @@ Create()
 ############################################################
 Start()
 {
-    echo "Start the network agent"
+    echo "###########################"
+    echo "Starting the network agent"
+    echo "###########################"
 
     # check if SERVICE ACCOUNT exists
     export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
@@ -111,27 +132,34 @@ Start()
         echo "Cannot find the service account - run this script with the -c option"
         exit 0
     fi
-    echo "Service account = $GOOGLE_SERVICE_ACCOUNT"
 
+    echo "#####################"
     echo "Creating mgmt network"
+    echo "#####################"
     gcloud compute networks create mgmt --subnet-mode=custom
     gcloud compute networks subnets create mgmt-subnet --network=mgmt --range=10.0.100.0/24 --region=$GOOGLE_REGION
-    gcloud compute firewall-rules create mgmt-ingress --network mgmt --allow tcp:8080,tcp:22,tcp:3389,tcp:443,icmp --direction INGRESS --source-ranges 0.0.0.0/0
+    gcloud compute firewall-rules create mgmt-ingress --network=mgmt --allow=tcp,udp,icmp --source-ranges="0.0.0.0/0"
+    gcloud compute routers create mgmt --network mgmt --region=$GOOGLE_REGION
+    gcloud compute routers nats create mgmt --router=mgmt --region=$GOOGLE_REGION --auto-allocate-nat-external-ips --nat-all-subnet-ip-ranges --enable-logging
 
     # Create the docker repo
+    echo "############################"
     echo "Creating artifact repository"
-    gcloud artifacts repositories create networkagent --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository"
+    echo "############################"
+    gcloud artifacts repositories create networkagent --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository" --quiet
+    gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev --quiet
 
     # create the GKE cluster
-    echo "Creating GKE cluster - this may take 5-10 minutes"
+    echo "###################################################"
+    echo "Creating GKE cluster - this will take a few minutes"
+    echo "###################################################"
     gcloud container clusters create networkautomation \
     --release-channel stable \
     --addons ConfigConnector \
+    --enable-ip-alias \
     --service-account $GOOGLE_SERVICE_ACCOUNT\
     --scopes default,storage-full,cloud-platform,bigquery \
     --workload-pool $GOOGLE_PROJECT.svc.id.goog \
-    --logging SYSTEM \
-    --monitoring SYSTEM \
     --zone $GOOGLE_ZONE\
     --node-locations $GOOGLE_ZONE \
     --num-nodes 5 \
@@ -149,9 +177,33 @@ Start()
     kubectl create namespace automation
     kubectl annotate namespace automation cnrm.cloud.google.com/project-id=$GOOGLE_PROJECT
     kubectl config set-context --current --namespace automation
-    kubectl apply -f configconnector.yaml
+    kubectl apply -f environment/configconnector.yaml
 
-    kubectl wait -n cnrm-system --for=condition=Ready pod --all
+    echo "#######################################"
+    echo "Waiting for config connector to come up"
+    echo "#######################################"
+
+    # kubectl wait -n cnrm-system --for=condition=Ready pod cnrm-controller-manager-0
+    while [[ $(kubectl get pods -n cnrm-system cnrm-controller-manager-0 -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') != "True" ]]; do
+        sleep 20
+        echo "sleeping for 20 secs..."
+    done
+
+    echo "##################################\n"
+    echo "Deploy the Operator"
+    echo "##################################\n"
+    Operator
+
+    echo "##################################\n"
+    echo "Deploy the Agent Rest Tools"
+    echo "##################################\n"
+    Tools
+
+    # start the network, prometheus monitor and the customer locations
+    kubectl apply -f environment/networks.yaml
+    # kubectl apply -f environment/bigquery.yaml
+    kubectl apply -f environment/prometheus.yaml
+    kubectl apply -f sample-services/customersites
 }
 
 ############################################################
@@ -159,19 +211,22 @@ Start()
 ############################################################
 Delete()
 {
+    echo "#######################################"
     echo "Deleting environment manifests and keys"
+    echo "#######################################"
     rm operator/deployment.yaml
-    rm operator/google-compute*
-    rm operator/networkagent.json
+    rm operator/src/google-compute*
+    rm operator/src/networkagent.json
 
     rm tools/deployment.yaml
-    rm tools/networkagent.json
+    rm tools/src/networkagent.json
 
     rm networkagent/deployment.yaml
-    rm networkagent/networkagent.json
+    rm networkagent/src/networkagent.json
 
-    rm environment/monitoring.yaml
+    rm environment/bigquery.yaml
     rm environment/configconnector.yaml
+    rm environment/networks.yaml
 
     rm networkagent.json
     rm google-compute*
@@ -196,6 +251,94 @@ Monitoring()
 }
 
 ############################################################
+# Kill the environment resources                           #
+############################################################
+Kill()
+{
+    echo "##############################################"
+    echo "Killing the environment - will take a few mins"
+    echo "##############################################"
+
+    kubectl delete -f sample-services/site2site/service.yaml
+    kubectl delete -f sample-services/customersites
+    kubectl delete -f environment/prometheus.yaml
+    # kubectl delete -f environment/bigquery.yaml
+    kubectl delete -f environment/networks.yaml
+    gcloud run services delete network-agent-api --region=$GOOGLE_REGION --quiet
+
+    echo "#####################"
+    echo "Deleting GKE Cluster"
+    echo "#####################"
+    gcloud container clusters delete networkautomation --region=$GOOGLE_ZONE --quiet
+
+    echo "#####################"
+    echo "Deleting mgmt network"
+    echo "#####################"
+    gcloud compute routers delete mgmt --region=$GOOGLE_REGION --quiet
+    gcloud compute firewall-rules delete mgmt-ingress --region=$GOOGLE_REGION --quiet
+    gcloud compute networks subnets delete mgmt-subnet --region=$GOOGLE_REGION --quiet
+    gcloud compute networks delete mgmt --region=$GOOGLE_REGION --quiet
+
+}
+
+############################################################
+# Build and deploy the operator                            #
+############################################################
+Operator()
+{
+    if ! test -f operator/deployment.yaml; then
+        echo "No deployment.yaml found - you can generate by running ./install.sh -c"
+        exit 0
+    fi
+
+    cd operator
+    docker build . -t $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networkoperator:latest
+    docker push $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networkoperator:latest
+    kubectl apply -f config
+    kubectl delete -f deployment.yaml
+    kubectl apply -f deployment.yaml
+    kubectl get pods 
+    cd ..
+}
+
+############################################################
+# Build and deploy the tools                               #
+############################################################
+Tools()
+{
+    if ! test -f tools/deployment.yaml; then
+        echo "No deployment.yaml found - you can generate by running ./install.sh -c"
+        exit 0
+    fi
+
+    cd tools
+    export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
+    docker build . -t $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networktools:latest
+    docker push $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networktools:latest
+    gcloud run deploy network-agent-api --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networktools:latest --region $GOOGLE_REGION --service-account $GOOGLE_SERVICE_ACCOUNT --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT,GOOGLE_REGION=$GOOGLE_REGION,GOOGLE_ZONE=$GOOGLE_ZONE
+    cd ..
+}
+
+############################################################
+# Build and deploy the networkagent                        #
+############################################################
+Networkagent()
+{
+    if ! test -f operator/deployment.yaml; then
+        echo "No deployment.yaml found - you can generate by running ./install.sh -c"
+        exit 0
+    fi
+
+    cd networkagent
+    docker build . -t $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networkagent:latest
+    docker push $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networkagent:latest
+    kubectl delete -f deployment.yaml
+    kubectl apply -f deployment.yaml
+    kubectl get pods
+    cd ..
+}
+
+############################################################
 # Help                                                     #
 ############################################################
 Help()
@@ -203,10 +346,14 @@ Help()
    # Display Help
    echo "Network Agent environment manager."
    echo
-   echo "Syntax: scriptTemplate [-c|-s|-d]"
+   echo "Syntax: install.sh [-c|-s|-o|-r|-n|-k|-d]"
    echo "options:"
-   echo "  -c     create manifests."
+   echo "  -c     create keys and manifests."
    echo "  -s     start network agent environment."
+   echo "  -o     build and deploy the operator"
+   echo "  -r     build and deploy the rest tools"
+   echo "  -n     build and deploy the networkagent"
+   echo "  -k     kill the environment resources."
    echo "  -d     delete the network agent environment."
    echo
 }
@@ -215,7 +362,7 @@ Help()
 # Process the input options. Add options as needed.        #
 ############################################################
 # Get the options
-while getopts ":hcsd" option; do
+while getopts ":hcsotnkd" option; do
    case $option in
       h) 
         Help
@@ -225,6 +372,18 @@ while getopts ":hcsd" option; do
         exit;;
       s) 
         Start
+        exit;;
+      o) 
+        Operator
+        exit;;
+      t) 
+        Tools
+        exit;;
+      n) 
+        Networkagent
+        exit;;
+      k) 
+        Kill
         exit;;
       d)
         Delete

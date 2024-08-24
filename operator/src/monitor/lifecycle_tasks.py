@@ -1,0 +1,82 @@
+import kopf
+import logging
+from utils.compute import *
+import utils.constants as constants
+import ansible_runner
+from resources.wireguard.lifecycle_tasks import *;
+
+logger = logging.getLogger(__name__)
+
+async def run_update(nodes):
+    logger.info("Running update")
+
+    ip_address = await get_ip("monitor")
+    if ip_address is None:
+        raise kopf.TemporaryError("waiting for ip address", delay=15)
+
+    # run ansible playbook to install prometheus on the VM
+    extravars = {
+        'GOOGLE_PROJECT': os.getenv("GOOGLE_PROJECT"),
+        'GOOGLE_REGION': os.getenv("GOOGLE_REGION"),
+        'GOOGLE_ZONE': os.getenv("GOOGLE_ZONE"),
+        'BASEDIR': constants.basedir,
+        'nodes': nodes
+    }
+    hosts = {
+        'hosts': {
+            "monitor": {
+                'ansible_host': ip_address,
+                'ansible_user': os.getenv("GOOGLE_USER"),
+                'ansible_connection': 'ssh',
+                'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
+                'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'
+            }
+        }
+    }
+    logger.info(hosts)
+    logger.info(extravars)
+    r = ansible_runner.run(private_data_dir=constants.basedir+"/monitor/playbooks", 
+                           inventory={'all': hosts},
+                           playbook='configure.yaml',
+                           extravars=extravars)
+
+    logger.info("status = %s", r.status)
+    if r.status != 'successful':
+        raise kopf.TemporaryError("Ansible Error.", delay=15)
+
+
+async def run_install():
+    logger.info("installing prometheus monitor")
+
+    ip_address = await get_ip("monitor")
+    if ip_address is None:
+        raise kopf.TemporaryError("waiting for monitor IP address")
+
+    # run ansible playbook to install prometheus on the VM
+    extravars = {
+        'GOOGLE_PROJECT': os.getenv("GOOGLE_PROJECT"),
+        'GOOGLE_REGION': os.getenv("GOOGLE_REGION"),
+        'GOOGLE_ZONE': os.getenv("GOOGLE_ZONE"),
+        'BASEDIR': constants.basedir
+    }
+    hosts = {
+        'hosts': {
+            "monitor": {
+                'ansible_host': ip_address,
+                'ansible_user': os.getenv("GOOGLE_USER"),
+                'ansible_connection': 'ssh',
+                'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
+                'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'
+            }
+        }
+    }
+    logger.info(hosts)
+    logger.info(extravars)
+    r = ansible_runner.run(private_data_dir=constants.basedir+"/monitor/playbooks", 
+                           inventory={'all': hosts},
+                           playbook='install.yaml',
+                           extravars=extravars)
+
+    logger.info("status = %s", r.status)
+    if r.status != 'successful':
+        raise kopf.TemporaryError("Ansible Error.", delay=15)

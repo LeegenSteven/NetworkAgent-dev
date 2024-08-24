@@ -1,0 +1,34 @@
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeNetwork
+metadata:
+  name: dataplane
+spec:
+  routingMode: REGIONAL
+  autoCreateSubnetworks: false
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeSubnetwork
+metadata:
+  name: dataplane
+spec:
+  ipCidrRange: 192.168.10.0/24
+  region: "{{GOOGLE_REGION}}"
+  description: user plane network that carries VPN traffic
+  networkRef:
+    name: dataplane
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeFirewall
+metadata:
+  name: wireguard
+spec:
+  allow:
+    - protocol: udp
+      ports:
+       - "51820"
+  networkRef:
+    name: dataplane
+  direction: INGRESS
+  sourceRanges:
+    - 0.0.0.0/0

@@ -49,12 +49,15 @@ async def service_resources(spec, name, namespace, logger, **kwargs):
   logger.info(services)
 
   # Create the site infra
-  site1 = await create_site(aend, bend, "10.0.10.0/24", "192.168.1.1", services[name]['uuid'], services[name]['akey'], services[name]['bkey'])
-  site2 = await create_site(bend, aend, "10.0.11.0/24", "192.168.1.2", services[name]['uuid'], services[name]['bkey'], services[name]['akey'])
+  site1 = await create_site(aend, bend, "192.168.1.1", services[name]['uuid'], services[name]['akey'], services[name]['bkey'])
+  site2 = await create_site(bend, aend, "192.168.1.2", services[name]['uuid'], services[name]['bkey'], services[name]['akey'])
+
+  asitevm=aend+'-vpn-'+services[name]['uuid']
+  bsitevm=bend+'-vpn-'+services[name]['uuid']
 
   # Create the static routes to vpn tunnels
-  await create_route(site1['vmname'], aend, bend)
-  await create_route(site2['vmname'], bend, aend)
+  await create_route(aend+'-vpn-'+services[name]['uuid'], aend, bend)
+  await create_route(bend+'-vpn-'+services[name]['uuid'], bend, aend)
 
   # remove the services from the list so a service with the same name can be readded down the line
   logger.info("remove service from list")
@@ -68,32 +71,32 @@ async def service_resources(spec, name, namespace, logger, **kwargs):
        {
         'kind': 'ComputeInstance',
         'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': site1['vmname']
+        'name': asitevm
        },
        {
         'kind': 'ComputeNetwork',
         'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': site1['vmname']
+        'name': asitevm
        },
        {
         'kind': 'ComputeSubnetwork',
         'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': site1['vmname']
+        'name': asitevm
        },
        {
         'kind': 'ComputeRouter',
         'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': f"{site1['vmname']}-router"
+        'name': f"{asitevm}-router"
        },
        {
         'kind': 'ComputeRouterNAT',
         'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': f"{site1['vmname']}-nat"
+        'name': f"{asitevm}-nat"
        },
        {
         'kind': 'ComputeRoute',
         'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': f"{site1['vmname']}"
+        'name': asitevm
        },
       #  {
       #   'kind': 'Wireguard',
@@ -103,32 +106,32 @@ async def service_resources(spec, name, namespace, logger, **kwargs):
        {
         'kind': 'ComputeInstance',
         'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': site2['vmname']
+        'name': bsitevm
        },
        {
         'kind': 'ComputeNetwork',
         'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': site2['vmname']
+        'name': bsitevm
        },
        {
         'kind': 'ComputeSubnetwork',
         'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': site2['vmname']
+        'name': bsitevm
        },
        {
         'kind': 'ComputeRouter',
         'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': f"{site2['vmname']}-router"
+        'name': f"{bsitevm}-router"
        },
        {
         'kind': 'ComputeRouterNAT',
         'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': f"{site2['vmname']}-nat"
+        'name': f"{bsitevm}-nat"
        },
        {
         'kind': 'ComputeRoute',
         'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': f"{site2['vmname']}"
+        'name': bsitevm
        },
     ] 
   

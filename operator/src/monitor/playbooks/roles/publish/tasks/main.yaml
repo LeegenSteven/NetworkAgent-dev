@@ -1,0 +1,26 @@
+- name: Install pubsub python package
+  ansible.builtin.pip:
+    name: 
+      - google-cloud-pubsub
+      - requests
+
+- name: upload agent service file
+  ansible.builtin.copy:
+    src: "{{BASEDIR}}/networkagent.json"
+    dest: /opt/networkagent.json
+    owner: root
+    group: root
+    mode: '0644'
+
+# - name: upload publisher python file
+#   ansible.builtin.template:
+#     src: publish.py
+#     dest: /opt/publish.py
+#     owner: root
+#     group: root
+#     mode: '0777'
+
+# - name: run publisher
+#   raw: nohup python3 /opt/publish.py  </dev/null >/dev/null 2>&1 &
+
+# increase(node_network_receive_packets_total[30s])

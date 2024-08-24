@@ -23,31 +23,6 @@ spec:
     name: london
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
-kind: ComputeRouter
-metadata:
-  name: london-router
-  labels:
-    customer: acme
-spec:
-  description: london router
-  region: "{{GOOGLE_REGION}}"
-  networkRef:
-    name: london
----
-apiVersion: compute.cnrm.cloud.google.com/v1beta1
-kind: ComputeRouterNAT
-metadata:
-  name: 'london-nat'
-  labels:
-    customer: acme
-spec:
-  region: "{{GOOGLE_REGION}}"
-  routerRef:
-    name: london-router
-  natIpAllocateOption: AUTO_ONLY
-  sourceSubnetworkIpRangesToNat: ALL_SUBNETWORKS_ALL_IP_RANGES
----
-apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeFirewall
 metadata:
   name: london-allowed
@@ -77,7 +52,7 @@ metadata:
   labels:
     customer: acme
 spec:
-  machineType: e2-small
+  machineType: e2-standard-2
   zone: {{GOOGLE_ZONE}}
   bootDisk:
     initializeParams:
@@ -87,25 +62,11 @@ spec:
         external: ubuntu-os-cloud/ubuntu-2204-lts
   networkInterface:
     - subnetworkRef:
-        name: london
-      accessConfig:
-        - natIpRef:
-            name: london-app1-ip
-    - subnetworkRef:
         external: "https://www.googleapis.com/compute/v1/projects/{{GOOGLE_PROJECT}}/regions/{{GOOGLE_REGION}}/subnetworks/mgmt-subnet"
+    - subnetworkRef:
+        name: london
   canIpForward: true
-  metadataStartupScript: "sudo apt-get update; sudo apt-get install -yq python3"
+  metadataStartupScript: "sudo apt-get update;sudo apt-get install -yq python3;sudo ip route add 10.0.70.0/24 via 10.0.50.1;sudo ip route add 10.0.60.0/24 via 10.0.50.1;sudo ip route add 10.0.80.0/24 via 10.0.50.1"
   metadata:
     - key: ssh-keys
       value: {{GOOGLE_USER}}:{{GOOGLE_SSH_KEY}}
----
-apiVersion: compute.cnrm.cloud.google.com/v1beta1
-kind: ComputeAddress
-metadata:
-  name: london-app1-ip
-  labels:
-    customer: acme
-spec:
-  addressType: EXTERNAL
-  description: external address
-  location: "{{GOOGLE_REGION}}"

@@ -1,0 +1,6 @@
+apiVersion: google.dev/v1
+kind: Monitor
+metadata:
+  name: monitor
+spec:
+  nodes:

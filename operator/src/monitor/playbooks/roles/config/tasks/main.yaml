@@ -1,0 +1,11 @@
+- name: template
+  template:
+    src: config.j2
+    dest: /opt/config.yaml
+
+- name: kill prometheus if it is running
+  raw: pkill prometheus
+  ignore_errors: True
+
+- name: Start prometheus
+  raw: nohup /opt/prometheus-2.54.0.linux-amd64/prometheus --config.file=/opt/config.yaml </dev/null >/dev/null 2>&1 &

@@ -3,39 +3,30 @@ import logging
 import ansible_runner
 import utils.constants as constants
 from services.sitetosite.lifecycle_tasks import *
-from resources.wireguard.lifecycle_tasks import get_address_info
+from utils.compute import *
 
 logger = logging.getLogger(__name__)
 
-async def getExternalAddress(name):
-    address_name=None
-    result = await get_compute(name)
-    if result is None:
-        raise kopf.TemporaryError("Waiting for VM")
+async def get_not_mgmt_ip(name):
+    logger.info("getting mgmt ip address")
 
-    interfaces = result.spec.get('networkInterface')
+    vm = await get_compute(name)
+    if vm is None or vm.get('spec') is None:
+        logger.info("No VM or VM spec")
+        return None
+
+    interfaces = vm.spec.get('networkInterface')
+    ip_address=None
     for int in interfaces:
-        accessConfig = int.get('accessConfig')
-        if accessConfig is not None:
-            address_name =int['accessConfig'][0]['natIpRef']['name']
-            break
-
-    address_info = await get_address_info(address_name)
-    return address_info.spec['address']
-
-async def getMgmtAddress(name):
-    address=None
-    result = await get_compute(name)
-    if result is None:
-        raise kopf.TemporaryError("Waiting for VM")
-
-    interfaces = result.spec.get('networkInterface')
-    for int in interfaces:
-        if 'mgmt' not in int['networkRef']['external']:
-            address =int['networkIpRef']['external']
-            break
-
-    return address
+        if int.get('networkRef') is not None:
+            if int.get('networkRef').get('external') is not None:
+                if "mgmt" not in int['networkRef']['external']:
+                    ip_address = int['networkIpRef']['external']
+    if ip_address is None:
+        raise kopf.TemporaryError("could not find ip address", 15)
+    else:
+        logger.debug("found mgmt ip address %s", ip_address)
+    return ip_address
 
 @kopf.on.create('connectivitytest')
 async def createtest(spec, name, namespace, logger, **kwargs):
@@ -45,41 +36,26 @@ async def createtest(spec, name, namespace, logger, **kwargs):
 
     logger.info("Create test case between %s and %s", client, server)
 
-    result1 = await get_compute(client)
-    result2 = await get_compute(server)
-    if result1 is None or result2 is None:
-        raise kopf.PermanentError("VMs not found")
+    client_mgmt_ip=await get_ip(client)
+    server_mgmt_ip=await get_ip(server)
 
-    client_external_ip=await getExternalAddress(client)
-    server_external_ip=await getExternalAddress(server)
-    client_mgmt_ip=await getMgmtAddress(client)
-    server_mgmt_ip=await getMgmtAddress(server)
-
-    serverresult = await get_compute(server)
-    # check the VM has a network and ip address, if not backoff until it does
-    interfaces = serverresult.spec.get('networkInterface')
-    for int in interfaces:
-        accessConfig = int.get('accessConfig')
-        if accessConfig is not None:
-            server_address =int['accessConfig'][0]['natIpRef']['name']
-            break
-
-    server_address_info = await get_address_info(server_address)
-    server_ip = server_address_info.spec['address']
-
+    if client_mgmt_ip is None or server_mgmt_ip is None:
+        raise kopf.PermanentError("waiting for IP addresses")
+    client_data_ip=await get_not_mgmt_ip(client)
+    server_data_ip=await get_not_mgmt_ip(server)
     hosts = {
         'hosts': {
             'client': {
-                'ansible_host': client_external_ip,
-                'mgmt_ip': client_mgmt_ip,
+                'ansible_host': client_mgmt_ip,
+                'data_ip': client_data_ip,
                 'ansible_user': 'admin_briannaughton_altostrat_co',
                 'ansible_connection': 'ssh',
                 'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
                 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'
             },
             'server': {
-                'ansible_host': server_external_ip,
-                'mgmt_ip': server_mgmt_ip,
+                'ansible_host': server_mgmt_ip,
+                'data_ip': server_data_ip,
                 'ansible_user': 'admin_briannaughton_altostrat_co',
                 'ansible_connection': 'ssh',
                 'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
@@ -96,50 +72,33 @@ async def createtest(spec, name, namespace, logger, **kwargs):
     if r.status != 'successful':
         raise kopf.TemporaryError("Ansible Error.", delay=15)
 
+
+
 @kopf.on.delete('connectivitytest')
 async def deletetest(spec, name, namespace, logger, **kwargs):
     logger.info("Delete test case")
     
-    # build the a and b end variables
     client=spec.get('virtualmachines')[0]
     server=spec.get('virtualmachines')[1]
 
-    result1 = await get_compute(client)
-    result2 = await get_compute(server)
-    if result1 is None or result2 is None:
-        return 
+    client_mgmt_ip=await get_ip(client)
+    server_mgmt_ip=await get_ip(server)
 
-    client_external_ip=await getExternalAddress(client)
-    server_external_ip=await getExternalAddress(server)
-    client_mgmt_ip=await getMgmtAddress(client)
-    server_mgmt_ip=await getMgmtAddress(server)
-
-    serverresult = await get_compute(server)
-    # check the VM has a network and ip address, if not backoff until it does
-    interfaces = serverresult.spec.get('networkInterface')
-    for int in interfaces:
-        accessConfig = int.get('accessConfig')
-        if accessConfig is not None:
-            server_address =int['accessConfig'][0]['natIpRef']['name']
-            break
-
-    server_address_info = await get_address_info(server_address)
-    server_ip = server_address_info.spec['address']
+    if client_mgmt_ip is None or server_mgmt_ip is None:
+        raise kopf.PermanentError("can't find ip addresses for client or server")
 
     hosts = {
         'hosts': {
             'client': {
-                'ansible_host': client_external_ip,
-                'mgmt_ip': client_mgmt_ip,
-                'ansible_user': 'admin_briannaughton_altostrat_co',
+                'ansible_host': client_mgmt_ip,
+                'ansible_user': os.getenv("GOOGLE_USER"),
                 'ansible_connection': 'ssh',
                 'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
                 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'
             },
             'server': {
-                'ansible_host': server_external_ip,
-                'mgmt_ip': server_mgmt_ip,
-                'ansible_user': 'admin_briannaughton_altostrat_co',
+                'ansible_host': server_mgmt_ip,
+                'ansible_user': os.getenv("GOOGLE_USER"),
                 'ansible_connection': 'ssh',
                 'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
                 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'

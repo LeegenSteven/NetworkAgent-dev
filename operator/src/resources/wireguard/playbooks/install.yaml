@@ -11,10 +11,6 @@
     import_role:
       name: nodeexporter
 
-  - name: install publisher
-    import_role:
-      name: publish
-
   - name: run wireguard
     become: True
     ansible.builtin.systemd_service:

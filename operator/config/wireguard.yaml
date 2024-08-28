@@ -23,6 +23,42 @@ spec:
           properties:
             spec:
               type: object
+              properties:
+                sourceInterface: 
+                  description: The name of the interface to bind this instance to
+                  type: string
+                tunnelSubnet:
+                  description: The CIDR for the tunnel.
+                  type: string
+                tunnelAddress:
+                  description: The tunnel ip address assigned to this virtual appliance
+                  type: string
+                allowedInterface: 
+                  description: The name of the computesubnetwork that is reachable from the peer wireguard appliance
+                  type: string
+                peerName:
+                  description: The name of the other wireguard appliance to connect this instance to.
+                  type: string
+                keys:
+                  description: this wireguard instance's public and private keys
+                  type: object
+                  properties:
+                    public:
+                      description: public keys
+                      type: string
+                    private:
+                      description: public keys
+                      type: string
+                peerKeys:
+                  description: the peer wireguard instance's public and private keys
+                  type: object
+                  properties:
+                    public:
+                      description: public keys
+                      type: string
+                    private:
+                      description: public keys
+                      type: string
               x-kubernetes-preserve-unknown-fields: true
             status:
               type: object

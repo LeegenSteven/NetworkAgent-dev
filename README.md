@@ -74,20 +74,8 @@ Each demo environment will have the following:
 To build the demo environment, do the following:
 
 * [Setup base GCP environment](environment/Readme.md)
-* [Deploy the network operator](/operator/Readme.md)
-* [Deploy the network tools REST endpoint](/tools/Readme.md)
-* [Deploy the network agent](/networkagent/Readme.md)
+* [Setup Prometheus](docs/monitor.md)
+* [Build and deploy the network operator](/operator/Readme.md)
+* [Build and deploy the network tools REST endpoint](/tools/Readme.md)
+* [Build and deploy the network agent](/networkagent/Readme.md)
 
-## Demo Scenario
-
-* Add 2 locations and show 
-* Ask LLM about your locations and see those added above
-* Ask LLM about available services
-* Create point to point service with both locations
-* Show k8s objects created
-* Run traffic across locations over VPN
-* Show traffic running
-* Add two more locations
-* Ask LLM about locations again
-* Delete the existing service and create a new mesh service across all of the locations
-* Run traffic again and show

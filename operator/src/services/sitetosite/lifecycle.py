@@ -5,21 +5,17 @@ from utils.keys import WgKey
 
 logger = logging.getLogger(__name__)
 
-services={}
-
 ##########################################
-# Create a new PTP VPN
+# Create a new Point To Point VPN
 ##########################################
 @kopf.on.create('pointtopointservice')
-async def service_resources(spec, name, namespace, logger, **kwargs):
-  logger.info(f"Create pointtopoint service {name} with spec: {spec}")
-
-  global services
+async def pointtopoint(spec, status, name, logger, **kwargs):
+  logger.debug(f"Create pointtopoint service {name} with spec: {spec}")
 
   if len(spec.get('interfaces'))!=2:
       raise kopf.PermanentError("Two interfaces must be provided.")
 
-  # build the a and b end variables
+  # get the a and b end variables
   aend=spec.get('interfaces')[0]
   bend=spec.get('interfaces')[1]
 
@@ -33,116 +29,64 @@ async def service_resources(spec, name, namespace, logger, **kwargs):
     network_api.get(namespace="automation", name=aend)
     network_api.get(namespace="automation", name=bend)
   except:
-    raise kopf.PermanentError("interfaces not found")
+    raise kopf.PermanentError("compute sub networks not found")
 
-  # Create uuid and keys for this service instance
-  if name not in services:
-    logger.info("creating new keys for %s", name)
-    newuuid = str(uuid.uuid4())[:8]
-    services[name]={}
-    services[name]['uuid'] = newuuid
-    services[name]['akey'] = WgKey().to_dict()
-    services[name]['bkey'] = WgKey().to_dict()
-  else:
-    logger.info("Using existing keys")
+  serviceInfo=await get_configmap(name)
+  if serviceInfo is None:
+    serviceInfo=await create_configmap(
+      name,
+      str(uuid.uuid4())[:8],
+      WgKey().to_dict(),
+      WgKey().to_dict()
+    )
+  logger.debug(serviceInfo)
 
-  logger.info(services)
-
-  # Create the site infra
-  site1 = await create_site(aend, bend, "192.168.1.1", services[name]['uuid'], services[name]['akey'], services[name]['bkey'])
-  site2 = await create_site(bend, aend, "192.168.1.2", services[name]['uuid'], services[name]['bkey'], services[name]['akey'])
-
-  asitevm=aend+'-vpn-'+services[name]['uuid']
-  bsitevm=bend+'-vpn-'+services[name]['uuid']
+  # Create the two wireguard virtual appliances
+  asitename=aend+'-vpn-'+serviceInfo['uuid']
+  bsitename=bend+'-vpn-'+serviceInfo['uuid']
+  await create_vpn_edge(name,
+                        asitename,
+                        aend,
+                        "192.168.1.0/24",
+                        "192.168.1.1",
+                        bend, 
+                        bsitename, 
+                        serviceInfo['keys']['akeys'], 
+                        serviceInfo['keys']['bkeys'])
+  await create_vpn_edge(name,
+                        bsitename,
+                        bend,
+                        "192.168.1.0/24",
+                        "192.168.1.2",
+                        aend, 
+                        asitename, 
+                        serviceInfo['keys']['bkeys'],
+                        serviceInfo['keys']['akeys'])
 
   # Create the static routes to vpn tunnels
-  await create_route(aend+'-vpn-'+services[name]['uuid'], aend, bend)
-  await create_route(bend+'-vpn-'+services[name]['uuid'], bend, aend)
+  await create_route(aend+'-vpn-'+serviceInfo['uuid'], aend, bend)
+  await create_route(bend+'-vpn-'+serviceInfo['uuid'], bend, aend)
 
-  # remove the services from the list so a service with the same name can be readded down the line
-  logger.info("remove service from list")
+  return {"Status": "Running"}
 
-  return [
-      #  {
-      #   'kind': 'Wireguard',
-      #   'api_version': "google.dev/v1",
-      #   'name': avars['vmname']
-      #  },     
-       {
-        'kind': 'ComputeInstance',
-        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': asitevm
-       },
-       {
-        'kind': 'ComputeNetwork',
-        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': asitevm
-       },
-       {
-        'kind': 'ComputeSubnetwork',
-        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': asitevm
-       },
-       {
-        'kind': 'ComputeRouter',
-        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': f"{asitevm}-router"
-       },
-       {
-        'kind': 'ComputeRouterNAT',
-        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': f"{asitevm}-nat"
-       },
-       {
-        'kind': 'ComputeRoute',
-        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': asitevm
-       },
-      #  {
-      #   'kind': 'Wireguard',
-      #   'api_version': "google.dev/v1",
-      #   'name': bvars['vmname']
-      #  },
-       {
-        'kind': 'ComputeInstance',
-        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': bsitevm
-       },
-       {
-        'kind': 'ComputeNetwork',
-        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': bsitevm
-       },
-       {
-        'kind': 'ComputeSubnetwork',
-        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': bsitevm
-       },
-       {
-        'kind': 'ComputeRouter',
-        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': f"{bsitevm}-router"
-       },
-       {
-        'kind': 'ComputeRouterNAT',
-        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': f"{bsitevm}-nat"
-       },
-       {
-        'kind': 'ComputeRoute',
-        'api_version': "compute.cnrm.cloud.google.com/v1beta1",
-        'name': bsitevm
-       },
-    ] 
-  
+
 ##########################################
 # Cleanup a new PTP VPN
 ##########################################
 @kopf.on.delete('pointtopointservice')
-async def delete_service_resources(spec, name, namespace, logger, **kwargs):
-  logger.info(f"Delete pointtopoint service {name} with spec: {spec}")
+async def delete_service_resources(name, logger, **kwargs):
+  logger.debug(f"Delete pointtopoint service {name}")
 
-  global services
-  if services.get(name) is not None:
-    logger.info("deleting keys %s",str(services[name]))
-    del services[name]
+  # remove the configmap for this service
+  await delete_configmap(name)
+
+# ############################################
+# # Monitor service children and update status
+# ############################################
+# @kopf.on.event('google.dev', 'v1', 'WireguardAppliance', labels={'kex-parent-name': None})
+# def monitoring(event, meta, status, **_):
+#     parent_name = meta['labels']['kex-parent-name']
+
+#     logger.debug("event")
+#     logger.debug("status")
+

@@ -50,4 +50,4 @@ async def install_vpn(servicename, vmname, mgmt_ip_address, data_ip_address, tun
 
     logger.info("status = %s", r.status)
     if r.status != 'successful':
-        raise kopf.TemporaryError("Ansible Error.", delay=15)
+        raise kopf.TemporaryError("Waiting for VM to come up.", delay=20)

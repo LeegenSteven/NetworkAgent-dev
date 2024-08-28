@@ -7,20 +7,13 @@ from monitor.lifecycle_tasks import *
 logger = logging.getLogger(__name__)
 
 @kopf.on.create('google.dev','v1','monitor')
-async def create_monitor(spec, name, namespace, logger, **kwargs):
+async def monitor(spec, name, namespace, logger, **kwargs):
     logger.debug("Create prometheus monitor")
 
-    await create_external_ip("monitor", os.getenv("GOOGLE_REGION"))
-
-    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-    network_api = client.resources.get(api_version="compute.cnrm.cloud.google.com/v1beta1", kind="ComputeAddress",)
-    result = network_api.get(name="monitor", namespace="automation")
-    if result.get('spec').get('address') is None:
-        raise kopf.TemporaryError("waiting for address to be allocated", 15)
-
-    await create_compute("monitor",
-                         result.get('spec').get('address'),
-                         None , 
+    await create_compute(name,
+                         "monitor",
+                         None,
+                         None, 
                          os.getenv("GOOGLE_PROJECT"),
                          os.getenv("GOOGLE_REGION"),
                          os.getenv("GOOGLE_ZONE"), 
@@ -29,9 +22,11 @@ async def create_monitor(spec, name, namespace, logger, **kwargs):
     await run_install()
 
     if spec.get("nodes") is not None:
-        run_update(spec.get("nodes"))
+        await run_update(spec.get("nodes"))
     else:
-        run_update([])
+        await run_update([])
+
+    return {"status": "Running"}
 
 @kopf.on.update('google.dev','v1','monitor')
 async def update_monitor(spec, name, namespace, logger, **kwargs):
@@ -43,8 +38,10 @@ async def update_monitor(spec, name, namespace, logger, **kwargs):
         await run_update(spec.get("nodes"))
 
 
+######################################################################################################
 # Watch for VPN virtual machines being created and update the prometheus scrape config with those node
 # exporter endpoint addresses
+######################################################################################################
 @kopf.on.event('compute.cnrm.cloud.google.com','v1beta1','computeinstances',labels={'monitor': 'yes'})
 async def monitorevent(event, body, name, spec, logger, **kwargs):
     logger.debug("Updating VM's to monitor")

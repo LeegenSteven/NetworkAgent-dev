@@ -1,16 +1,106 @@
 import logging
 import kubernetes
 import kopf
-import json
-import os
 from utils.compute import *
+import json
 
 logger = logging.getLogger(__name__)
 
 ########################################################################
-# WireguardAppliance
+# Create configmap instance
 ########################################################################
-async def create_vpn_edge(vpn_name, tunnel_subnet, tunnel_ip, peer_interface, peer_vm_name, my_keys, peer_keys):
+async def create_configmap(name, uuid, akeys, bkeys):
+  logger.debug("create configmap")
+
+  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+  api = client.resources.get(api_version="v1", kind="ConfigMap")
+
+  keys={
+    "akeys": akeys,
+    "bkeys": bkeys
+  }
+
+  configmap_manifest = {
+      "kind": "ConfigMap",
+      "apiVersion": "v1",
+      "metadata": {
+          "name": name,
+      },
+      "data": {
+          "uuid": uuid,
+          "keys": json.dumps(keys)
+      },
+  }
+  logger.debug(configmap_manifest)
+
+  kopf.adopt(configmap_manifest)
+  kopf.label(configmap_manifest, labels={'kex-parent-name': name})
+
+  try:
+    api.create(body=configmap_manifest, namespace="automation")
+
+    returnObject={
+      "uuid": uuid,
+      "keys": keys
+    }
+    return returnObject
+
+  except kubernetes.client.rest.ApiException as e: 
+    logger.debug(e.status)
+    logger.debug(e)
+    if e.status == 409:
+      logger.debug("configmap already exists - skipping")
+
+########################################################################
+# Get configmap instance
+########################################################################
+async def get_configmap(name):
+  logger.debug("getting config name %s", name)
+
+  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+  api = client.resources.get(api_version="v1", kind="ConfigMap") 
+
+  try:
+
+    result=api.get(name=name,namespace="automation")
+    logger.debug(result)
+    keystring=result.get('data').get('keys')
+    if keystring is not None:
+      return {
+        "uuid": result.get('data').get('uuid'), 
+        "keys": json.loads(keystring)
+      }
+    return None
+
+  except kubernetes.client.rest.ApiException as e: 
+    logger.debug(e.status)
+    if e.status == 404:
+      logger.debug("no configmap named %s", name)
+      return None
+    else:
+      logger.debug(e)
+
+########################################################################
+# delete configmap instance
+########################################################################
+async def delete_configmap(name):
+  logger.debug("getting config name %s", name)
+
+  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+  api = client.resources.get(api_version="v1", kind="ConfigMap") 
+
+  try:
+    api.delete(name=name,namespace="automation")
+  except kubernetes.client.rest.ApiException as e: 
+    logger.debug(e.status)
+    logger.debug(e)
+    if e.status == 404:
+      logger.error("no configmap named %s", name)
+
+########################################################################
+# Create a WireguardAppliance instance
+########################################################################
+async def create_vpn_edge(parent_name, vpn_name, source_interface,tunnel_subnet, tunnel_ip, peer_interface, peer_vm_name, my_keys, peer_keys):
   logger.info("Create VPN Edge")
 
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
@@ -27,7 +117,7 @@ async def create_vpn_edge(vpn_name, tunnel_subnet, tunnel_ip, peer_interface, pe
       "namespace": "automation"
     },
     "spec": {
-      "vmname": vpn_name,
+      "sourceInterface": source_interface,
       "tunnelSubnet": tunnel_subnet,
       "tunnelAddress": tunnel_ip,
       "allowedInterface": peer_interface,
@@ -39,37 +129,13 @@ async def create_vpn_edge(vpn_name, tunnel_subnet, tunnel_ip, peer_interface, pe
 
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
-  # logger.debug(json.dumps(crd_manifest, indent=4))
+  kopf.label(crd_manifest, labels={'kex-parent-name': parent_name})
 
   try:
     result = network_api.create(crd_manifest)
   except kubernetes.client.rest.ApiException as e: 
-    logger.info(e.status)
-    # logger.debug(e)
+    logger.debug(e.status)
     if e.status == 409:
-      logger.info("WG already exists - skipping")
-
-########################################################################
-# Create Site
-########################################################################
-async def create_site(aend, bend, tunnel_address, uuid, akeys, bkeys):
-  logger.info("Creating VPN Site")
-
-  # create children resources
-  await create_compute(aend+'-vpn-'+uuid,
-                       None,
-                       aend, 
-                       os.getenv("GOOGLE_PROJECT"),
-                       os.getenv("GOOGLE_REGION"),
-                       os.getenv("GOOGLE_ZONE"), 
-                       True)
-
-  await create_vpn_edge(aend+'-vpn-'+uuid,
-                        "192.168.1.0/24",
-                        tunnel_address,
-                        bend, 
-                        bend+'-vpn-'+uuid, 
-                        akeys, 
-                        bkeys)
-
-  return vars
+      logger.debug("WG already exists - skipping")
+    else:
+      logger.debug(e)

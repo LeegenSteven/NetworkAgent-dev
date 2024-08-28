@@ -27,9 +27,9 @@ fi
 ############################################################
 Create()
 {
-    echo "##################################\n"
+    echo "########################################"
     echo "Setting project to $GOOGLE_PROJECT"
-    echo "##################################\n"
+    echo "########################################"
     gcloud config set project $GOOGLE_PROJECT
 
     # Test if google compute ssh keys exist, it not generate them
@@ -179,9 +179,9 @@ Start()
     kubectl config set-context --current --namespace automation
     kubectl apply -f environment/configconnector.yaml
 
-    echo "#######################################"
-    echo "Waiting for config connector to come up"
-    echo "#######################################"
+    echo "################################################"
+    echo "Waiting for cnrm-controller-manager-0 to start "
+    echo "################################################"
 
     # kubectl wait -n cnrm-system --for=condition=Ready pod cnrm-controller-manager-0
     while [[ $(kubectl get pods -n cnrm-system cnrm-controller-manager-0 -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') != "True" ]]; do
@@ -189,15 +189,10 @@ Start()
         echo "sleeping for 20 secs..."
     done
 
-    echo "##################################\n"
+    echo "##################################"
     echo "Deploy the Operator"
-    echo "##################################\n"
+    echo "##################################"
     Operator
-
-    echo "##################################\n"
-    echo "Deploy the Agent Rest Tools"
-    echo "##################################\n"
-    Tools
 
     # start the network, prometheus monitor and the customer locations
     kubectl apply -f environment/networks.yaml
@@ -211,6 +206,13 @@ Start()
 ############################################################
 Delete()
 {
+    read -p "Are you sure you want to delete the environment configuration (y/n)?" choice
+    case "$choice" in 
+        y|Y ) echo "proceeding to delete environment configuration";;
+        n|N ) exit 0;;
+        * ) echo "please enter y/n";;
+    esac
+
     echo "#######################################"
     echo "Deleting environment manifests and keys"
     echo "#######################################"
@@ -255,6 +257,13 @@ Monitoring()
 ############################################################
 Kill()
 {
+    read -p "Are you sure you want to kill the environment(y/n)?" choice
+    case "$choice" in 
+        y|Y ) echo "proceeding to kill the environment";;
+        n|N ) exit 0;;
+        * ) echo "please enter y/n";;
+    esac
+
     echo "##############################################"
     echo "Killing the environment - will take a few mins"
     echo "##############################################"
@@ -274,10 +283,10 @@ Kill()
     echo "#####################"
     echo "Deleting mgmt network"
     echo "#####################"
-    gcloud compute routers delete mgmt --region=$GOOGLE_REGION --quiet
-    gcloud compute firewall-rules delete mgmt-ingress --region=$GOOGLE_REGION --quiet
-    gcloud compute networks subnets delete mgmt-subnet --region=$GOOGLE_REGION --quiet
-    gcloud compute networks delete mgmt --region=$GOOGLE_REGION --quiet
+    gcloud compute routers delete mgmt --quiet
+    gcloud compute firewall-rules delete mgmt-ingress --quiet
+    gcloud compute networks subnets delete mgmt-subnet --quiet
+    gcloud compute networks delete mgmt --quiet
 
 }
 

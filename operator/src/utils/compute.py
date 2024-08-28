@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 # Create ComputeNetwork
 ########################################################################
 async def create_network(network_name):
-  logger.info("Create compute network %s", network_name)
+  logger.debug("Create compute network %s", network_name)
 
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
   network_api = client.resources.get(
@@ -50,7 +50,7 @@ async def create_network(network_name):
 # Delete ComputeNetwork
 ########################################################################
 async def delete_network(network_name):
-  logger.info("Delete compute network %s", network_name)
+  logger.debug("Delete compute network %s", network_name)
 
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
   network_api = client.resources.get(
@@ -68,7 +68,7 @@ async def delete_network(network_name):
 # Create ComputeSubNetwork
 ########################################################################
 async def create_subnetwork(network_name, subnet_name, cidr, region):
-  logger.info("Create compute subnetwork")
+  logger.debug("Create compute subnetwork")
 
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
   network_api = client.resources.get(
@@ -101,7 +101,7 @@ async def create_subnetwork(network_name, subnet_name, cidr, region):
     result = network_api.create(crd_manifest)
     return result
   except kubernetes.client.rest.ApiException as e: 
-    logger.info(e.status)
+    logger.debug(e.status)
     if e.status == 409:
       logger.info("Already exists - skipping")
     else:
@@ -111,7 +111,7 @@ async def create_subnetwork(network_name, subnet_name, cidr, region):
 # Get Subnetwork
 ########################################################################
 async def get_subnetwork(name):
-  logger.info("Get compute subnetwork %s", name)
+  logger.debug("Get compute subnetwork %s", name)
 
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
   network_api = client.resources.get(
@@ -122,13 +122,13 @@ async def get_subnetwork(name):
     result = network_api.get(namespace="automation", name=name)
     return result
   except kubernetes.client.rest.ApiException as e:
-    logger.info(e)
+    logger.debug(e)
 
 ########################################################################
 # Create ComputeRouter
 ########################################################################
 async def create_router(network_name, region):
-  logger.info("Create Router")
+  logger.debug("Create Router")
 
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
   network_api = client.resources.get(
@@ -159,9 +159,9 @@ async def create_router(network_name, region):
   try:
     result = network_api.create(crd_manifest)
   except kubernetes.client.rest.ApiException as e: 
-    logger.info(e.status)
+    logger.debug(e.status)
     if e.status == 409:
-      logger.info("Already exists - skipping")
+      logger.debug("Already exists - skipping")
     else:
       logger.debug(e)
 
@@ -169,7 +169,7 @@ async def create_router(network_name, region):
 # ComputeRouterNAT
 ########################################################################
 async def create_nat(network_name, region):
-  logger.info("Create NAT")
+  logger.debug("Create NAT")
 
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
   network_api = client.resources.get(
@@ -210,8 +210,8 @@ async def create_nat(network_name, region):
 ########################################################################
 # Create ComputeInstance
 ########################################################################
-async def create_compute(vm_name, external_ip, interface, project, region, zone, vpn=False, monitor=True):
-  logger.info("Create compute %s", vm_name)
+async def create_compute(parent_name, vm_name, external_ip, interface, project, region, zone, vpn=False, monitor=True):
+  logger.debug("Create compute %s", vm_name)
 
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
   network_api = client.resources.get(
@@ -243,7 +243,7 @@ async def create_compute(vm_name, external_ip, interface, project, region, zone,
   )
 
   # provision external ip if it is specified
-  if external_ip:
+  if external_ip is not None:
     accessconfig=[]
     accessconfig.append({
       "natIpRef": {
@@ -318,18 +318,20 @@ async def create_compute(vm_name, external_ip, interface, project, region, zone,
     }
   }
 
-  # update manifest to be child of site-to-site service
+  # update manifest with parent child relationship
   kopf.adopt(crd_manifest)
-  logger.debug(json.dumps(crd_manifest, indent=4))
+  if parent_name is not None:
+    kopf.label(crd_manifest, labels={'kex-parent-name': parent_name})
 
   try:
     result = network_api.create(crd_manifest)
+    return result
   except kubernetes.client.rest.ApiException as e: 
-    logger.info(e.status)
+    logger.debug(e.status)
     if e.status == 422:
       raise kopf.PermanentError("Unprocessable entity.")
     elif e.status == 409:
-      logger.info("already exists - skipping")
+      logger.debug("already exists - skipping")
     else:
       logger.debug(e)
 
@@ -337,7 +339,7 @@ async def create_compute(vm_name, external_ip, interface, project, region, zone,
 # Get ComputeInstance
 ########################################################################
 async def get_compute(vm_name):
-  logger.info("Get compute %s", vm_name)
+  logger.debug("Get compute %s", vm_name)
 
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
   network_api = client.resources.get(
@@ -351,7 +353,7 @@ async def get_compute(vm_name):
     return result
 
   except kubernetes.client.rest.ApiException as e: 
-    logger.info(e.status)
+    logger.debug(e.status)
     if e.status == 422:
       raise kopf.PermanentError("Unprocessable entity.")
     if e.status == 404:
@@ -361,7 +363,7 @@ async def get_compute(vm_name):
 # Create ComputeAddress
 ########################################################################
 async def create_external_ip(name, region):
-  logger.info("Create external ip")
+  logger.debug("Create external ip")
 
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
   network_api = client.resources.get(
@@ -391,9 +393,9 @@ async def create_external_ip(name, region):
     result = network_api.create(crd_manifest)
     return result
   except kubernetes.client.rest.ApiException as e: 
-    logger.info(e.status)
+    logger.debug(e.status)
     if e.status == 409:
-      logger.info("Already exists - skipping")
+      logger.debug("Already exists - skipping")
     else:
       logger.debug(e)
 
@@ -401,7 +403,7 @@ async def create_external_ip(name, region):
 # CreateRoute
 ########################################################################
 async def create_route(vm_name, source_subnetwork_name, peer_subnetwork_name):
-  logger.info("Create route to vm %s from source %s to subnetwork %s", vm_name, source_subnetwork_name, peer_subnetwork_name)
+  logger.debug("Create route to vm %s from source %s to subnetwork %s", vm_name, source_subnetwork_name, peer_subnetwork_name)
 
   route_ip=None
 
@@ -409,6 +411,8 @@ async def create_route(vm_name, source_subnetwork_name, peer_subnetwork_name):
   vmresult = await get_compute(vm_name)
   if vmresult is None:
     raise kopf.TemporaryError("Waiting for VM")
+
+  logger.debug("source %s, target %s", source_subnetwork_name, peer_subnetwork_name)
 
   # check the VM has a network and ip address, if not backoff until it does
   if vmresult.get('spec') is not None:
@@ -421,7 +425,7 @@ async def create_route(vm_name, source_subnetwork_name, peer_subnetwork_name):
             break
 
   if route_ip is None:
-    raise kopf.TemporaryError("Waiting for VM to come up", 20)
+    raise kopf.TemporaryError("Waiting for VM ip address", 20)
 
   # find the cidr associated with peer_subnetwork_name
   destresult = await get_subnetwork(peer_subnetwork_name)
@@ -463,9 +467,9 @@ async def create_route(vm_name, source_subnetwork_name, peer_subnetwork_name):
     return result
 
   except kubernetes.client.rest.ApiException as e: 
-    logger.info(e.status)
+    logger.debug(e.status)
     if e.status == 409:
-      logger.info("Already exists - skipping")
+      logger.debug("Already exists - skipping")
     else:
       logger.debug(e)
 
@@ -473,11 +477,11 @@ async def create_route(vm_name, source_subnetwork_name, peer_subnetwork_name):
 # Get the mgmt network ip address
 ########################################################################
 async def get_ip(name, networkname="mgmt"):
-    logger.info("getting mgmt ip address")
+    logger.debug("getting mgmt ip address")
     # get server
     vm = await get_compute(name)
     if vm is None or vm.get('spec') is None:
-        logger.info("No VM or VM spec")
+        logger.debug("No VM or VM spec")
         return None
 
     interfaces = vm.spec.get('networkInterface')
@@ -500,7 +504,7 @@ async def get_ip(name, networkname="mgmt"):
 # Get Compute Subnet Info
 #####################################################################
 async def get_subnet_info(subnetname):
-    logger.info("get info for subnet %s", subnetname)
+    logger.debug("get info for subnet %s", subnetname)
 
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
     network_api = client.resources.get(
@@ -522,7 +526,7 @@ async def get_subnet_info(subnetname):
 # Get Compute Instance Info
 #####################################################################
 async def get_vm_info(vmname):
-    logger.info("get info for vm %s", vmname)
+    logger.debug("get info for vm %s", vmname)
 
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
     network_api = client.resources.get(
@@ -537,6 +541,6 @@ async def get_vm_info(vmname):
             raise kopf.TemporaryError("Waiting for VM to come up")
         return result
     except kubernetes.client.rest.ApiException as e: 
-        logger.info(e.status)
+        logger.debug(e.status)
         if e.status == 404:
             raise kopf.TemporaryError(f"No VM {vmname} found yet")

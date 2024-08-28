@@ -1,3 +1,7 @@
+- name: install pip
+  ansible.builtin.apt:
+    name: python3-pip
+
 - name: Install pubsub python package
   ansible.builtin.pip:
     name: 

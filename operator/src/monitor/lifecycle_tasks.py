@@ -8,7 +8,7 @@ from resources.wireguard.lifecycle_tasks import *;
 logger = logging.getLogger(__name__)
 
 async def run_update(nodes):
-    logger.info("Running update")
+    logger.debug("Running update")
 
     ip_address = await get_ip("monitor")
     if ip_address is None:
@@ -33,8 +33,8 @@ async def run_update(nodes):
             }
         }
     }
-    logger.info(hosts)
-    logger.info(extravars)
+    logger.debug(hosts)
+    logger.debug(extravars)
     r = ansible_runner.run(private_data_dir=constants.basedir+"/monitor/playbooks", 
                            inventory={'all': hosts},
                            playbook='configure.yaml',
@@ -46,7 +46,7 @@ async def run_update(nodes):
 
 
 async def run_install():
-    logger.info("installing prometheus monitor")
+    logger.debug("installing prometheus monitor")
 
     ip_address = await get_ip("monitor")
     if ip_address is None:
@@ -70,13 +70,13 @@ async def run_install():
             }
         }
     }
-    logger.info(hosts)
-    logger.info(extravars)
+    logger.debug(hosts)
+    logger.debug(extravars)
     r = ansible_runner.run(private_data_dir=constants.basedir+"/monitor/playbooks", 
                            inventory={'all': hosts},
                            playbook='install.yaml',
                            extravars=extravars)
 
-    logger.info("status = %s", r.status)
+    logger.debug("status = %s", r.status)
     if r.status != 'successful':
         raise kopf.TemporaryError("Ansible Error.", delay=15)

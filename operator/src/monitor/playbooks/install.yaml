@@ -23,6 +23,10 @@
       remote_src: yes
     when: not download.stat.exists 
 
+  - name: install BQ publisher
+    import_role:
+      name: publish
+
   - name: Check if grafana already downloaded
     ansible.builtin.stat:
       path: /opt/grafana-11.1.4.linux-amd64.tar.gz
@@ -42,9 +46,10 @@
       remote_src: yes
     when: not download.stat.exists 
 
+  - name: kill grafana if it is running
+    raw: pkill grafana
+    ignore_errors: True
+
   - name: Run grafana server
     raw: nohup /opt/grafana-v11.1.4/bin/grafana server </dev/null >/dev/null 2>&1 &
 
-  - name: install BQ publisher
-    import_role:
-      name: publish

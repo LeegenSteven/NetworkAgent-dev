@@ -12,6 +12,7 @@ launch.json
 **/environment/monitoring.yaml
 **/environment/networks.yaml
 **/environment/configconnector.yaml
+**/environment/bigquery.yaml
 **/operator/deployment.yaml
 **/tools/deployment.yaml
 **/networkagent/deployment.yaml

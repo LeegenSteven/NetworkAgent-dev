@@ -27,28 +27,6 @@
     import_role:
       name: publish
 
-  - name: Check if grafana already downloaded
-    ansible.builtin.stat:
-      path: /opt/grafana-11.1.4.linux-amd64.tar.gz
-    register: download
-
-  - name: Downloading grafana
-    ansible.builtin.get_url:
-      url: https://dl.grafana.com/oss/release/grafana-11.1.4.linux-amd64.tar.gz
-      dest: /opt/grafana-11.1.4.linux-amd64.tar.gz
-      force_basic_auth: yes
-    when: not download.stat.exists 
-
-  - name: Unzip grafana
-    ansible.builtin.unarchive:
-      src: /opt/grafana-11.1.4.linux-amd64.tar.gz
-      dest: /opt
-      remote_src: yes
-    when: not download.stat.exists 
-
-  - name: kill grafana if it is running
-    raw: pkill grafana
-    ignore_errors: True
-
-  - name: Run grafana server
-    raw: nohup /opt/grafana-v11.1.4/bin/grafana-server </dev/null >/dev/null 2>&1 &
+  - name: install grafana
+    import_role:
+      name: grafana

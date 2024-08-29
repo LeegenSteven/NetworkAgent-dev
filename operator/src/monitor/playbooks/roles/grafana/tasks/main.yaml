@@ -1,0 +1,26 @@
+- name: install pre-requisites
+  ansible.builtin.apt:
+    pkg:
+      - apt-transport-https 
+      - software-properties-common 
+      - wget
+
+- name: install apt key
+  ansible.builtin.apt_key:
+    url: https://apt.grafana.com/gpg.key
+    state: present
+
+- name: Add grafana repo
+  ansible.builtin.apt_repository:
+    repo: deb https://apt.grafana.com stable main
+    state: present
+
+- name: install grafana
+  ansible.builtin.apt:
+    name: grafana
+    update_cache: yes
+
+- name: Make sure grafana is running
+  ansible.builtin.systemd_service:
+    state: started
+    name: grafana-server

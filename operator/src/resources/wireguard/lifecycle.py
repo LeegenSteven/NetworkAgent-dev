@@ -37,8 +37,9 @@ async def create(body,spec, name, namespace, logger, **kwargs):
 
     # discover the allowed interface's cidr
     subnet_info = await get_subnet_info(spec.get('allowedInterface'))
+    allowed_cidr = subnet_info.get('spec')['ipCidrRange']
     # TODO: THIS IS A HACK to workaround wireguard and GCP /32 interface naming
-    allowed_cidr = subnet_info.get('spec')['ipCidrRange'][:-2]+'32'
+    # allowed_cidr = subnet_info.get('spec')['ipCidrRange'][:-2]+'32'
 
     logger.debug("allowed cidr %s", allowed_cidr)
 

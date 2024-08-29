@@ -51,5 +51,4 @@
     ignore_errors: True
 
   - name: Run grafana server
-    raw: nohup /opt/grafana-v11.1.4/bin/grafana server </dev/null >/dev/null 2>&1 &
-
+    raw: nohup /opt/grafana-v11.1.4/bin/grafana-server </dev/null >/dev/null 2>&1 &

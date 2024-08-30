@@ -206,7 +206,7 @@ Start()
 ############################################################
 Delete()
 {
-    read -p "Are you sure you want to delete the environment configuration (y/n)?" choice
+    read -p "Are you sure you want to delete the environment configuration (y/n)? " choice
     case "$choice" in 
         y|Y ) echo "proceeding to delete environment configuration";;
         n|N ) exit 0;;
@@ -257,7 +257,7 @@ Monitoring()
 ############################################################
 Kill()
 {
-    read -p "Are you sure you want to kill the environment(y/n)?" choice
+    read -p "Are you sure you want to kill the environment(y/n)? " choice
     case "$choice" in 
         y|Y ) echo "proceeding to kill the environment";;
         n|N ) exit 0;;
@@ -360,7 +360,7 @@ Help()
    echo "  -c     create keys and manifests."
    echo "  -s     start network agent environment."
    echo "  -o     build and deploy the operator"
-   echo "  -r     build and deploy the rest tools"
+   echo "  -t     build and deploy the rest tools"
    echo "  -n     build and deploy the networkagent"
    echo "  -k     kill the environment resources."
    echo "  -d     delete the network agent environment."

@@ -32,6 +32,7 @@ The following links detail how the demo is architected.
 
 * [Supported Network Services](docs/networkservices.md)
 * [Virtual Network Functions](docs/wireguard-vnf.md)
+* [GCP Environment](docs/gcp.md)
 * [Lifecycle Management](docs/lifecycle.md)
 * [CICD of Network Services](docs/cicd.md)
 * [Network Agent](docs/agent.md)

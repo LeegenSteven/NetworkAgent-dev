@@ -42,16 +42,3 @@ Deploy the operator, from the __NetworkAgent/operator__ directory run the follow
 ```
 kubectl apply -f deployment.yaml
 ```
-# Running the operator locally on your laptop
-
-Ensure the GOOGLE_PROJECT, GOOGLE_REGION and GOOGLE_ZONE environment variables are set (as described in the initial GCP setup readme)
-
-Run the following to start the operator on your laptop. 
-
-```
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cd src
-kopf run main.py --verbose
-```

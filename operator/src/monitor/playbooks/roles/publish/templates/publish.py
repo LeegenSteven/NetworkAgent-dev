@@ -20,26 +20,19 @@ def poll():
 
     while(running):
 
-        # get metrics from node exporter every 10 seconds
-        r = requests.get('http://127.0.0.1:9100/metrics')
+        receive_txt = requests.get('http://127.0.0.1:9090/api/v1/query',params={'query': 'increase(node_network_receive_bytes_total[20s])'}).text
+        json_data = json.loads(receive_txt)
 
-        rawlines = r.text.splitlines()
-        metrics={"servicename": "{{servicename}}", "device": "wg0", "edgename": socket.gethostname(), "time": str(datetime.datetime.now())}
-        for line in rawlines:
-            if not line.startswith('#'):
-                if "wg0" in line and ('transmit' in line or 'receive' in line):
-                    if 'bytes' in line or 'drop' in line or 'packets' in line:
-                        strings=line.split()
-                        key = strings[0].split('{')[0]
-                        value = strings[1]
-                        metrics[key]=float(value)
+        # transmit_txt = requests.get('http://127.0.0.1:9090/api/v1/query',params={'query': 'increase(node_network_transmit_bytes_total[20s])'}).text
+        # json_data = json.loads(transmit_txt)
 
-        json_metrics=json.dumps(metrics)
-        logger.info(json_metrics)
-        data = json_metrics.encode('utf-8')
-
-        future = publisher.publish(topic_name, data)
-        future.result()
+        if json_data['status'] == 'success':
+            if len(json_data['data']['result']) !=0:
+                json_metrics=json.dumps(json_data['data']['result'])
+                # logger.info(json_metrics)
+                data = json_metrics.encode('utf-8')                
+                future = publisher.publish(topic_name, data)
+                future.result()
 
         time.sleep(10)
 

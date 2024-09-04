@@ -196,7 +196,7 @@ Start()
 
     # start the network, prometheus monitor and the customer locations
     kubectl apply -f environment/networks.yaml
-    # kubectl apply -f environment/bigquery.yaml
+    kubectl apply -f environment/bigquery.yaml
     kubectl apply -f environment/prometheus.yaml
     kubectl apply -f sample-services/customersites
 }
@@ -271,7 +271,7 @@ Kill()
     kubectl delete -f sample-services/site2site/service.yaml
     kubectl delete -f sample-services/customersites
     kubectl delete -f environment/prometheus.yaml
-    # kubectl delete -f environment/bigquery.yaml
+    kubectl delete -f environment/bigquery.yaml
     kubectl delete -f environment/networks.yaml
     gcloud run services delete network-agent-api --region=$GOOGLE_REGION --quiet
 

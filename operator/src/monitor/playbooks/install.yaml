@@ -23,10 +23,13 @@
       remote_src: yes
     when: not download.stat.exists 
 
+  - name: Start prometheus
+    raw: nohup /opt/prometheus-2.54.0.linux-amd64/prometheus --config.file=/opt/config.yaml </dev/null >/dev/null 2>&1 &
+
   - name: install BQ publisher
     import_role:
       name: publish
 
-  - name: install grafana
-    import_role:
-      name: grafana
+  # - name: install grafana
+  #   import_role:
+  #     name: grafana

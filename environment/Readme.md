@@ -2,7 +2,24 @@
 
 This section describes how to setup the base Network Agent environment. 
 
-## Setup gcloud on your laptop
+## Enable GCP APIs and Org Policies
+
+Enable the following APIs in your project before continuing
+
+* Compute Engine
+* Big Query
+* GKE
+* Cloud Run
+
+### Update Organization Policies
+
+The following organization policy values must be set. 
+
+* Set __constraints/compute.vmExternalIpAccess__ to AllowAll
+* Set __constraints/compute.requireShieldedVm__ to Off
+* Set __constraints/iam.disableServiceAccountKeyCreation__ to Off
+
+## Setup gcloud
 
 [Install](https://cloud.google.com/sdk/docs/install) and initialise gcloud as follows:
 

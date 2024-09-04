@@ -1,6 +1,16 @@
 # Setup GCP Environment
 
-This section describes how to setup the base Network Agent environment. 
+This section describes how to setup the base Network Agent environment.
+
+## Prerequisites
+The following packages are required before proceeding with the installation
+* [Google Cloud Command Line interface](https://cloud.google.com/sdk/docs/install)
+* kubectl (on Debian: ```sudo apt-get install kubectl```)
+* Python3 pip installer (on Debian: ```sudo apt-get install python3-pip```)
+* jinja templating engine (```pip install jinja-cli```).
+
+Note: it is recommended to create your own Python virtual environment first prior to installing jinja or any other python packages.
+
 
 ## Enable GCP APIs and Org Policies
 
@@ -36,7 +46,7 @@ Setup the following environment variables. They are used throughout the rest of 
 export GOOGLE_PROJECT=<YOUR PROJECT>
 export GOOGLE_REGION=<YOUR REGION>
 export GOOGLE_ZONE=<YOUR ZONE>
-export GOOGLE_USER=<GCE USERNAME> # the name of the deafult user in your virtual machines 
+export GOOGLE_USER=<GCE USERNAME> # the name of the default Operating System user when you connect to a GCE VM 
 ```
 
 ## Installation script setup

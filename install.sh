@@ -100,7 +100,7 @@ Create()
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/networks.j2 > environment/networks.yaml
 
     echo "#######################################################"
-    echo "generating networkkagent, tools and operator yaml files"
+    echo "generating networkagent, tools and operator yaml files"
     echo "#######################################################"
     jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE operator/deployment.j2 > operator/deployment.yaml
     jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE tools/deployment.j2 > tools/deployment.yaml
@@ -333,7 +333,7 @@ Tools()
 ############################################################
 Networkagent()
 {
-    if ! test -f operator/deployment.yaml; then
+    if ! test -f networkagent/deployment.yaml; then
         echo "No deployment.yaml found - you can generate by running ./install.sh -c"
         exit 0
     fi

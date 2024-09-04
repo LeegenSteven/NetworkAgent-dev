@@ -13,11 +13,12 @@ Enable the following APIs in your project before continuing
 
 ### Update Organization Policies
 
-The following organization policy values must be set. 
+The following organization policy values must be set
 
-* Set __constraints/compute.vmExternalIpAccess__ to AllowAll
-* Set __constraints/compute.requireShieldedVm__ to Off
-* Set __constraints/iam.disableServiceAccountKeyCreation__ to Off
+* Set __constraints/compute.vmExternalIpAccess__ to __Allow All__
+* Set __constraints/compute.requireShieldedVm__ to __Off__
+* Set __constraints/iam.disableServiceAccountKeyCreation__ to __Off__
+* Set __constraints/compute.vmCanIpForward__ to __Allow All__
 
 ## Setup gcloud
 

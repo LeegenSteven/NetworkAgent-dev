@@ -197,7 +197,16 @@ Start()
     --network mgmt \
     --subnetwork mgmt-subnet
 
-    gcloud components install kubectl
+    # On glinux machines gcloud components cannot be installed
+    # through gcloud. apt must be used instead
+    if [[ `uname -v` =~ "rodete" ]]; then
+        sudo apt install kubectl
+        sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin
+    else
+        gcloud components install kubectl
+        gcloud components install gke-gcloud-auth-plugin # for GKE 1.26+
+    fi
+
     gcloud container clusters get-credentials networkautomation --region=$GOOGLE_ZONE
 
     gcloud iam service-accounts add-iam-policy-binding \

@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # Create a Wireguard virtual network appliance
 #########################################################################
 @kopf.on.create('wireguardappliance')
-async def create(body,spec, name, namespace, logger, **kwargs):
+async def wireguard(body,spec, name, namespace, logger, **kwargs):
     logger.debug(f"A handler is called with spec: {spec}")
 
     servicename = body['metadata']['ownerReferences'][0]['name']
@@ -38,8 +38,6 @@ async def create(body,spec, name, namespace, logger, **kwargs):
     # discover the allowed interface's cidr
     subnet_info = await get_subnet_info(spec.get('allowedInterface'))
     allowed_cidr = subnet_info.get('spec')['ipCidrRange']
-    # TODO: THIS IS A HACK to workaround wireguard and GCP /32 interface naming
-    # allowed_cidr = subnet_info.get('spec')['ipCidrRange'][:-2]+'32'
 
     logger.debug("allowed cidr %s", allowed_cidr)
 
@@ -62,8 +60,11 @@ async def create(body,spec, name, namespace, logger, **kwargs):
                 spec.get('peerKeys')     
             )
 
+    # once the vpn is running create the route from source to allowed interface
+    await create_route(name, spec.get('sourceInterface'), spec.get('allowedInterface'))
+
     return {
-        "status":"UpToDate", 
+        "status":"Running", 
         "mgmt_ip_address": mgmt_ip_address, 
         "data_ip_address": data_ip_address, 
         "allowed_cidr": allowed_cidr,

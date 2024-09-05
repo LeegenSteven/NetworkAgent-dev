@@ -150,13 +150,12 @@ def getServices(name):
                 logger.debug(item)
                 if item.get('status') is None or item.get('status').get('pointtopoint') is None:
                     svc={"servicename": item['metadata']['name'],
-                         "status": "waiting for service to come up"}
+                         "status": "Starting"}
                 else:
                     svc= {
-                        'customer': item['metadata']['labels']['customer'],
-                        'kind': item['kind'],
                         'servicename': item['metadata']['name'],
-                        'status': "running",
+                        'status': item.get('status').get('pointtopoint').get('status'),
+                        'vnfs': item.get('status').get('pointtopoint').get('edges')
                     }
                 services_list.append(svc)
 

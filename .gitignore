@@ -14,7 +14,10 @@ launch.json
 **/environment/configconnector.yaml
 **/environment/bigquery.yaml
 **/operator/deployment.yaml
+**/operator/cloudbuild.yaml
 **/tools/deployment.yaml
+**/tools/cloudbuild.yaml
 **/networkagent/deployment.yaml
+**/networkagent/cloudbuild.yaml
 **/sample-services/customersites/*.yaml
 

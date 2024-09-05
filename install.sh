@@ -22,6 +22,10 @@ if [ -z "${GOOGLE_PROJECT}" ] || [ -z "${GOOGLE_REGION}" ] || [ -z "${GOOGLE_ZON
     exit 0
 fi
 
+export GOOGLE_PROJECT_NUMBER=`gcloud projects describe $GOOGLE_PROJECT --format="value(projectNumber)"`
+export GOOGLE_ACTIVE_USER=`gcloud auth list --filter=status:ACTIVE --format="value(account)"`
+export GOOGLE_REPO="networkagent-repo"
+
 ############################################################
 # Create keys and manifest files                           #
 ############################################################
@@ -31,6 +35,37 @@ Create()
     echo "Setting project to $GOOGLE_PROJECT"
     echo "########################################"
     gcloud config set project $GOOGLE_PROJECT
+
+    # Make sure the active GCP user has proper permissions
+    echo "########################################"
+    echo "Grant GCP permissions to GCP active user: $GOOGLE_ACTIVE_USER"
+    echo "########################################"
+    gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="user:$GOOGLE_ACTIVE_USER" --role="roles/logging.logWriter"
+
+    # enable GCP Services API needed
+    echo "########################################"
+    echo "Enabling required GCP services API for project $GOOGLE_PROJECT"
+    echo "########################################"
+    gcloud services enable --project=$GOOGLE_PROJECT artifactregistry.googleapis.com
+    gcloud services enable --project=$GOOGLE_PROJECT cloudbuild.googleapis.com
+    gcloud services enable --project=$GOOGLE_PROJECT compute.googleapis.com
+    gcloud services enable --project=$GOOGLE_PROJECT container.googleapis.com
+    gcloud services enable --project=$GOOGLE_PROJECT run.googleapis.com
+
+    # Create artifact repository
+    echo "########################################"
+    echo "Create Artifact Repository "
+    echo "########################################"
+    gcloud artifacts repositories create $GOOGLE_REPO --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository" --quiet
+
+    # Configure Cloud Build service account
+    echo "########################################"
+    echo "Setup Cloud Build service account permissions "
+    echo "########################################"
+    CLOUD_BUILD_COMPUTE_SVC_ACCOUNT="${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+    gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$CLOUD_BUILD_COMPUTE_SVC_ACCOUNT" --role="roles/storage.objectUser"
+    gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$CLOUD_BUILD_COMPUTE_SVC_ACCOUNT" --role="roles/logging.logWriter"
+    gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$CLOUD_BUILD_COMPUTE_SVC_ACCOUNT" --role="roles/artifactregistry.writer"
 
     # Test if google compute ssh keys exist, it not generate them
     if ! test -f google-compute; then
@@ -103,8 +138,11 @@ Create()
     echo "generating networkagent, tools and operator yaml files"
     echo "#######################################################"
     jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE operator/deployment.j2 > operator/deployment.yaml
+    jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO operator/cloudbuild.j2 > operator/cloudbuild.yaml
     jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE tools/deployment.j2 > tools/deployment.yaml
+    jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO tools/cloudbuild.j2 > tools/cloudbuild.yaml
     jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE networkagent/deployment.j2 > networkagent/deployment.yaml
+    jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagent/cloudbuild.j2 > networkagent/cloudbuild.yaml
 
     echo "##############################"
     echo "generating customer site files"
@@ -141,13 +179,6 @@ Start()
     gcloud compute firewall-rules create mgmt-ingress --network=mgmt --allow=tcp,udp,icmp --source-ranges="0.0.0.0/0"
     gcloud compute routers create mgmt --network mgmt --region=$GOOGLE_REGION
     gcloud compute routers nats create mgmt --router=mgmt --region=$GOOGLE_REGION --auto-allocate-nat-external-ips --nat-all-subnet-ip-ranges --enable-logging
-
-    # Create the docker repo
-    echo "############################"
-    echo "Creating artifact repository"
-    echo "############################"
-    gcloud artifacts repositories create networkagent --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository" --quiet
-    gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev --quiet
 
     # create the GKE cluster
     echo "###################################################"
@@ -239,7 +270,7 @@ Delete()
 
     rm sample-services/customersites/*yaml
 
-    echo "Delete network automsation GKE"
+    echo "Delete network automation GKE"
 }
 
 ############################################################
@@ -283,10 +314,10 @@ Kill()
     echo "#####################"
     echo "Deleting mgmt network"
     echo "#####################"
-    gcloud compute routers delete mgmt --quiet
-    gcloud compute firewall-rules delete mgmt-ingress --quiet
-    gcloud compute networks subnets delete mgmt-subnet --quiet
-    gcloud compute networks delete mgmt --quiet
+    gcloud compute routers delete mgmt --region=$GOOGLE_REGION --quiet
+    gcloud compute firewall-rules delete mgmt-ingress --region=$GOOGLE_REGION --quiet
+    gcloud compute networks subnets delete mgmt-subnet --region=$GOOGLE_REGION --quiet
+    gcloud compute networks delete mgmt --region=$GOOGLE_REGION --quiet
 
 }
 
@@ -301,8 +332,7 @@ Operator()
     fi
 
     cd operator
-    docker build . -t $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networkoperator:latest
-    docker push $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networkoperator:latest
+    gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
     kubectl apply -f config
     kubectl delete -f deployment.yaml
     kubectl apply -f deployment.yaml
@@ -322,8 +352,7 @@ Tools()
 
     cd tools
     export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
-    docker build . -t $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networktools:latest
-    docker push $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networktools:latest
+    gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
     gcloud run deploy network-agent-api --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networktools:latest --region $GOOGLE_REGION --service-account $GOOGLE_SERVICE_ACCOUNT --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT,GOOGLE_REGION=$GOOGLE_REGION,GOOGLE_ZONE=$GOOGLE_ZONE
     cd ..
 }
@@ -339,8 +368,7 @@ Networkagent()
     fi
 
     cd networkagent
-    docker build . -t $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networkagent:latest
-    docker push $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networkagent:latest
+    gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
     kubectl delete -f deployment.yaml
     kubectl apply -f deployment.yaml
     kubectl get pods

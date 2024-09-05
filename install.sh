@@ -224,7 +224,7 @@ Start()
     echo "################################################"
 
     # kubectl wait -n cnrm-system --for=condition=Ready pod cnrm-controller-manager-0
-    while [[ $(kubectl get pods -n cnrm-system cnrm-controller-manager-0 -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') != "True" ]]; do
+    while [[ $(kubectl get pods -n cnrm-system cnrm-controller-manager-0 -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}' 2>/dev/null) != "True" ]]; do
         sleep 20
         echo "sleeping for 20 secs..."
     done

@@ -24,7 +24,7 @@ fi
 
 export GOOGLE_PROJECT_NUMBER=`gcloud projects describe $GOOGLE_PROJECT --format="value(projectNumber)"`
 export GOOGLE_ACTIVE_USER=`gcloud auth list --filter=status:ACTIVE --format="value(account)"`
-export GOOGLE_REPO="networkagent-repo"
+export GOOGLE_REPO="networkagent"
 
 ############################################################
 # Create keys and manifest files                           #

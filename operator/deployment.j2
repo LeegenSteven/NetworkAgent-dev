@@ -70,7 +70,7 @@ spec:
       serviceAccountName: networkoperator-account
       containers:
       - name: networkoperator
-        image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/networkagent/networkoperator:latest
+        image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/networkoperator:latest
         imagePullPolicy: Always
         env:
         - name: BASEDIR

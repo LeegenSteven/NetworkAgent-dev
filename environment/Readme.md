@@ -29,6 +29,7 @@ The following organization policy values must be set
 * Set __constraints/compute.requireShieldedVm__ to __Off__
 * Set __constraints/iam.disableServiceAccountKeyCreation__ to __Off__
 * Set __constraints/compute.vmCanIpForward__ to __Allow All__
+* Set __constraints/iam.allowedPolicyMemberDomains__ to __Allow All__
 
 ## Setup gcloud
 

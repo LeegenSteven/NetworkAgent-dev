@@ -362,7 +362,9 @@ Tools()
     cd tools
     export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
     gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
-    gcloud run deploy network-agent-api --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networktools:latest --region $GOOGLE_REGION --service-account $GOOGLE_SERVICE_ACCOUNT --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT,GOOGLE_REGION=$GOOGLE_REGION,GOOGLE_ZONE=$GOOGLE_ZONE
+    gcloud run deploy network-agent-api --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networktools:latest \
+       --region $GOOGLE_REGION --service-account $GOOGLE_SERVICE_ACCOUNT \
+       --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT,GOOGLE_REGION=$GOOGLE_REGION,GOOGLE_ZONE=$GOOGLE_ZONE
     cd ..
 }
 

@@ -3,6 +3,7 @@ kubernetes
 ansible
 ansible-runner
 netaddr
+google-cloud-spanner
 google-cloud-container
 google-api-python-client
 ruamel.yaml

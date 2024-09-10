@@ -13,6 +13,7 @@ launch.json
 **/environment/networks.yaml
 **/environment/configconnector.yaml
 **/environment/bigquery.yaml
+**/environment/spanner.yaml
 **/operator/deployment.yaml
 **/operator/cloudbuild.yaml
 **/tools/deployment.yaml

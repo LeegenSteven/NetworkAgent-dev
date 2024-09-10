@@ -1,0 +1,43 @@
+apiVersion: spanner.cnrm.cloud.google.com/v1beta1
+kind: SpannerInstance
+metadata:
+  labels:
+  name: networktopology-instance
+  annotations:
+    cnrm.cloud.google.com/project-id: {{GOOGLE_PROJECT}}
+spec:
+  resourceID: networktopology-instance
+  config: regional-{{GOOGLE_REGION}}
+  displayName: Network Topology
+  processingUnits: 100
+---
+apiVersion: spanner.cnrm.cloud.google.com/v1beta1
+kind: SpannerDatabase
+metadata:
+  name: networktopology-db
+  annotations:
+    cnrm.cloud.google.com/project-id: {{GOOGLE_PROJECT}}
+spec:
+  resourceID: networktopology-db
+  instanceRef:
+    name: networktopology-instance
+  ddl:
+  - "CREATE TABLE NetworkNode (
+       id STRING(36) NOT NULL,
+       name STRING(MAX) NOT NULL,
+       node_property JSON
+    ) PRIMARY KEY(id)"
+  - "CREATE TABLE NetworkConnection (
+       id STRING(36) NOT NULL,
+       to_id STRING(36) NOT NULL,
+       connection_property JSON,
+       CONSTRAINT FK_ConnectionToNode FOREIGN KEY (to_id) REFERENCES NetworkNode (id)
+    ) PRIMARY KEY(id, to_id), INTERLEAVE IN PARENT NetworkNode"
+  - "CREATE OR REPLACE PROPERTY GRAPH networkGraph
+       NODE TABLES (NetworkNode)
+       EDGE TABLES (
+         NetworkConnection
+         SOURCE KEY (id) REFERENCES NetworkNode(id)
+         DESTINATION KEY (to_id) REFERENCES NetworkNode(id)
+         LABEL isConnectedTo
+    )"

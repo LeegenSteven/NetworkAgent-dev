@@ -51,6 +51,8 @@ Create()
     gcloud services enable --project=$GOOGLE_PROJECT compute.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT container.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT run.googleapis.com
+    gcloud services enable --project=$GOOGLE_PROJECT bigquery.googleapis.com
+    gcloud services enable --project=$GOOGLE_PROJECT spanner.googleapis.com
 
     # Create artifact repository
     echo "########################################"
@@ -131,6 +133,7 @@ Create()
     echo "generating environment yaml files"
     echo "####################################################"
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/bigquery.j2 >  environment/bigquery.yaml
+    jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/spanner.j2 >  environment/spanner.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/configconnector.j2 > environment/configconnector.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/networks.j2 > environment/networks.yaml
 
@@ -190,7 +193,7 @@ Start()
     --addons ConfigConnector \
     --enable-ip-alias \
     --service-account $GOOGLE_SERVICE_ACCOUNT\
-    --scopes default,storage-full,cloud-platform,bigquery \
+    --scopes "default,storage-full,cloud-platform,bigquery,https://www.googleapis.com/auth/spanner.admin,https://www.googleapis.com/auth/spanner.data" \
     --workload-pool $GOOGLE_PROJECT.svc.id.goog \
     --zone $GOOGLE_ZONE\
     --node-locations $GOOGLE_ZONE \
@@ -238,6 +241,7 @@ Start()
     # start the network, prometheus monitor and the customer locations
     kubectl apply -f environment/networks.yaml
     kubectl apply -f environment/bigquery.yaml
+    kubectl apply -f environment/spanner.yaml
     kubectl apply -f environment/prometheus.yaml
     kubectl apply -f sample-services/customersites
 }
@@ -268,6 +272,7 @@ Delete()
     rm networkagent/src/networkagent.json
 
     rm environment/bigquery.yaml
+    rm environment/spanner.yaml
     rm environment/configconnector.yaml
     rm environment/networks.yaml
 
@@ -313,6 +318,7 @@ Kill()
     kubectl delete -f sample-services/customersites
     kubectl delete -f environment/prometheus.yaml
     kubectl delete -f environment/bigquery.yaml
+    kubectl delete -f environment/spanner.yaml
     kubectl delete -f environment/networks.yaml
     gcloud run services delete network-agent-api --region=$GOOGLE_REGION --quiet
 

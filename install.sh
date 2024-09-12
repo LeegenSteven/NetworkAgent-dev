@@ -335,11 +335,10 @@ Kill()
     echo "#####################"
     echo "Deleting mgmt network"
     echo "#####################"
-    gcloud compute routers delete mgmt --quiet
-    gcloud compute firewall-rules delete mgmt-ingress --quiet
-    gcloud compute networks subnets delete mgmt-subnet --quiet
-    gcloud compute networks delete mgmt --quiet
-
+    gcloud compute routers delete mgmt --region=$GOOGLE_REGION --quiet
+    gcloud compute firewall-rules delete mgmt-ingress --project=$GOOGLE_PROJECT --quiet
+    gcloud compute networks subnets delete mgmt-subnet --region=$GOOGLE_REGION --quiet
+    gcloud compute networks delete mgmt --project=$GOOGLE_PROJECT --quiet
 }
 
 ############################################################

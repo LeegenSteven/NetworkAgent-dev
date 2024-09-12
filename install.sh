@@ -232,6 +232,7 @@ Start()
         sleep 20
         echo "sleeping for 20 secs..."
     done
+    echo "Ready !"
 
     echo "##################################"
     echo "Deploy the Operator"

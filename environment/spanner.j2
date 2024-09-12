@@ -24,7 +24,9 @@ spec:
   ddl:
   - "CREATE TABLE NetworkNode (
        id STRING(36) NOT NULL,
-       name STRING(MAX) NOT NULL,
+       kind STRING(MAX),
+       name STRING(MAX),
+       display_name STRING(MAX),
        node_property JSON
     ) PRIMARY KEY(id)"
   - "CREATE TABLE NetworkConnection (

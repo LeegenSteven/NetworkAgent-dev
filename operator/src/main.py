@@ -23,6 +23,7 @@ from services.utils.status import *
 from resources.wireguard.lifecycle import *
 from tests.lifecycle import *
 from monitor.lifecycle import *
+from graph.lifecycle import *
 
 if os.getenv("GOOGLE_REGION") is None or os.getenv("GOOGLE_ZONE") is None or os.getenv("GOOGLE_PROJECT") is None:
     logger.error("You must set GOOGLE_REGION/GOOGLE_ZONE/GOOGLE_PROJECT environment variables")

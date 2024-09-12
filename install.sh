@@ -193,7 +193,7 @@ Start()
     --addons ConfigConnector \
     --enable-ip-alias \
     --service-account $GOOGLE_SERVICE_ACCOUNT\
-    --scopes "default,storage-full,cloud-platform,bigquery\
+    --scopes "default,storage-full,cloud-platform,bigquery" \
     --workload-pool $GOOGLE_PROJECT.svc.id.goog \
     --zone $GOOGLE_ZONE\
     --node-locations $GOOGLE_ZONE \

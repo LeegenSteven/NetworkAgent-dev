@@ -33,7 +33,7 @@ spec:
        id STRING(36) NOT NULL,
        to_id STRING(36) NOT NULL,
        connection_property JSON
-    ) PRIMARY KEY(id, to_id), INTERLEAVE IN PARENT NetworkNode"
+    ) PRIMARY KEY(id, to_id)"
   - "CREATE OR REPLACE PROPERTY GRAPH networkGraph
        NODE TABLES (NetworkNode)
        EDGE TABLES (

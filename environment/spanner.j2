@@ -32,8 +32,7 @@ spec:
   - "CREATE TABLE NetworkConnection (
        id STRING(36) NOT NULL,
        to_id STRING(36) NOT NULL,
-       connection_property JSON,
-       CONSTRAINT FK_ConnectionToNode FOREIGN KEY (to_id) REFERENCES NetworkNode (id)
+       connection_property JSON
     ) PRIMARY KEY(id, to_id), INTERLEAVE IN PARENT NetworkNode"
   - "CREATE OR REPLACE PROPERTY GRAPH networkGraph
        NODE TABLES (NetworkNode)

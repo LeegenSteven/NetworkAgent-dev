@@ -7,9 +7,9 @@ from google.cloud import spanner
 SQL_TEMPLATES = {
   'create_nw_node': "INSERT NetworkNode (id, kind, name, display_name, node_property)" 
                     " VALUES ('{id}', '{kind}', '{name}', '{display_name}', {crd})",
-  'delete_nw_node': "DELETE FROM NetworkNode WHERE to_id = '{id}'",
+  'delete_nw_node': "DELETE FROM NetworkNode WHERE id = '{id}'",
   'create_nw_cnx': "INSERT NetworkConnection (id, to_id) VALUES ('{id}', '{to_id}')",
-  'delete_nw_cnx': "DELETE FROM NetworkConnection WHERE id = '{id}'"
+  'delete_nw_cnx': "DELETE FROM NetworkConnection WHERE to_id = '{id}'"
 }
 
 # Connect to Spanner database

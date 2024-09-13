@@ -27,7 +27,8 @@ spec:
        kind STRING(MAX),
        name STRING(MAX),
        display_name STRING(MAX),
-       node_property JSON
+       node_property JSON,
+       CONSTRAINT FK_ConnectionToNode FOREIGN KEY (to_id) REFERENCES NetworkNode (id)
     ) PRIMARY KEY(id)"
   - "CREATE TABLE NetworkConnection (
        id STRING(36) NOT NULL,

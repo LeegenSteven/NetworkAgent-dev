@@ -19,7 +19,7 @@ rules:
   # Framework: crud of configmaps.
   - apiGroups: [""]
     resources: [configmaps]
-    verbs: [create, delete, get, list, patch, list]
+    verbs: [create, delete, get, list, patch, watch, list]
 
   # Framework: runtime observation of namespaces & CRDs (addition/deletion).
   - apiGroups: [apiextensions.k8s.io]
@@ -35,6 +35,16 @@ rules:
   - apiGroups: [compute.cnrm.cloud.google.com]
     resources: [computenetworks, computeaddresses, computesubnetworks, computeinstances, computerouters, computerouternats, computefirewalls, computeroutes]
     verbs: [list, get, create, watch, patch, delete]
+
+  # Application: needed to avoid Kopf error when uslistening to kopf.EVERYTHING.
+  - apiGroups: [compute.cnrm.cloud.google.com]
+    resources: [computeinstances/status]
+    verbs: [get, watch, patch]
+
+  # Application: needed to avoid Kopf error when listening to kopf.EVERYTHING.
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: [list, watch]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1

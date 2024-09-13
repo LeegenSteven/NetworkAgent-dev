@@ -25,6 +25,7 @@ fi
 export GOOGLE_PROJECT_NUMBER=`gcloud projects describe $GOOGLE_PROJECT --format="value(projectNumber)"`
 export GOOGLE_ACTIVE_USER=`gcloud auth list --filter=status:ACTIVE --format="value(account)"`
 export GOOGLE_REPO="networkagent"
+export GOOGLE_NAMESPACE="automation"
 
 ############################################################
 # Create keys and manifest files                           #
@@ -53,6 +54,12 @@ Create()
     gcloud services enable --project=$GOOGLE_PROJECT run.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT bigquery.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT spanner.googleapis.com
+    # For vertex AI workbench
+    gcloud services enable --project=$GOOGLE_PROJECT notebooks.googleapis.com
+    # for colab enterprise in addition tu compute engine api
+    gcloud services enable --project=$GOOGLE_PROJECT aiplatform.googleapis.com
+    gcloud services enable --project=$GOOGLE_PROJECT dataform.googleapis.com
+ 
 
     # Create artifact repository
     echo "########################################"
@@ -107,6 +114,17 @@ Create()
         gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/compute.admin"
         gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/compute.networkAdmin"
         gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/iam.serviceAccountAdmin"
+        # Grant Spanner access permissions from GKE cluster
+        # See https://cloud.google.com/spanner/docs/connect-gke-cluster
+        # For an unknown reason granting to the service account (line below) doesn't work...
+        # gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
+        #  --member="principal://iam.googleapis.com/projects/${GOOGLE_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GOOGLE_PROJECT}.svc.id.goog/subject/ns/${GOOGLE_NAMESPACE}/sa/${GOOGLE_SERVICE_ACCOUNT}" \
+        #  --role=roles/spanner.databaseUser --condition=None
+        #
+        #... so grant it to all service accounts in the name space. It works.
+        gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
+          --member="principalSet://iam.googleapis.com/projects/${GOOGLE_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GOOGLE_PROJECT}.svc.id.goog/namespace/${GOOGLE_NAMESPACE}" \
+          --role=roles/spanner.databaseUser --condition=None
     fi
 
     if ! test -f networkagent.json; then
@@ -218,9 +236,9 @@ Start()
         --member="serviceAccount:$GOOGLE_PROJECT.svc.id.goog[cnrm-system/cnrm-controller-manager]" \
         --role="roles/iam.workloadIdentityUser"
 
-    kubectl create namespace automation
-    kubectl annotate namespace automation cnrm.cloud.google.com/project-id=$GOOGLE_PROJECT
-    kubectl config set-context --current --namespace automation
+    kubectl create namespace $GOOGLE_NAMESPACE
+    kubectl annotate namespace $GOOGLE_NAMESPACE cnrm.cloud.google.com/project-id=$GOOGLE_PROJECT
+    kubectl config set-context --current --namespace $GOOGLE_NAMESPACE
     kubectl apply -f environment/configconnector.yaml
 
     echo "################################################"

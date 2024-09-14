@@ -9,7 +9,7 @@ SQL_TEMPLATES = {
                     " VALUES ('{id}', '{kind}', '{name}', '{display_name}', {crd})",
   'delete_nw_node': "DELETE FROM NetworkNode WHERE id = '{id}'",
   'create_nw_cnx': "INSERT NetworkConnection (id, to_id) VALUES ('{id}', '{to_id}')",
-  'delete_nw_cnx': "DELETE FROM NetworkConnection WHERE to_id = '{id}'"
+  'delete_nw_cnx': "DELETE FROM NetworkConnection WHERE (id = {id} OR to_id = '{id}')'"
 }
 
 # Connect to Spanner database

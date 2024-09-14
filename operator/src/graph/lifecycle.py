@@ -36,7 +36,7 @@ async def create_node(body, spec, meta, uid, name, logger, **kwargs):
 
     logger.info("Create node '%s' (success: %s)", name, success)
     if not success:
-      raise kopf.TemporaryError("Create node error", retry=1, delay=15)
+      raise kopf.TemporaryError("Create node error", delay=15)
 
 # Catch delete events
 @kopf.on.delete(kopf.EVERYTHING, labels = {'graph': 'true'})
@@ -61,5 +61,5 @@ async def delete_node(body, spec, uid, name, logger, **kwargs):
 
   logger.info("Delete node '%s' (success: %s)", name, success)
   if not success:
-    raise kopf.TemporaryError("Delete node error", retry=1, delay=15)
+    raise kopf.TemporaryError("Delete node error", delay=15)
 

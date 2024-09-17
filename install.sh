@@ -42,6 +42,8 @@ Create()
     echo "Grant GCP permissions to GCP active user: $GOOGLE_ACTIVE_USER"
     echo "########################################"
     gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="user:$GOOGLE_ACTIVE_USER" --role="roles/logging.logWriter"
+    # needed for the COlab Notebook to access the graph database
+    gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="user:$GOOGLE_ACTIVE_USER" --role="roles/spanner.databaseReader"
 
     # enable GCP Services API needed
     echo "########################################"
@@ -124,7 +126,7 @@ Create()
         #... so grant it to all service accounts in the name space. It works.
         gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
           --member="principalSet://iam.googleapis.com/projects/${GOOGLE_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GOOGLE_PROJECT}.svc.id.goog/namespace/${GOOGLE_NAMESPACE}" \
-          --role=roles/spanner.databaseUser --condition=None
+          --role="roles/spanner.databaseUser" --condition=None
     fi
 
     if ! test -f networkagent.json; then

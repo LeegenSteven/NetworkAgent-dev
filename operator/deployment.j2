@@ -28,7 +28,7 @@ rules:
 
   # Application: read-only access for watching cluster-wide.
   - apiGroups: [google.dev]
-    resources: [pointtopointservices, wireguardappliances, connectivitytests, monitors]
+    resources: [meshservices, pointtopointservices, wireguardappliances, connectivitytests, monitors]
     verbs: [list, get, create, watch, patch, delete]
 
   # Application: other resources managed.

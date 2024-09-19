@@ -1,10 +1,11 @@
 apiVersion: google.dev/v1
-kind: PointToPointService
+kind: MeshService
 metadata:
-  name: ptpservice1
+  name: meshservice1
   labels:
     customer: acme
 spec:
   interfaces: # the "remote" customer subnets to connect
-    - london
-    - sydney
+    - dublin
+    - singapore
+    - newyork

@@ -17,7 +17,9 @@ else:
 logger.info("Base directory is %s", constants.basedir)
 
 # register lifecycle events
-from services.sitetosite.lifecycle import *
+from services.pointtopoint.lifecycle import *
+from services.mesh.lifecycle import *
+from services.utils.status import *
 from resources.wireguard.lifecycle import *
 from tests.lifecycle import *
 from monitor.lifecycle import *

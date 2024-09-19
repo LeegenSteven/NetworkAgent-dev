@@ -147,6 +147,7 @@ Create()
     echo "##############################"
     echo "generating customer site files"
     echo "##############################"
+    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customersites/dublin.j2 > sample-services/customersites/dublin.yaml
     jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customersites/london.j2 > sample-services/customersites/london.yaml
     jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customersites/sydney.j2 > sample-services/customersites/sydney.yaml
     jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customersites/singapore.j2 > sample-services/customersites/singapore.yaml
@@ -320,13 +321,18 @@ Kill()
     echo "#####################"
     gcloud container clusters delete networkautomation --region=$GOOGLE_ZONE --quiet
 
+    echo "######################"
+    echo "Deleting Artefact Repo"
+    echo "######################"
+    gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+
     echo "#####################"
     echo "Deleting mgmt network"
     echo "#####################"
-    gcloud compute routers delete mgmt --region=$GOOGLE_REGION --quiet
-    gcloud compute firewall-rules delete mgmt-ingress --region=$GOOGLE_REGION --quiet
-    gcloud compute networks subnets delete mgmt-subnet --region=$GOOGLE_REGION --quiet
-    gcloud compute networks delete mgmt --region=$GOOGLE_REGION --quiet
+    gcloud compute routers delete mgmt --quiet
+    gcloud compute firewall-rules delete mgmt-ingress --quiet
+    gcloud compute networks subnets delete mgmt-subnet --quiet
+    gcloud compute networks delete mgmt --quiet
 
 }
 

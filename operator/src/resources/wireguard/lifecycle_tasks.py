@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 #####################################################################
 # Install VPN software on VM
 #####################################################################
-async def install_vpn(servicename, vmname, mgmt_ip_address, data_ip_address, tunnel_address, tunnel_cidr, interface_cidr, peer_name, peer_ip_address, keys, peer_keys):
+async def install_vpn(servicename, vmname, mgmt_ip_address, data_ip_address, tunnel_address, tunnel_cidr, keys, peers):
     logger.info("Install VPN")
 
     extravars = {
@@ -20,11 +20,8 @@ async def install_vpn(servicename, vmname, mgmt_ip_address, data_ip_address, tun
         'tunnel_address': tunnel_address,
         'tunnel_cidr': tunnel_cidr,
         'default_interface': 'ens6' ,
-        'interface_cidr' : interface_cidr,
-        'peer_name': peer_name,
-        'peer_ip_address' : peer_ip_address,
+        'peers' : peers,
         'keys': keys, 
-        'peer_keys': peer_keys,
         'GOOGLE_PROJECT': os.getenv("GOOGLE_PROJECT"),
         'GOOGLE_REGION': os.getenv("GOOGLE_REGION"),
         'GOOGLE_ZONE': os.getenv("GOOGLE_ZONE"),

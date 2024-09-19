@@ -445,7 +445,7 @@ async def create_route(vm_name, source_subnetwork_name, peer_subnetwork_name):
     "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
     "kind": "ComputeRoute",
     "metadata": {
-      "name": vm_name
+      "name": vm_name+'-'+peer_subnetwork_name
     },
     "spec": {
       "description": f"{vm_name} route",

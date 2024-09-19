@@ -2,7 +2,6 @@ import kopf
 import logging
 import ansible_runner
 import utils.constants as constants
-from services.sitetosite.lifecycle_tasks import *
 from utils.compute import *
 
 logger = logging.getLogger(__name__)

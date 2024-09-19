@@ -66,7 +66,7 @@ spec:
     - subnetworkRef:
         name: singapore
   canIpForward: true
-  metadataStartupScript: "sudo apt-get update;sudo apt-get install -yq python3;sudo ip route add 10.0.70.0/24 via 10.0.80.1;sudo ip route add 10.0.60.0/24 via 10.0.80.1;sudo ip route add 10.0.70.0/24 via 10.0.80.1"
+  metadataStartupScript: "sudo apt-get update;sudo apt-get install -yq python3;sudo ip route add 10.0.40.0/24 via 10.0.80.1;sudo ip route add 10.0.70.0/24 via 10.0.80.1;sudo ip route add 10.0.60.0/24 via 10.0.80.1;sudo ip route add 10.0.70.0/24 via 10.0.80.1"
   metadata:
     - key: ssh-keys
       value: {{GOOGLE_USER}}:{{GOOGLE_SSH_KEY}}

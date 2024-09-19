@@ -27,7 +27,7 @@ async def wireguard(body,spec, name, namespace, logger, **kwargs):
                         os.getenv("GOOGLE_ZONE"), 
                         True)
 
-    # Get mgmt and dataplane address
+    # Get mgmt and dataplane address for the VM created above
     mgmt_ip_address = await get_ip(name)
     data_ip_address = await get_ip(name, networkname="dataplane")
     if mgmt_ip_address is None or data_ip_address is None:
@@ -35,15 +35,21 @@ async def wireguard(body,spec, name, namespace, logger, **kwargs):
 
     logger.debug("found mgmt ip address %s", mgmt_ip_address )
 
-    # discover the allowed interface's cidr
-    subnet_info = await get_subnet_info(spec.get('allowedInterface'))
-    allowed_cidr = subnet_info.get('spec')['ipCidrRange']
+    # find the allowed interface cidr and VM ip address for each of the peers
+    peersInfo=[]
+    for peer in spec['peers']:
+        # copy the base peer info and add to it
+        peerInfo=peer
+        subnet_info = await get_subnet_info(peer['allowedInterface'])
+        allowed_cidr = subnet_info.get('spec')['ipCidrRange']
+        logger.debug("allowed cidr %s", allowed_cidr)
+        peerInfo['allowedCidr']=allowed_cidr
 
-    logger.debug("allowed cidr %s", allowed_cidr)
-
-    # discover the peer ip address
-    peer_ip_address = await get_ip(spec.get('peer'), networkname="dataplane")
-    logger.debug("found peer external ip address %s", peer_ip_address)
+        # discover the peer ip address
+        peer_ip_address = await get_ip(peer['peerName'], networkname="dataplane")
+        logger.debug("found peer dataplane ip address %s", peer_ip_address)
+        peerInfo['ipAddress']=peer_ip_address
+        peersInfo.append(peerInfo)
 
     # Run ansible to install software on the VM
     await install_vpn(
@@ -53,15 +59,15 @@ async def wireguard(body,spec, name, namespace, logger, **kwargs):
                 data_ip_address,
                 spec.get('tunnelAddress'),
                 spec.get('tunnelSubnet'),
-                allowed_cidr,
-                spec.get('peer'),
-                peer_ip_address,
                 spec.get('keys'),
-                spec.get('peerKeys')     
+                peersInfo     
             )
 
     # once the vpn is running create the route from source to allowed interface
-    await create_route(name, spec.get('sourceInterface'), spec.get('allowedInterface'))
+    # loop over all allowed interfaces and create routes from source interface
+    for peer in peersInfo:
+        logger.debug("Creating route from %s to %s",spec.get('sourceInterface'), peer['allowedInterface'])
+        await create_route(name, spec.get('sourceInterface'), peer['allowedInterface'])
 
     return {
         "status":"Running", 

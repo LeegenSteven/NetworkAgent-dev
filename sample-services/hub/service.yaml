@@ -1,0 +1,12 @@
+apiVersion: google.dev/v1
+kind: HubService
+metadata:
+  name: vpnservice1
+  labels:
+    customer: acme
+spec:
+  hub: london
+  spokes: # the "remote" customer subnets to connect
+    - sydney
+    - singapore
+    - newyork

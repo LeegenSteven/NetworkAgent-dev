@@ -1,18 +1,18 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: pointtopointservices.google.dev
-  labels:
-    type: connectivityservice
+  name: meshservices.google.dev
+  # labels:
+  #   type: connectivityservice
 spec:
   scope: Namespaced
   group: google.dev
   names:
-    kind: PointToPointService
-    plural: pointtopointservices
-    singular: pointtopointservice
+    kind: MeshService
+    plural: meshservices
+    singular: meshservice
     shortNames:
-      - ptp
+      - mesh
   versions:
     - name: v1
       served: true
@@ -26,13 +26,16 @@ spec:
               properties:
                 interfaces:
                   description: |
-                    Two customer VPC Subnetwork locations to be connected by a single VPN tunnel.
+                    Between two and ten customer VPC Subnetwork locations to be connected together with a mesh VPN.
+
+                    All locations will be able to route traffic to each other. There must be no overlapping 
+                    IP address ranges across each of the locations.
                   type: array
                   items:
                     type: string
                   oneOf:
                     - minItems: 2
-                      maxItems: 2
+                      maxItems: 10
               x-kubernetes-preserve-unknown-fields: true
             status:
               type: object

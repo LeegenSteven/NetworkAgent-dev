@@ -27,13 +27,13 @@ spec:
        kind STRING(MAX),
        name STRING(MAX),
        display_name STRING(MAX),
-       node_property JSON,
-       CONSTRAINT FK_ConnectionToNode FOREIGN KEY (to_id) REFERENCES NetworkNode (id)
+       node_property JSON
     ) PRIMARY KEY(id)"
   - "CREATE TABLE NetworkConnection (
        id STRING(36) NOT NULL,
        to_id STRING(36) NOT NULL,
-       connection_property JSON
+       connection_property JSON,
+       CONSTRAINT FK_ConnectionToNode FOREIGN KEY (to_id) REFERENCES NetworkNode (id)
     ) PRIMARY KEY(id, to_id)"
   - "CREATE OR REPLACE PROPERTY GRAPH networkGraph
        NODE TABLES (NetworkNode)

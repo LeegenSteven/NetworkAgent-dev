@@ -9,7 +9,7 @@ spec:
   group: google.dev
   names:
     kind: Firewall
-    plural: Firewalls
+    plural: firewalls
     singular: firewall
     shortNames:
       - firewall

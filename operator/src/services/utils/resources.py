@@ -22,7 +22,10 @@ async def create_vpn_edge(parent_name, parent_kind, vpn_name, source_interface,t
     "kind": "WireguardAppliance",
     "metadata": {
       "name": vpn_name,
-      "namespace": "automation"
+      "namespace": "automation",
+      "labels": {
+        "graph": "true"
+      }
     },
     "spec": {
       "sourceInterface": source_interface,

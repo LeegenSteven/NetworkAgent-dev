@@ -4,6 +4,7 @@ metadata:
   name: meshservice1
   labels:
     customer: acme
+    graph: "true"
 spec:
   interfaces: # the "remote" customer subnets to connect
     - dublin

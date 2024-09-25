@@ -279,6 +279,11 @@ Delete()
         * ) echo "please enter y/n";;
     esac
 
+    echo "######################"
+    echo "Deleting Artefact Repo"
+    echo "######################"
+    gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+
     echo "#######################################"
     echo "Deleting environment manifests and keys"
     echo "#######################################"
@@ -347,11 +352,6 @@ Kill()
     echo "Deleting GKE Cluster"
     echo "#####################"
     gcloud container clusters delete networkautomation --region=$GOOGLE_ZONE --quiet
-
-    echo "######################"
-    echo "Deleting Artefact Repo"
-    echo "######################"
-    gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
 
     echo "#####################"
     echo "Deleting mgmt network"

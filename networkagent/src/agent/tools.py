@@ -1,41 +1,405 @@
-import logging
 from langchain_core.tools import tool
-from kubernetes import client, config
+from typing import Optional, Annotated, List, Dict, Any
+from pydantic import BaseModel, Field
+import logging
+import kubernetes
+from utils.k8s import get_client, get_credentials
+import os
+from google.cloud import bigquery
+import uuid
 
 logger = logging.getLogger(__name__)
 
-# https://github.com/kubernetes-client/python/blob/master/examples/namespaced_custom_object.py
-
+######################################################################
+# Get existing customer locations tool
+######################################################################
 @tool
-def getServiceInfo(customerName: str)->str:
+def getCustomerLocations(
+    name: Annotated[str, "The customer name"]
+    )-> str:
     """
-    Retrieve a customers connectivity service
-    Args:
-        customerName(str): The company name of the customer requesting service information
+    Fetch a list of Customer GCP network locations that can be connected with the available connectivity services
+
     Returns:
-        str: YAML string representing the full information
+      A list of customer locations or network names in Markdown format.
     """
-    logger.info("Getting service info for customer %s",customerName)
+    logger.info("Getting locations for a customer %s", name )
 
-    config.load_kube_config()
+    if name is None:
+        return "You must provide a customer name"
 
-    api = client.CustomObjectsApi()
+    client = kubernetes.dynamic.DynamicClient(get_client())
 
-    # get the resource and print out data
-    resource = api.get_namespaced_custom_object(
-        group="google.dev",
-        version="v1",
-        name="edge1",
-        namespace="networkautomation",
-        plural="edgeappliances",
+    try:
+        network_api = client.resources.get(
+            api_version="compute.cnrm.cloud.google.com/v1beta1", 
+            kind="ComputeSubnetwork",
+        )
+        result=network_api.get(label_selector=f"customer={name}")
+        locations=f"""
+#### Network Locations for Customer {name}
+"""
+        for item in result.items:
+            logger.info(item)
+            location = f"""
+__Network Name:__ {item['metadata']['name']}
+* _Description_: {item['spec']['description']}
+* _CIDR_: {item['spec']['ipCidrRange']}
+            """
+            locations=locations + location
+
+        if len(locations)==0:
+            return "No locations found"
+
+        return locations
+    except kubernetes.client.rest.ApiException as e:
+        if e.status == 404:
+            return "No locations found"
+        else:
+            logger.debug(e)
+
+######################################################################
+# Get existing customer applications
+######################################################################
+def getCustomerApplications(
+    name: Annotated[str, "The customer name"]
+    ) -> str:
+    """
+    Fetch a set of Customer specific IT applications that are attached to each Customer network location
+
+    Returns:
+        List of IT application names in Markdown forma
+    """
+    logger.info("Getting applications for customer %s", name )
+
+    client = kubernetes.dynamic.DynamicClient(get_client())
+
+    try:
+        network_api = client.resources.get(
+            api_version="compute.cnrm.cloud.google.com/v1beta1", 
+            kind="ComputeInstance",
+        )
+        result=network_api.get(label_selector=f"customer={name}")
+        apps=f"""
+### IT Applications for customer {name}
+"""
+        for item in result.items:
+            logger.info(item)
+            apps=apps+f"""
+* {item['metadata']['name']}
+"""
+        if len(apps)==0:
+            return "No IT applications found" 
+
+        return apps
+    except kubernetes.client.rest.ApiException as e:
+        if e.status == 404:
+            return "No IT applications found" 
+        else:
+            logger.debug(e)
+
+######################################################################
+# Get a list of Service Definitions
+######################################################################
+@tool
+def getServiceDefinitions()->List[str]:
+    """
+    Fetch the available network connectivity services that can be instantiated.
+
+    Returns:
+        A set of kubernetes custom resource CRDs that can orchestrate a set of connectivity services. 
+        Each CRD provides the following information:
+        - description of the connectivity service functionality
+        - a spec section that has the name of the 'kind' for each connectivity service and an OpenAPI schema describing the information required to instantiate the kind connectivity service.
+    """
+    logger.info("Getting Service definitions")
+
+    client = kubernetes.dynamic.DynamicClient(get_client())
+
+    try:
+        network_api = client.resources.get(
+            api_version="apiextensions.k8s.io/v1", 
+            kind="CustomResourceDefinition",
+        )
+        items=network_api.get(label_selector="type=connectivityservice")
+        services=[]
+        for item in items.items:
+            services.append(item.to_dict())
+
+        if len(services)==0:
+            return []
+
+        return services
+    except kubernetes.client.rest.ApiException as e:
+        if e.status == 404:
+            return []
+        else:
+            logger.debug(e)
+
+######################################################################
+# Get existing connectivity services
+######################################################################
+@tool
+def getServices(
+    name: Annotated[str, "The Customer name"]
+    )-> str:
+    """
+    Fetch the connectivity service instances that are already deployed for a specified customer.
+
+    Returns:
+        Connectivity service instances and their status in Markdown format
+        The current operational status of the service is also provided.
+    """
+    logger.info("finding service instances for %s", name)
+
+    client = kubernetes.dynamic.DynamicClient(get_client())
+
+    # need to flatten string or k8s freaks out
+    customerName = name.lower()
+
+    try:
+        services_list=f"""
+#### Connectivity Service Instances for {name}
+"""
+        network_api = client.resources.get(
+            api_version="apiextensions.k8s.io/v1", 
+            kind="CustomResourceDefinition",
+        )
+        service_descriptors=network_api.get(label_selector="type=connectivityservice")
+        for crd in service_descriptors.items:
+            svc_api = client.resources.get(
+                kind=crd['spec']['names']['kind'],
+                api_version=crd['spec']['group']+'/'+crd['spec']['versions'][0]['name'],
+            )
+
+            services=svc_api.get(label_selector=f"customer={customerName}")
+
+            for item in services.items:
+                logger.debug(item)
+                service_description=""
+                if item.get('status') is None or item.get('status').get('currentStatus') is None:
+                    service_description=f"""
+* __Servicename__: {item['metadata']['name']}
+  * _Kind_: {crd['spec']['names']['kind']}
+  * _Status_: Pending"""
+                    services_list=services_list+service_description
+                else:
+                    service_description=f"""
+* __Servicename__: {item['metadata']['name']}
+  * _Kind_: {crd['spec']['names']['kind']}
+  * _Status_: {item.get('status').get('currentStatus')}
+"""
+                    services_list=services_list+service_description
+
+        logger.debug(services_list)
+        return services_list
+
+    except  kubernetes.client.rest.ApiException as e:
+        if e.status == 404:
+            return """No services found"""
+        else:
+            logger.info(e)
+
+######################################################################
+# Create a new connectivity service
+######################################################################
+@tool
+def createService(
+    customerName: Annotated[str, "customer name is required"],
+    serviceKind: Annotated[str, "the kubernetes kind for this service instance"], 
+    serviceSpec: Annotated[Dict, "the kubernetes spec object for the new service"]
+    )->str:
+    """
+    Tool used to instantiate a new network connectivity service. 
+
+    The types of network services available can be discovered by calling the getServiceDefinitions tool
+
+    """
+    logger.info("Create a new Service for %s from %s", customerName, str(serviceSpec))
+
+    client = kubernetes.dynamic.DynamicClient(get_client())
+    name = customerName.lower()
+
+    try:
+        network_api = client.resources.get(
+            api_version="google.dev/v1",
+            kind=serviceKind,
+        )
+        crd_manifest= { 
+            "apiVersion": "google.dev/v1",
+            "kind": serviceKind,
+            "metadata": {
+                "name": name+str(uuid.uuid4())[:8],
+                "namespace": "automation",
+                "labels": {
+                    "customer": name
+                },
+            },
+            "spec": serviceSpec
+        }
+        result = network_api.create(crd_manifest)
+
+        return "new service request successful"
+    except kubernetes.client.rest.ApiException as e: 
+        logger.info(e.status)
+        logger.debug(e)
+        if e.status == 409:
+            return f"service {name} already exists"
+        else:
+            logger.info(e)
+
+######################################################################
+# Delete an existing connectivity service
+######################################################################
+@tool
+def deleteService(
+    name: Annotated[str, "The name of the service instance to delete"], 
+    kind: Annotated[str, "The kubernetes kind of the service instance to delete"]
+    )->str:
+    """
+    Delete a running connectivity service instance
+    """
+    if name is None or kind is None:
+        return {}, 400
+
+    client = kubernetes.dynamic.DynamicClient(get_client())
+
+    try:
+        network_api = client.resources.get(
+            api_version="google.dev/v1", 
+            kind=kind,
+        )
+        network_api.delete(name=name, namespace="automation")
+        return f"Service {name } deleted request submitted"
+
+    except kubernetes.client.rest.ApiException as e: 
+        logger.info(e.status)
+        logger.debug(e)
+        if e.status == 404:
+            logger.info("No service found")
+            return "No service found"
+        else:
+            logger.info(e)
+
+
+######################################################################
+# Create a new connectivity test
+######################################################################
+class TestInput(BaseModel):
+    name: Optional[str] = Field(None, description='a name for the test')
+    virtualmachines: Optional[List[str]] = Field(
+        None, description='Two IT application instance names to deploy the test to',
+        min_length=2, 
+        max_length=2
     )
 
-    logger.info(resource)
+@tool("create-test-tool", args_schema=TestInput, return_direct=True)
+def createTest(payload)->Annotated[str, "Result of the create test request returned in Markdown"]:
+    """
+    Create a connectivity test between two valid IT applications. 
+    The IT application names must exist. 
+    """
+    logger.info("Create a new Test from %s", str(payload))
 
-# @tool
-def createNewService():
-    pass
+    name = payload['name']
+    virtualmachines=payload['virtualmachines']
 
-# @tool
-def updateService():
-    pass
+    client = kubernetes.dynamic.DynamicClient(get_client())
+
+    try:
+        network_api = client.resources.get(
+            api_version="google.dev/v1", 
+            kind="ConnectivityTest",
+        )
+        crd_manifest= { 
+            "apiVersion": "google.dev/v1",
+            "kind": "ConnectivityTest",
+            "metadata": {
+                "name": name,
+                "namespace": "automation",
+            },
+            "spec": {
+                "virtualmachines": virtualmachines
+            }
+        }
+        result = network_api.create(crd_manifest)
+
+        return "Test created"
+
+    except kubernetes.client.rest.ApiException as e: 
+        logger.debug(e)
+        if e.status == 409:
+            logger.info("Already exists - skipping")
+            return "Test already exists"
+        else:
+            logger.info(e)
+            return str(e)
+
+######################################################################
+# Delete a connectivity test
+######################################################################
+@tool
+def deleteTest(
+    name: Annotated[str, "The name of the test instance to delete"]
+    )->Annotated[str, "The result of the delete test request, return in Markdown format"]:
+    """
+    Delete a running connectivity test, the name provided must be the name of a running test instance
+    """
+
+    client = kubernetes.dynamic.DynamicClient(get_client())
+
+    try:
+
+        network_api = client.resources.get(
+            api_version="google.dev/v1", 
+            kind="ConnectivityTest",
+        )
+        network_api.delete(name=name, namespace="automation")
+        return f"Test {name} deleted"
+
+    except kubernetes.client.rest.ApiException as e: 
+        logger.debug(e)
+        if e.status == 404:
+            logger.info("No service found")
+            return f"Test {name} not found"
+        else:
+            logger.info(e)
+            return str(e)
+
+######################################################################
+# Get Service Performance Metrics
+######################################################################
+@tool
+def getServicePerformanceMetrics(name, period):
+    """
+    Get service metrics
+    """
+    logger.info("Getting metrics for %s for the last %s mins", name, period)
+
+    client = bigquery.Client(credentials=get_credentials())
+    table_id = os.getenv("GOOGLE_PROJECT")+".serviceperformance.serviceperformance"
+
+    results = client.query_and_wait(
+        f"""
+        SELECT servicename, AVG(receive) as average_receive_total, AVG(sent) as average_sent_total
+        FROM (
+        SELECT
+        JSON_VALUE(data, "$.servicename") as servicename,
+        FLOAT64(
+            JSON_EXTRACT(data, "$.node_network_receive_bytes_total")
+        )  as receive,
+        FLOAT64(
+            JSON_EXTRACT(data, "$.node_network_transmit_bytes_total")
+        )  as sent
+        FROM `{table_id}`
+        WHERE JSON_VALUE(data, '$.servicename')='{name}' AND publish_time BETWEEN TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL -{period} MINUTE) AND CURRENT_TIMESTAMP()
+        )
+        GROUP BY servicename
+        """
+    )
+
+    records = [dict(row) for row in results]
+    if len(records)>0:
+        return records[0],200
+    else:
+        return {}, 200

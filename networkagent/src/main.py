@@ -1,105 +1,68 @@
 import logging
-import gradio as gr
-import requests
-import json
-from langchain_community.agent_toolkits.openapi.spec import reduce_openapi_spec
-from langchain_google_vertexai.chat_models import ChatVertexAI
-from langchain.callbacks.manager import CallbackManager
-from langchain_core.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
-from langchain.schema import AIMessage, HumanMessage
-import google.auth
-from langchain_community.utilities import RequestsWrapper
-from langchain_community.agent_toolkits.openapi import planner
-import os
-import sys
-from langchain_core.prompts import ChatPromptTemplate
-from datetime import datetime
+from agent.networkagent import NetworkAgent
+from langchain_core.messages import AIMessage, HumanMessage
+import streamlit as st
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
-logging.basicConfig(level='INFO', format=log_format)
+logging.basicConfig(level='DEBUG', format=log_format)
 logger = logging.getLogger(__name__)
 
-assitant_runnable = None
-agent=None
+st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
+# st.markdown("""
+#     <style>
+#         .reportview-container {
+#             margin-top: -2em;
+#         }
+#         #MainMenu {visibility: hidden;}
+#         .stDeployButton {display:none;}
+#         footer {visibility: hidden;}
+#         #stDecoration {display:none;}
+#     </style>
+# """, unsafe_allow_html=True)
+import graph.topology as topology
 
-def do_vertex():
-    global assistant_runnable
-    global agent
-    assistant_prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                """
-                You are a helpful network assistant called George.
-                
-                Current time: {time}.
-                """
-            ),
-            ("placeholder", "{messages}")
-        ]
-    ).partial(time=datetime.now())
+st.title("💬 Gemini Network Agent")
 
+reset_chat = st.sidebar.button("Reset Chat")
 
-    credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE", "/networkagent.json"))[0]
-    logger.info(credentials)
+# Setup Agent and chat history
+if "agent" not in st.session_state:
+    st.session_state.agent = NetworkAgent()
 
-    llm = ChatVertexAI(model_name="gemini-1.5-flash",
-                        temperature=0,
-                        credentials=credentials,
-                        max_tokens=None,
-                        max_retries=2,
-                        stop=None,
-                        project=os.getenv("GOOGLE_PROJECT"),
-                        location=os.getenv("GOOGLE_REGION"),
-                        callback_manager=CallbackManager([StreamingStdOutCallbackHandler()]))
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = [
+        AIMessage(content="Hello, I am a network assistant. How can I help you?"),
+    ]
 
-    assistant_runnable = assistant_prompt | llm
+# Create columns
+chatcolumn, graphcolumn = st.columns(2, )
+chatcontainer = chatcolumn.container(height=500, border=True)
 
-    url = os.getenv("NETWORK_TOOLS_URL","https://network-agent-api-4q7fdnlzwa-nw.a.run.app")+"/ui/openapi.json"
-    logger.info("url = %s", url)
-    response = requests.get(url)
+with graphcolumn:
+    graphcontainer=st.container(height=500, border=True)
+with graphcontainer:
+    st.markdown("<h5 style='text-align: center;'>Network Topology Overview</h1>", unsafe_allow_html=True)
+    selected = topology.create_cytoscape()
 
-    response_json = response.json()
-    # update the server url because it doesnt contain the server address
-    response_json['servers'][0]['url']=os.getenv("NETWORK_TOOLS_URL","https://network-agent-api-4q7fdnlzwa-nw.a.run.app")+"/ui"
-    logger.info(json.dumps(response_json,indent=4))
+# Display chat messages from history on app rerun
+for message in st.session_state.chat_history:
+    if isinstance(message, AIMessage):
+        with chatcontainer.chat_message("AI"):
+            st.markdown(message.content)
+    elif isinstance(message, HumanMessage):
+        with chatcontainer.chat_message("Human"):
+            st.markdown(message.content)
 
-    api_spec = reduce_openapi_spec(response_json)
-    logger.info(api_spec)
+# Accept user input
+if prompt := st.chat_input("Type your message here...?"):
+    st.session_state.chat_history.append(HumanMessage(content=prompt))
+    # Display user message in chat message container
+    with chatcontainer.chat_message("Human"):
+        st.markdown(prompt)
 
-    requests_wrapper = RequestsWrapper()
-
-    agent = planner.create_openapi_agent(
-        api_spec,
-        requests_wrapper,
-        llm,
-        allow_dangerous_requests=True,
-    )
-
-def agent_interaction(message, history):
-    logger.info("new interaction %s", message)
-    history_langchain_format = []
-
-    for human, ai in history:
-        history_langchain_format.append(HumanMessage(content=human))
-        history_langchain_format.append(AIMessage(content=ai))
-
-    history_langchain_format.append(HumanMessage(content=message))
-
-    gpt_response = agent.invoke(history_langchain_format)
-    logger.info(gpt_response)
-
-    return gpt_response['output']
-
-if __name__ == '__main__':
-    logger.info("starting Network Agent")
-
-    if os.getenv("GOOGLE_REGION") is None or os.getenv("GOOGLE_ZONE") is None or os.getenv("GOOGLE_PROJECT") is None:
-        logger.error("You must set GOOGLE_REGION/GOOGLE_ZONE/GOOGLEPROJECT environment variables")
-        sys.exit(0)
-
-    do_vertex()
-
-    gr.ChatInterface(agent_interaction).launch()
-
+    with chatcontainer.chat_message("AI"):
+        response=st.session_state.agent.run(prompt)
+        logger.info(response)
+        st.markdown(response)
+    st.session_state.chat_history.append(AIMessage(content=response))

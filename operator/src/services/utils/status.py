@@ -67,5 +67,8 @@ def updateStatus(parent_kind, parent_name, status, event, name):
 
         if allRunning:
           newservice['status'][parent_kind]['status']="Running"
+          newservice['status']['currentStatus']="Running"
+        else:
+          newservice['status']['currentStatus']="Starting"
 
         network_api.patch(body=newservice, name=parent_name, namespace="automation", content_type='application/merge-patch+json')

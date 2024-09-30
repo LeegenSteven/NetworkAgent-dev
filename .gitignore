@@ -20,5 +20,5 @@ launch.json
 **/tools/cloudbuild.yaml
 **/networkagent/deployment.yaml
 **/networkagent/cloudbuild.yaml
-**/sample-services/customersites/*.yaml
+**/sample-services/customer-infrastructure/*.yaml
 lib

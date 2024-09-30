@@ -53,6 +53,8 @@ Create()
     gcloud services enable --project=$GOOGLE_PROJECT cloudbuild.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT compute.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT container.googleapis.com
+    gcloud services enable --project=$GOOGLE_PROJECT gkehub.googleapis.com
+    gcloud services enable --project=$GOOGLE_PROJECT anthos.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT run.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT bigquery.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT spanner.googleapis.com
@@ -68,6 +70,7 @@ Create()
     echo "Create Artifact Repository "
     echo "########################################"
     gcloud artifacts repositories create $GOOGLE_REPO --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository" --quiet
+    gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev --quiet
 
     # Configure Cloud Build service account
     echo "########################################"
@@ -116,6 +119,7 @@ Create()
         gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/compute.admin"
         gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/compute.networkAdmin"
         gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/iam.serviceAccountAdmin"
+        gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/monitoring.metricWriter"
         # Grant Spanner access permissions from GKE cluster
         # See https://cloud.google.com/spanner/docs/connect-gke-cluster
         # For an unknown reason granting to the service account (line below) doesn't work...
@@ -167,14 +171,14 @@ Create()
     jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagent/deployment.j2 > networkagent/deployment.yaml
     jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagent/cloudbuild.j2 > networkagent/cloudbuild.yaml
 
-    echo "##############################"
-    echo "generating customer site files"
-    echo "##############################"
-    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customersites/dublin.j2 > sample-services/customersites/dublin.yaml
-    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customersites/london.j2 > sample-services/customersites/london.yaml
-    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customersites/sydney.j2 > sample-services/customersites/sydney.yaml
-    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customersites/singapore.j2 > sample-services/customersites/singapore.yaml
-    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customersites/newyork.j2 > sample-services/customersites/newyork.yaml
+    echo "###############################################"
+    echo "generating customer infrastructure files"
+    echo "###############################################"
+    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customer-infrastructure/dublin.j2 > sample-services/customer-infrastructure/dublin.yaml
+    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customer-infrastructure/london.j2 > sample-services/customer-infrastructure/london.yaml
+    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customer-infrastructure/sydney.j2 > sample-services/customer-infrastructure/sydney.yaml
+    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customer-infrastructure/singapore.j2 > sample-services/customer-infrastructure/singapore.yaml
+    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customer-infrastructure/newyork.j2 > sample-services/customer-infrastructure/newyork.yaml
 }
 
 ############################################################
@@ -218,6 +222,7 @@ Start()
     --zone $GOOGLE_ZONE\
     --node-locations $GOOGLE_ZONE \
     --num-nodes 5 \
+    --enable-fleet \
     --network mgmt \
     --subnetwork mgmt-subnet
 
@@ -264,7 +269,7 @@ Start()
     kubectl apply -f environment/bigquery.yaml
     kubectl apply -f environment/spanner.yaml
     kubectl apply -f environment/prometheus.yaml
-    kubectl apply -f sample-services/customersites
+    kubectl apply -f environment/git.yaml
 }
 
 ############################################################
@@ -309,7 +314,8 @@ Delete()
 
     echo "Delete customer location"
 
-    rm sample-services/customersites/*yaml
+    rm sample-services/network-services/*.yaml
+    rm sample-services/customer-infrastructure/*.yaml
 
     echo "Delete network automation GKE"
 }
@@ -340,9 +346,10 @@ Kill()
     echo "Killing the environment - will take a few mins"
     echo "##############################################"
 
-    kubectl delete -f sample-services/site2site/service.yaml
-    kubectl delete -f sample-services/customersites
+    kubectl delete -f sample-services/network-services
+    kubectl delete -f sample-services/customer-infrastructure
     kubectl delete -f environment/prometheus.yaml
+    kubectl delete -f environment/git.yaml
     kubectl delete -f environment/bigquery.yaml
     kubectl delete -f environment/spanner.yaml
     kubectl delete -f environment/networks.yaml
@@ -378,6 +385,8 @@ Operator()
     kubectl delete -f deployment.yaml
     kubectl apply -f deployment.yaml
     kubectl get pods 
+    echo "Waiting for deployment to be ready..."
+    kubectl rollout status deployment networkoperator -n $GOOGLE_NAMESPACE --timeout=120s
     cd ..
 }
 

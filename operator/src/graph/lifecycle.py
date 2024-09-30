@@ -62,4 +62,3 @@ async def delete_node(body, spec, uid, name, logger, **kwargs):
   logger.info("Delete node '%s' (success: %s)", name, success)
   if not success:
     raise kopf.TemporaryError("Delete node error", delay=15)
-

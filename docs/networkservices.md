@@ -12,12 +12,13 @@ The Network Agent is trained on the information needed to deploy each of these s
 
 This service connects two private VPCs over a wireguard tunnel. A pair of virtual network functions (VNFs) are connected to the two provided private VPCs. A wireguard tunnel is configured between the VNFs and static routes added to the private VPCs to route traffic over the VPN tunnel.
 
-![Simple VPN Tunnel](/drawings/ptpflow..drawio.svg)
+![Simple VPN Tunnel](/drawings/services/ptpflow..drawio.svg)
 
+## Mesh
 
-## Mesh (To be done)
+This service connects three or more VPCs over a set of wireguard tunnels. All VPCs can route traffic to/from the other VPCs in the Mesh.
 
-https://www.zenarmor.com/docs/network-security-tutorials/how-to-configure-wireguard-mesh-vpn
+![Mesh VPN Tunnel](/drawings/services/meshflow.drawio.svg)
 
 ## Multi Hop (To be done)
 

@@ -360,10 +360,10 @@ async def get_compute(vm_name):
       return None
 
 ########################################################################
-# Create ComputeAddress
+# Create External ComputeAddress
 ########################################################################
 async def create_external_ip(name, region):
-  logger.debug("Create external ip")
+  logger.debug(f"Create external ip {name}")
 
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
   network_api = client.resources.get(
@@ -385,7 +385,7 @@ async def create_external_ip(name, region):
     }
   }
 
-  # update manifest to be child of site-to-site service
+  # update manifest to be child of parent object
   kopf.adopt(crd_manifest)
   logger.debug(json.dumps(crd_manifest, indent=4))
 
@@ -398,6 +398,32 @@ async def create_external_ip(name, region):
       logger.debug("Already exists - skipping")
     else:
       logger.debug(e)
+
+########################################################################
+# Get ComputeAddress external IP address
+########################################################################
+async def get_external_ip_address(name):
+  logger.debug("Getting external ip address")
+
+  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+  network_api = client.resources.get(
+      api_version="compute.cnrm.cloud.google.com/v1beta1", 
+      kind="ComputeAddress",
+  )
+  try:
+    result = network_api.get(name=name, namespace="automation")
+    if result.get('spec') is not None:
+      if result.get('spec')['address'] is not None:
+        return result.get('spec').get('address')
+      else:
+        raise kopf.TemporaryError(f"Waiting for external IP address", 15)
+
+  except kubernetes.client.rest.ApiException as e: 
+    if e.status == 404:
+      raise kopf.TemporaryError(f"No address {name} found yet")
+    else:
+      logger.debug(e)
+      raise kopf.PermanentError("Something bad happened")
 
 ########################################################################
 # CreateRoute
@@ -474,7 +500,7 @@ async def create_route(vm_name, source_subnetwork_name, peer_subnetwork_name):
       logger.debug(e)
 
 ########################################################################
-# Get the mgmt network ip address
+# Get the mgmt network ip address on a VM
 ########################################################################
 async def get_ip(name, networkname="mgmt"):
     logger.debug("getting mgmt ip address")

@@ -21,6 +21,8 @@ Todo list. Each task rated as:
 ## Monitoring
 
 * __H__: rewrite publish python script to query prometheus server and send metrics to BQ
+* __H__: Enable VPC flows
+
 
 ## Config Sync/Nephio Change Mgmt
 
@@ -31,7 +33,6 @@ Todo list. Each task rated as:
 ## Network Services
 
 * __M__: Add Hub and spoke: 
-* __M__: Add Mesh
 
 ## Netbox
 
@@ -39,8 +40,7 @@ Todo list. Each task rated as:
 
 ## Network Agent
 
-* __H__: Move from gradio to streamlit https://medium.com/@jedrzejplucinski/4-steps-to-create-chat-bot-for-your-api-e563c897ef85
-* __H__: 
+* __H__: Make Gemini work with function calling - currently there are out of order calls being flagged
 
 ## Network Tests
 

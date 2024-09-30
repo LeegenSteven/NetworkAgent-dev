@@ -2,4 +2,4 @@
 
 To be done
 
-![agent architecture](/drawings/agent.drawio.svg)
+![agent architecture](/drawings/agent/agent.drawio.svg)

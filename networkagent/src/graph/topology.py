@@ -1,12 +1,45 @@
 from st_cytoscape import cytoscape
 import numpy as np
 import pandas as pd
-from sklearn import linear_model
+from google.cloud import spanner
+import logging
+import google.auth
+import os
 import streamlit as st
+
+logger = logging.getLogger(__name__)
 
 #####################################################################################
 # Graph stuff
 #####################################################################################
+
+# Connect to Spanner database
+@st.cache_resource
+def spanner_connect():
+  credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/tools/networkagent.json"))[0]
+  spanner_client = spanner.Client(credentials=credentials)
+  instance = spanner_client.instance('networktopology-instance')
+  database = instance.database('networktopology-db')
+  return database
+
+database = spanner_connect()
+
+def get_nodes():
+  def sql_get_network_nodes(transaction):
+    sql = "SELECT * from NetworkNode"
+    logger.info("SQL: {}".format(sql))
+    return transaction.execute_update(sql)
+  
+  row_ct = 0
+  success = True
+  try:
+    row_ct = database.run_in_transaction(sql_get_network_nodes)
+  except Exception as e:
+    success = False
+    logger.error("SQL error: {}".format(e))
+
+  return success
+
 generating_model = """
 Z <-- N
 C1 <-- N
@@ -35,9 +68,9 @@ def generate_data():
                 if node != "N":
                     nodes.add(node)
                     edges.add((node, left))
-    return pd.DataFrame.from_dict(d), nodes, edges
+    return nodes, edges
 
-df, nodes, edges = generate_data()
+nodes, edges = generate_data()
 elements = []
 for node in nodes:
     elements.append(

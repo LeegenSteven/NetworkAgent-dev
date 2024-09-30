@@ -106,7 +106,7 @@ class NetworkAgent:
 
         networkGraph = StateGraph(NetworkAgentState)
         networkGraph.add_node("agent", self.call_model)
-        networkGraph.add_node("tools", create_tool_node_with_fallback(tools))
+        networkGraph.add_node("tools", self.call_tool)
         networkGraph.set_entry_point("agent")
         networkGraph.add_conditional_edges(
             "agent",
@@ -162,8 +162,7 @@ class NetworkAgent:
                     logger.debug("GOT DODGY ANSWER FROM GEMINI")
                 else:
                     break
-
-            logger.debug(result)
+            logger.debug(result.to_json())
             return {"messages": result}
         
         except Exception as e:
@@ -190,14 +189,14 @@ class NetworkAgent:
             except Exception as e:
                 # Return the error if the tool call fails
                 logger.debug('Error')
-                output_messages.append(
-                    ToolMessage(
-                        content="",
-                        name=tool_call["name"],
-                        tool_call_id=tool_call["id"],
-                        additional_kwargs={"error": e},
-                    )
-                )
+                # output_messages.append(
+                #     ToolMessage(
+                #         content="",
+                #         name=tool_call["name"],
+                #         tool_call_id=tool_call["id"],
+                #         additional_kwargs={"error": e},
+                #     )
+                # )
         logger.debug(output_messages)
         logger.debug("+++++++++++++++++++++++++    TOOL OUTPUT  +++++++++++++++++++++++++++++++++")
         return {"messages": output_messages}

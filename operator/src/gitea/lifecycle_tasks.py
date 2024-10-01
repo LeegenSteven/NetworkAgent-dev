@@ -7,7 +7,7 @@ from resources.wireguard.lifecycle_tasks import *;
 
 logger = logging.getLogger(__name__)
 
-async def run_gitea_install():
+async def run_gitea_install(external_ip_address):
     logger.debug("installing prometheus monitor")
 
     ip_address = await get_ip("gitea")
@@ -19,7 +19,8 @@ async def run_gitea_install():
         'GOOGLE_PROJECT': os.getenv("GOOGLE_PROJECT"),
         'GOOGLE_REGION': os.getenv("GOOGLE_REGION"),
         'GOOGLE_ZONE': os.getenv("GOOGLE_ZONE"),
-        'BASEDIR': constants.basedir
+        'BASEDIR': constants.basedir,
+        'external_ip_address': external_ip_address
     }
     hosts = {
         'hosts': {
@@ -34,31 +35,15 @@ async def run_gitea_install():
     }
     logger.debug(hosts)
     logger.debug(extravars)
+    def event_handler(data):
+        logger.debug(data)
     r = ansible_runner.run(private_data_dir=constants.basedir+"/gitea/playbooks", 
                            inventory={'all': hosts},
                            playbook='install.yaml',
+                           event_handler=event_handler,
                            extravars=extravars)
 
     logger.debug("status = %s", r.status)
     if r.status != 'successful':
-        raise kopf.TemporaryError("Ansible Error.", delay=15)
-    
-
-    # create the configsync configuration
-    # apply-spec.yaml
-
-    # applySpecVersion: 1
-    # spec:
-    # configSync:
-    #     # Set to true to install and enable Config Sync
-    #     enabled: true
-    #     # If you don't have a source of truth yet, omit the
-    #     # following fields. You can configure them later.
-    #     sourceType: git
-    #     syncRepo: http://{ip_address}/
-    #     syncBranch: production
-    #     secretType: ssh
-    #     gcpServiceAccountEmail: "networkagent@{{GOOGLE_PROJECT}}.iam.gserviceaccount.com"
-    #     metricsGcpServiceAccountEmail: "networkagent@{{GOOGLE_PROJECT}}.iam.gserviceaccount.com"
-    #     policyDir: /production
-    #     preventDrift: true
+        logger.debug(r.status)
+        raise kopf.TemporaryError("Ansible Error!!!",15)

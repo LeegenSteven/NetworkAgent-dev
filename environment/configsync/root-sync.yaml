@@ -1,0 +1,14 @@
+# root source for other root sources
+apiVersion: configsync.gke.io/v1beta1
+kind: RootSync
+metadata:
+  name: networkagent-root
+  namespace: config-management-system
+spec:
+  sourceType: git
+  sourceFormat: unstructured
+  git:
+    repo: https://networkagent:password123@10.0.100.9:3000/root-repo
+    auth: none
+    gcpServiceAccountEmail: networkagent@me.com
+    noSSLVerify: ROOT_NO_SSL_VERIFY

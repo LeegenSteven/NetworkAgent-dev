@@ -1,0 +1,80 @@
+- name: Install aptitude
+  apt:
+    name: aptitude
+    state: latest
+    update_cache: true
+
+- name: Install required system packages
+  apt:
+    pkg:
+      - git
+    state: latest
+    update_cache: true
+
+- name: Check if gitea already downloaded
+  ansible.builtin.stat:
+    path: /usr/local/bin/gitea
+  register: download
+
+- name: download gitea binary
+  ansible.builtin.get_url:
+    url: https://dl.gitea.com/gitea/1.22.2/gitea-1.22.2-linux-amd64
+    dest: /usr/local/bin/gitea
+    mode: '0777'
+  when: not download.stat.exists 
+
+- name: Add a git group
+  ansible.builtin.group:
+    name: git
+    state: present
+
+- name: Add a git user
+  ansible.builtin.user:
+    name: git
+    create_home: yes
+
+- name: create directories if they don't exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: git
+    group: git
+    mode: 0775
+  loop:
+    - /var/lib/gitea/log
+    - /var/lib/gitea/data
+    - /var/lib/gitea/custom
+    - /etc/gitea
+
+- name: push the gitea systemd file
+  copy:
+    src: gitea.service
+    dest: /etc/systemd/system/gitea.service
+
+- name: Check if keys already exist
+  ansible.builtin.stat:
+    path: /etc/gitea/cert.pem
+  register: keys
+
+- name: create keys
+  command: "sudo -u git /usr/local/bin/gitea cert --host {{ external_ip_address }}"
+  args:
+    chdir: /etc/gitea
+  when: not keys.stat.exists 
+
+- name: push the ini file
+  template:
+    src: app.ini
+    dest: /etc/gitea/app.ini
+    owner: git
+    group: git
+    mode: 0775
+
+- name: Start gitea service
+  ansible.builtin.systemd_service:
+    state: started
+    name: gitea
+
+- name: create networkagent user
+  command: "sudo -u git /usr/local/bin/gitea admin user create --username networkagent --password password123 --email me@example.com --config /etc/gitea/app.ini"
+

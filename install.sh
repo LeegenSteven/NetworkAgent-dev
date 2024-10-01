@@ -259,6 +259,9 @@ Start()
     done
     echo "Ready !"
 
+    # Start ConfigSync operator in cluster
+    gcloud beta container fleet config-management apply --membership=networkautomation --config=./environment/configsync.yaml --project=$GOOGLE_PROJECT
+
     echo "##################################"
     echo "Deploy the Operator"
     echo "##################################"
@@ -314,7 +317,6 @@ Delete()
 
     echo "Delete customer location"
 
-    rm sample-services/network-services/*.yaml
     rm sample-services/customer-infrastructure/*.yaml
 
     echo "Delete network automation GKE"

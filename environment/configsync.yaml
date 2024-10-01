@@ -2,10 +2,3 @@ applySpecVersion: 1
 spec:
   configSync:
     enabled: true
-    sourceType: git
-    sourceFormat: unstructured
-    syncRepo: http://networkagent:password123@10.0.100.9/networkagent/repos.git
-    syncBranch: main
-    secretType: none
-    gcpServiceAccountEmail: "networkagent@bt-demo-999.iam.gserviceaccount.com"
-    metricsGcpServiceAccountEmail: "networkagent@bt-demo-999.iam.gserviceaccount.com"

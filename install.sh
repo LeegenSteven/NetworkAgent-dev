@@ -26,6 +26,8 @@ export GOOGLE_PROJECT_NUMBER=`gcloud projects describe $GOOGLE_PROJECT --format=
 export GOOGLE_ACTIVE_USER=`gcloud auth list --filter=status:ACTIVE --format="value(account)"`
 export GOOGLE_REPO="networkagent"
 export GOOGLE_NAMESPACE="automation"
+export GOOGLE_SPANNER_INSTANCE="networktopology-instance"
+export GOOGLE_SPANNER_DATABASE="networktopology-db"
 
 ############################################################
 # Create keys and manifest files                           #
@@ -162,7 +164,7 @@ Create()
     echo "generating environment yaml files"
     echo "####################################################"
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/bigquery.j2 >  environment/bigquery.yaml
-    jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/spanner.j2 >  environment/spanner.yaml
+    jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_SPANNER_DATABASE -E GOOGLE_SPANNER_INSTANCE environment/spanner.j2 >  environment/spanner.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/configconnector.j2 > environment/configconnector.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/networks.j2 > environment/networks.yaml
 
@@ -261,13 +263,16 @@ Start()
         --member="serviceAccount:$GOOGLE_PROJECT.svc.id.goog[cnrm-system/cnrm-controller-manager]" \
         --role="roles/iam.workloadIdentityUser"
 
+    # Setup the GKE namespace we'll be using
     kubectl create namespace $GOOGLE_NAMESPACE
     kubectl annotate namespace $GOOGLE_NAMESPACE cnrm.cloud.google.com/project-id=$GOOGLE_PROJECT
     kubectl config set-context --current --namespace $GOOGLE_NAMESPACE
+
+    # Setup the one config connector we will be using 
     kubectl apply -f environment/configconnector.yaml
 
     echo "################################################"
-    echo "Waiting for cnrm-controller-manager-0 to start "
+    echo "Waiting for cnrm-controller-manager-0 to start... "
     echo "################################################"
 
     # kubectl wait -n cnrm-system --for=condition=Ready pod cnrm-controller-manager-0
@@ -277,8 +282,26 @@ Start()
     done
     echo "Ready !"
 
+<<<<<<< Updated upstream
     # Start ConfigSync operator in cluster
     gcloud beta container fleet config-management apply --membership=networkautomation --config=./environment/configsync.yaml --project=$GOOGLE_PROJECT
+=======
+
+    # Setup Spanner and wait until it's ready as we need it to be up and
+    # running before the Operator is deployed so as not to miss any
+    # creation events in the operator (especially on the networking part)
+    # 
+    echo "####################################"
+    echo "Waiting for Spanner DB to come up..."
+    echo "####################################"
+    kubectl apply -f environment/spanner.yaml
+    while [[ $(kubectl get spannerdatabase $GOOGLE_SPANNER_DATABASE -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}' 2>/dev/null) != "True" ]]; do
+        sleep 20
+        echo "sleeping for 20 secs..."
+    done
+    echo "Ready !"
+
+>>>>>>> Stashed changes
 
     echo "##################################"
     echo "Deploy the Operator"
@@ -288,7 +311,6 @@ Start()
     # start the network, prometheus monitor and the customer locations
     kubectl apply -f environment/networks.yaml
     kubectl apply -f environment/bigquery.yaml
-    kubectl apply -f environment/spanner.yaml
     kubectl apply -f environment/prometheus.yaml
     kubectl apply -f environment/git.yaml
 }

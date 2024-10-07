@@ -5,6 +5,7 @@ metadata:
   name: dublin
   labels:
     customer: acme
+    graph: "true"
 spec:
   routingMode: REGIONAL
   autoCreateSubnetworks: false
@@ -15,6 +16,7 @@ metadata:
   name: dublin
   labels:
     customer: acme
+    graph: "true"
 spec:
   ipCidrRange: 10.0.40.0/24
   region: "{{GOOGLE_REGION}}"
@@ -33,6 +35,7 @@ metadata:
   name: dublin-allowed
   labels:
     customer: acme
+    graph: "true"
 spec:
   allow:
     - protocol: tcp
@@ -56,6 +59,7 @@ metadata:
   name: dublin-app1
   labels:
     customer: acme
+    graph: "true"
 spec:
   machineType: e2-standard-2
   zone: {{GOOGLE_ZONE}}

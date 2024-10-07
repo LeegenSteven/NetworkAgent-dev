@@ -10,12 +10,7 @@ logger = logging.getLogger(__name__)
 ########################################################################
 async def create_vpn_edge(parent_name, parent_kind, vpn_name, source_interface,tunnel_subnet, tunnel_ip, my_keys, peers):
   logger.debug("Create VPN Edge %s", vpn_name)
-
-  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
-      api_version="google.dev/v1", 
-      kind="WireguardAppliance",
-  )
+  network_api = get_resource_api("google.dev/v1", "WireguardAppliance")
 
   crd_manifest = {
     "apiVersion": "google.dev/v1",

@@ -345,19 +345,8 @@ async def get_compute(vm_name):
 # Create External ComputeAddress
 ########################################################################
 async def create_external_ip(name, region):
-<<<<<<< Updated upstream
-  logger.debug(f"Create external ip {name}")
-
-  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
-      api_version="compute.cnrm.cloud.google.com/v1beta1", 
-      kind="ComputeAddress",
-  )
-
-=======
   logger.debug("Create external ip")
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeAddress")
->>>>>>> Stashed changes
   crd_manifest= {
     "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
     "kind": "ComputeAddress",

@@ -64,6 +64,7 @@ Create()
     gcloud services enable --project=$GOOGLE_PROJECT aiplatform.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT dataform.googleapis.com
  
+<<<<<<< HEAD
 
     # Create artifact repository
     echo "########################################"
@@ -72,6 +73,8 @@ Create()
     gcloud artifacts repositories create $GOOGLE_REPO --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository" --quiet
     gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev --quiet
 
+=======
+>>>>>>> c319627 (Artifact repo created in Start() because deletion in Kill())
     # Configure Cloud Build service account
     echo "########################################"
     echo "Setup Cloud Build service account permissions "
@@ -147,9 +150,11 @@ Create()
         cp networkagent.json operator/src
         cp networkagent.json networkagent/src
     else
-        echo "###########################################################################################################################################"
-        echo "networkagent.json is empty, check your project is allowed to create service account keys or if you have exceeded the number of keys allowed."
-        echo "###########################################################################################################################################"
+        echo "#############################################################"
+        echo "networkagent.json is empty, check your project is allowed to "
+        echo "create service account keys or if you have exceeded the number "
+        echo "of keys allowed."
+        echo "##############################################################"
         exit 0
     fi
 
@@ -193,10 +198,16 @@ Create()
 ############################################################
 Start()
 {
+
+    # Create artifact repository
+    echo "########################################"
+    echo "Create Artifact Repository "
+    echo "########################################"
+    gcloud artifacts repositories create $GOOGLE_REPO --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository" --quiet
+
     echo "###########################"
     echo "Starting the network agent"
     echo "###########################"
-
     # check if SERVICE ACCOUNT exists
     export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
 

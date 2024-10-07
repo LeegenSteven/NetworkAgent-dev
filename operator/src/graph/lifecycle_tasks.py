@@ -210,10 +210,6 @@ def delete_network_connection(uid):
   if success:
     logger.info("{} network connection(s) deleted for node {}".format(row_ct, uid))
   else:
-<<<<<<< Updated upstream
-    logger.error("Connection {} deletion failed".format(uid))
-  return success
-=======
     logger.error("Network connection {} deletion failed".format(uid))
   return success
 
@@ -305,4 +301,3 @@ async def find_network_reference(spec_base):
   
   # At that stage we haven't found any net or subnet resource
   return None
->>>>>>> Stashed changes

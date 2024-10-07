@@ -8,7 +8,13 @@ logger = logging.getLogger(__name__)
 # Catch create events
 # TODO: see if you can be more specific in the Kopf resource
 # specification without loosing genericity too much
-@kopf.on.create(kopf.EVERYTHING, labels = {'graph': 'true'})
+@kopf.on.create('google.dev', 'v1', 'MeshService')
+@kopf.on.create('google.dev', 'v1', 'PointToPointService')
+@kopf.on.create('google.dev', 'v1', 'WireguardAppliance')
+@kopf.on.create('compute.cnrm.cloud.google.com','v1beta1','computeinstances',labels={'graph': 'true'})
+@kopf.on.create('compute.cnrm.cloud.google.com','v1beta1','computesubnetworks',labels={'graph': 'true'})
+@kopf.on.create('compute.cnrm.cloud.google.com','v1beta1','computenetworks',labels={'graph': 'true'})
+@kopf.on.create('compute.cnrm.cloud.google.com','v1beta1','computeroutes',labels={'graph': 'true'})
 async def create_node(body, spec, meta, uid, name, logger, **kwargs):
   logger.info("Create graph network node")
   success = False
@@ -39,7 +45,13 @@ async def create_node(body, spec, meta, uid, name, logger, **kwargs):
       raise kopf.TemporaryError("Create node error", delay=15)
 
 # Catch delete events
-@kopf.on.delete(kopf.EVERYTHING, labels = {'graph': 'true'})
+@kopf.on.delete('google.dev', 'v1', 'MeshService')
+@kopf.on.delete('google.dev', 'v1', 'PointToPointService')
+@kopf.on.delete('google.dev', 'v1', 'WireguardAppliance')
+@kopf.on.delete('compute.cnrm.cloud.google.com','v1beta1','computeinstances',labels={'graph': 'true'})
+@kopf.on.delete('compute.cnrm.cloud.google.com','v1beta1','computesubnetworks',labels={'graph': 'true'})
+@kopf.on.delete('compute.cnrm.cloud.google.com','v1beta1','computenetworks',labels={'graph': 'true'})
+@kopf.on.delete('compute.cnrm.cloud.google.com','v1beta1','computeroutes',labels={'graph': 'true'})
 async def delete_node(body, spec, uid, name, logger, **kwargs):
   logger.info("Delete graph network node")
   success = False

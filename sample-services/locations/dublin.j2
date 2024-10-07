@@ -2,7 +2,7 @@
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeNetwork
 metadata:
-  name: newyork
+  name: dublin
   labels:
     customer: acme
 spec:
@@ -12,20 +12,25 @@ spec:
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeSubnetwork
 metadata:
-  name: newyork
+  name: dublin
   labels:
     customer: acme
 spec:
-  ipCidrRange: 10.0.60.0/24
+  ipCidrRange: 10.0.40.0/24
   region: "{{GOOGLE_REGION}}"
-  description: newyork Network
+  description: dublin Network
   networkRef:
-    name: newyork
+    name: dublin
+  secondaryIpRange:
+  - rangeName: servicesrange
+    ipCidrRange: 10.5.0.0/16
+  - rangeName: clusterrange
+    ipCidrRange: 10.6.0.0/16
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeFirewall
 metadata:
-  name: newyork-allowed
+  name: dublin-allowed
   labels:
     customer: acme
 spec:
@@ -38,7 +43,7 @@ spec:
        - "0-65535"
     - protocol: icmp
   networkRef:
-    name: newyork
+    name: dublin
   direction: INGRESS
   sourceRanges:
     - 0.0.0.0/0
@@ -48,10 +53,9 @@ kind: ComputeInstance
 metadata:
   annotations:
     cnrm.cloud.google.com/allow-stopping-for-update: "true"
-  name: newyork-app1
+  name: dublin-app1
   labels:
     customer: acme
-    graph: "true"
 spec:
   machineType: e2-standard-2
   zone: {{GOOGLE_ZONE}}
@@ -65,9 +69,10 @@ spec:
     - subnetworkRef:
         external: "https://www.googleapis.com/compute/v1/projects/{{GOOGLE_PROJECT}}/regions/{{GOOGLE_REGION}}/subnetworks/mgmt-subnet"
     - subnetworkRef:
-        name: newyork
+        name: dublin
   canIpForward: true
-  metadataStartupScript: "sudo apt-get update;sudo apt-get install -yq python3;sudo ip route add 10.0.40.0/24 via 10.0.60.1;sudo ip route add 10.0.50.0/24 via 10.0.60.1;sudo ip route add 10.0.70.0/24 via 10.0.60.1;sudo ip route add 10.0.80.0/24 via 10.0.60.1"
+  metadataStartupScript: "sudo apt-get update;sudo apt-get install -yq python3;sudo ip route add 10.0.50.0/24 via 10.0.40.1;sudo ip route add 10.0.60.0/24 via 10.0.40.1;sudo ip route add 10.0.70.0/24 via 10.0.40.1;sudo ip route add 10.0.80.0/24 via 10.0.40.1"
   metadata:
     - key: ssh-keys
       value: {{GOOGLE_USER}}:{{GOOGLE_SSH_KEY}}
+

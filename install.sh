@@ -174,11 +174,18 @@ Create()
     echo "###############################################"
     echo "generating customer infrastructure files"
     echo "###############################################"
-    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customer-infrastructure/dublin.j2 > sample-services/customer-infrastructure/dublin.yaml
-    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customer-infrastructure/london.j2 > sample-services/customer-infrastructure/london.yaml
-    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customer-infrastructure/sydney.j2 > sample-services/customer-infrastructure/sydney.yaml
-    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customer-infrastructure/singapore.j2 > sample-services/customer-infrastructure/singapore.yaml
-    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/customer-infrastructure/newyork.j2 > sample-services/customer-infrastructure/newyork.yaml
+    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/locations/dublin.j2 > sample-services/locations/dublin.yaml
+    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/locations/london.j2 > sample-services/locations/london.yaml
+    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/locations/sydney.j2 > sample-services/locations/sydney.yaml
+    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/locations/singapore.j2 > sample-services/locations/singapore.yaml
+    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/locations/newyork.j2 > sample-services/locations/newyork.yaml
+
+    echo "###############################################"
+    echo "generating cluster files"
+    echo "###############################################"
+    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/clusters/london.j2 > sample-services/clusters/london.yaml
+    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/clusters/dublin.j2 > sample-services/clusters/dublin.yaml
+
 }
 
 ############################################################
@@ -317,7 +324,8 @@ Delete()
 
     echo "Delete customer location"
 
-    rm sample-services/customer-infrastructure/*.yaml
+    rm sample-services/locations/*.yaml
+    rm sample-services/clusters/*.yaml
 
     echo "Delete network automation GKE"
 }
@@ -348,8 +356,8 @@ Kill()
     echo "Killing the environment - will take a few mins"
     echo "##############################################"
 
-    kubectl delete -f sample-services/network-services
-    kubectl delete -f sample-services/customer-infrastructure
+    kubectl delete -f sample-services/connectivity-services
+    kubectl delete -f sample-services/locations
     kubectl delete -f environment/prometheus.yaml
     kubectl delete -f environment/git.yaml
     kubectl delete -f environment/bigquery.yaml

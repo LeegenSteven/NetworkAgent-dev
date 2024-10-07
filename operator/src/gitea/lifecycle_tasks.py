@@ -7,6 +7,9 @@ from resources.wireguard.lifecycle_tasks import *;
 
 logger = logging.getLogger(__name__)
 
+########################################################
+# Install and configure gitea software
+########################################################
 async def run_gitea_install(external_ip_address):
     logger.debug("installing prometheus monitor")
 
@@ -47,3 +50,45 @@ async def run_gitea_install(external_ip_address):
     if r.status != 'successful':
         logger.debug(r.status)
         raise kopf.TemporaryError("Ansible Error!!!",15)
+
+
+########################################################
+# Create root sync in network automation cluster
+########################################################
+async def create_root_sync(ip_address):
+  logger.debug(f"create root sync to repo {ip_address}")
+
+  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+  network_api = client.resources.get(
+      api_version="configsync.gke.io/v1beta1", 
+      kind="RootSync",
+  )
+
+  crd_manifest= {
+    "apiVersion": "configsync.gke.io/v1beta1",
+    "kind": "RootSync",
+    "metadata": {
+      "name": "networkagent-root",
+      "namespace": "config-management-system"
+    },
+    "spec": {
+      "sourceType": "git",
+      "sourceFormat": "unstructured",
+      "git": {
+        "repo": f"https://networkagent:password123@{ip_address}:3000/networkagent/root-repo",
+        "auth": "none",
+        "gcpServiceAccountEmail": f"networkagent@{os.getenv("GOOGLE_PROJECT")}.iam.gserviceaccount.com",
+        "noSSLVerify": True
+      }
+    }
+  }
+
+  try:
+    result = network_api.create(crd_manifest)
+    return result
+  except kubernetes.client.rest.ApiException as e: 
+    logger.debug(e.status)
+    if e.status == 409:
+      logger.debug("Already exists - skipping")
+    else:
+      logger.debug(e)

@@ -31,9 +31,14 @@ rules:
     resources: [meshservices, pointtopointservices, wireguardappliances, connectivitytests, monitors, giteas]
     verbs: [list, get, create, watch, patch, delete]
 
-  # Application: other resources managed.
+  # Application: config connector.
   - apiGroups: [compute.cnrm.cloud.google.com]
     resources: [computenetworks, computeaddresses, computesubnetworks, computeinstances, computerouters, computerouternats, computefirewalls, computeroutes]
+    verbs: [list, get, create, watch, patch, delete]
+
+  # Application: Config Sync.
+  - apiGroups: [configsync.gke.io]
+    resources: [rootsyncs]
     verbs: [list, get, create, watch, patch, delete]
 
   # Application: needed to avoid Kopf error when uslistening to kopf.EVERYTHING.

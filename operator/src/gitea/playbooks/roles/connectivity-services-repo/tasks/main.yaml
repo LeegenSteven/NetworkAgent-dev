@@ -1,0 +1,56 @@
+- name: Create connectivity services repo directory
+  file:
+    path: /opt/connectivity-services-repo
+    state: directory
+    owner: git
+    group: git
+    mode: 0775
+
+- name: init git repo
+  command: sudo -u git git init
+  args:
+    chdir: /opt/connectivity-services-repo
+
+- name: configure git user name
+  command: "sudo -u git git config --global user.name 'Network Agent'"
+  args:
+    chdir: /opt/connectivity-services-repo
+
+- name: configure git email
+  command: "sudo -u git git config --global user.email 'networkagent@example.com'"
+  args:
+    chdir: /opt/connectivity-services-repo
+
+- name: checkout master branch
+  command: sudo -u git git checkout -b master
+  args:
+    chdir: /opt/connectivity-services-repo
+
+- name: push readme.md
+  ansible.builtin.copy:
+    src: Readme.md
+    dest: /opt/connectivity-services-repo/Readme.md
+    owner: git
+    group: git
+    mode: '0644'
+
+- name: add readme to network-services-repo
+  command: sudo -u git git add .
+  args:
+    chdir: /opt/connectivity-services-repo
+
+- name: initial commit 
+  command: sudo -u git git commit -m "initial commit"
+  args:
+    chdir: /opt/connectivity-services-repo
+
+- name: add remote repo
+  command: sudo -u git git remote add origin https://networkagent:password123@{{ansible_host}}:3000/networkagent/connectivity-services.git
+  args:
+    chdir: /opt/connectivity-services-repo
+
+- name: push to repo
+  command: sudo -u git git -c http.sslVerify=false push -u origin master
+  args:
+    chdir: /opt/connectivity-services-repo
+

@@ -1,0 +1,21 @@
+- name: authenticate with gitea
+  command: "curl -H 'Content-Type: application/json' -d '{\"name\":\"root-repo\", \"scopes\":[\"write:repository\", \"write:user\"]}' -u networkagent:password123 https://{{ansible_host}}:3000/api/v1/users/networkagent/tokens --insecure"
+  register: result
+
+- set_fact:
+    token_result: "{{ result.stdout | from_json }}"
+
+- debug:
+    var: token_result
+
+- name: create root-repo
+  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"root-repo\"}' --insecure"
+  when: token_result.sha1 is defined
+
+- name: create customer-infrastructure repo
+  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"locations\"}' --insecure"
+  when: token_result.sha1 is defined
+
+- name: create network-services repo
+  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"connectivity-services\"}' --insecure"
+  when: token_result.sha1 is defined

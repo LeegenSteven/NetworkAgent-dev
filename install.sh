@@ -65,18 +65,7 @@ Create()
     # for colab enterprise in addition tu compute engine api
     gcloud services enable --project=$GOOGLE_PROJECT aiplatform.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT dataform.googleapis.com
- 
-<<<<<<< HEAD
 
-    # Create artifact repository
-    echo "########################################"
-    echo "Create Artifact Repository "
-    echo "########################################"
-    gcloud artifacts repositories create $GOOGLE_REPO --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository" --quiet
-    gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev --quiet
-
-=======
->>>>>>> c319627 (Artifact repo created in Start() because deletion in Kill())
     # Configure Cloud Build service account
     echo "########################################"
     echo "Setup Cloud Build service account permissions "
@@ -200,12 +189,12 @@ Create()
 ############################################################
 Start()
 {
-
-    # Create artifact repository
+   # Create artifact repository
     echo "########################################"
     echo "Create Artifact Repository "
     echo "########################################"
     gcloud artifacts repositories create $GOOGLE_REPO --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository" --quiet
+    gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev --quiet
 
     echo "###########################"
     echo "Starting the network agent"
@@ -282,10 +271,8 @@ Start()
     done
     echo "Ready !"
 
-<<<<<<< Updated upstream
     # Start ConfigSync operator in cluster
     gcloud beta container fleet config-management apply --membership=networkautomation --config=./environment/configsync.yaml --project=$GOOGLE_PROJECT
-=======
 
     # Setup Spanner and wait until it's ready as we need it to be up and
     # running before the Operator is deployed so as not to miss any
@@ -300,8 +287,6 @@ Start()
         echo "sleeping for 20 secs..."
     done
     echo "Ready !"
-
->>>>>>> Stashed changes
 
     echo "##################################"
     echo "Deploy the Operator"
@@ -326,11 +311,6 @@ Delete()
         n|N ) exit 0;;
         * ) echo "please enter y/n";;
     esac
-
-    echo "######################"
-    echo "Deleting Artefact Repo"
-    echo "######################"
-    gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
 
     echo "#######################################"
     echo "Deleting environment manifests and keys"
@@ -370,7 +350,6 @@ Monitoring()
 {
     export GOOGLE_PROJECT_NUMBER=gcloud projects describe $GOOGLE_PROJECT --format="value(projectNumber)"
     service-$GOOGLE_PROJECT_NUMBER@gcp-sa-pubsub.iam.gserviceaccount.com
-
 }
 
 ############################################################
@@ -410,6 +389,12 @@ Kill()
     gcloud compute firewall-rules delete mgmt-ingress --project=$GOOGLE_PROJECT --quiet
     gcloud compute networks subnets delete mgmt-subnet --region=$GOOGLE_REGION --quiet
     gcloud compute networks delete mgmt --project=$GOOGLE_PROJECT --quiet
+
+    echo "######################"
+    echo "Deleting Artifact Repo"
+    echo "######################"
+    gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+
 }
 
 ############################################################

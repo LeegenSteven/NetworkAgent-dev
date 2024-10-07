@@ -1,0 +1,56 @@
+- name: Create locations directory
+  file:
+    path: /opt/locations-repo
+    state: directory
+    owner: git
+    group: git
+    mode: 0775
+
+- name: init git repo
+  command: sudo -u git git init
+  args:
+    chdir: /opt/locations-repo
+
+- name: configure git user name
+  command: "sudo -u git git config --global user.name 'Network Agent'"
+  args:
+    chdir: /opt/locations-repo
+
+- name: configure git email
+  command: "sudo -u git git config --global user.email 'networkagent@example.com'"
+  args:
+    chdir: /opt/locations-repo
+
+- name: checkout master branch
+  command: sudo -u git git checkout -b master
+  args:
+    chdir: /opt/locations-repo
+
+- name: push readme.md
+  ansible.builtin.copy:
+    src: Readme.md
+    dest: /opt/locations-repo/Readme.md
+    owner: git
+    group: git
+    mode: '0644'
+
+- name: add readme to infrastructure-repo
+  command: sudo -u git git add .
+  args:
+    chdir: /opt/locations-repo
+
+- name: initial commit 
+  command: sudo -u git git commit -m "initial commit"
+  args:
+    chdir: /opt/locations-repo
+
+- name: add remote repo
+  command: sudo -u git git remote add origin https://networkagent:password123@{{ansible_host}}:3000/networkagent/locations.git
+  args:
+    chdir: /opt/locations-repo
+
+- name: push to repo
+  command: sudo -u git git -c http.sslVerify=false push -u origin master
+  args:
+    chdir: /opt/locations-repo
+

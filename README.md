@@ -28,29 +28,22 @@ The network agent support the following use cases:
 
 ## Demo Architecture
 
-The following links detail how the demo is architected.
+The following links detail how main components of the network agent demo.
 
-* [Supported Network Services](docs/networkservices.md)
+* [Network Services](docs/networkservices.md)
 * [Virtual Network Functions](docs/wireguard-vnf.md)
 * [GCP Environment](docs/gcp.md)
 * [Lifecycle Management](docs/lifecycle.md)
-* [CICD of Network Services](docs/cicd.md)
+* [GitOps of Network Services](docs/cicd.md)
 * [Network Agent](docs/agent.md)
 
 ## Create the demo environment
 
-The following links describe how to get the demo environment up and running.
+Following the steps below to create a network agent demo environment.
 
 * [Setup GCP environment](environment/Readme.md)
 * [Build and deploy the network operator](/operator/Readme.md)
 * [Build and deploy the network agent REST tools](/tools/Readme.md)
 * [Build and deploy the network agent](/networkagent/Readme.md)
+* [Create Customer Locations and Network Services](/docs/git.md)
 
-## Running the demo
-
-* Find services available to deploy
-* Deploy a service
-* Query services that are deployed
-* Query Performance of deployed services
-* Run a Test across the VPN
-* Query Performance of deployed services

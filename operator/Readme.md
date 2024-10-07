@@ -10,7 +10,7 @@ The operator code is based on the [kopf](https://kopf.readthedocs.io/en/latest/)
 
 ## Build and deploy the operator
 
-To build and deploy run the following command from the NetworkAgent base directory.
+The operator is automatically deployed when __install.sh -s__ is run. To update to a new version of the operator run the following command from the NetworkAgent base directory.
 
 ```
 ./install.sh -o

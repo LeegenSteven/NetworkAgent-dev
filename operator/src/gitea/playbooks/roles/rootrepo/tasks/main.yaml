@@ -1,0 +1,71 @@
+- name: Create root repo directory
+  file:
+    path: /opt/root-repo
+    state: directory
+    owner: git
+    group: git
+    mode: 0775
+
+- name: init git repo
+  command: sudo -u git git init
+  args:
+    chdir: /opt/root-repo
+
+- name: configure git user name
+  command: "sudo -u git git config --global user.name 'Network Agent'"
+  args:
+    chdir: /opt/root-repo
+
+- name: configure git email
+  command: "sudo -u git git config --global user.email 'networkagent@example.com'"
+  args:
+    chdir: /opt/root-repo
+
+- name: checkout master branch
+  command: sudo -u git git checkout -b master
+  args:
+    chdir: /opt/root-repo
+
+- name: push readme.md
+  ansible.builtin.copy:
+    src: Readme.md
+    dest: /opt/root-repo/Readme.md
+    owner: git
+    group: git
+    mode: '0644'
+
+- name: add source repos
+  ansible.builtin.template:
+    src: "{{item}}"
+    dest: "/opt/root-repo/{{item}}"
+    owner: git
+    group: git
+    mode: '0644'
+  loop:
+    - locations-namespace.yaml
+    - locations-repo-sync.yaml
+    - locations-role.yaml
+    - connectivity-services-namespace.yaml
+    - connectivity-services-repo-sync.yaml
+    - connectivity-services-role.yaml
+
+- name: add readme to root-repo
+  command: sudo -u git git add .
+  args:
+    chdir: /opt/root-repo
+
+- name: initial commit 
+  command: sudo -u git git commit -m "initial commit"
+  args:
+    chdir: /opt/root-repo
+
+- name: add remote repo
+  command: sudo -u git git remote add origin https://networkagent:password123@{{ansible_host}}:3000/networkagent/root-repo.git
+  args:
+    chdir: /opt/root-repo
+
+- name: push to repo
+  command: sudo -u git git -c http.sslVerify=false push -u origin master
+  args:
+    chdir: /opt/root-repo
+

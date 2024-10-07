@@ -3,4 +3,3 @@ kind: Gitea
 metadata:
   name: gitea
 spec:
-  nodes:

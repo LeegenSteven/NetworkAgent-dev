@@ -6,3 +6,19 @@
     - name: install Gitea
       import_role:
         name: install
+
+    - name: create gitea repos
+      import_role:
+        name: create-gitea-repos
+    
+    - name: locations-repo
+      import_role:
+        name: locations-repo
+    
+    - name: connectivity-services-repo
+      import_role:
+        name: connectivity-services-repo
+
+    - name: root-repo
+      import_role:
+        name: rootrepo

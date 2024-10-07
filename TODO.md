@@ -7,10 +7,11 @@ Todo list. Each task rated as:
 * __L__: Low
 
 ## Operator
+* __H__: Install Ops Agent. curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
+sudo bash add-google-cloud-ops-agent-repo.sh --also-install
 
 ## Graph
 
-* __H__: Write watcher that tracks changes in google.dev and config connector to maintain a real time topology
 * __H__: Add metrics to graph or at least use graph to make sense of BQ metrics
 
 ## Tools/Rest endpoint

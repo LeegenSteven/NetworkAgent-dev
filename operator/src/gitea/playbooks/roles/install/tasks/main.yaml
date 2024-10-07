@@ -31,6 +31,8 @@
 - name: Add a git user
   ansible.builtin.user:
     name: git
+    shell: /bin/bash
+    groups: git
     create_home: yes
 
 - name: create directories if they don't exist
@@ -75,6 +77,10 @@
     state: started
     name: gitea
 
+- name: check if user exists
+  command: "sudo -u git /usr/local/bin/gitea admin user list --config /etc/gitea/app.ini"
+  register: users
+
 - name: create networkagent user
   command: "sudo -u git /usr/local/bin/gitea admin user create --username networkagent --password password123 --email me@example.com --config /etc/gitea/app.ini"
-
+  when: not "networkagent" in users.stdout

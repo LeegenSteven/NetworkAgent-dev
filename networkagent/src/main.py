@@ -2,6 +2,7 @@ import logging
 from agent.networkagent import NetworkAgent
 from langchain_core.messages import AIMessage, HumanMessage
 import streamlit as st
+from datetime import datetime
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
@@ -40,10 +41,18 @@ chatcolumn, graphcolumn = st.columns(2, )
 chatcontainer = chatcolumn.container(height=500, border=True)
 
 with graphcolumn:
-    graphcontainer=st.container(height=500, border=True)
+    graphcontainer = st.container(height=500, border=True)
+    graphelementcontainer = st.container(height=300, border=True)
+
+
 with graphcontainer:
-    st.markdown("<h5 style='text-align: center;'>Network Topology Overview</h1>", unsafe_allow_html=True)
+    st.markdown("<h5 style='text-align: center;'>Network Topology Overview</h5>", unsafe_allow_html=True)
     selected = topology.create_cytoscape()
+
+with graphelementcontainer:
+    graph_info = topology.display_selected_elements(selected)
+    now = datetime.now()
+    st.markdown(graph_info)
 
 # Display chat messages from history on app rerun
 for message in st.session_state.chat_history:

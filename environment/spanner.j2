@@ -2,11 +2,11 @@ apiVersion: spanner.cnrm.cloud.google.com/v1beta1
 kind: SpannerInstance
 metadata:
   labels:
-  name: networktopology-instance
+  name: {{GOOGLE_SPANNER_INSTANCE}}
   annotations:
     cnrm.cloud.google.com/project-id: {{GOOGLE_PROJECT}}
 spec:
-  resourceID: networktopology-instance
+  resourceID: {{GOOGLE_SPANNER_INSTANCE}}
   config: regional-{{GOOGLE_REGION}}
   displayName: Network Topology
   processingUnits: 100
@@ -14,32 +14,43 @@ spec:
 apiVersion: spanner.cnrm.cloud.google.com/v1beta1
 kind: SpannerDatabase
 metadata:
-  name: networktopology-db
+  name: {{GOOGLE_SPANNER_DATABASE}}
   annotations:
     cnrm.cloud.google.com/project-id: {{GOOGLE_PROJECT}}
 spec:
-  resourceID: networktopology-db
+  resourceID: {{GOOGLE_SPANNER_DATABASE}}
   instanceRef:
-    name: networktopology-instance
+    name: {{GOOGLE_SPANNER_INSTANCE}}
   ddl:
   - "CREATE TABLE NetworkNode (
        id STRING(36) NOT NULL,
        kind STRING(MAX),
        name STRING(MAX),
        display_name STRING(MAX),
+       self_link STRING(MAX),
+       status STRING(25),
        node_property JSON
     ) PRIMARY KEY(id)"
-  - "CREATE TABLE NetworkConnection (
+  - "CREATE TABLE ResourceConnection (
        id STRING(36) NOT NULL,
        to_id STRING(36) NOT NULL,
        connection_property JSON,
-       CONSTRAINT FK_ConnectionToNode FOREIGN KEY (to_id) REFERENCES NetworkNode (id)
+       CONSTRAINT FK_RConnectionToNode FOREIGN KEY (to_id) REFERENCES NetworkNode (id)
+    ) PRIMARY KEY(id, to_id)"
+  - "CREATE TABLE NetworkConnection (
+       id STRING(36) NOT NULL,
+       to_id STRING(36) NOT NULL,
+       connection_property JSON
     ) PRIMARY KEY(id, to_id)"
   - "CREATE OR REPLACE PROPERTY GRAPH networkGraph
        NODE TABLES (NetworkNode)
        EDGE TABLES (
          NetworkConnection
-         SOURCE KEY (id) REFERENCES NetworkNode(id)
-         DESTINATION KEY (to_id) REFERENCES NetworkNode(id)
-         LABEL isConnectedTo
+           SOURCE KEY (id) REFERENCES NetworkNode(id)
+           DESTINATION KEY (to_id) REFERENCES NetworkNode(id)
+           LABEL isConnectedTo,
+         ResourceConnection
+           SOURCE KEY (id) REFERENCES NetworkNode(id)
+           DESTINATION KEY (to_id) REFERENCES NetworkNode(id)
+           LABEL Manages
     )"

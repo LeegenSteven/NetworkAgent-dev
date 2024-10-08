@@ -7,24 +7,26 @@ import utils.constants as constants
 
 logger = logging.getLogger(__name__)
 
+def get_resource_api(api_version, kind, client=None):
+  client = client or kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+  resource_api = client.resources.get(api_version=api_version, kind=kind)
+  return resource_api
+
 ########################################################################
 # Create ComputeNetwork
 ########################################################################
 async def create_network(network_name):
   logger.debug("Create compute network %s", network_name)
-
-  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
-      api_version="compute.cnrm.cloud.google.com/v1beta1", 
-      kind="ComputeNetwork",
-  )
-
+  network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeNetwork")
   crd_manifest={
     "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
     "kind": "ComputeNetwork",
     "metadata": {
       "name": network_name,
-      "namespace": "automation"
+      "namespace": "automation",
+      "labels": {
+        "graph": "true"
+      }
     },
     "spec": {
       "routingMode": "REGIONAL",
@@ -51,13 +53,7 @@ async def create_network(network_name):
 ########################################################################
 async def delete_network(network_name):
   logger.debug("Delete compute network %s", network_name)
-
-  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
-      api_version="compute.cnrm.cloud.google.com/v1beta1", 
-      kind="ComputeNetwork",
-  )
-
+  network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeNetwork")
   try: 
     result = network_api.delete(name=network_name, body={}, namespace="automation")
   except kubernetes.client.rest.ApiException as e: 
@@ -69,19 +65,16 @@ async def delete_network(network_name):
 ########################################################################
 async def create_subnetwork(network_name, subnet_name, cidr, region):
   logger.debug("Create compute subnetwork")
-
-  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
-      api_version="compute.cnrm.cloud.google.com/v1beta1", 
-      kind="ComputeSubnetwork",
-  )
-
+  network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeSubnetwork")
   crd_manifest= { 
     "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
     "kind": "ComputeSubnetwork",
     "metadata": {
       "name": subnet_name,
-      "namespace": "automation"
+      "namespace": "automation",
+      "labels": {
+        "graph": "true"
+      }
     },
     "spec": {
       "ipCidrRange": cidr,
@@ -112,12 +105,19 @@ async def create_subnetwork(network_name, subnet_name, cidr, region):
 ########################################################################
 async def get_subnetwork(name):
   logger.debug("Get compute subnetwork %s", name)
+  network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeSubnetwork")
+  try:
+    result = network_api.get(namespace="automation", name=name)
+    return result
+  except kubernetes.client.rest.ApiException as e:
+    logger.debug(e)
 
-  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
-      api_version="compute.cnrm.cloud.google.com/v1beta1", 
-      kind="ComputeSubnetwork",
-  )
+########################################################################
+# Get Network
+########################################################################
+async def get_network(name):
+  logger.debug("Get compute network %s", name)
+  network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeNetwork")
   try:
     result = network_api.get(namespace="automation", name=name)
     return result
@@ -129,19 +129,16 @@ async def get_subnetwork(name):
 ########################################################################
 async def create_router(network_name, region):
   logger.debug("Create Router")
-
-  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
-      api_version="compute.cnrm.cloud.google.com/v1beta1", 
-      kind="ComputeRouter",
-  )
-
+  network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeRouter")
   crd_manifest={
     "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
     "kind": "ComputeRouter",
     "metadata":{
       "name": f"{network_name}-router",
-      "namespace": "automation"
+      "namespace": "automation",
+      "labels": {
+        "graph": "true"
+      }
     },
     "spec": {
       "description": f"{network_name} vpn router",
@@ -170,19 +167,16 @@ async def create_router(network_name, region):
 ########################################################################
 async def create_nat(network_name, region):
   logger.debug("Create NAT")
-
-  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
-      api_version="compute.cnrm.cloud.google.com/v1beta1", 
-      kind="ComputeRouterNAT",
-  )
-
+  network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeRouterNAT")
   crd_manifest={
     "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
     "kind": "ComputeRouterNAT",
     "metadata": {
       "name": f"{network_name}-nat",
-      "namespace": "automation"
+      "namespace": "automation",
+      "labels": {
+        "graph": "true"
+      }
     },
     "spec": {
       "region": region,
@@ -212,12 +206,7 @@ async def create_nat(network_name, region):
 ########################################################################
 async def create_compute(parent_name, vm_name, external_ip, interface, project, region, zone, vpn=False, monitor=True):
   logger.debug("Create compute %s", vm_name)
-
-  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
-      api_version="compute.cnrm.cloud.google.com/v1beta1", 
-      kind="ComputeInstance",
-  )
+  compute_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeInstance")
 
   # get the google user
   google_user = os.getenv("GOOGLE_USER")
@@ -282,6 +271,7 @@ async def create_compute(parent_name, vm_name, external_ip, interface, project, 
   labels = {}
   if monitor:
     labels["monitor"]="yes"
+  labels["graph"] = "true"
 
   crd_manifest={
     "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
@@ -324,7 +314,7 @@ async def create_compute(parent_name, vm_name, external_ip, interface, project, 
     kopf.label(crd_manifest, labels={'kex-parent-name': parent_name})
 
   try:
-    result = network_api.create(crd_manifest)
+    result = compute_api.create(crd_manifest)
     return result
   except kubernetes.client.rest.ApiException as e: 
     logger.debug(e.status)
@@ -340,18 +330,10 @@ async def create_compute(parent_name, vm_name, external_ip, interface, project, 
 ########################################################################
 async def get_compute(vm_name):
   logger.debug("Get compute %s", vm_name)
-
-  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
-      api_version="compute.cnrm.cloud.google.com/v1beta1", 
-      kind="ComputeInstance",
-  )
-
+  compute_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeInstance")
   try:
-
-    result = network_api.get(namespace="automation", name=vm_name)
+    result = compute_api.get(namespace="automation", name=vm_name)
     return result
-
   except kubernetes.client.rest.ApiException as e: 
     logger.debug(e.status)
     if e.status == 422:
@@ -363,20 +345,17 @@ async def get_compute(vm_name):
 # Create External ComputeAddress
 ########################################################################
 async def create_external_ip(name, region):
-  logger.debug(f"Create external ip {name}")
-
-  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
-      api_version="compute.cnrm.cloud.google.com/v1beta1", 
-      kind="ComputeAddress",
-  )
-
+  logger.debug("Create external ip")
+  network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeAddress")
   crd_manifest= {
     "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
     "kind": "ComputeAddress",
     "metadata": {
       "name": f"{name}",
-      "namespace": "automation"
+      "namespace": "automation",
+      "labels": {
+        "graph": "true"
+      }
     },
     "spec": {
       "addressType": "EXTERNAL",
@@ -461,17 +440,15 @@ async def create_route(vm_name, source_subnetwork_name, peer_subnetwork_name):
   sourceresult = await get_subnetwork(source_subnetwork_name)
   sourcenetwork = sourceresult.spec['networkRef']['name']
 
-  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
-      api_version="compute.cnrm.cloud.google.com/v1beta1", 
-      kind="ComputeRoute",
-  )
-
+  network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeRoute")
   crd_manifest= {
     "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
     "kind": "ComputeRoute",
     "metadata": {
-      "name": vm_name+'-'+peer_subnetwork_name
+      "name": vm_name+'-'+peer_subnetwork_name,
+      "labels": {
+        "graph": "true"
+      }
     },
     "spec": {
       "description": f"{vm_name} route",
@@ -530,43 +507,32 @@ async def get_ip(name, networkname="mgmt"):
 # Get Compute Subnet Info
 #####################################################################
 async def get_subnet_info(subnetname):
-    logger.debug("get info for subnet %s", subnetname)
-
-    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-    network_api = client.resources.get(
-        api_version="compute.cnrm.cloud.google.com/v1beta1", 
-        kind="ComputeSubnetwork",
-    )
-    try:
-        result = network_api.get(name=subnetname, namespace="automation")
-        conditions = result.get('status').get('conditions')
-        if conditions[-1].get('reason') != "UpToDate":
-            raise kopf.TemporaryError("Waiting for subnet to come up")
-        return result
-    except kubernetes.client.rest.ApiException as e: 
-        logger.info(e.status)
-        if e.status == 404:
-            raise kopf.TemporaryError(f"No subnet {subnetname} found yet")
+  logger.debug("get info for subnet %s", subnetname)
+  network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeSubnetwork")
+  try:
+    result = network_api.get(name=subnetname, namespace="automation")
+    conditions = result.get('status').get('conditions')
+    if conditions[-1].get('reason') != "UpToDate":
+        raise kopf.TemporaryError("Waiting for subnet to come up")
+    return result
+  except kubernetes.client.rest.ApiException as e: 
+    logger.info(e.status)
+    if e.status == 404:
+        raise kopf.TemporaryError(f"No subnet {subnetname} found yet")
 
 #####################################################################
 # Get Compute Instance Info
 #####################################################################
 async def get_vm_info(vmname):
-    logger.debug("get info for vm %s", vmname)
-
-    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-    network_api = client.resources.get(
-        api_version="compute.cnrm.cloud.google.com/v1beta1", 
-        kind="ComputeInstance",
-    )
-
-    try:
-        result = network_api.get(name=vmname, namespace="automation")
-        status = result.get('status')
-        if status.get('currentStatus') != "RUNNING":
-            raise kopf.TemporaryError("Waiting for VM to come up")
-        return result
-    except kubernetes.client.rest.ApiException as e: 
-        logger.debug(e.status)
-        if e.status == 404:
-            raise kopf.TemporaryError(f"No VM {vmname} found yet")
+  logger.debug("get info for vm %s", vmname)
+  compute_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeInstance")
+  try:
+    result = compute_api.get(name=vmname, namespace="automation")
+    status = result.get('status')
+    if status.get('currentStatus') != "RUNNING":
+      raise kopf.TemporaryError("Waiting for VM to come up")
+    return result
+  except kubernetes.client.rest.ApiException as e: 
+    logger.debug(e.status)
+    if e.status == 404:
+      raise kopf.TemporaryError(f"No VM {vmname} found yet")

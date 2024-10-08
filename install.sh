@@ -26,6 +26,8 @@ export GOOGLE_PROJECT_NUMBER=`gcloud projects describe $GOOGLE_PROJECT --format=
 export GOOGLE_ACTIVE_USER=`gcloud auth list --filter=status:ACTIVE --format="value(account)"`
 export GOOGLE_REPO="networkagent"
 export GOOGLE_NAMESPACE="automation"
+export GOOGLE_SPANNER_INSTANCE="networktopology-instance"
+export GOOGLE_SPANNER_DATABASE="networktopology-db"
 
 ############################################################
 # Create keys and manifest files                           #
@@ -63,14 +65,6 @@ Create()
     # for colab enterprise in addition tu compute engine api
     gcloud services enable --project=$GOOGLE_PROJECT aiplatform.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT dataform.googleapis.com
- 
-
-    # Create artifact repository
-    echo "########################################"
-    echo "Create Artifact Repository "
-    echo "########################################"
-    gcloud artifacts repositories create $GOOGLE_REPO --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository" --quiet
-    gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev --quiet
 
     # Configure Cloud Build service account
     echo "########################################"
@@ -147,9 +141,11 @@ Create()
         cp networkagent.json operator/src
         cp networkagent.json networkagent/src
     else
-        echo "###########################################################################################################################################"
-        echo "networkagent.json is empty, check your project is allowed to create service account keys or if you have exceeded the number of keys allowed."
-        echo "###########################################################################################################################################"
+        echo "#############################################################"
+        echo "networkagent.json is empty, check your project is allowed to "
+        echo "create service account keys or if you have exceeded the number "
+        echo "of keys allowed."
+        echo "##############################################################"
         exit 0
     fi
 
@@ -157,7 +153,7 @@ Create()
     echo "generating environment yaml files"
     echo "####################################################"
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/bigquery.j2 >  environment/bigquery.yaml
-    jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/spanner.j2 >  environment/spanner.yaml
+    jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_SPANNER_DATABASE -E GOOGLE_SPANNER_INSTANCE environment/spanner.j2 >  environment/spanner.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/configconnector.j2 > environment/configconnector.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/networks.j2 > environment/networks.yaml
 
@@ -193,10 +189,16 @@ Create()
 ############################################################
 Start()
 {
+   # Create artifact repository
+    echo "########################################"
+    echo "Create Artifact Repository "
+    echo "########################################"
+    gcloud artifacts repositories create $GOOGLE_REPO --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository" --quiet
+    gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev --quiet
+
     echo "###########################"
     echo "Starting the network agent"
     echo "###########################"
-
     # check if SERVICE ACCOUNT exists
     export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
 
@@ -250,13 +252,16 @@ Start()
         --member="serviceAccount:$GOOGLE_PROJECT.svc.id.goog[cnrm-system/cnrm-controller-manager]" \
         --role="roles/iam.workloadIdentityUser"
 
+    # Setup the GKE namespace we'll be using
     kubectl create namespace $GOOGLE_NAMESPACE
     kubectl annotate namespace $GOOGLE_NAMESPACE cnrm.cloud.google.com/project-id=$GOOGLE_PROJECT
     kubectl config set-context --current --namespace $GOOGLE_NAMESPACE
+
+    # Setup the one config connector we will be using 
     kubectl apply -f environment/configconnector.yaml
 
     echo "################################################"
-    echo "Waiting for cnrm-controller-manager-0 to start "
+    echo "Waiting for cnrm-controller-manager-0 to start... "
     echo "################################################"
 
     # kubectl wait -n cnrm-system --for=condition=Ready pod cnrm-controller-manager-0
@@ -269,6 +274,20 @@ Start()
     # Start ConfigSync operator in cluster
     gcloud beta container fleet config-management apply --membership=networkautomation --config=./environment/configsync.yaml --project=$GOOGLE_PROJECT
 
+    # Setup Spanner and wait until it's ready as we need it to be up and
+    # running before the Operator is deployed so as not to miss any
+    # creation events in the operator (especially on the networking part)
+    # 
+    echo "####################################"
+    echo "Waiting for Spanner DB to come up..."
+    echo "####################################"
+    kubectl apply -f environment/spanner.yaml
+    while [[ $(kubectl get spannerdatabase $GOOGLE_SPANNER_DATABASE -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}' 2>/dev/null) != "True" ]]; do
+        sleep 20
+        echo "sleeping for 20 secs..."
+    done
+    echo "Ready !"
+
     echo "##################################"
     echo "Deploy the Operator"
     echo "##################################"
@@ -277,7 +296,6 @@ Start()
     # start the network, prometheus monitor and the customer locations
     kubectl apply -f environment/networks.yaml
     kubectl apply -f environment/bigquery.yaml
-    kubectl apply -f environment/spanner.yaml
     kubectl apply -f environment/prometheus.yaml
     kubectl apply -f environment/git.yaml
 }
@@ -293,11 +311,6 @@ Delete()
         n|N ) exit 0;;
         * ) echo "please enter y/n";;
     esac
-
-    echo "######################"
-    echo "Deleting Artefact Repo"
-    echo "######################"
-    gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
 
     echo "#######################################"
     echo "Deleting environment manifests and keys"
@@ -337,7 +350,6 @@ Monitoring()
 {
     export GOOGLE_PROJECT_NUMBER=gcloud projects describe $GOOGLE_PROJECT --format="value(projectNumber)"
     service-$GOOGLE_PROJECT_NUMBER@gcp-sa-pubsub.iam.gserviceaccount.com
-
 }
 
 ############################################################
@@ -377,6 +389,12 @@ Kill()
     gcloud compute firewall-rules delete mgmt-ingress --project=$GOOGLE_PROJECT --quiet
     gcloud compute networks subnets delete mgmt-subnet --region=$GOOGLE_REGION --quiet
     gcloud compute networks delete mgmt --project=$GOOGLE_PROJECT --quiet
+
+    echo "######################"
+    echo "Deleting Artifact Repo"
+    echo "######################"
+    gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+
 }
 
 ############################################################

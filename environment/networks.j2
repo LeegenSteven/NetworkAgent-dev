@@ -3,6 +3,8 @@ apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeNetwork
 metadata:
   name: dataplane
+  labels:
+    graph: "true"
 spec:
   routingMode: REGIONAL
   autoCreateSubnetworks: false
@@ -11,6 +13,8 @@ apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeSubnetwork
 metadata:
   name: dataplane
+  labels:
+    graph: "true"
 spec:
   ipCidrRange: 192.168.10.0/24
   region: "{{GOOGLE_REGION}}"
@@ -22,6 +26,8 @@ apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeFirewall
 metadata:
   name: wireguard
+  labels:
+    graph: "true"
 spec:
   allow:
     - protocol: udp

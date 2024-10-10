@@ -2,6 +2,7 @@ apiVersion: spanner.cnrm.cloud.google.com/v1beta1
 kind: SpannerInstance
 metadata:
   labels:
+    kind: spanner-instance # Workaround to deploy instance first and change the edition  
   name: {{GOOGLE_SPANNER_INSTANCE}}
   annotations:
     cnrm.cloud.google.com/project-id: {{GOOGLE_PROJECT}}
@@ -14,6 +15,8 @@ spec:
 apiVersion: spanner.cnrm.cloud.google.com/v1beta1
 kind: SpannerDatabase
 metadata:
+  labels:
+    kind: spanner-database  # Workaround to deploy instance first and change the edition
   name: {{GOOGLE_SPANNER_DATABASE}}
   annotations:
     cnrm.cloud.google.com/project-id: {{GOOGLE_PROJECT}}

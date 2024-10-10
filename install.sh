@@ -281,12 +281,28 @@ Start()
     echo "####################################"
     echo "Waiting for Spanner DB to come up..."
     echo "####################################"
-    kubectl apply -f environment/spanner.yaml
+    
+    echo "Creating Spanner database ${GOOGLE_SPANNER_INSTANCE}..."
+    kubectl apply -f environment/spanner.yaml -l "kind=spanner-instance"
+    while [[ $(kubectl get spannerinstance $GOOGLE_SPANNER_INSTANCE -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}' 2>/dev/null) != "True" ]]; do
+        sleep 20
+        echo "sleeping for 20 secs..."
+    done
+    echo "Spanner instance ready !"
+
+    # Work around because the edition spec is not supported in the manifest file
+    # (See https://b.corp.google.com/issues/372631209)
+    echo "Updating Spanner instance to Enterprise Edition"
+    gcloud spanner instances update $GOOGLE_SPANNER_INSTANCE --edition=ENTERPRISE
+
+    echo "Creating Spanner database ${GOOGLE_SPANNER_DATABASE}..."
+    kubectl apply -f environment/spanner.yaml -l "kind=spanner-database"
     while [[ $(kubectl get spannerdatabase $GOOGLE_SPANNER_DATABASE -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}' 2>/dev/null) != "True" ]]; do
         sleep 20
         echo "sleeping for 20 secs..."
     done
-    echo "Ready !"
+    echo "Spanner database ready !"
+
 
     echo "##################################"
     echo "Deploy the Operator"

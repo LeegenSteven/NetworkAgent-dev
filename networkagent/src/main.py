@@ -6,7 +6,7 @@ from datetime import datetime
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
-logging.basicConfig(level='DEBUG', format=log_format)
+logging.basicConfig(level='INFO', format=log_format)
 logger = logging.getLogger(__name__)
 
 st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
@@ -44,14 +44,27 @@ with graphcolumn:
     graphcontainer = st.container(height=500, border=True)
     graphelementcontainer = st.container(height=300, border=True)
 
-
 with graphcontainer:
-    st.markdown("<h5 style='text-align: center;'>Network Topology Overview</h5>", unsafe_allow_html=True)
-    selected = topology.create_cytoscape()
+    network_tab, resource_tab, combined_tab = st.tabs(["Network Topology", "K8s Resource Topology", "Combined View"])
+    #selected = topology.create_network_cytoscape()
+
+    with network_tab:
+        #st.markdown("<h5 style='text-align: center;'>Network Topology Overview</h5>", unsafe_allow_html=True)
+        #st.container(height=500, border=True)
+        selected = topology.create_network_cytoscape()
+
+    with resource_tab:
+        #st.header("A cat")
+        #st.container(height=500, border=True)
+        selected = topology.create_resource_cytoscape()
+
+    with combined_tab:
+        #st.markdown("<h5 style='text-align: center;'>Network Topology Overview</h5>", unsafe_allow_html=True)
+        #st.container(height=500, border=True)
+        selected = topology.create_combined_cytoscape()
 
 with graphelementcontainer:
     graph_info = topology.display_selected_elements(selected)
-    now = datetime.now()
     st.markdown(graph_info)
 
 # Display chat messages from history on app rerun

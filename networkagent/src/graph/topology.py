@@ -49,6 +49,11 @@ short_kinds = {
   'WireguardAppliance': 'VNF',
 }
 
+google_blue = "#4285F4"
+google_red  = "#DB4437"
+google_yellow = "#F4B400"
+google_green  = "#0F9D58"
+
 database = spanner_connect()
 
 node_uniq_ids = {}
@@ -87,7 +92,8 @@ def build_graph(database, edge_label):
         f"""GRAPH networkGraph
         MATCH (a)-[{edge_pattern}]->(b)
         RETURN a.id AS a_id, a.kind AS a_kind, a.name AS a_name, a.display_name AS a_display_name, a.status AS a_status, TO_JSON_STRING(a.node_property) AS a_property,
-        b.id AS b_id, b.kind AS b_kind, b.name AS b_name, b.display_name AS b_display_name, b.status AS b_status, TO_JSON_STRING(b.node_property) AS b_property""")
+        b.id AS b_id, b.kind AS b_kind, b.name AS b_name, b.display_name AS b_display_name, b.status AS b_status, TO_JSON_STRING(b.node_property) AS b_property,
+        LABELS(e) AS edge_label""")
     except Exception as e:
       logger.error("SQL error: {}".format(e))
       success = False
@@ -99,7 +105,7 @@ def build_graph(database, edge_label):
       if elt is not None: elements.append(elt)
       elt = new_node(*row[6:12])
       if elt is not None: elements.append(elt)
-      elements.append(new_edge(edge_label, row[0], row[6]))
+      elements.append(new_edge(row[12][0], row[0], row[6]))
 
   return elements, success
 
@@ -131,12 +137,12 @@ stylesheet = [
       "style": {
         "label": "data(label)",
         "width": 20,
-        "height": 20
+        "height": 20,
         }
     },
     { "selector": "edge",
       "style": {
-        "width": 2,
+        "width": 3,
         "curve-style": "bezier",
         "target-arrow-shape": "triangle",
         },
@@ -157,15 +163,18 @@ def hierarchical_layout(layout, elements):
     if elt['group'] == 'edges':
       layout["relativePlacementConstraint"].append({"top": elt['data']['source'], "bottom": elt['data']['target']})
 
+def edge_color(elements, edge_label, color):
+  for e in elements:
+    if e['group'] == 'edges' and e['data']['label'] == edge_label:
+      e['style'] = { 'line-color': color, 'target-arrow-color': color,'source-arrow-color': color  }
+
 def create_network_cytoscape():
   elements, success = build_graph(database, 'isConnectedTo')
-  #logger.info("NW >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-  #logger.info(elements)
   layout = {"name": "fcose", "animationDuration": 3}
-  #layout["alignmentConstraint"] = {"vertical": [dataplane_uids]}
   layout["nodeRepulsion"] = 50000
 
   hierarchical_layout(layout,elements)
+  edge_color(elements, 'isConnectedTo', google_green)
 
   return cytoscape(
       elements,
@@ -180,22 +189,11 @@ def create_network_cytoscape():
 
 def create_resource_cytoscape():
   elements, success = build_graph(database, 'Manages')
-  print("RSC >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-  logger.info(elements)
-  logger.info(service_uids)
-  logger.info(appliance_uids)
   layout = {"name": "fcose", "animationDuration": 3}
+  layout["nodeRepulsion"] = 50000
 
   hierarchical_layout(layout,elements)
-
-  """layout["relativePlacementConstraint"] = []
-  for sid in service_uids:
-    for aid in appliance_uids: 
-      layout["relativePlacementConstraint"].append({"top": sid, "bottom": aid})
-    
-  layout["alignmentConstraint"] = {"horizontal": [appliance_uids, service_uids]}"""
-  layout["nodeRepulsion"] = 50000
-  logger.info(layout)
+  edge_color(elements, 'Manages', google_blue)
 
   return cytoscape(
       elements,
@@ -210,11 +208,12 @@ def create_resource_cytoscape():
 
 def create_combined_cytoscape():
   elements, success = build_graph(database, None)
-  print("CMBND >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
   layout = {"name": "fcose", "animationDuration": 3}
   layout["nodeRepulsion"] = 50000
 
   hierarchical_layout(layout,elements)
+  edge_color(elements, 'Manages', google_blue)
+  edge_color(elements, 'isConnectedTo', google_green)
 
   return cytoscape(
       elements,

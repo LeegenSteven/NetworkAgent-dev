@@ -3,6 +3,7 @@ from agent.networkagent import NetworkAgent
 from langchain_core.messages import AIMessage, HumanMessage
 import streamlit as st
 from datetime import datetime
+import utils.st_extension as st_ext
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
@@ -45,26 +46,21 @@ with graphcolumn:
     graphelementcontainer = st.container(height=300, border=True)
 
 with graphcontainer:
-    network_tab, resource_tab, combined_tab = st.tabs(["Network Topology", "K8s Resource Topology", "Combined View"])
-    #selected = topology.create_network_cytoscape()
 
-    with network_tab:
-        #st.markdown("<h5 style='text-align: center;'>Network Topology Overview</h5>", unsafe_allow_html=True)
-        #st.container(height=500, border=True)
-        selected = topology.create_network_cytoscape()
+    tab_labels = ["Network Topology", "K8s resources", "Combined View"]
+    selected_tab = st_ext.segmented_control(tab_labels, default=tab_labels[0], max_size=4, key="graph_tabs")
 
-    with resource_tab:
-        #st.header("A cat")
-        #st.container(height=500, border=True)
-        selected = topology.create_resource_cytoscape()
-
-    with combined_tab:
-        #st.markdown("<h5 style='text-align: center;'>Network Topology Overview</h5>", unsafe_allow_html=True)
-        #st.container(height=500, border=True)
-        selected = topology.create_combined_cytoscape()
+    if selected_tab == tab_labels[0]:
+        selected_elts = topology.create_network_cytoscape()
+        #st.markdown("Content in A")
+        #st.button("Go to B", on_click=lambda: st.session_state.update(tabs="B"))
+    elif selected_tab == tab_labels[1]:
+        selected_elts = topology.create_resource_cytoscape()
+    elif selected_tab == tab_labels[2]:
+        selected_elts = topology.create_combined_cytoscape()
 
 with graphelementcontainer:
-    graph_info = topology.display_selected_elements(selected)
+    graph_info = topology.display_selected_elements(selected_elts)
     st.markdown(graph_info)
 
 # Display chat messages from history on app rerun

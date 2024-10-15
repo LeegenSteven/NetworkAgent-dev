@@ -67,7 +67,7 @@ async def create_node(body, spec, meta, uid, name, logger, **kwargs):
 
 # Catch update events
 @kopf.on.update(kopf.EVERYTHING, labels = {'graph': 'true'})
-async def delete_node(body, spec, uid, name, logger, **kwargs):
+async def update_node(body, spec, uid, name, logger, **kwargs):
   logger.info("Update graph network node")
   success = False
 

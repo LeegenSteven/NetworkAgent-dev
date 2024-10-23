@@ -27,9 +27,9 @@ sudo bash add-google-cloud-ops-agent-repo.sh --also-install
 
 ## Config Sync/Nephio Change Mgmt
 
-* __M__: Setup porch and configsync and register git instance
+* __H__: Add location and network function branches
 * __M__: Blueprints? Figure out how to include the service/resource CRs in a blueprint package story
-* __M__: Automate pipeline from LLM to deployment
+
 
 ## Network Services
 

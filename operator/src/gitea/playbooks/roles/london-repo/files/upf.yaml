@@ -1,0 +1,8 @@
+apiVersion: google.dev/v1
+kind: UserPlaneFunction
+metadata:
+  name: upf-london
+spec:
+  interface: 
+    name: london
+    namespace: london

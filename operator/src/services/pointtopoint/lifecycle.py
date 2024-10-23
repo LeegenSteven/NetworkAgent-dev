@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 # Create a new Point To Point VPN
 ##########################################
 @kopf.on.create('pointtopointservice')
-async def pointtopointservice(spec, status, name, logger, **kwargs):
+async def pointtopointservice(spec, status, namespace, name, logger, **kwargs):
   logger.debug(f"Create pointtopoint service {name} with spec: {spec}")
 
   if len(spec.get('interfaces'))!=2:
@@ -27,20 +27,21 @@ async def pointtopointservice(spec, status, name, logger, **kwargs):
     kind="ComputeSubnetwork",
   )
   try:
-    network_api.get(namespace="automation", name=aend)
-    network_api.get(namespace="automation", name=bend)
+    network_api.get(namespace=namespace, name=aend)
+    network_api.get(namespace=namespace, name=bend)
   except:
     raise kopf.PermanentError("compute sub networks not found")
 
   # if persistent config for this service exists, grab it
   # if this is first time this is called then create it
-  serviceInfo=await get_configmap(name)
+  serviceInfo=await get_configmap(namespace, name)
   if serviceInfo is None:
     keys={
       "akeys": WgKey().to_dict(),
       "bkeys": WgKey().to_dict()
     }
     serviceInfo=await create_configmap(
+      namespace,
       name,
       str(uuid.uuid4())[:8],
       keys
@@ -53,7 +54,8 @@ async def pointtopointservice(spec, status, name, logger, **kwargs):
   asitepeers=[{"peerName": bsitename, "allowedInterface": bend, "keys": serviceInfo['keys']['bkeys']}]
   bsitepeers=[{"peerName": asitename, "allowedInterface": aend, "keys": serviceInfo['keys']['akeys']}]
 
-  await create_vpn_edge(name,
+  await create_vpn_edge(namespace,
+                        name,
                         "pointtopointservice",
                         asitename,
                         aend,
@@ -62,7 +64,8 @@ async def pointtopointservice(spec, status, name, logger, **kwargs):
                         serviceInfo['keys']['akeys'], 
                         asitepeers)
 
-  await create_vpn_edge(name,
+  await create_vpn_edge(namespace,
+                        name,
                         "pointtopointservice",
                         bsitename,
                         bend,
@@ -84,9 +87,9 @@ async def pointtopointservice(spec, status, name, logger, **kwargs):
 # Cleanup a new PTP VPN
 ##########################################
 @kopf.on.delete('pointtopointservice')
-async def delete_service_resources(name, logger, **kwargs):
-  logger.debug(f"Delete pointtopoint service {name}")
+async def delete_service_resources(namespace, name, logger, **kwargs):
+  logger.debug(f"Delete pointtopoint service {name} in ns {namespace}")
 
   # remove the configmap for this service
-  await delete_configmap(name)
+  await delete_configmap(namespace, name)
 

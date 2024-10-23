@@ -34,7 +34,14 @@ spec:
                     There must be no overlapping IP address ranges across each of the locations.
                   type: array
                   items:
-                    type: string
+                    type: object
+                    properties:
+                      name:
+                        description: name of the network
+                        type: string
+                      namespace:
+                        description: network namespace
+                        type: string
                   oneOf:
                     - minItems: 2
                       maxItems: 10

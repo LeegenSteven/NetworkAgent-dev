@@ -23,3 +23,5 @@ launch.json
 **/sample-services/locations/*.yaml
 **/sample-services/clusters/*.yaml
 lib
+deployment-blueprint.tar.gz
+porch-install

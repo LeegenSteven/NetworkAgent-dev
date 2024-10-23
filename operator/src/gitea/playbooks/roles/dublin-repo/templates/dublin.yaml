@@ -1,0 +1,54 @@
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeNetwork
+metadata:
+  name: dublin
+  labels:
+    customer: acme
+    graph: "true"
+spec:
+  routingMode: REGIONAL
+  autoCreateSubnetworks: false
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeSubnetwork
+metadata:
+  name: dublin
+  labels:
+    customer: acme
+    graph: "true"
+spec:
+  ipCidrRange: 10.0.40.0/24
+  region: "{{GOOGLE_REGION}}"
+  description: dublin Network
+  networkRef:
+    name: dublin
+    namespace: dublin
+  secondaryIpRange:
+  - rangeName: servicesrange
+    ipCidrRange: 10.5.0.0/16
+  - rangeName: clusterrange
+    ipCidrRange: 10.6.0.0/16
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeFirewall
+metadata:
+  name: dublin-allowed
+  labels:
+    customer: acme
+    graph: "true"
+spec:
+  allow:
+    - protocol: tcp
+      ports:
+       - "0-65535"
+    - protocol: udp
+      ports:
+       - "0-65535"
+    - protocol: icmp
+  networkRef:
+    name: dublin
+    name: dublin
+  direction: INGRESS
+  sourceRanges:
+    - 0.0.0.0/0

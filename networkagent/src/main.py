@@ -24,26 +24,26 @@ st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
 # """, unsafe_allow_html=True)
 import graph.topology as topology
 
-st.title("💬 Gemini Network Agent")
+# st.title("💬 Gemini Network Agent")
 
 reset_chat = st.sidebar.button("Reset Chat")
 
-# Setup Agent and chat history
-if "agent" not in st.session_state:
-    st.session_state.agent = NetworkAgent()
+# # Setup Agent and chat history
+# if "agent" not in st.session_state:
+#     st.session_state.agent = NetworkAgent()
 
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = [
-        # AIMessage(content="Hello, I am a network assistant. How can I help you?"),
-    ]
+# if "chat_history" not in st.session_state:
+#     st.session_state.chat_history = [
+#         # AIMessage(content="Hello, I am a network assistant. How can I help you?"),
+#     ]
 
 # Create columns
-chatcolumn, graphcolumn = st.columns(2, )
-chatcontainer = chatcolumn.container(height=500, border=True)
+# chatcolumn, graphcolumn = st.columns(2, )
+# chatcontainer = chatcolumn.container(height=500, border=True)
 
-with graphcolumn:
-    graphcontainer = st.container(height=500, border=True)
-    graphelementcontainer = st.container(height=300, border=True)
+# with graphcolumn:
+graphcontainer = st.container(height=500, border=True)
+graphelementcontainer = st.container(height=300, border=True)
 
 with graphcontainer:
 
@@ -63,24 +63,24 @@ with graphelementcontainer:
     graph_info = topology.display_selected_elements(selected_elts)
     st.markdown(graph_info)
 
-# Display chat messages from history on app rerun
-for message in st.session_state.chat_history:
-    if isinstance(message, AIMessage):
-        with chatcontainer.chat_message("AI"):
-            st.markdown(message.content)
-    elif isinstance(message, HumanMessage):
-        with chatcontainer.chat_message("Human"):
-            st.markdown(message.content)
+# # Display chat messages from history on app rerun
+# for message in st.session_state.chat_history:
+#     if isinstance(message, AIMessage):
+#         with chatcontainer.chat_message("AI"):
+#             st.markdown(message.content)
+#     elif isinstance(message, HumanMessage):
+#         with chatcontainer.chat_message("Human"):
+#             st.markdown(message.content)
 
-# Accept user input
-if prompt := st.chat_input("Type your message here...?"):
-    st.session_state.chat_history.append(HumanMessage(content=prompt))
-    # Display user message in chat message container
-    with chatcontainer.chat_message("Human"):
-        st.markdown(prompt)
+# # Accept user input
+# if prompt := st.chat_input("Type your message here...?"):
+#     st.session_state.chat_history.append(HumanMessage(content=prompt))
+#     # Display user message in chat message container
+#     with chatcontainer.chat_message("Human"):
+#         st.markdown(prompt)
 
-    with chatcontainer.chat_message("AI"):
-        response=st.session_state.agent.run(prompt)
-        logger.info(response)
-        st.markdown(response)
-    st.session_state.chat_history.append(AIMessage(content=response))
+#     with chatcontainer.chat_message("AI"):
+#         response=st.session_state.agent.run(prompt)
+#         logger.info(response)
+#         st.markdown(response)
+#     st.session_state.chat_history.append(AIMessage(content=response))

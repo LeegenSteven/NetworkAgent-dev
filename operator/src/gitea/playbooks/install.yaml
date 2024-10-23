@@ -11,13 +11,21 @@
       import_role:
         name: create-gitea-repos
     
-    - name: locations-repo
+    - name: london-repo
       import_role:
-        name: locations-repo
+        name: london-repo
     
-    - name: connectivity-services-repo
+    - name: dublin-repo
       import_role:
-        name: connectivity-services-repo
+        name: dublin-repo
+
+    - name: newyork-repo
+      import_role:
+        name: newyork-repo
+
+    - name: core-repo
+      import_role:
+        name: core-repo
 
     - name: root-repo
       import_role:

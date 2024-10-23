@@ -25,8 +25,15 @@ spec:
               type: object
               properties:
                 sourceInterface: 
-                  description: The name of the interface to bind this wireguard appliance instance to
-                  type: string
+                  description: The network interface to bind this wireguard appliance instance to
+                  type: object
+                  properties:
+                    name: 
+                      description: The k8s network name
+                      type: string
+                    namespace:
+                      description: the namespace the network is in
+                      type: string
                 tunnelSubnet:
                   description: The CIDR for the wireguard tunnel virtual nic.
                   type: string
@@ -57,7 +64,14 @@ spec:
                         type: string
                       allowedInterface:
                         description: The name of the computesubnetwork that is reachable from the peer wireguard appliance
-                        type: string
+                        type: object
+                        properties:
+                          name: 
+                            description: name of the interface
+                            type: string
+                          namespace:
+                            description: namespace of the network interface
+                            type: string
                       keys:
                         description: the peer wireguard instance's public and private keys
                         type: object

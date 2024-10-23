@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 async def monitor(spec, name, namespace, logger, **kwargs):
     logger.debug("Create prometheus monitor")
 
-    await create_compute(name,
+    await create_compute(namespace, 
+                         name,
                          "monitor",
                          None,
                          None, 

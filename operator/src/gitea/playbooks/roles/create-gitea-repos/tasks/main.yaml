@@ -12,10 +12,19 @@
   command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"root-repo\"}' --insecure"
   when: token_result.sha1 is defined
 
-- name: create customer-infrastructure repo
-  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"locations\"}' --insecure"
+- name: create london repo
+  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"london\"}' --insecure"
   when: token_result.sha1 is defined
 
-- name: create network-services repo
-  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"connectivity-services\"}' --insecure"
+- name: create dublin repo
+  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"dublin\"}' --insecure"
   when: token_result.sha1 is defined
+
+- name: create newyork repo
+  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"newyork\"}' --insecure"
+  when: token_result.sha1 is defined
+
+- name: create core repo
+  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"core\"}' --insecure"
+  when: token_result.sha1 is defined
+

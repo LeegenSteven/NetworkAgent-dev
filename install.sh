@@ -122,9 +122,11 @@ Create()
         #  --role=roles/spanner.databaseUser --condition=None
         #
         #... so grant it to all service accounts in the name space. It works.
+
         gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
           --member="principalSet://iam.googleapis.com/projects/${GOOGLE_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GOOGLE_PROJECT}.svc.id.goog/namespace/${GOOGLE_NAMESPACE}" \
-          --role="roles/spanner.databaseUser" --condition=None
+          --role="roles/spanner.databaseUser" \
+          --condition=None
     fi
 
     if ! test -f networkagent.json; then
@@ -166,21 +168,6 @@ Create()
     jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO tools/cloudbuild.j2 > tools/cloudbuild.yaml
     jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagent/deployment.j2 > networkagent/deployment.yaml
     jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagent/cloudbuild.j2 > networkagent/cloudbuild.yaml
-
-    echo "###############################################"
-    echo "generating customer infrastructure files"
-    echo "###############################################"
-    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/locations/dublin.j2 > sample-services/locations/dublin.yaml
-    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/locations/london.j2 > sample-services/locations/london.yaml
-    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/locations/sydney.j2 > sample-services/locations/sydney.yaml
-    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/locations/singapore.j2 > sample-services/locations/singapore.yaml
-    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/locations/newyork.j2 > sample-services/locations/newyork.yaml
-
-    echo "###############################################"
-    echo "generating cluster files"
-    echo "###############################################"
-    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/clusters/london.j2 > sample-services/clusters/london.yaml
-    jinja -E GOOGLE_USER -E GOOGLE_SSH_KEY -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE sample-services/clusters/dublin.j2 > sample-services/clusters/dublin.yaml
 
 }
 
@@ -242,6 +229,7 @@ Start()
         sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin
     else
         gcloud components install kubectl
+        gcloud components install kpt
         gcloud components install gke-gcloud-auth-plugin # for GKE 1.26+
     fi
 
@@ -303,17 +291,22 @@ Start()
     done
     echo "Spanner database ready !"
 
-
-    echo "##################################"
-    echo "Deploy the Operator"
-    echo "##################################"
+    echo "#####################################"
+    echo "Deploy the Operator and networks/git"
+    echo "#####################################"
     Operator
 
-    # start the network, prometheus monitor and the customer locations
+    # start the network and git repos
     kubectl apply -f environment/networks.yaml
-    kubectl apply -f environment/bigquery.yaml
-    kubectl apply -f environment/prometheus.yaml
+    # kubectl apply -f environment/bigquery.yaml
+    # kubectl apply -f environment/prometheus.yaml
     kubectl apply -f environment/git.yaml
+    kubectl apply -f environment/free5gc-build.yaml
+
+    # echo "##################################"
+    # echo "Deploy Porch                      "
+    # echo "##################################"
+    # Porch
 }
 
 ############################################################
@@ -349,14 +342,6 @@ Delete()
     rm networkagent.json
     rm google-compute*
 
-    echo "Delete any deployed connectivity services"
-
-    echo "Delete customer location"
-
-    rm sample-services/locations/*.yaml
-    rm sample-services/clusters/*.yaml
-
-    echo "Delete network automation GKE"
 }
 
 ############################################################
@@ -384,11 +369,11 @@ Kill()
     echo "Killing the environment - will take a few mins"
     echo "##############################################"
 
-    kubectl delete -f sample-services/connectivity-services
-    kubectl delete -f sample-services/locations
-    kubectl delete -f environment/prometheus.yaml
+    # kubectl delete -f sample-services/connectivity-services
+    # kubectl delete -f sample-services/locations
+    # kubectl delete -f environment/prometheus.yaml
     kubectl delete -f environment/git.yaml
-    kubectl delete -f environment/bigquery.yaml
+    # kubectl delete -f environment/bigquery.yaml
     kubectl delete -f environment/spanner.yaml
     kubectl delete -f environment/networks.yaml
     gcloud run services delete network-agent-api --region=$GOOGLE_REGION --quiet
@@ -435,6 +420,21 @@ Operator()
 }
 
 ############################################################
+# Deploy the Porch systems                                 #
+############################################################
+Porch()
+{
+    if ! test -f deployment-blueprint.tar.gz; then
+        wget https://github.com/kptdev/kpt/releases/download/porch%2Fv0.0.35/deployment-blueprint.tar.gz
+        mkdir porch-install
+        tar xzf ./deployment-blueprint.tar.gz -C porch-install
+    fi
+    kubectl apply -f porch-install
+    kubectl wait deployment --for=condition=Available porch-server -n porch-system --timeout=300s
+}
+
+
+############################################################
 # Build and deploy the tools                               #
 ############################################################
 Tools()
@@ -479,7 +479,7 @@ Help()
    # Display Help
    echo "Network Agent environment manager."
    echo
-   echo "Syntax: install.sh [-c|-s|-o|-r|-n|-k|-d]"
+   echo "Syntax: install.sh [-c|-s|-o|-r|-n|-k|-d|-p]"
    echo "options:"
    echo "  -c     create keys and manifests."
    echo "  -s     start network agent environment."
@@ -488,6 +488,7 @@ Help()
    echo "  -n     build and deploy the networkagent"
    echo "  -k     kill the environment resources."
    echo "  -d     delete the network agent environment."
+   echo "  -p     deploy porch tools"
    echo
 }
 
@@ -495,7 +496,7 @@ Help()
 # Process the input options. Add options as needed.        #
 ############################################################
 # Get the options
-while getopts ":hcsotnkd" option; do
+while getopts ":hcsotnkdp" option; do
    case $option in
       h) 
         Help
@@ -520,6 +521,9 @@ while getopts ":hcsotnkd" option; do
         exit;;
       d)
         Delete
+        exit;;
+      p)
+        Porch
         exit;;
      \?) # Invalid option
         echo "Error: Invalid option"

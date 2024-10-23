@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 ########################################################################
 # Create configmap instance
 ########################################################################
-async def create_configmap(name, uuid, keys):
+async def create_configmap(namespace, name, uuid, keys):
   logger.debug("create configmap")
 
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
@@ -18,6 +18,9 @@ async def create_configmap(name, uuid, keys):
       "apiVersion": "v1",
       "metadata": {
           "name": name,
+          "annotations": {
+            "configmanagement.gke.io/managed": "disabled"
+          }
       },
       "data": {
           "uuid": uuid,
@@ -30,7 +33,7 @@ async def create_configmap(name, uuid, keys):
   kopf.label(configmap_manifest, labels={'kex-parent-name': name})
 
   try:
-    api.create(body=configmap_manifest, namespace="automation")
+    api.create(body=configmap_manifest, namespace=namespace)
 
     returnObject={
       "uuid": uuid,
@@ -47,7 +50,7 @@ async def create_configmap(name, uuid, keys):
 ########################################################################
 # Get configmap instance
 ########################################################################
-async def get_configmap(name):
+async def get_configmap(namespace, name):
   logger.debug("getting config name %s", name)
 
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
@@ -55,7 +58,7 @@ async def get_configmap(name):
 
   try:
 
-    result=api.get(name=name,namespace="automation")
+    result=api.get(name=name,namespace=namespace)
     logger.debug(result)
     keystring=result.get('data').get('keys')
     if keystring is not None:
@@ -76,14 +79,14 @@ async def get_configmap(name):
 ########################################################################
 # delete configmap instance
 ########################################################################
-async def delete_configmap(name):
+async def delete_configmap(namespace, name):
   logger.debug("getting config name %s", name)
 
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
   api = client.resources.get(api_version="v1", kind="ConfigMap") 
 
   try:
-    api.delete(name=name,namespace="automation")
+    api.delete(name=name,namespace=namespace)
   except kubernetes.client.rest.ApiException as e: 
     logger.debug(e.status)
     logger.debug(e)

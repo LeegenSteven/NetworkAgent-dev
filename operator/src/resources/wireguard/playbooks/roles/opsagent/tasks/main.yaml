@@ -1,0 +1,10 @@
+- name: download install script
+  ansible.builtin.get_url:
+    url: https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
+    dest: /opt/
+    mode: '0777'
+
+# - name: run install script
+#   command: "./add-google-cloud-ops-agent-repo.sh --also-install"
+#   args:
+#     chdir: /opt

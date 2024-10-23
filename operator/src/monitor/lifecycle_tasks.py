@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 async def run_update(nodes):
     logger.debug("Running update")
 
-    ip_address = await get_ip("monitor")
+    ip_address = await get_ip("automation", "monitor")
     if ip_address is None:
         raise kopf.TemporaryError("waiting for ip address", delay=15)
 
@@ -48,7 +48,7 @@ async def run_update(nodes):
 async def run_install():
     logger.debug("installing prometheus monitor")
 
-    ip_address = await get_ip("monitor")
+    ip_address = await get_ip("automation", "monitor")
     if ip_address is None:
         raise kopf.TemporaryError("waiting for monitor IP address")
 

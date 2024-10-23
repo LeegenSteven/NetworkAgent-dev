@@ -1,0 +1,93 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: controlplanes.google.dev
+spec:
+  scope: Namespaced
+  group: google.dev
+  names:
+    kind: ControlPlane
+    plural: controlplanes
+    singular: controlplane
+    shortNames:
+      - cp
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: |
+            control plane CNFs
+          properties:
+            spec:
+              type: object
+              properties:
+                cluster:
+                  description: Name of the cluster to deploy to.
+                  type: string
+                external_subnetwork:
+                  type: object
+                  properties:
+                    name:
+                      description: name of the vpc used to reserve an IP address for internal load balancer
+                      type: string
+                    namespace:
+                      description: namespace of the vpc
+                      type: string
+                plmnId:
+                  type: object
+                  properties:
+                    mcc:
+                      type: string
+                    mnc:
+                      type: string
+                userplaneInformation:
+                  description: userplane information
+                  upNodes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        node:
+                          type: object
+                          description: information of userplane node (AN or UPF)
+                          properties:
+                            name:
+                              description: Name of the node
+                              type: string
+                            nodeType:
+                              description: Type of the node, i.e. AN orUPF
+                              type: string
+                            nodeInfo:
+                              description: Additional node info
+                              type: object
+                              x-kubernetes-preserve-unknown-fields: true
+                  links:
+                    type: array
+                    description: the topology graph of userplane, 
+                    items:
+                      type: object
+                      description: A and B represent the two nodes of each link
+                      properties:
+                        A: 
+                          type: string
+                        B:
+                          type: string
+
+                ueRoutingInfo: 
+                  description: the list of UE routing information
+                  type: aray
+                  items:
+                    groupName:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                      x-kubernetes-preserve-unknown-fields: true
+
+              x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true

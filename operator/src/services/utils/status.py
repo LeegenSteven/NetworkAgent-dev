@@ -7,30 +7,32 @@ logger = logging.getLogger(__name__)
 # Monitor service children and update status
 ############################################
 @kopf.on.event('google.dev', 'v1', 'WireguardAppliance')
-def servicestatus(event,meta,status, **_):
+def servicestatus(event,meta,namespace,status, **_):
     parent_name = meta['labels']['kex-parent-name']
+    parent_namespace = meta['labels']['kex-parent-namespace']
     parent_kind = meta['labels']['kex-parent-kind']
     name = meta['name']
 
     logger.debug("++++++++++++++++++++Wireguard Change Event++++++++++++++++++++++++")
     logger.debug("Parent name = %s", parent_name)
+    logger.debug("Parent namespace = %s", parent_namespace)
     logger.debug("Parent kind = %s", parent_kind)
     logger.debug("Wireguard name = %s", name)
 
     try:
 
-      updateStatus(parent_kind, parent_name, status, event, name)
+      updateStatus(namespace,parent_kind, parent_name, parent_namespace, status, event, name)
 
     except kubernetes.client.rest.ApiException as e:
       if e.status == 404:
         logger.debug("No VPN Service Found")
       if e.status == 409:
         logger.debug("Conflict - manifest is out of date - reload and  try again!!!!!!!!!!!!")
-        updateStatus(parent_kind, parent_name, status, event, name)
+        updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, event, name)
       else:
         logger.error(e)
 
-def updateStatus(parent_kind, parent_name, status, event, name):
+def updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, event, name):
       client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
       kind = None
       if parent_kind=="pointtopointservice":
@@ -44,7 +46,7 @@ def updateStatus(parent_kind, parent_name, status, event, name):
           kind=kind,
       )
 
-      service = network_api.get(name=parent_name, namespace="automation")
+      service = network_api.get(name=parent_name, namespace=parent_namespace)
       newservice=service.to_dict()
 
       if parent_kind in newservice['status']:
@@ -71,4 +73,4 @@ def updateStatus(parent_kind, parent_name, status, event, name):
         else:
           newservice['status']['currentStatus']="Starting"
 
-        network_api.patch(body=newservice, name=parent_name, namespace="automation", content_type='application/merge-patch+json')
+        network_api.patch(body=newservice, name=parent_name, namespace=parent_namespace, content_type='application/merge-patch+json')

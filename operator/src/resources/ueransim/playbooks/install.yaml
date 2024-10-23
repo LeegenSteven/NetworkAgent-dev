@@ -1,0 +1,12 @@
+- hosts: all
+  become: True
+  gather_facts: False
+  tasks:
+
+    - name: install docker etc
+      import_role:
+        name: install
+
+    - name: run UERANSIM
+      import_role:
+        name: run

@@ -10,10 +10,10 @@ logger = logging.getLogger(__name__)
 ########################################################
 # Install and configure gitea software
 ########################################################
-async def run_gitea_install(external_ip_address):
+async def run_gitea_install(namespace, external_ip_address):
     logger.debug("installing prometheus monitor")
 
-    ip_address = await get_ip("gitea")
+    ip_address = await get_ip(namespace, "gitea")
     if ip_address is None:
         raise kopf.TemporaryError("waiting for gitea IP address")
 
@@ -77,6 +77,8 @@ async def create_root_sync(ip_address):
       "git": {
         "repo": f"https://networkagent:password123@{ip_address}:3000/networkagent/root-repo",
         "auth": "none",
+        "revision": "HEAD",
+        "branch": "master",
         "gcpServiceAccountEmail": f"networkagent@{os.getenv("GOOGLE_PROJECT")}.iam.gserviceaccount.com",
         "noSSLVerify": True
       }

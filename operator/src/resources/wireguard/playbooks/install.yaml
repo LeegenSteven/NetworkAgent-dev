@@ -7,9 +7,9 @@
     import_role:
       name: install
 
-  - name: install node exporter 
-    import_role:
-      name: nodeexporter
+  # - name: install ops agent
+  #   import_role:
+  #     name: opsagent
 
   - name: run wireguard
     become: True
@@ -17,5 +17,3 @@
       state: restarted
       enabled: true
       name: wg-quick@wg0
-
-    

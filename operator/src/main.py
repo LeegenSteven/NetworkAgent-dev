@@ -17,10 +17,14 @@ else:
 logger.info("Base directory is %s", constants.basedir)
 
 # register lifecycle events
+from build.free5gc.lifecycle import *
 from services.pointtopoint.lifecycle import *
 from services.mesh.lifecycle import *
 from services.utils.status import *
 from resources.wireguard.lifecycle import *
+from resources.ueransim.lifecycle import *
+from resources.upf.lifecycle import *
+from resources.controlplane.lifecycle import *
 from tests.lifecycle import *
 from monitor.lifecycle import *
 from gitea.lifecycle import *

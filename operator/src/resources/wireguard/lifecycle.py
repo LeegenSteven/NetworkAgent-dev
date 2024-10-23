@@ -13,23 +13,24 @@ logger = logging.getLogger(__name__)
 #########################################################################
 @kopf.on.create('wireguardappliance')
 async def wireguard(body,spec, name, namespace, logger, **kwargs):
-    logger.debug(f"A handler is called with spec: {spec}")
+    logger.debug(f"A wireguard handler is called with spec: {spec}")
 
     servicename = body['metadata']['ownerReferences'][0]['name']
 
-    # create children resources
-    await create_compute(None,
-                        name,
-                        None,
+    # create children resources in the automation namespace
+    await create_compute(namespace,
+                        None, # parent name
+                        name, # vmname
+                        None, # external ip
                         spec.get('sourceInterface'),
                         os.getenv("GOOGLE_PROJECT"),
                         os.getenv("GOOGLE_REGION"),
                         os.getenv("GOOGLE_ZONE"), 
-                        True)
+                        vpn=True)
 
     # Get mgmt and dataplane address for the VM created above
-    mgmt_ip_address = await get_ip(name)
-    data_ip_address = await get_ip(name, networkname="dataplane")
+    mgmt_ip_address = await get_ip(namespace, name)
+    data_ip_address = await get_ip(namespace, name, networkname="dataplane")
     if mgmt_ip_address is None or data_ip_address is None:
         raise kopf.TemporaryError("No ip address found on VM yet - waiting")
 
@@ -40,13 +41,13 @@ async def wireguard(body,spec, name, namespace, logger, **kwargs):
     for peer in spec['peers']:
         # copy the base peer info and add to it
         peerInfo=peer
-        subnet_info = await get_subnet_info(peer['allowedInterface'])
+        subnet_info = await get_subnet_info(peer['allowedInterface']['namespace'], peer['allowedInterface']['name'])
         allowed_cidr = subnet_info.get('spec')['ipCidrRange']
         logger.debug("allowed cidr %s", allowed_cidr)
         peerInfo['allowedCidr']=allowed_cidr
 
         # discover the peer ip address
-        peer_ip_address = await get_ip(peer['peerName'], networkname="dataplane")
+        peer_ip_address = await get_ip(namespace, peer['peerName'], networkname="dataplane")
         logger.debug("found peer dataplane ip address %s", peer_ip_address)
         peerInfo['ipAddress']=peer_ip_address
         peersInfo.append(peerInfo)
@@ -67,7 +68,7 @@ async def wireguard(body,spec, name, namespace, logger, **kwargs):
     # loop over all allowed interfaces and create routes from source interface
     for peer in peersInfo:
         logger.debug("Creating route from %s to %s",spec.get('sourceInterface'), peer['allowedInterface'])
-        await create_route(name, spec.get('sourceInterface'), peer['allowedInterface'])
+        await create_route(namespace, name, spec.get('sourceInterface'), peer['allowedInterface'])
 
     return {
         "status":"Running", 

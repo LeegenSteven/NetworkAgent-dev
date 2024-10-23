@@ -2,42 +2,41 @@
 
 A gitea virtual machine is automatically created when the __install.sh -s__ runs.
 
-However, if you want to reset the gitea environment you can delete and recreate the gitea virtual machine by running the following commands from the NetworkAgent directory.
+The k8s manifest can be found in __environment/git.yaml__
 
-```
-kubectl delete -f environment/git.yaml
-kubectl apply -f environment/git.yaml
-```
-
-## Log into Gitea
-
-To get access to the gitea UI run the following command, you can find its public IP address by running the following command.
+You must wait for the status to be __Ready__ by running the following
 
 ```
 kubectl describe gitea
 ```
 
+## Log into Gitea
+
+To get access to the gitea UI run the following command to find the VM's public IP address.
+
+```
+kubectl get giteas gitea -o jsonpath='{.status.create_gitea.external_ip_address}'
+```
+
 Then open a browser at https://<<external_ip_address>>:3000
 
-Log into gitea with the username/password networkagent/password123.
+Log into gitea with the username/password __networkagent/password123__
 
+## Clone the repos to your local machine
 
-## Clone the repos
-
-Clone the infrastructure and network-services repositories in a local directory. 
-
-```
-git clone https://<<external_ip_address>>:3000/networkagent/infrastructure -c http.sslVerify=false
-git clone https://<<external_ip_address>>:3000/networkagent/network-services -c http.sslVerify=false
-```
-
-Copy the sample customer infrastructure files from the NetworkAgent project as follows:
+If you want to clone the infrastructure and network-services repositories to a local directory you can run the following commands. 
 
 ```
-cd infrastructure
-cp <NetworkAgent Dir>/sample-services/customer-infrastructure/*yaml .
-git add .
-git commit -m "Added customer infrastructure config"
-git push
+export GITEA_ADDRESS=`kubectl get giteas gitea -o jsonpath='{.status.create_gitea.external_ip_address}'`
+git clone https://$GITEA_ADDRESS:3000/networkagent/core -c http.sslVerify=false
+git clone https://$GITEA_ADDRESS:3000/networkagent/dublin -c http.sslVerify=false
+git clone https://$GITEA_ADDRESS:3000/networkagent/london -c http.sslVerify=false
+git clone https://$GITEA_ADDRESS:3000/networkagent/newyork -c http.sslVerify=false
 ```
 
+
+
+```
+export GITEA_ADDRESS=`kubectl get giteas gitea -o jsonpath='{.status.create_gitea.external_ip_address}'`
+kpt alpha repo register --namespace default --repo-basic-username=networkagent --repo-basic-password=password123 https://$GITEA_ADDRESS:3000/networkagent/blueprints.git
+```

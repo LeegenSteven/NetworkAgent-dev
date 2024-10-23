@@ -1,0 +1,8 @@
+apiVersion: google.dev/v1
+kind: UERanSIM
+metadata:
+  name: ueransim-ny
+spec:
+  interface: 
+    name: newyork
+    namespace: newyork

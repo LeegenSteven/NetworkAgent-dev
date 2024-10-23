@@ -1,0 +1,5 @@
+apiVersion: google.dev/v1
+kind: Free5GC
+metadata:
+  name: free5gc-build
+spec:

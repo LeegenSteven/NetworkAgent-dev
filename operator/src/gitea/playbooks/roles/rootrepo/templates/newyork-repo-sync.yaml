@@ -1,0 +1,15 @@
+apiVersion: configsync.gke.io/v1beta1
+kind: RepoSync
+metadata:
+  name: repo-sync
+  namespace: newyork
+spec:
+  sourceType: git
+  sourceFormat: unstructured
+  git:
+    repo: https://networkagent:password123@{{external_ip_address}}:3000/networkagent/newyork
+    revision: HEAD
+    branch: master
+    auth: none
+    gcpServiceAccountEmail: networkagent@me.com
+    noSSLVerify: True

@@ -15,7 +15,7 @@ def get_resource_api(api_version, kind, client=None):
 ########################################################################
 # Create ComputeNetwork
 ########################################################################
-async def create_network(network_name):
+async def create_network(namespace, network_name):
   logger.debug("Create compute network %s", network_name)
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeNetwork")
   crd_manifest={
@@ -23,9 +23,12 @@ async def create_network(network_name):
     "kind": "ComputeNetwork",
     "metadata": {
       "name": network_name,
-      "namespace": "automation",
+      "namespace": namespace,
       "labels": {
         "graph": "true"
+      },
+      "annotations": {
+        "configmanagement.gke.io/managed": "disabled"
       }
     },
     "spec": {
@@ -51,11 +54,11 @@ async def create_network(network_name):
 ########################################################################
 # Delete ComputeNetwork
 ########################################################################
-async def delete_network(network_name):
+async def delete_network(namespace, network_name):
   logger.debug("Delete compute network %s", network_name)
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeNetwork")
   try: 
-    result = network_api.delete(name=network_name, body={}, namespace="automation")
+    result = network_api.delete(name=network_name, body={}, namespace=namespace)
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
     logger.debug(e)
@@ -63,7 +66,7 @@ async def delete_network(network_name):
 ########################################################################
 # Create ComputeSubNetwork
 ########################################################################
-async def create_subnetwork(network_name, subnet_name, cidr, region):
+async def create_subnetwork(namespace, network_name, subnet_name, cidr, region):
   logger.debug("Create compute subnetwork")
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeSubnetwork")
   crd_manifest= { 
@@ -71,7 +74,10 @@ async def create_subnetwork(network_name, subnet_name, cidr, region):
     "kind": "ComputeSubnetwork",
     "metadata": {
       "name": subnet_name,
-      "namespace": "automation",
+      "namespace": namespace,
+      "annotations": {
+        "configmanagement.gke.io/managed": "disabled"
+      },
       "labels": {
         "graph": "true"
       }
@@ -103,23 +109,26 @@ async def create_subnetwork(network_name, subnet_name, cidr, region):
 ########################################################################
 # Get Subnetwork
 ########################################################################
-async def get_subnetwork(name):
-  logger.debug("Get compute subnetwork %s", name)
+async def get_subnetwork(namespace, name):
+  logger.debug("Get compute subnetwork %s in namespace %s", name, namespace)
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeSubnetwork")
   try:
-    result = network_api.get(namespace="automation", name=name)
+    result = network_api.get(namespace=namespace, name=name)
     return result
   except kubernetes.client.rest.ApiException as e:
-    logger.debug(e)
+    if e.status == 404:
+      logger.debug("%s in namespace %s Not found", name, namespace)
+    else:
+      logger.debug(e)
 
 ########################################################################
 # Get Network
 ########################################################################
-async def get_network(name):
+async def get_network(namespace, name):
   logger.debug("Get compute network %s", name)
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeNetwork")
   try:
-    result = network_api.get(namespace="automation", name=name)
+    result = network_api.get(namespace=namespace, name=name)
     return result
   except kubernetes.client.rest.ApiException as e:
     logger.debug(e)
@@ -127,7 +136,7 @@ async def get_network(name):
 ########################################################################
 # Create ComputeRouter
 ########################################################################
-async def create_router(network_name, region):
+async def create_router(namespace, network_name, region):
   logger.debug("Create Router")
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeRouter")
   crd_manifest={
@@ -135,9 +144,12 @@ async def create_router(network_name, region):
     "kind": "ComputeRouter",
     "metadata":{
       "name": f"{network_name}-router",
-      "namespace": "automation",
+      "namespace": namespace,
       "labels": {
         "graph": "true"
+      },
+      "annotations": {
+        "configmanagement.gke.io/managed": "disabled"
       }
     },
     "spec": {
@@ -165,7 +177,7 @@ async def create_router(network_name, region):
 ########################################################################
 # ComputeRouterNAT
 ########################################################################
-async def create_nat(network_name, region):
+async def create_nat(namespace, network_name, region):
   logger.debug("Create NAT")
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeRouterNAT")
   crd_manifest={
@@ -173,9 +185,12 @@ async def create_nat(network_name, region):
     "kind": "ComputeRouterNAT",
     "metadata": {
       "name": f"{network_name}-nat",
-      "namespace": "automation",
+      "namespace": namespace,
       "labels": {
         "graph": "true"
+      },
+      "annotations": {
+        "configmanagement.gke.io/managed": "disabled"
       }
     },
     "spec": {
@@ -204,7 +219,7 @@ async def create_nat(network_name, region):
 ########################################################################
 # Create ComputeInstance
 ########################################################################
-async def create_compute(parent_name, vm_name, external_ip, interface, project, region, zone, vpn=False, monitor=True):
+async def create_compute(namespace, parent_name, vm_name, external_ip, interface, project, region, zone, vpn=False, monitor=True,release="ubuntu-2204-lts",):
   logger.debug("Create compute %s", vm_name)
   compute_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeInstance")
 
@@ -246,17 +261,21 @@ async def create_compute(parent_name, vm_name, external_ip, interface, project, 
     networkInterfaces.append(
         {
           "subnetworkRef": {
-            "name": "dataplane"
+            "name": "dataplane",
+            "namespace": "automation"
           }
         }
     )
 
   # next add the interface to connect to - this equates to ens5 internal nic
   if interface is not None:
+    # check the interface is up, and wait if not
+    await get_subnetwork(interface['namespace'], interface['name'])
     networkInterfaces.append(
         {
           "subnetworkRef": {
-            "name": interface
+            "name": interface['name'],
+            "namespace": interface['namespace'] 
           }
         }
     )
@@ -278,11 +297,12 @@ async def create_compute(parent_name, vm_name, external_ip, interface, project, 
     "kind": "ComputeInstance",
     "metadata": {
       "annotations": {
-        "cnrm.cloud.google.com/allow-stopping-for-update": "true"
+        "cnrm.cloud.google.com/allow-stopping-for-update": "true",
+        "configmanagement.gke.io/managed": "disabled"
       },
       "labels": labels,
       "name": vm_name,
-      "namespace": "automation"
+      "namespace": namespace
     },
     "spec": {
       "machineType": machineType,
@@ -292,7 +312,7 @@ async def create_compute(parent_name, vm_name, external_ip, interface, project, 
           "size": 50,
           "type": "pd-ssd",
           "sourceImageRef": {
-            "external": "ubuntu-os-cloud/ubuntu-2204-lts"
+            "external": f"ubuntu-os-cloud/{release}"
           },
         },
       },
@@ -328,11 +348,11 @@ async def create_compute(parent_name, vm_name, external_ip, interface, project, 
 ########################################################################
 # Get ComputeInstance
 ########################################################################
-async def get_compute(vm_name):
-  logger.debug("Get compute %s", vm_name)
+async def get_compute(namespace, vm_name):
+  logger.debug("Get compute %s in ns %s", vm_name, namespace)
   compute_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeInstance")
   try:
-    result = compute_api.get(namespace="automation", name=vm_name)
+    result = compute_api.get(namespace=namespace, name=vm_name)
     return result
   except kubernetes.client.rest.ApiException as e: 
     logger.debug(e.status)
@@ -344,7 +364,7 @@ async def get_compute(vm_name):
 ########################################################################
 # Create External ComputeAddress
 ########################################################################
-async def create_external_ip(name, region):
+async def create_external_ip(namespace, name, region):
   logger.debug("Create external ip")
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeAddress")
   crd_manifest= {
@@ -352,9 +372,12 @@ async def create_external_ip(name, region):
     "kind": "ComputeAddress",
     "metadata": {
       "name": f"{name}",
-      "namespace": "automation",
+      "namespace": namespace,
       "labels": {
         "graph": "true"
+      },
+      "annotations": {
+        "configmanagement.gke.io/managed": "disabled"
       }
     },
     "spec": {
@@ -381,7 +404,7 @@ async def create_external_ip(name, region):
 ########################################################################
 # Get ComputeAddress external IP address
 ########################################################################
-async def get_external_ip_address(name):
+async def get_external_ip_address(namespace, name):
   logger.debug("Getting external ip address")
 
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
@@ -390,7 +413,7 @@ async def get_external_ip_address(name):
       kind="ComputeAddress",
   )
   try:
-    result = network_api.get(name=name, namespace="automation")
+    result = network_api.get(name=name, namespace=namespace)
     if result.get('spec') is not None:
       if result.get('spec')['address'] is not None:
         return result.get('spec').get('address')
@@ -407,24 +430,24 @@ async def get_external_ip_address(name):
 ########################################################################
 # CreateRoute
 ########################################################################
-async def create_route(vm_name, source_subnetwork_name, peer_subnetwork_name):
-  logger.debug("Create route to vm %s from source %s to subnetwork %s", vm_name, source_subnetwork_name, peer_subnetwork_name)
+async def create_route(namespace, vm_name, source_subnetwork, peer_subnetwork):
+  logger.debug("Create route to vm %s from source %s to subnetwork %s", vm_name, source_subnetwork, peer_subnetwork)
 
   route_ip=None
 
   # find ip address on vm_name assigned to source_subnetwork_name
-  vmresult = await get_compute(vm_name)
+  vmresult = await get_compute(namespace, vm_name)
   if vmresult is None:
     raise kopf.TemporaryError("Waiting for VM")
 
-  logger.debug("source %s, target %s", source_subnetwork_name, peer_subnetwork_name)
+  logger.debug("source %s, target %s", source_subnetwork, peer_subnetwork)
 
   # check the VM has a network and ip address, if not backoff until it does
   if vmresult.get('spec') is not None:
     logger.debug(vmresult.spec)
     for interface in vmresult.spec['networkInterface']:
       if interface.get('subnetworkRef').get('name') is not None:
-        if interface['subnetworkRef']['name']==source_subnetwork_name:
+        if interface['subnetworkRef']['name']==source_subnetwork['name']:
           if interface.get('networkIpRef') is not None and interface.get('networkIpRef').get('external') is not None:
             route_ip=interface['networkIpRef']['external']
             break
@@ -433,11 +456,11 @@ async def create_route(vm_name, source_subnetwork_name, peer_subnetwork_name):
     raise kopf.TemporaryError("Waiting for VM ip address", 20)
 
   # find the cidr associated with peer_subnetwork_name
-  destresult = await get_subnetwork(peer_subnetwork_name)
+  destresult = await get_subnetwork(peer_subnetwork['namespace'], peer_subnetwork['name'])
   peer_cidr = destresult.spec['ipCidrRange']
 
   # find the network name from the source subnetwork
-  sourceresult = await get_subnetwork(source_subnetwork_name)
+  sourceresult = await get_subnetwork(source_subnetwork['namespace'], source_subnetwork['name'])
   sourcenetwork = sourceresult.spec['networkRef']['name']
 
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeRoute")
@@ -445,16 +468,20 @@ async def create_route(vm_name, source_subnetwork_name, peer_subnetwork_name):
     "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
     "kind": "ComputeRoute",
     "metadata": {
-      "name": vm_name+'-'+peer_subnetwork_name,
+      "name": vm_name+'-'+peer_subnetwork['name'],
       "labels": {
         "graph": "true"
+      },
+      "annotations": {
+        "configmanagement.gke.io/managed": "disabled"
       }
     },
     "spec": {
       "description": f"{vm_name} route",
       "destRange": peer_cidr,
       "networkRef": {
-        "name": sourcenetwork
+        "name": sourcenetwork, 
+        "namespace": source_subnetwork['namespace']
       },
       "priority": 100,
       "nextHopIp": route_ip
@@ -479,10 +506,10 @@ async def create_route(vm_name, source_subnetwork_name, peer_subnetwork_name):
 ########################################################################
 # Get the mgmt network ip address on a VM
 ########################################################################
-async def get_ip(name, networkname="mgmt"):
+async def get_ip(namespace, name, networkname="mgmt"):
     logger.debug("getting mgmt ip address")
     # get server
-    vm = await get_compute(name)
+    vm = await get_compute(namespace, name)
     if vm is None or vm.get('spec') is None:
         logger.debug("No VM or VM spec")
         return None
@@ -506,11 +533,11 @@ async def get_ip(name, networkname="mgmt"):
 #####################################################################
 # Get Compute Subnet Info
 #####################################################################
-async def get_subnet_info(subnetname):
-  logger.debug("get info for subnet %s", subnetname)
+async def get_subnet_info(namespace, subnetname):
+  logger.debug("get info for subnet %s in ns %s", subnetname, namespace)
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeSubnetwork")
   try:
-    result = network_api.get(name=subnetname, namespace="automation")
+    result = network_api.get(name=subnetname, namespace=namespace)
     conditions = result.get('status').get('conditions')
     if conditions[-1].get('reason') != "UpToDate":
         raise kopf.TemporaryError("Waiting for subnet to come up")
@@ -518,16 +545,16 @@ async def get_subnet_info(subnetname):
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
     if e.status == 404:
-        raise kopf.TemporaryError(f"No subnet {subnetname} found yet")
+        raise kopf.TemporaryError(f"No subnet {subnetname} found yet. Waiting...")
 
 #####################################################################
 # Get Compute Instance Info
 #####################################################################
-async def get_vm_info(vmname):
+async def get_vm_info(namespace, vmname):
   logger.debug("get info for vm %s", vmname)
   compute_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeInstance")
   try:
-    result = compute_api.get(name=vmname, namespace="automation")
+    result = compute_api.get(name=vmname, namespace=namespace)
     status = result.get('status')
     if status.get('currentStatus') != "RUNNING":
       raise kopf.TemporaryError("Waiting for VM to come up")

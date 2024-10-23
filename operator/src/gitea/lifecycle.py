@@ -10,11 +10,12 @@ async def create_gitea(spec, name, namespace, logger, **kwargs):
     logger.debug("Create gitea repo")
 
     # Create external IP address
-    await create_external_ip("gitea", os.getenv("GOOGLE_REGION"))
-    external_ip_address = await get_external_ip_address("gitea")
+    await create_external_ip(namespace, "gitea", os.getenv("GOOGLE_REGION"))
+    external_ip_address = await get_external_ip_address(namespace, "gitea")
 
     # Create VM and attach IP address
-    await create_compute(name,
+    await create_compute(namespace, 
+                         name,
                          "gitea",
                          external_ip_address, # replace with None when only private IP address
                          None, 
@@ -24,10 +25,10 @@ async def create_gitea(spec, name, namespace, logger, **kwargs):
                          monitor=False) # set to false so this VM is not scraped by prometheus
 
     # Install Gitea
-    await run_gitea_install(external_ip_address)
+    await run_gitea_install(namespace, external_ip_address)
 
     # get the mgmt ip address of the VM
-    mgmt_ip_address=await get_ip("gitea")
+    # mgmt_ip_address=await get_ip(namespace, "gitea")
 
     # Create root sync object
     await create_root_sync(external_ip_address)

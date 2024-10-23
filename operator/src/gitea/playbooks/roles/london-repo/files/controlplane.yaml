@@ -1,0 +1,9 @@
+apiVersion: google.dev/v1
+kind: ControlPlane
+metadata:
+  name: london
+spec:
+  cluster: london-cluster
+  external_subnetwork: # used to reserve an IP address for internal load balancer
+    name: london
+    namespace: london

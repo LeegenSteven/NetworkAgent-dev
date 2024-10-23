@@ -8,8 +8,8 @@ logger = logging.getLogger(__name__)
 ########################################################################
 # Create a WireguardAppliance instance
 ########################################################################
-async def create_vpn_edge(parent_name, parent_kind, vpn_name, source_interface,tunnel_subnet, tunnel_ip, my_keys, peers):
-  logger.debug("Create VPN Edge %s", vpn_name)
+async def create_vpn_edge(namespace, parent_name, parent_namespace, parent_kind, vpn_name, source_interface, tunnel_subnet, tunnel_ip, my_keys, peers):
+  logger.debug("Create VPN Edge %s in ns %s", vpn_name, namespace)
   network_api = get_resource_api("google.dev/v1", "WireguardAppliance")
 
   crd_manifest = {
@@ -17,9 +17,12 @@ async def create_vpn_edge(parent_name, parent_kind, vpn_name, source_interface,t
     "kind": "WireguardAppliance",
     "metadata": {
       "name": vpn_name,
-      "namespace": "automation",
+      "namespace": namespace,
       "labels": {
         "graph": "true"
+      },
+      "annotations": {
+        "configmanagement.gke.io/managed": "disabled"
       }
     },
     "spec": {
@@ -36,10 +39,13 @@ async def create_vpn_edge(parent_name, parent_kind, vpn_name, source_interface,t
   # update manifest to be child of site-to-site service
   kopf.adopt(crd_manifest)
   kopf.label(crd_manifest, labels={'kex-parent-name': parent_name})
+  kopf.label(crd_manifest, labels={'kex-parent-namespace': parent_namespace})
   kopf.label(crd_manifest, labels={'kex-parent-kind': parent_kind})
 
   try:
-    result = network_api.create(crd_manifest)
+    result = network_api.create(body=crd_manifest, namespace=namespace)
+    logger.debug("created wireguard-----------------------+====")
+    logger.debug(result)
   except kubernetes.client.rest.ApiException as e: 
     logger.debug(e.status)
     if e.status == 409:

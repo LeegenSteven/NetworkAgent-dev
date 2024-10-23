@@ -1,0 +1,15 @@
+apiVersion: google.dev/v1
+kind: MeshService
+metadata:
+  name: meshservice1
+  labels:
+    customer: acme
+    graph: "true"
+spec:
+  interfaces: # the "remote" customer subnets to connect
+    - name: dublin
+      namespace: dublin
+    - name: london
+      namespace: london
+    - name: newyork
+      namespace: newyork

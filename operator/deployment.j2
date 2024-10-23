@@ -28,7 +28,7 @@ rules:
 
   # Application: read-only access for watching cluster-wide.
   - apiGroups: [google.dev]
-    resources: [meshservices, pointtopointservices, wireguardappliances, connectivitytests, monitors, giteas]
+    resources: [meshservices, pointtopointservices, wireguardappliances, connectivitytests, monitors, giteas, ueransims, userplanefunctions, controlplanes]
     verbs: [list, get, create, watch, patch, delete]
 
   # Application: config connector.
@@ -59,7 +59,7 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: networkoperator-role-cluster
+  name: cluster-admin
 subjects:
   - kind: ServiceAccount
     name: networkoperator-account

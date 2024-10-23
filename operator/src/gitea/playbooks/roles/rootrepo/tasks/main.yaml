@@ -21,6 +21,9 @@
   args:
     chdir: /opt/root-repo
 
+###############################################
+# Master Branch
+###############################################
 - name: checkout master branch
   command: sudo -u git git checkout -b master
   args:
@@ -33,21 +36,6 @@
     owner: git
     group: git
     mode: '0644'
-
-- name: add source repos
-  ansible.builtin.template:
-    src: "{{item}}"
-    dest: "/opt/root-repo/{{item}}"
-    owner: git
-    group: git
-    mode: '0644'
-  loop:
-    - locations-namespace.yaml
-    - locations-repo-sync.yaml
-    - locations-role.yaml
-    - connectivity-services-namespace.yaml
-    - connectivity-services-repo-sync.yaml
-    - connectivity-services-role.yaml
 
 - name: add readme to root-repo
   command: sudo -u git git add .
@@ -64,8 +52,57 @@
   args:
     chdir: /opt/root-repo
 
-- name: push to repo
+- name: push master to repo
   command: sudo -u git git -c http.sslVerify=false push -u origin master
+  args:
+    chdir: /opt/root-repo
+
+###############################################
+# Dev Branch
+###############################################
+- name: checkout dev branch
+  command: sudo -u git git checkout -b dev
+  args:
+    chdir: /opt/root-repo
+
+- name: add readme to root-repo
+  command: sudo -u git git add .
+  args:
+    chdir: /opt/root-repo
+
+- name: add source repos to dev
+  ansible.builtin.template:
+    src: "{{item}}"
+    dest: "/opt/root-repo/{{item}}"
+    owner: git
+    group: git
+    mode: '0644'
+  loop:
+    - core-namespace.yaml
+    - core-repo-sync.yaml
+    - core-role.yaml
+    - london-namespace.yaml
+    - london-repo-sync.yaml
+    - london-role.yaml
+    - dublin-namespace.yaml
+    - dublin-repo-sync.yaml
+    - dublin-role.yaml
+    - newyork-namespace.yaml
+    - newyork-repo-sync.yaml
+    - newyork-role.yaml
+
+- name: add dev files to root-repo
+  command: sudo -u git git add .
+  args:
+    chdir: /opt/root-repo
+
+- name: dev commit 
+  command: sudo -u git git commit -m "add repos"
+  args:
+    chdir: /opt/root-repo
+
+- name: push to repo
+  command: sudo -u git git -c http.sslVerify=false push -u origin dev
   args:
     chdir: /opt/root-repo
 

@@ -6,10 +6,10 @@ from utils.compute import *
 
 logger = logging.getLogger(__name__)
 
-async def get_not_mgmt_ip(name):
+async def get_not_mgmt_ip(namespace, name):
     logger.info("getting mgmt ip address")
 
-    vm = await get_compute(name)
+    vm = await get_compute(namespace, name)
     if vm is None or vm.get('spec') is None:
         logger.info("No VM or VM spec")
         return None
@@ -35,13 +35,13 @@ async def createtest(spec, name, namespace, logger, **kwargs):
 
     logger.info("Create test case between %s and %s", client, server)
 
-    client_mgmt_ip=await get_ip(client)
-    server_mgmt_ip=await get_ip(server)
+    client_mgmt_ip=await get_ip(namespace, client)
+    server_mgmt_ip=await get_ip(namespace, server)
 
     if client_mgmt_ip is None or server_mgmt_ip is None:
         raise kopf.PermanentError("waiting for IP addresses")
-    client_data_ip=await get_not_mgmt_ip(client)
-    server_data_ip=await get_not_mgmt_ip(server)
+    client_data_ip=await get_not_mgmt_ip(namespace, client)
+    server_data_ip=await get_not_mgmt_ip(namespace, server)
     hosts = {
         'hosts': {
             'client': {
@@ -80,8 +80,8 @@ async def deletetest(spec, name, namespace, logger, **kwargs):
     client=spec.get('virtualmachines')[0]
     server=spec.get('virtualmachines')[1]
 
-    client_mgmt_ip=await get_ip(client)
-    server_mgmt_ip=await get_ip(server)
+    client_mgmt_ip=await get_ip(namespace, client)
+    server_mgmt_ip=await get_ip(namespace, server)
 
     if client_mgmt_ip is None or server_mgmt_ip is None:
         raise kopf.PermanentError("can't find ip addresses for client or server")

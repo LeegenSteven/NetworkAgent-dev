@@ -50,7 +50,7 @@ def get_status(body):
 # ------------------------------------------
 # Create a network node
 # ------------------------------------------
-def create_network_node(body, spec, name, kind, uid):
+def create_network_node(body, spec, namespace, name, kind, uid):
 
   def sql_create_network_node(transaction):
     tmpl = SQL_TEMPLATES['create_nw_node']
@@ -62,7 +62,7 @@ def create_network_node(body, spec, name, kind, uid):
     api = kubernetes.client.ApiClient()
     client = kubernetes.dynamic.DynamicClient(api)
     resource_api = get_resource_api(body.get('apiVersion'), kind, client)
-    resource = resource_api.get(namespace="automation", name=name)
+    resource = resource_api.get(namespace=namespace, name=name)
     #sanitized_resource = api.sanitize_for_serialization(resource.to_dict())
     #logger.debug("resource: %s",sanitized_resource)
 
@@ -271,33 +271,36 @@ def delete_resource_connection(uid):
 # the name or external attirbutes
 def find_xnet_name(spec_base, attribute):
   subnet_name = None
+  subnet_namespace = None
   subnet_entry = spec_base.get(attribute)
   if subnet_entry is not None:
     subnet_name = subnet_entry.get('name')
-    if subnet_name is None: 
-      subnet_url = subnet_entry.get('external')
-      if subnet_url is not None:
-        subnet_name = subnet_url.split('/')[-1]
-  return subnet_name
+    subnet_namespace = subnet_entry.get('namespace')
+  return subnet_name, subnet_namespace
 
 # Find the reference network of of K8s resource
 # given its spec (or part of its spec) as a parameter
-async def find_network_reference(spec_base):
+async def find_network_reference(namespace, spec_base):
   # Try finding a subnet resource first
-  subnet_name = find_xnet_name(spec_base, 'subnetworkRef')
+  subnet_name, subnet_namespace = find_xnet_name(spec_base, 'subnetworkRef')
   if subnet_name is not None:
-      subnet = await get_subnetwork(subnet_name)
+      subnet = await get_subnetwork(subnet_namespace, subnet_name)
       if subnet is not None:
-        logger.info("Found subnet %s", subnet_name)
+        logger.info("Found subnet %s in ns %s", subnet_name, subnet_namespace)
         return subnet
       
   # Try finding a net resource second
-  net_name = find_xnet_name(spec_base, 'networkRef')
-  if net_name is not None:
-      net = await get_network(net_name)
-      if net is not None:
-        logger.info("Found net %s", net_name)
-        return net
-  
+  net_name,net_namespace = find_xnet_name(spec_base, 'networkRef')
+  if net_name is not None and net_namespace is not None:
+      try:
+        net = await get_network(net_namespace, net_name)
+        if net is not None:
+          logger.info("Found net %s in ns %s", net_name, net_namespace)
+          return net
+      except kubernetes.client.rest.ApiException as e:
+        if e.status == 404:
+          logger.debug("%s in namespace %s not found", net_name, namespace)
+        else:
+          logger.debug(e)    
   # At that stage we haven't found any net or subnet resource
   return None

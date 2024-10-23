@@ -9,14 +9,8 @@ logger = logging.getLogger(__name__)
 # Catch create events
 # TODO: see if you can be more specific in the Kopf resource
 # specification without loosing genericity too much
-@kopf.on.create('google.dev', 'v1', 'MeshService')
-@kopf.on.create('google.dev', 'v1', 'PointToPointService')
-@kopf.on.create('google.dev', 'v1', 'WireguardAppliance')
-@kopf.on.create('compute.cnrm.cloud.google.com','v1beta1','computeinstances',labels={'graph': 'true'})
-@kopf.on.create('compute.cnrm.cloud.google.com','v1beta1','computesubnetworks',labels={'graph': 'true'})
-@kopf.on.create('compute.cnrm.cloud.google.com','v1beta1','computenetworks',labels={'graph': 'true'})
-@kopf.on.create('compute.cnrm.cloud.google.com','v1beta1','computeroutes',labels={'graph': 'true'})
-async def create_node(body, spec, meta, uid, name, logger, **kwargs):
+@kopf.on.create(kopf.EVERYTHING, labels = {'graph': 'true'})
+async def create_node(body, spec, meta, uid, namespace, name, logger, **kwargs):
   logger.info("Create graph network node")
   success = False
 
@@ -28,7 +22,7 @@ async def create_node(body, spec, meta, uid, name, logger, **kwargs):
   else:
     logger.info("Graph node %s of kind %s detected", name, kind)
   
-  success |= create_network_node(body, spec, name, kind, uid)
+  success |= create_network_node(body, spec, namespace, name, kind, uid)
 
   # --- Build K8s resource connections (management connections)
   #
@@ -56,7 +50,7 @@ async def create_node(body, spec, meta, uid, name, logger, **kwargs):
 
   for s in specs:
     logger.info("Looking for (sub)network ref in %s / %s", body.get('kind'), meta.get('name'))
-    xnet = await find_network_reference(s)
+    xnet = await find_network_reference(namespace, s)
     if xnet is not None:
       xnet_uid = xnet.get('metadata').get('uid')
       success |= create_network_connection(uid,xnet_uid)
@@ -85,13 +79,7 @@ async def update_node(body, spec, uid, name, logger, **kwargs):
     raise kopf.TemporaryError("Update node error", delay=15)
 
 # Catch delete events
-@kopf.on.delete('google.dev', 'v1', 'MeshService')
-@kopf.on.delete('google.dev', 'v1', 'PointToPointService')
-@kopf.on.delete('google.dev', 'v1', 'WireguardAppliance')
-@kopf.on.delete('compute.cnrm.cloud.google.com','v1beta1','computeinstances',labels={'graph': 'true'})
-@kopf.on.delete('compute.cnrm.cloud.google.com','v1beta1','computesubnetworks',labels={'graph': 'true'})
-@kopf.on.delete('compute.cnrm.cloud.google.com','v1beta1','computenetworks',labels={'graph': 'true'})
-@kopf.on.delete('compute.cnrm.cloud.google.com','v1beta1','computeroutes',labels={'graph': 'true'})
+@kopf.on.delete(kopf.EVERYTHING, labels = {'graph': 'true'})
 async def delete_node(body, spec, uid, name, logger, **kwargs):
   logger.info("Delete graph network node")
   success = False

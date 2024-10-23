@@ -1,0 +1,144 @@
+- name: Create dublin directory
+  file:
+    path: /opt/dublin-repo
+    state: directory
+    owner: git
+    group: git
+    mode: 0775
+
+- name: init git repo
+  command: sudo -u git git init
+  args:
+    chdir: /opt/dublin-repo
+
+- name: configure git user name
+  command: "sudo -u git git config --global user.name 'Network Agent'"
+  args:
+    chdir: /opt/dublin-repo
+
+- name: configure git email
+  command: "sudo -u git git config --global user.email 'networkagent@example.com'"
+  args:
+    chdir: /opt/dublin-repo
+
+###############################################
+# Master Branch
+###############################################
+- name: checkout master branch
+  command: sudo -u git git checkout -b master
+  args:
+    chdir: /opt/dublin-repo
+
+- name: push dublin files to master
+  ansible.builtin.copy:
+    src: "{{item}}"
+    dest: "/opt/dublin-repo/{{item}}"
+    owner: git
+    group: git
+    mode: '0644'
+  loop:
+   - Readme.md
+
+- name: add to master branch in dublin repo
+  command: sudo -u git git add .
+  args:
+    chdir: /opt/dublin-repo
+
+- name: initial commit 
+  command: sudo -u git git commit -m "initial commit"
+  args:
+    chdir: /opt/dublin-repo
+
+- name: add remote repo
+  command: sudo -u git git remote add origin https://networkagent:password123@{{ansible_host}}:3000/networkagent/dublin.git
+  args:
+    chdir: /opt/dublin-repo
+
+- name: push to repo
+  command: sudo -u git git -c http.sslVerify=false push -u origin master
+  args:
+    chdir: /opt/dublin-repo
+
+###############################################
+# Location Branch
+###############################################
+- name: checkout location branch
+  command: sudo -u git git checkout -b location
+  args:
+    chdir: /opt/dublin-repo
+
+- name: push dublin files
+  ansible.builtin.copy:
+    src: "{{item}}"
+    dest: "/opt/dublin-repo/{{item}}"
+    owner: git
+    group: git
+    mode: '0644'
+  loop:
+   - Readme.md
+
+- name: push templated dublin files
+  ansible.builtin.template:
+    src: "dublin.yaml"
+    dest: "/opt/dublin-repo/dublin.yaml"
+    owner: git
+    group: git
+    mode: '0644'
+
+- name: add to location branch in dublin repo
+  command: sudo -u git git add .
+  args:
+    chdir: /opt/dublin-repo
+
+- name: dublin files commit 
+  command: sudo -u git git commit -m "add location files"
+  args:
+    chdir: /opt/dublin-repo
+
+- name: push to repo
+  command: sudo -u git git -c http.sslVerify=false push -u origin location
+  args:
+    chdir: /opt/dublin-repo
+
+###############################################
+# Network Function Branch
+###############################################
+- name: checkout network function branch
+  command: sudo -u git git checkout -b networkfunction
+  args:
+    chdir: /opt/dublin-repo
+
+- name: push dublin files
+  ansible.builtin.copy:
+    src: "{{item}}"
+    dest: "/opt/dublin-repo/{{item}}"
+    owner: git
+    group: git
+    mode: '0644'
+  loop:
+   - dublin-ueransim.yaml
+   - Readme.md
+
+- name: push templated dublin files
+  ansible.builtin.template:
+    src: "dublin.yaml"
+    dest: "/opt/dublin-repo/dublin.yaml"
+    owner: git
+    group: git
+    mode: '0644'
+
+- name: add to network function branch in dublin repo
+  command: sudo -u git git add .
+  args:
+    chdir: /opt/dublin-repo
+
+- name: dublin files commit 
+  command: sudo -u git git commit -m "add network function files"
+  args:
+    chdir: /opt/dublin-repo
+
+- name: push to repo
+  command: sudo -u git git -c http.sslVerify=false push -u origin networkfunction
+  args:
+    chdir: /opt/dublin-repo
+

@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 # Connect to Spanner database
 @st.cache_resource
 def spanner_connect():
-  credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/tools/networkagent.json"))[0]
+  credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/agent/networkagent.json"))[0]
+  logger.info(credentials)
   spanner_client = spanner.Client(credentials=credentials)
   instance = spanner_client.instance('networktopology-instance')
   database = instance.database('networktopology-db')

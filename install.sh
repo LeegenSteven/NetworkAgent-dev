@@ -373,6 +373,7 @@ Kill()
     # kubectl delete -f sample-services/locations
     # kubectl delete -f environment/prometheus.yaml
     kubectl delete -f environment/git.yaml
+    kubectl delete -f environment/free5gc-build.yaml
     # kubectl delete -f environment/bigquery.yaml
     kubectl delete -f environment/spanner.yaml
     kubectl delete -f environment/networks.yaml
@@ -415,7 +416,8 @@ Operator()
     kubectl apply -f deployment.yaml
     kubectl get pods 
     echo "Waiting for deployment to be ready..."
-    kubectl rollout status deployment networkoperator -n $GOOGLE_NAMESPACE --timeout=120s
+    kubectl rollout status deployment gitea-operator -n $GOOGLE_NAMESPACE --timeout=120s
+    kubectl rollout status deployment free5gc-operator -n $GOOGLE_NAMESPACE --timeout=120s
     cd ..
 }
 

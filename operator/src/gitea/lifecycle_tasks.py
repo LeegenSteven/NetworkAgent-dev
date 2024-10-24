@@ -3,7 +3,7 @@ import logging
 from utils.compute import *
 import utils.constants as constants
 import ansible_runner
-from resources.wireguard.lifecycle_tasks import *;
+from vpn.wireguard.lifecycle_tasks import *;
 
 logger = logging.getLogger(__name__)
 

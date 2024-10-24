@@ -1,0 +1,16 @@
+- name: copy UPF configuration
+  ansible.builtin.template: 
+    src: "{{item}}"
+    dest: "/opt/{{item}}"
+  loop:
+  - upfcfg.yaml
+  - upf-iptables.sh
+
+# run upf image with config above, docker with host networking
+# - name: Container present
+#   docker_container:
+#     name: upf
+#     state: present
+#     image: 
+#     command: ??
+#     network_mode: host

@@ -27,9 +27,6 @@ async def create_gitea(spec, name, namespace, logger, **kwargs):
     # Install Gitea
     await run_gitea_install(namespace, external_ip_address)
 
-    # get the mgmt ip address of the VM
-    # mgmt_ip_address=await get_ip(namespace, "gitea")
-
     # Create root sync object
     await create_root_sync(external_ip_address)
 

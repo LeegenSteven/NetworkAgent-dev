@@ -17,18 +17,31 @@ else:
 logger.info("Base directory is %s", constants.basedir)
 
 # register lifecycle events
-from build.free5gc.lifecycle import *
-from services.pointtopoint.lifecycle import *
-from services.mesh.lifecycle import *
-from services.utils.status import *
-from resources.wireguard.lifecycle import *
-from resources.ueransim.lifecycle import *
-from resources.upf.lifecycle import *
-from resources.controlplane.lifecycle import *
-from tests.lifecycle import *
-from monitor.lifecycle import *
-from gitea.lifecycle import *
-from graph.lifecycle import *
+if os.getenv("VPN") is not None:
+    logger.info("VPN Lifecycle")
+    from vpn.pointtopoint.lifecycle import *
+    from vpn.mesh.lifecycle import *
+    from vpn.utils.status import *
+    from vpn.wireguard.lifecycle import *
+    from vpn.tests.lifecycle import *
+
+if os.getenv("FREE5GC") is not None:
+    logger.info("FREE5GC Lifecycle")
+    from free5gc.build.lifecycle import *
+    from free5gc.ueransim.lifecycle import *
+    from free5gc.upf.lifecycle import *
+    from free5gc.controlplane.lifecycle import *
+
+if os.getenv("MONITOR") is not None:
+    logger.info("MONITOR Lifecycle")
+    from monitor.lifecycle import *
+
+if os.getenv("GITEA") is not None:
+    logger.info("GITEA Lifecycle")
+    from gitea.lifecycle import *
+
+if os.getenv("GRAPH") is not None:
+    from graph.lifecycle import *
 
 if os.getenv("GOOGLE_REGION") is None or os.getenv("GOOGLE_ZONE") is None or os.getenv("GOOGLE_PROJECT") is None:
     logger.error("You must set GOOGLE_REGION/GOOGLE_ZONE/GOOGLE_PROJECT environment variables")
@@ -44,4 +57,3 @@ def configure(settings: kopf.OperatorSettings, **_):
 @kopf.on.login()
 def login_fn(**kwargs):
     return kopf.login_via_client(**kwargs)
-

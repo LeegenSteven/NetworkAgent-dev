@@ -1,0 +1,10 @@
+- name: copy UERANSIM config
+  ansible.builtin.template: 
+    src: "{{item}}"
+    dest: "/opt/{{item}}"
+  loop:
+  - gnbcfg.yaml
+  - uecfg.yaml
+
+# run UERANSIM with config above, docker run with host network
+

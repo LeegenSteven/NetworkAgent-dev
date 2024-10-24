@@ -1,0 +1,107 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ausf-configmap
+  labels:
+    app: free5gc
+data:
+  ausfcfg.yaml: |
+    info:
+      version: 1.0.2
+      description: AUSF initial local configuration
+
+    configuration:
+      sbi: # Service-based interface information
+        scheme: http # the protocol for sbi (http or https)
+        registerIPv4: ausf-nausf # IP used to register to NRF
+        bindingIPv4: 0.0.0.0  # IP used to bind the service
+        port: 8000 # Port used to bind the service
+        tls: # the local path of TLS key
+          pem: config/TLS/ausf.pem # AUSF TLS Certificate
+          key: config/TLS/ausf.key # AUSF TLS Private key
+      serviceNameList: # the SBI services provided by this AUSF, refer to TS 29.509
+        - nausf-auth # Nausf_UEAuthentication service
+      nrfUri: http://nrf-nnrf:8000 # a valid URI of NRF
+      plmnSupportList: # the PLMNs (Public Land Mobile Network) list supported by this AUSF
+        - mcc: 001 # Mobile Country Code (3 digits string, digit: 0~9)
+          mnc: 01  # Mobile Network Code (2 or 3 digits string, digit: 0~9)
+      groupId: ausfGroup001 # ID for the group of the AUSF
+      eapAkaSupiImsiPrefix: false # including "imsi-" prefix or not when using the SUPI to do EAP-AKA' authentication
+
+    # the kind of log output
+    # debugLevel: how detailed to output, value: trace, debug, info, warn, error, fatal, panic
+    # ReportCaller: enable the caller report or not, value: true or false
+    logger:
+      AUSF:
+        debugLevel: info
+        ReportCaller: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: free5gc-ausf
+  labels:
+    app: free5gc
+    nf: ausf
+spec:
+  selector:
+    matchLabels:
+      app: free5gc
+      nf: ausf
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: free5gc
+        nf: ausf
+    spec:
+      initContainers:
+      - name: wait-amf
+        image: busybox:1.32.0
+        env:
+        - name: DEPENDENCIES
+          value: amf-namf:8000
+        command: ["sh", "-c", "until nc -z $DEPENDENCIES; do echo waiting for the AMF; sleep 2; done;"]
+      containers:
+      - image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/networkagent/ausf:latest
+        name: ausf
+        ports:
+        - containerPort: 8000
+        command: ["./ausf"]
+        args: ["--config", "config/ausfcfg.yaml"]  
+        env:
+          - name: GIN_MODE
+            value: release
+        volumeMounts:
+        - mountPath: /free5gc/config/
+          name: ausf-volume
+        resources:
+          requests:
+            memory: "100Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "250m"
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      volumes:
+      - name: ausf-volume
+        projected:
+          sources:
+          - configMap:
+              name: ausf-configmap
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: ausf-nausf
+  labels:
+    app: free5gc
+    nf: ausf
+spec:
+  ports:
+    - port: 8000
+  selector:
+    app: free5gc
+    nf: ausf

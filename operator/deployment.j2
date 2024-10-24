@@ -4,52 +4,6 @@ kind: ServiceAccount
 metadata:
   namespace: "automation"
   name: networkoperator-account
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: networkoperator-role-cluster
-rules:
-
-  # Framework: posting the events about the handlers progress/errors.
-  - apiGroups: [""]
-    resources: [events]
-    verbs: [create]
-
-  # Framework: crud of configmaps.
-  - apiGroups: [""]
-    resources: [configmaps]
-    verbs: [create, delete, get, list, patch, watch, list]
-
-  # Framework: runtime observation of namespaces & CRDs (addition/deletion).
-  - apiGroups: [apiextensions.k8s.io]
-    resources: [customresourcedefinitions]
-    verbs: [list, watch]
-
-  # Application: read-only access for watching cluster-wide.
-  - apiGroups: [google.dev]
-    resources: [meshservices, pointtopointservices, wireguardappliances, connectivitytests, monitors, giteas, ueransims, userplanefunctions, controlplanes]
-    verbs: [list, get, create, watch, patch, delete]
-
-  # Application: config connector.
-  - apiGroups: [compute.cnrm.cloud.google.com]
-    resources: [computenetworks, computeaddresses, computesubnetworks, computeinstances, computerouters, computerouternats, computefirewalls, computeroutes]
-    verbs: [list, get, create, watch, patch, delete]
-
-  # Application: Config Sync.
-  - apiGroups: [configsync.gke.io]
-    resources: [rootsyncs]
-    verbs: [list, get, create, watch, patch, delete]
-
-  # Application: needed to avoid Kopf error when uslistening to kopf.EVERYTHING.
-  - apiGroups: [compute.cnrm.cloud.google.com]
-    resources: [computeinstances/status]
-    verbs: [get, watch, patch]
-
-  # Application: needed to avoid Kopf error when listening to kopf.EVERYTHING.
-  - apiGroups: ["*"]
-    resources: ["*"]
-    verbs: [list, watch]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -69,22 +23,22 @@ subjects:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: networkoperator
+  name: vpn-operator
 spec:
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      application: networkoperator
+      application: vpn-operator
   template:
     metadata:
       labels:
-        application: networkoperator
+        application: vpn-operator
     spec:
       serviceAccountName: networkoperator-account
       containers:
-      - name: networkoperator
+      - name: vpn-operator
         image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/networkoperator:latest
         imagePullPolicy: Always
         env:
@@ -98,3 +52,112 @@ spec:
           value: {{GOOGLE_ZONE}}
         - name: GOOGLE_USER
           value: {{GOOGLE_USER}}
+        - name: VPN
+          value: "yes"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: free5gc-operator
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      application: free5gc-operator
+  template:
+    metadata:
+      labels:
+        application: free5gc-operator
+    spec:
+      serviceAccountName: networkoperator-account
+      containers:
+      - name: free5gc-operator
+        image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/networkoperator:latest
+        imagePullPolicy: Always
+        env:
+        - name: BASEDIR
+          value: "/operator"
+        - name: GOOGLE_PROJECT
+          value: {{GOOGLE_PROJECT}}
+        - name: GOOGLE_REGION
+          value: {{GOOGLE_REGION}}
+        - name: GOOGLE_ZONE
+          value: {{GOOGLE_ZONE}}
+        - name: GOOGLE_USER
+          value: {{GOOGLE_USER}}
+        - name: FREE5GC
+          value: "yes"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graph-operator
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      application: graph-operator
+  template:
+    metadata:
+      labels:
+        application: graph-operator
+    spec:
+      serviceAccountName: networkoperator-account
+      containers:
+      - name: graph-operator
+        image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/networkoperator:latest
+        imagePullPolicy: Always
+        env:
+        - name: BASEDIR
+          value: "/operator"
+        - name: GOOGLE_PROJECT
+          value: {{GOOGLE_PROJECT}}
+        - name: GOOGLE_REGION
+          value: {{GOOGLE_REGION}}
+        - name: GOOGLE_ZONE
+          value: {{GOOGLE_ZONE}}
+        - name: GOOGLE_USER
+          value: {{GOOGLE_USER}}
+        - name: GRAPH
+          value: "yes"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitea-operator
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      application: gitea-operator
+  template:
+    metadata:
+      labels:
+        application: gitea-operator
+    spec:
+      serviceAccountName: networkoperator-account
+      containers:
+      - name: gitea-operator
+        image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/networkoperator:latest
+        imagePullPolicy: Always
+        env:
+        - name: BASEDIR
+          value: "/operator"
+        - name: GOOGLE_PROJECT
+          value: {{GOOGLE_PROJECT}}
+        - name: GOOGLE_REGION
+          value: {{GOOGLE_REGION}}
+        - name: GOOGLE_ZONE
+          value: {{GOOGLE_ZONE}}
+        - name: GOOGLE_USER
+          value: {{GOOGLE_USER}}
+        - name: GITEA
+          value: "yes"

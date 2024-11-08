@@ -29,6 +29,7 @@ metadata:
   name: free5gc-webui
   labels:
     app: free5gc
+    graph: "true"
 spec:
   selector:
     matchLabels:

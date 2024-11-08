@@ -1,5 +1,8 @@
+########################################################
+# Get API token
+########################################################
 - name: authenticate with gitea
-  command: "curl -H 'Content-Type: application/json' -d '{\"name\":\"root-repo\", \"scopes\":[\"write:repository\", \"write:user\"]}' -u networkagent:password123 https://{{ansible_host}}:3000/api/v1/users/networkagent/tokens --insecure"
+  command: "curl -H 'Content-Type: application/json' -d '{\"name\":\"root-repo\", \"scopes\":[\"write:repository\", \"write:user\", \"write:admin\"]}' -u networkagent:password123 https://{{ansible_host}}:3000/api/v1/users/networkagent/tokens --insecure"
   register: result
 
 - set_fact:
@@ -8,6 +11,9 @@
 - debug:
     var: token_result
 
+########################################################
+# Create Repos
+########################################################
 - name: create root-repo
   command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"root-repo\"}' --insecure"
   when: token_result.sha1 is defined
@@ -28,3 +34,17 @@
   command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"core\"}' --insecure"
   when: token_result.sha1 is defined
 
+- name: create london cluster repo
+  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"london-cluster\"}' --insecure"
+  when: token_result.sha1 is defined
+
+########################################################
+# NetworkAgent SSH Key
+########################################################
+- name: create ssh key for networkagent user
+  command: "curl -k -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/keys -d '{\"title\": \"NetworkAgent key\", \"key\": \"{{ GOOGLE_SSH_KEY }}\"}' --insecure"
+  register: out
+  when: token_result.sha1 is defined
+
+- debug: 
+    msg: "{{ out.stdout }}"

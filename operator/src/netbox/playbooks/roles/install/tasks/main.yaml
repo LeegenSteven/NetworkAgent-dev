@@ -14,14 +14,6 @@
     state: latest
     update_cache: true
 
-- name: install pip dependencies
-  ansible.builtin.pip:
-    name:
-      - docker 
-
-- name: update the version of requests
-  command: pip install requests==2.28.1
-
 - name: Add Docker GPG apt Key
   apt_key:
     url: https://download.docker.com/linux/ubuntu/gpg
@@ -37,17 +29,31 @@
     pkg:
       - docker-ce 
       - docker-ce-cli 
+      - docker-compose-plugin
       - containerd.io
     state: latest
     update_cache: true
 
-- name: download networkagent.json
-  ansible.builtin.copy: 
-    src: /operator/networkagent.json
-    dest: /opt
+- name: Check if netbox already there
+  ansible.builtin.stat:
+    path: /opt/netbox-docker
+  register: netboxdocker
 
-- name: authenticate with the artefact repo
-  raw: "cat /opt/networkagent.json | docker login -u _json_key --password-stdin https://{{GOOGLE_REGION}}-docker.pkg.dev"
+- name: clone netbox docker
+  command: git clone -b release https://github.com/netbox-community/netbox-docker.git
+  args:
+    chdir: /opt
+  when: not netboxdocker.stat.exists 
 
-# - name: pull ueransim
-#   command: "docker pull {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/networkagent/ueransim:latest"
+# - name: update ports
+# tee docker-compose.override.yml <<EOF
+# services:
+#   netbox:
+#     ports:
+#       - 8000:8080
+# EOF
+
+- name: docker compose up 
+  community.docker.docker_compose_v2:
+    project_src: /opt/netbox-docker
+    state: present 

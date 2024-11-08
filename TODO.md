@@ -7,6 +7,8 @@ Todo list. Each task rated as:
 * __L__: Low
 
 ## Operator
+
+* __H__: Add back IT applications in git, add to branch called IT
 * __H__: Install Ops Agent. curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
 sudo bash add-google-cloud-ops-agent-repo.sh --also-install
 

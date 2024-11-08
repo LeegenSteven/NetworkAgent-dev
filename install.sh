@@ -217,7 +217,7 @@ Start()
     --workload-pool $GOOGLE_PROJECT.svc.id.goog \
     --zone $GOOGLE_ZONE\
     --node-locations $GOOGLE_ZONE \
-    --num-nodes 5 \
+    --num-nodes 6 \
     --enable-fleet \
     --network mgmt \
     --subnetwork mgmt-subnet
@@ -301,7 +301,7 @@ Start()
     # kubectl apply -f environment/bigquery.yaml
     # kubectl apply -f environment/prometheus.yaml
     kubectl apply -f environment/git.yaml
-    kubectl apply -f environment/free5gc-build.yaml
+    # kubectl apply -f environment/free5gc-build.yaml
 
     # echo "##################################"
     # echo "Deploy Porch                      "
@@ -320,6 +320,11 @@ Delete()
         n|N ) exit 0;;
         * ) echo "please enter y/n";;
     esac
+
+    echo "######################"
+    echo "Deleting Artifact Repo"
+    echo "######################"
+    gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
 
     echo "#######################################"
     echo "Deleting environment manifests and keys"
@@ -391,11 +396,6 @@ Kill()
     gcloud compute firewall-rules delete mgmt-ingress --project=$GOOGLE_PROJECT --quiet
     gcloud compute networks subnets delete mgmt-subnet --region=$GOOGLE_REGION --quiet
     gcloud compute networks delete mgmt --project=$GOOGLE_PROJECT --quiet
-
-    echo "######################"
-    echo "Deleting Artifact Repo"
-    echo "######################"
-    gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
 
 }
 

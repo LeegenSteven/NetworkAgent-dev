@@ -52,6 +52,7 @@ metadata:
   labels:
     app: free5gc
     nf: pcf
+    graph: "true"
 spec:
   selector:
     matchLabels:

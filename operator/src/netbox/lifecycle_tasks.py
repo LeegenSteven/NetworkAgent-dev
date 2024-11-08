@@ -1,0 +1,53 @@
+import kopf
+import logging
+from utils.compute import *
+import utils.constants as constants
+import ansible_runner
+from vpn.wireguard.lifecycle_tasks import *;
+
+logger = logging.getLogger(__name__)
+
+########################################################
+# Install and configure netbox software
+########################################################
+async def run_netbox_install(namespace, external_ip_address):
+    logger.debug("installing netbox")
+
+    ip_address = await get_ip(namespace, "netbox")
+    if ip_address is None:
+        raise kopf.TemporaryError("waiting for netbox IP address")
+
+    # run ansible playbook to install prometheus on the VM
+    extravars = {
+        'GOOGLE_PROJECT': os.getenv("GOOGLE_PROJECT"),
+        'GOOGLE_REGION': os.getenv("GOOGLE_REGION"),
+        'GOOGLE_ZONE': os.getenv("GOOGLE_ZONE"),
+        'BASEDIR': constants.basedir,
+        'external_ip_address': external_ip_address
+    }
+    hosts = {
+        'hosts': {
+            "monitor": {
+                'ansible_host': ip_address,
+                'ansible_user': os.getenv("GOOGLE_USER"),
+                'ansible_connection': 'ssh',
+                'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
+                'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'
+            }
+        }
+    }
+    logger.debug(hosts)
+    logger.debug(extravars)
+    def event_handler(data):
+        logger.debug(data)
+    r = ansible_runner.run(private_data_dir=constants.basedir+"/netbox/playbooks", 
+                           inventory={'all': hosts},
+                           playbook='install.yaml',
+                        #    event_handler=event_handler,
+                           extravars=extravars)
+
+    logger.debug("status = %s", r.status)
+    if r.status != 'successful':
+        logger.debug(r.status)
+        raise kopf.TemporaryError("Ansible Error!!!",15)
+

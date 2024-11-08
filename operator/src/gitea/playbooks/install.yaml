@@ -14,7 +14,11 @@
     - name: london-repo
       import_role:
         name: london-repo
-    
+
+    - name: london-cluster-repo
+      import_role:
+        name: london-cluster-repo
+
     - name: dublin-repo
       import_role:
         name: dublin-repo

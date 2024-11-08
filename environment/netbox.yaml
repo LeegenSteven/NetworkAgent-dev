@@ -1,0 +1,5 @@
+apiVersion: google.dev/v1
+kind: Netbox
+metadata:
+  name: netbox
+spec:

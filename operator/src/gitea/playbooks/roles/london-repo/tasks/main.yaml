@@ -118,7 +118,6 @@
     group: git
     mode: '0644'
   loop:
-    - controlplane.yaml
     - upf.yaml
     - Readme.md
 

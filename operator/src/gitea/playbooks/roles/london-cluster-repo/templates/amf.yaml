@@ -135,6 +135,7 @@ metadata:
   labels:
     app: free5gc
     nf: amf
+    graph: "true"
 spec:
   selector:
     matchLabels:

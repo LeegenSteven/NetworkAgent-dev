@@ -112,6 +112,7 @@ metadata:
     app: free5gc
     nf: smf
     name: smf
+    graph: "true"
 spec:
   selector:
     matchLabels:

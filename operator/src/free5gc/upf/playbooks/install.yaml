@@ -6,3 +6,7 @@
     - name: install docker etc
       import_role:
         name: install
+
+    - name: run the upf
+      import_role:
+        name: run

@@ -30,7 +30,7 @@ if os.getenv("FREE5GC") is not None:
     from free5gc.build.lifecycle import *
     from free5gc.ueransim.lifecycle import *
     from free5gc.upf.lifecycle import *
-    from free5gc.controlplane.lifecycle import *
+    from free5gc.cluster.lifecycle import *
 
 if os.getenv("MONITOR") is not None:
     logger.info("MONITOR Lifecycle")
@@ -39,6 +39,7 @@ if os.getenv("MONITOR") is not None:
 if os.getenv("GITEA") is not None:
     logger.info("GITEA Lifecycle")
     from gitea.lifecycle import *
+    from netbox.lifecycle import *
 
 if os.getenv("GRAPH") is not None:
     from graph.lifecycle import *

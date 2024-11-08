@@ -30,7 +30,7 @@ async def upf(spec, status, namespace, name, logger, **kwargs):
                         monitor=False) # set to false so this VM is not scraped by prometheus
 
   # install UPF to VM 
-  # await run_install(namespace, name)
+  await run_install(namespace, name)
 
   return {
       "status":"Running", 

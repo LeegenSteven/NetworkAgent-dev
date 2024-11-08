@@ -1,7 +1,7 @@
 import kopf
 import logging
 from utils.compute import *
-from resources.wireguard.lifecycle_tasks import *;
+from vpn.wireguard.lifecycle_tasks import *;
 from monitor.lifecycle_tasks import *
 
 logger = logging.getLogger(__name__)

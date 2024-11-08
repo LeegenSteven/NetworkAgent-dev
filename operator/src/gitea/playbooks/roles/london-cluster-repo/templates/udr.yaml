@@ -39,6 +39,7 @@ metadata:
   labels:
     app: free5gc
     nf: udr
+    graph: "true"
 spec:
   selector:
     matchLabels:

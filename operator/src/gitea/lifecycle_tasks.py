@@ -4,6 +4,7 @@ from utils.compute import *
 import utils.constants as constants
 import ansible_runner
 from vpn.wireguard.lifecycle_tasks import *;
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -17,13 +18,21 @@ async def run_gitea_install(namespace, external_ip_address):
     if ip_address is None:
         raise kopf.TemporaryError("waiting for gitea IP address")
 
+    # Retrieve the public ssh key
+    key=None
+    with open(constants.basedir+'/google-compute.pub') as f: 
+       key = f.read()
+       logger.debug("ssh key = %s", key)
+
     # run ansible playbook to install prometheus on the VM
     extravars = {
         'GOOGLE_PROJECT': os.getenv("GOOGLE_PROJECT"),
         'GOOGLE_REGION': os.getenv("GOOGLE_REGION"),
         'GOOGLE_ZONE': os.getenv("GOOGLE_ZONE"),
+        'GOOGLE_USER': os.getenv("GOOGLE_USER"),
         'BASEDIR': constants.basedir,
-        'external_ip_address': external_ip_address
+        'external_ip_address': external_ip_address,
+        'GOOGLE_SSH_KEY': key
     }
     hosts = {
         'hosts': {
@@ -51,6 +60,44 @@ async def run_gitea_install(namespace, external_ip_address):
         logger.debug(r.status)
         raise kopf.TemporaryError("Ansible Error!!!",15)
 
+########################################################
+# Create root sync private key
+########################################################
+async def create_root_sync_private_key():
+  logger.debug(f"create root sync private key")
+
+  key=None
+  with open(constants.basedir+'/google-compute') as f: 
+    key = f.read()
+    logger.debug("ssh key = %s", key)
+
+  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+  network_api = client.resources.get(
+      api_version="v1", 
+      kind="Secret",
+  )
+
+  crd_manifest= {
+    "apiVersion": "v1",
+    "kind": "Secret",
+    "metadata": {
+      "name": "git-creds",
+      "namespace": "config-management-system"
+    },
+    "data": {
+      "ssh": base64.b64encode(key.encode('utf-8')).decode('utf-8')
+    }
+  }
+
+  try:
+    result = network_api.create(body=crd_manifest, namespace="config-management-system")
+    return result
+  except kubernetes.client.rest.ApiException as e: 
+    logger.debug(e.status)
+    if e.status == 409:
+      logger.debug("Already exists - skipping")
+    else:
+      logger.debug(e)
 
 ########################################################
 # Create root sync in network automation cluster

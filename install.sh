@@ -260,6 +260,7 @@ Start()
     echo "Ready !"
 
     # Start ConfigSync operator in cluster
+    gcloud beta container fleet config-management enable --project=$GOOGLE_PROJECT
     gcloud beta container fleet config-management apply --membership=networkautomation --config=./environment/configsync.yaml --project=$GOOGLE_PROJECT
 
     # Setup Spanner and wait until it's ready as we need it to be up and

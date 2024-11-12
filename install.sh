@@ -484,7 +484,7 @@ Help()
    echo "Syntax: install.sh [-c|-s|-o|-r|-n|-k|-d|-p]"
    echo "options:"
    echo "  -c     create keys and manifests."
-   echo "  -s     start network agent environment."
+   echo "  -s     start network agent environment (incl. operator)."
    echo "  -o     build and deploy the operator"
    echo "  -t     build and deploy the rest tools"
    echo "  -n     build and deploy the networkagent"

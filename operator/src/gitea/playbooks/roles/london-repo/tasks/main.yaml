@@ -103,6 +103,40 @@
     chdir: /opt/london-repo
 
 ###############################################
+# app Branch
+###############################################
+- name: checkout app branch
+  command: sudo -u git git checkout -b app
+  args:
+    chdir: /opt/london-repo
+
+- name: push templated files
+  ansible.builtin.template:
+    src: "{{ item }}"
+    dest: "/opt/london-repo/{{item}}"
+    owner: git
+    group: git
+    mode: '0644'
+  loop:
+    - london-app.yaml
+    - london.yaml
+
+- name: add files to app branch 
+  command: sudo -u git git add .
+  args:
+    chdir: /opt/london-repo
+
+- name: app files commit
+  command: sudo -u git git commit -m "add app files"
+  args:
+    chdir: /opt/london-repo
+
+- name: push to app branch in repo
+  command: sudo -u git git -c http.sslVerify=false push -u origin app
+  args:
+    chdir: /opt/london-repo
+
+###############################################
 # Network Function Branch
 ###############################################
 - name: checkout networkfunction branch

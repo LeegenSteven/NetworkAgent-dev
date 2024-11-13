@@ -101,6 +101,40 @@
     chdir: /opt/dublin-repo
 
 ###############################################
+# app Branch
+###############################################
+- name: checkout app branch
+  command: sudo -u git git checkout -b app
+  args:
+    chdir: /opt/dublin-repo
+
+- name: push templated files
+  ansible.builtin.template:
+    src: "{{ item }}"
+    dest: "/opt/dublin-repo/{{item}}"
+    owner: git
+    group: git
+    mode: '0644'
+  loop:
+    - dublin-app.yaml
+    - dublin.yaml
+
+- name: add to app branch in dublin repo
+  command: sudo -u git git add .
+  args:
+    chdir: /opt/dublin-repo
+
+- name: dublin files commit 
+  command: sudo -u git git commit -m "add app files"
+  args:
+    chdir: /opt/dublin-repo
+
+- name: push to repo
+  command: sudo -u git git -c http.sslVerify=false push -u origin app
+  args:
+    chdir: /opt/dublin-repo
+
+###############################################
 # Network Function Branch
 ###############################################
 - name: checkout network function branch

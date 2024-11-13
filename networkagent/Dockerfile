@@ -3,4 +3,4 @@ ADD ./requirements.txt /
 RUN pip install -r /requirements.txt
 ADD ./src/ /agent
 WORKDIR /agent
-CMD streamlit run main.py
+CMD streamlit run main.py --server.port 8080

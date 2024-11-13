@@ -3,6 +3,7 @@ import json
 import kubernetes
 import kopf
 logger = logging.getLogger(__name__)
+from utils.compute import get_resource_api
 
 ########################################################################
 # Create configmap instance
@@ -92,3 +93,36 @@ async def delete_configmap(namespace, name):
     logger.debug(e)
     if e.status == 404:
       logger.error("no configmap named %s", name)
+
+
+##########################################
+# Get Cluster Spec
+##########################################
+async def getClusterDetails(namespace, name):
+  logger.debug("Get container cluster %s in namespace %s", name, namespace)
+  network_api = get_resource_api("container.cnrm.cloud.google.com/v1beta1", "ContainerCluster")
+  try:
+    result = network_api.get(namespace=namespace, name=name)
+    return result
+  except kubernetes.client.rest.ApiException as e:
+    if e.status == 404:
+      logger.debug("%s in namespace %s Not found", name, namespace)
+    else:
+      logger.debug(e)
+  return None
+
+##########################################
+# Get Cluster Feature Spec
+##########################################
+async def getClusterFeatureDetails(namespace, name):
+  logger.debug("Get container cluster feature %s in namespace %s", name, namespace)
+  network_api = get_resource_api("gkehub.cnrm.cloud.google.com/v1beta1", "GKEHubFeature")
+  try:
+    result = network_api.get(namespace=namespace, name=name)
+    return result
+  except kubernetes.client.rest.ApiException as e:
+    if e.status == 404:
+      logger.debug("%s in namespace %s Not found", name, namespace)
+    else:
+      logger.debug(e)
+  return None

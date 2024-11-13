@@ -474,6 +474,7 @@ Networkagent()
     fi
 
     cd networkagent
+    export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
     gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
     gcloud run deploy network-agent --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networkagent:latest \
        --region $GOOGLE_REGION --service-account $GOOGLE_SERVICE_ACCOUNT \

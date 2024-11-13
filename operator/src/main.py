@@ -30,7 +30,7 @@ if os.getenv("FREE5GC") is not None:
     from free5gc.build.lifecycle import *
     from free5gc.ueransim.lifecycle import *
     from free5gc.upf.lifecycle import *
-    from free5gc.cluster.lifecycle import *
+    from free5gc.certificate.lifecycle import *
 
 if os.getenv("MONITOR") is not None:
     logger.info("MONITOR Lifecycle")

@@ -245,6 +245,12 @@ Start()
     kubectl annotate namespace $GOOGLE_NAMESPACE cnrm.cloud.google.com/project-id=$GOOGLE_PROJECT
     kubectl config set-context --current --namespace $GOOGLE_NAMESPACE
 
+    # create and attach operator service account to networkagent service account for workload identity
+    kubectl create serviceaccount networkoperator-account --namespace $GOOGLE_NAMESPACE
+    gcloud iam service-accounts add-iam-policy-binding $GOOGLE_SERVICE_ACCOUNT \
+        --role roles/iam.workloadIdentityUser \
+        --member "serviceAccount:$GOOGLE_PROJECT.svc.id.goog[$GOOGLE_NAMESPACE/networkoperator-account]"
+
     # Setup the one config connector we will be using 
     kubectl apply -f environment/configconnector.yaml
 
@@ -384,6 +390,7 @@ Kill()
     kubectl delete -f environment/spanner.yaml
     kubectl delete -f environment/networks.yaml
     gcloud run services delete network-agent-api --region=$GOOGLE_REGION --quiet
+    gcloud run services delete network-agent --region=$GOOGLE_REGION --quiet
 
     echo "#####################"
     echo "Deleting GKE Cluster"
@@ -468,9 +475,9 @@ Networkagent()
 
     cd networkagent
     gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
-    kubectl delete -f deployment.yaml
-    kubectl apply -f deployment.yaml
-    kubectl get pods
+    gcloud run deploy network-agent --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networkagent:latest \
+       --region $GOOGLE_REGION --service-account $GOOGLE_SERVICE_ACCOUNT \
+       --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT,GOOGLE_REGION=$GOOGLE_REGION,GOOGLE_ZONE=$GOOGLE_ZONE
     cd ..
 }
 

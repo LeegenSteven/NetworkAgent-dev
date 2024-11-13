@@ -1,0 +1,27 @@
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeInstance
+metadata:
+  annotations:
+    cnrm.cloud.google.com/allow-stopping-for-update: "true"
+  name: newyork-app1
+  labels:
+    customer: acme
+spec:
+  machineType: e2-standard-2
+  zone: {{GOOGLE_ZONE}}
+  bootDisk:
+    initializeParams:
+      size: 50
+      type: pd-ssd
+      sourceImageRef:
+        external: ubuntu-os-cloud/ubuntu-2204-lts
+  networkInterface:
+    - subnetworkRef:
+        external: "https://www.googleapis.com/compute/v1/projects/{{GOOGLE_PROJECT}}/regions/{{GOOGLE_REGION}}/subnetworks/mgmt-subnet"
+    - subnetworkRef:
+        name: newyork
+  canIpForward: true
+  metadataStartupScript: "sudo apt-get update;sudo apt-get install -yq python3;sudo ip route add 10.0.40.0/24 via 10.0.60.1;sudo ip route add 10.0.50.0/24 via 10.0.60.1;sudo ip route add 10.0.70.0/24 via 10.0.60.1;sudo ip route add 10.0.80.0/24 via 10.0.60.1"
+  metadata:
+    - key: ssh-keys
+      value: {{GOOGLE_USER}}:{{GOOGLE_SSH_KEY}}

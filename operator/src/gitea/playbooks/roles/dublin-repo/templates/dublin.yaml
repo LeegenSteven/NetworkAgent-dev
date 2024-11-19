@@ -58,9 +58,11 @@ kind: ComputeInstance
 metadata:
   annotations:
     cnrm.cloud.google.com/allow-stopping-for-update: "true"
+    client.lifecycle.config.k8s.io/mutation: ignore
   name: dublin-app1
   labels:
     customer: acme
+    graph: "true"
 spec:
   machineType: e2-standard-2
   zone: {{GOOGLE_ZONE}}

@@ -16,41 +16,6 @@ subjects:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vpn-operator
-spec:
-  replicas: 1
-  strategy:
-    type: Recreate
-  selector:
-    matchLabels:
-      application: vpn-operator
-  template:
-    metadata:
-      labels:
-        application: vpn-operator
-    spec:
-      serviceAccountName: networkoperator-account
-      containers:
-      - name: vpn-operator
-        image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/networkoperator:latest
-        imagePullPolicy: Always
-        env:
-        - name: BASEDIR
-          value: "/operator"
-        - name: GOOGLE_PROJECT
-          value: {{GOOGLE_PROJECT}}
-        - name: GOOGLE_REGION
-          value: {{GOOGLE_REGION}}
-        - name: GOOGLE_ZONE
-          value: {{GOOGLE_ZONE}}
-        - name: GOOGLE_USER
-          value: {{GOOGLE_USER}}
-        - name: VPN
-          value: "yes"
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
   name: free5gc-operator
 spec:
   replicas: 1
@@ -82,40 +47,8 @@ spec:
           value: {{GOOGLE_USER}}
         - name: FREE5GC
           value: "yes"
-
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: graph-operator
-spec:
-  replicas: 1
-  strategy:
-    type: Recreate
-  selector:
-    matchLabels:
-      application: graph-operator
-  template:
-    metadata:
-      labels:
-        application: graph-operator
-    spec:
-      serviceAccountName: networkoperator-account
-      containers:
-      - name: graph-operator
-        image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/networkoperator:latest
-        imagePullPolicy: Always
-        env:
-        - name: BASEDIR
-          value: "/operator"
-        - name: GOOGLE_PROJECT
-          value: {{GOOGLE_PROJECT}}
-        - name: GOOGLE_REGION
-          value: {{GOOGLE_REGION}}
-        - name: GOOGLE_ZONE
-          value: {{GOOGLE_ZONE}}
-        - name: GOOGLE_USER
-          value: {{GOOGLE_USER}}
+        - name: VPN
+          value: "yes"
         - name: GRAPH
           value: "yes"
 

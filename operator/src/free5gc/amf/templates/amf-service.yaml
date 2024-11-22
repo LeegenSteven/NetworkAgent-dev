@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: amf-namf
+  labels:
+    app: free5gc
+    nf: amf
+spec:
+  type: NodePort
+  ports:
+    - port: 8000
+      nodePort: 30506
+  selector:
+    app: free5gc
+    nf: amf

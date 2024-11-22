@@ -1,0 +1,9 @@
+{
+  "name": "7b350f69-5ad5-40c0-9866-135a422facda",
+  "displayName": "Text2SQL",
+  "description": "You are an expert at explaining data analysis in a concise and understandable way.",
+  "openApiSpec": {
+  
+  },
+  "toolType": "CUSTOMIZED_TOOL"
+}

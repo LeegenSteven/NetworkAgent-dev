@@ -298,7 +298,6 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
     "metadata": {
       "annotations": {
         "cnrm.cloud.google.com/allow-stopping-for-update": "true",
-        "configmanagement.gke.io/managed": "disabled"
       },
       "labels": labels,
       "name": vm_name,

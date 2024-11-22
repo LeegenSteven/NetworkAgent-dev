@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 #########################################################################
 # Create a Wireguard virtual network appliance
 #########################################################################
-@kopf.on.create('wireguardappliance')
+@kopf.on.create('google.dev','v1','wireguardappliance')
 async def wireguard(body,spec, name, namespace, logger, **kwargs):
     logger.debug(f"A wireguard handler is called with spec: {spec}")
 

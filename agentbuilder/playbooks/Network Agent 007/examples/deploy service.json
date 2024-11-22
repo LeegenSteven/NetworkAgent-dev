@@ -1,0 +1,183 @@
+{
+  "name": "5fc15cd8-fef3-46b3-9bf8-f050888a20c2",
+  "actions": [ {
+    "userUtterance": {
+      "text": "hi"
+    }
+  }, {
+    "agentUtterance": {
+      "text": "Hi there! How can I help you today? I can help you with tasks such as understanding which networking services are available to use, understanding which networking services are deployed already for a particular company, understanding which networking locations are available for a particular customer, deploying new networking services, deleting existing networking services, and understanding metrics from an existing deployed connectivity service."
+    }
+  }, {
+    "userUtterance": {
+      "text": "what services can i deploy"
+    }
+  }, {
+    "toolUse": {
+      "tool": "projects/free5gc-384814/locations/us-central1/agents/411228d8-5b52-474d-8e41-46ef2de67de6/tools/f3c478b5-65ea-423f-8169-8e7c6b516663",
+      "action": "main.getServiceDefinitions",
+      "inputActionParameters": {
+      
+      },
+      "outputActionParameters": {
+      
+      }
+    }
+  }, {
+    "agentUtterance": {
+      "text": "You can deploy the following services: PointToPointService"
+    }
+  }, {
+    "userUtterance": {
+      "text": "what locations are available"
+    }
+  }, {
+    "agentUtterance": {
+      "text": "Please tell me which customer you are interested in."
+    }
+  }, {
+    "userUtterance": {
+      "text": "acme"
+    }
+  }, {
+    "toolUse": {
+      "tool": "projects/free5gc-384814/locations/us-central1/agents/411228d8-5b52-474d-8e41-46ef2de67de6/tools/f3c478b5-65ea-423f-8169-8e7c6b516663",
+      "action": "main.getCustomerLocations",
+      "inputActionParameters": {
+        "name": "acme"
+      },
+      "outputActionParameters": {
+      
+      }
+    }
+  }, {
+    "agentUtterance": {
+      "text": "The available locations for customer acme are: london, newyork, singapore, sydney"
+    }
+  }, {
+    "userUtterance": {
+      "text": "ok is there anything deployed at the moment"
+    }
+  }, {
+    "toolUse": {
+      "tool": "projects/free5gc-384814/locations/us-central1/agents/411228d8-5b52-474d-8e41-46ef2de67de6/tools/f3c478b5-65ea-423f-8169-8e7c6b516663",
+      "action": "main.getServices",
+      "inputActionParameters": {
+        "name": "acme"
+      },
+      "outputActionParameters": {
+      
+      }
+    }
+  }, {
+    "agentUtterance": {
+      "text": "I'm sorry, I can't find any deployed services for customer acme."
+    }
+  }, {
+    "userUtterance": {
+      "text": "ok. so deploy a point to point service between london and new york"
+    }
+  }, {
+    "toolUse": {
+      "tool": "projects/free5gc-384814/locations/us-central1/agents/411228d8-5b52-474d-8e41-46ef2de67de6/tools/f3c478b5-65ea-423f-8169-8e7c6b516663",
+      "action": "main.createService",
+      "inputActionParameters": {
+        "requestBody": {
+          "customerName": "acme",
+          "serviceInfo": {
+            "apiVersion": "google.dev/v1",
+            "kind": "PointToPointService",
+            "spec": {
+              "interfaces": [ "london", "newyork" ]
+            }
+          }
+        }
+      },
+      "outputActionParameters": {
+      
+      }
+    }
+  }, {
+    "agentUtterance": {
+      "text": "I have created a new PointToPoint service for customer acme connecting london and new york."
+    }
+  }, {
+    "userUtterance": {
+      "text": "is the service running"
+    }
+  }, {
+    "agentUtterance": {
+      "text": "The service is still being provisioned. It will take a few minutes to become fully operational."
+    }
+  }, {
+    "userUtterance": {
+      "text": "what about now"
+    }
+  }, {
+    "toolUse": {
+      "tool": "projects/free5gc-384814/locations/us-central1/agents/411228d8-5b52-474d-8e41-46ef2de67de6/tools/f3c478b5-65ea-423f-8169-8e7c6b516663",
+      "action": "main.getServices",
+      "inputActionParameters": {
+        "name": "acme"
+      },
+      "outputActionParameters": {
+      
+      }
+    }
+  }, {
+    "agentUtterance": {
+      "text": "The service is now fully operational."
+    }
+  }, {
+    "userUtterance": {
+      "text": "can you delete a service"
+    }
+  }, {
+    "agentUtterance": {
+      "text": "Yes, I can delete a service. Which service would you like to delete?"
+    }
+  }, {
+    "userUtterance": {
+      "text": "what services are available"
+    }
+  }, {
+    "toolUse": {
+      "tool": "projects/free5gc-384814/locations/us-central1/agents/411228d8-5b52-474d-8e41-46ef2de67de6/tools/f3c478b5-65ea-423f-8169-8e7c6b516663",
+      "action": "main.getServices",
+      "inputActionParameters": {
+        "name": "acme"
+      },
+      "outputActionParameters": {
+      
+      }
+    }
+  }, {
+    "agentUtterance": {
+      "text": "You have one service deployed for customer acme, named acme97d2f5a4."
+    }
+  }, {
+    "userUtterance": {
+      "text": "can you delete acme97d2f5a4"
+    }
+  }, {
+    "toolUse": {
+      "tool": "projects/free5gc-384814/locations/us-central1/agents/411228d8-5b52-474d-8e41-46ef2de67de6/tools/f3c478b5-65ea-423f-8169-8e7c6b516663",
+      "action": "main.deleteService",
+      "inputActionParameters": {
+        "kind": "PointToPointService",
+        "name": "acme97d2f5a4"
+      },
+      "outputActionParameters": {
+      
+      }
+    }
+  }, {
+    "agentUtterance": {
+      "text": "I have deleted the service acme97d2f5a4."
+    }
+  } ],
+  "displayName": "deploy service",
+  "retrievalStrategy": "DEFAULT",
+  "conversationState": "OUTPUT_STATE_PENDING",
+  "languageCode": "en"
+}

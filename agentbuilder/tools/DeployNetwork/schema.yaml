@@ -1,0 +1,66 @@
+openapi: 3.0.0
+info:
+  title: Deploy Network API
+  description: API for triggering a network delpoyment
+  version: 1.0.0
+
+servers:
+  - url: https://network-agent-api-4q7fdnlzwa-nw.a.run.app/ui/ui   
+
+paths:
+  /:
+    post:
+      summary: Deploy Network
+      description: Takes App Name and Location
+      operationId: helloHttp 
+      requestBody: 
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/deployNetworkSchema' 
+      responses:
+        '200':
+          description: Successful translation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/deployNetworkSchemaResponse'
+        # ... other error responses 
+
+components:
+  schemas:
+    deployNetworkSchema:
+      type: object
+      properties:
+        sessionInfo:
+          type: object
+          properties:
+            parameters:
+              type: object
+              properties:
+                appName:
+                  type: string
+                location:
+                  type: string
+    deployNetworkSchemaResponse:
+      type: object
+      properties:
+        sessionInfo:
+          type: object
+          properties:
+            parameters:
+              type: object
+              properties:
+                deploymentStatus:
+                  type: object
+                  properties:
+                    results:
+                      type: array
+                      items:
+                        type: array
+                        items:
+                          type: string
+                    networkID:
+                      type: string
+                    status: 
+                      type: string

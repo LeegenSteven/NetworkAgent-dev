@@ -85,13 +85,11 @@
     group: git
     mode: '0644'
   loop:
-    - amf.yaml
     - ausf.yaml
     - mongodb.yaml
     - nrf.yaml
     - nssf.yaml
     - pcf.yaml
-    - smf.yaml
     - udm.yaml
     - udr.yaml
     - webui.yaml

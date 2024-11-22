@@ -45,6 +45,3 @@
   command: "curl -k -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/keys -d '{\"title\": \"NetworkAgent key\", \"key\": \"{{ GOOGLE_SSH_KEY }}\"}' --insecure"
   register: out
   when: token_result.sha1 is defined
-
-- debug: 
-    msg: "{{ out.stdout }}"

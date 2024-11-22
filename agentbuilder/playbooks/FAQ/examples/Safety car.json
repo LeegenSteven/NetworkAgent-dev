@@ -1,0 +1,32 @@
+{
+  "name": "1c8e5b45-04fd-4e94-bec6-4d8666431cfe",
+  "actions": [ {
+    "toolUse": {
+      "tool": "projects/free5gc-384814/locations/us-central1/agents/411228d8-5b52-474d-8e41-46ef2de67de6/tools/bf4f9a66-1849-47f0-948a-7ac19cde150d",
+      "action": "Formula E FAQ",
+      "inputActionParameters": {
+        "requestBody": {
+          "query": "how fast is the safety car"
+        }
+      },
+      "outputActionParameters": {
+        "200": {
+          "answer": "the official safety car in formula e is a Porsche Taycan S",
+          "snippets": [ {
+            "text": "projects/216059074033/locations/us/collections/default_collection/dataStores/formula-e-faq_1709923774785/branches/0/documents/a374a1a164b41748d0d495604a38b0e1",
+            "title": "",
+            "uri": ""
+          } ]
+        }
+      }
+    }
+  }, {
+    "agentUtterance": {
+      "text": "The official safety car in Formula E is a Porsche Taycan S."
+    }
+  } ],
+  "displayName": "Safety car",
+  "retrievalStrategy": "DEFAULT",
+  "conversationState": "OUTPUT_STATE_PENDING",
+  "languageCode": "undetected"
+}

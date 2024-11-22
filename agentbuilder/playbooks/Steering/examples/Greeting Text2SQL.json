@@ -1,0 +1,49 @@
+{
+  "name": "2daa3ab2-5eb4-48d8-a754-9cf2e20372f9",
+  "actions": [ {
+    "userUtterance": {
+      "text": "Hi!"
+    }
+  }, {
+    "agentUtterance": {
+      "text": "Hi, I'm BT Global Fabric Agent. Please tell me which application you would like to deploy and where! "
+    }
+  }, {
+    "userUtterance": {
+      "text": "I would like to deploy a palo alto firewall to singapore"
+    }
+  }, {
+    "playbookInvocation": {
+      "playbook": "projects/free5gc-384814/locations/us-central1/agents/411228d8-5b52-474d-8e41-46ef2de67de6/playbooks/f69ec19b-3687-460d-931f-2acc1dbc95e5",
+      "playbookInput": {
+        "precedingConversationSummary": "User wants to deploy a palo alto firewall in singapore",
+        "actionParameters": {
+        
+        }
+      },
+      "playbookOutput": {
+        "executionSummary": "Agent responds with the state of the request and whether it was successful or failed. ",
+        "actionParameters": {
+        
+        }
+      },
+      "playbookState": "OUTPUT_STATE_OK"
+    }
+  }, {
+    "agentUtterance": {
+      "text": "Anything else?"
+    }
+  }, {
+    "userUtterance": {
+      "text": "No thank you!"
+    }
+  }, {
+    "agentUtterance": {
+      "text": "Have a great day!"
+    }
+  } ],
+  "displayName": "Greeting Text2SQL",
+  "retrievalStrategy": "DEFAULT",
+  "conversationState": "OUTPUT_STATE_PENDING",
+  "languageCode": "en"
+}

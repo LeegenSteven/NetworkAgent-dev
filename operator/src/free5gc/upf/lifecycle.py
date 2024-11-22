@@ -31,7 +31,9 @@ async def upf(spec, status, namespace, name, logger, **kwargs):
 
   # install UPF to VM 
   await run_install(namespace, name)
+  ip=await get_ip(namespace, name, network_interface.get('name'))
 
   return {
-      "status":"Running", 
+      "status":"Running",
+      "address": ip
   }

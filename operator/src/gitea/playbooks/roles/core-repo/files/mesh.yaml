@@ -5,6 +5,8 @@ metadata:
   labels:
     customer: acme
     graph: "true"
+  annotations:
+    client.lifecycle.config.k8s.io/mutation: ignore
 spec:
   interfaces: # the "remote" customer subnets to connect
     - name: dublin

@@ -21,9 +21,6 @@ async def create_vpn_edge(namespace, parent_name, parent_namespace, parent_kind,
       "labels": {
         "graph": "true"
       },
-      "annotations": {
-        "configmanagement.gke.io/managed": "disabled"
-      }
     },
     "spec": {
       "sourceInterface": source_interface,

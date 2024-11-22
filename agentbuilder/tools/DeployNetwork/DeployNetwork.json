@@ -1,0 +1,20 @@
+{
+  "name": "3d89e831-6102-4051-bf03-211d131140f8",
+  "displayName": "DeployNetwork",
+  "description": "This tool takes the application name and deployment location and instructs the network operator to deploy the relevant configuration",
+  "openApiSpec": {
+    "authentication": {
+      "serviceAgentAuthConfig": {
+        "serviceAgentAuth": "ID_TOKEN"
+      }
+    }
+  },
+  "sharedSchemas": [ {
+    "name": "deployNetworkSchema",
+    "schema": "{\n  \"type\" : \"object\",\n  \"properties\" : {\n    \"sessionInfo\" : {\n      \"type\" : \"object\",\n      \"properties\" : {\n        \"parameters\" : {\n          \"type\" : \"object\",\n          \"properties\" : {\n            \"appName\" : {\n              \"type\" : \"string\"\n            },\n            \"location\" : {\n              \"type\" : \"string\"\n            }\n          }\n        }\n      }\n    }\n  }\n}"
+  }, {
+    "name": "deployNetworkSchemaResponse",
+    "schema": "{\n  \"type\" : \"object\",\n  \"properties\" : {\n    \"sessionInfo\" : {\n      \"type\" : \"object\",\n      \"properties\" : {\n        \"parameters\" : {\n          \"type\" : \"object\",\n          \"properties\" : {\n            \"deploymentStatus\" : {\n              \"type\" : \"object\",\n              \"properties\" : {\n                \"results\" : {\n                  \"type\" : \"array\",\n                  \"items\" : {\n                    \"type\" : \"array\",\n                    \"items\" : {\n                      \"type\" : \"string\"\n                    }\n                  }\n                },\n                \"networkID\" : {\n                  \"type\" : \"string\"\n                },\n                \"status\" : {\n                  \"type\" : \"string\"\n                }\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n}"
+  } ],
+  "toolType": "CUSTOMIZED_TOOL"
+}

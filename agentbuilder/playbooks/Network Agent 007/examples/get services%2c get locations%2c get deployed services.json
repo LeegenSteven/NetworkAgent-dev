@@ -1,0 +1,337 @@
+{
+  "name": "aa2dfa56-b744-46af-b64c-27228a3f3116",
+  "actions": [ {
+    "userUtterance": {
+      "text": "hi, please get all available network services"
+    }
+  }, {
+    "toolUse": {
+      "tool": "projects/free5gc-384814/locations/us-central1/agents/411228d8-5b52-474d-8e41-46ef2de67de6/tools/f3c478b5-65ea-423f-8169-8e7c6b516663",
+      "action": "main.getServiceDefinitions",
+      "inputActionParameters": {
+      
+      },
+      "outputActionParameters": {
+        "200": [ {
+          "apiVersion": "apiextensions.k8s.io/v1",
+          "kind": "CustomResourceDefinition",
+          "metadata": {
+            "annotations": {
+              "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apiextensions.k8s.io/v1\",\"kind\":\"CustomResourceDefinition\",\"metadata\":{\"annotations\":{},\"labels\":{\"type\":\"connectivityservice\"},\"name\":\"pointtopointservices.google.dev\"},\"spec\":{\"group\":\"google.dev\",\"names\":{\"kind\":\"PointToPointService\",\"plural\":\"pointtopointservices\",\"shortNames\":[\"ptp\"],\"singular\":\"pointtopointservice\"},\"scope\":\"Namespaced\",\"versions\":[{\"name\":\"v1\",\"schema\":{\"openAPIV3Schema\":{\"properties\":{\"spec\":{\"properties\":{\"interfaces\":{\"description\":\"Two customer VPC Subnetwork locations to be connected by this VPN tunnel.\\n\",\"items\":{\"type\":\"string\"},\"oneOf\":[{\"maxItems\":2,\"minItems\":2}],\"type\":\"array\"}},\"type\":\"object\",\"x-kubernetes-preserve-unknown-fields\":true},\"status\":{\"type\":\"object\",\"x-kubernetes-preserve-unknown-fields\":true}},\"type\":\"object\"}},\"served\":true,\"storage\":true}]}}\n"
+            },
+            "creationTimestamp": "2024-08-14T09:53:21Z",
+            "generation": 1,
+            "labels": {
+              "type": "connectivityservice"
+            },
+            "managedFields": [ {
+              "apiVersion": "apiextensions.k8s.io/v1",
+              "fieldsType": "FieldsV1",
+              "fieldsV1": {
+                "f:status": {
+                  "f:acceptedNames": {
+                    "f:kind": {
+                    
+                    },
+                    "f:listKind": {
+                    
+                    },
+                    "f:plural": {
+                    
+                    },
+                    "f:shortNames": {
+                    
+                    },
+                    "f:singular": {
+                    
+                    }
+                  },
+                  "f:conditions": {
+                    "k:{\"type\":\"Established\"}": {
+                      ".": {
+                      
+                      },
+                      "f:lastTransitionTime": {
+                      
+                      },
+                      "f:message": {
+                      
+                      },
+                      "f:reason": {
+                      
+                      },
+                      "f:status": {
+                      
+                      },
+                      "f:type": {
+                      
+                      }
+                    },
+                    "k:{\"type\":\"NamesAccepted\"}": {
+                      ".": {
+                      
+                      },
+                      "f:lastTransitionTime": {
+                      
+                      },
+                      "f:message": {
+                      
+                      },
+                      "f:reason": {
+                      
+                      },
+                      "f:status": {
+                      
+                      },
+                      "f:type": {
+                      
+                      }
+                    }
+                  }
+                }
+              },
+              "manager": "kube-apiserver",
+              "operation": "Update",
+              "subresource": "status",
+              "time": "2024-08-14T09:53:21Z"
+            }, {
+              "apiVersion": "apiextensions.k8s.io/v1",
+              "fieldsType": "FieldsV1",
+              "fieldsV1": {
+                "f:metadata": {
+                  "f:annotations": {
+                    ".": {
+                    
+                    },
+                    "f:kubectl.kubernetes.io/last-applied-configuration": {
+                    
+                    }
+                  },
+                  "f:labels": {
+                    ".": {
+                    
+                    },
+                    "f:type": {
+                    
+                    }
+                  }
+                },
+                "f:spec": {
+                  "f:conversion": {
+                    ".": {
+                    
+                    },
+                    "f:strategy": {
+                    
+                    }
+                  },
+                  "f:group": {
+                  
+                  },
+                  "f:names": {
+                    "f:kind": {
+                    
+                    },
+                    "f:listKind": {
+                    
+                    },
+                    "f:plural": {
+                    
+                    },
+                    "f:shortNames": {
+                    
+                    },
+                    "f:singular": {
+                    
+                    }
+                  },
+                  "f:scope": {
+                  
+                  },
+                  "f:versions": {
+                  
+                  }
+                }
+              },
+              "manager": "kubectl-client-side-apply",
+              "operation": "Update",
+              "time": "2024-08-14T09:53:21Z"
+            } ],
+            "name": "pointtopointservices.google.dev",
+            "resourceVersion": "27500",
+            "uid": "76b89b73-74fb-4662-a4f9-9dd3b839d3e2"
+          },
+          "spec": {
+            "conversion": {
+              "strategy": "None"
+            },
+            "group": "google.dev",
+            "names": {
+              "kind": "PointToPointService",
+              "listKind": "PointToPointServiceList",
+              "plural": "pointtopointservices",
+              "shortNames": [ "ptp" ],
+              "singular": "pointtopointservice"
+            },
+            "scope": "Namespaced",
+            "versions": [ {
+              "name": "v1",
+              "schema": {
+                "openAPIV3Schema": {
+                  "properties": {
+                    "spec": {
+                      "properties": {
+                        "interfaces": {
+                          "description": "Two customer VPC Subnetwork locations to be connected by this VPN tunnel.\n",
+                          "items": {
+                            "type": "string"
+                          },
+                          "oneOf": [ {
+                            "maxItems": 2,
+                            "minItems": 2
+                          } ],
+                          "type": "array"
+                        }
+                      },
+                      "type": "object",
+                      "x-kubernetes-preserve-unknown-fields": true
+                    },
+                    "status": {
+                      "type": "object",
+                      "x-kubernetes-preserve-unknown-fields": true
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "served": true,
+              "storage": true
+            } ]
+          },
+          "status": {
+            "acceptedNames": {
+              "kind": "PointToPointService",
+              "listKind": "PointToPointServiceList",
+              "plural": "pointtopointservices",
+              "shortNames": [ "ptp" ],
+              "singular": "pointtopointservice"
+            },
+            "conditions": [ {
+              "lastTransitionTime": "2024-08-14T09:53:21Z",
+              "message": "no conflicts found",
+              "reason": "NoConflicts",
+              "status": "True",
+              "type": "NamesAccepted"
+            }, {
+              "lastTransitionTime": "2024-08-14T09:53:21Z",
+              "message": "the initial names have been accepted",
+              "reason": "InitialNamesAccepted",
+              "status": "True",
+              "type": "Established"
+            } ],
+            "storedVersions": [ "v1" ]
+          }
+        } ]
+      }
+    }
+  }, {
+    "agentUtterance": {
+      "text": "The available network services are PointToPointService and connectivityservice"
+    }
+  }, {
+    "userUtterance": {
+      "text": "please get all locations for customer acme"
+    }
+  }, {
+    "toolUse": {
+      "tool": "projects/free5gc-384814/locations/us-central1/agents/411228d8-5b52-474d-8e41-46ef2de67de6/tools/f3c478b5-65ea-423f-8169-8e7c6b516663",
+      "action": "main.getCustomerLocations",
+      "inputActionParameters": {
+        "name": "acme"
+      },
+      "outputActionParameters": {
+      
+      }
+    }
+  }, {
+    "agentUtterance": {
+      "text": "The available locations for customer acme are: london-internal, london-internal-vpn-5fa13be6, newyork-internal, singapore-internal, sydney-internal, sydney-internal-vpn-5fa13be6"
+    }
+  }, {
+    "userUtterance": {
+      "text": "get all deployed services for customer acme"
+    }
+  }, {
+    "toolUse": {
+      "tool": "projects/free5gc-384814/locations/us-central1/agents/411228d8-5b52-474d-8e41-46ef2de67de6/tools/f3c478b5-65ea-423f-8169-8e7c6b516663",
+      "action": "main.getServices",
+      "inputActionParameters": {
+        "name": "acme"
+      },
+      "outputActionParameters": {
+        "200": [ {
+          "customer": "acme",
+          "kind": "PointToPointService",
+          "resources": [ {
+            "kind": "ComputeInstance",
+            "name": "london-internal-vpn-5fa13be6",
+            "status": "The resource is up to date"
+          }, {
+            "kind": "ComputeNetwork",
+            "name": "london-internal-vpn-5fa13be6",
+            "status": "The resource is up to date"
+          }, {
+            "kind": "ComputeSubnetwork",
+            "name": "london-internal-vpn-5fa13be6",
+            "status": "The resource is up to date"
+          }, {
+            "kind": "ComputeRouter",
+            "name": "london-internal-vpn-5fa13be6-router",
+            "status": "The resource is up to date"
+          }, {
+            "kind": "ComputeRouterNAT",
+            "name": "london-internal-vpn-5fa13be6-nat",
+            "status": "The resource is up to date"
+          }, {
+            "kind": "ComputeRoute",
+            "name": "london-internal-vpn-5fa13be6",
+            "status": "The resource is up to date"
+          }, {
+            "kind": "ComputeInstance",
+            "name": "sydney-internal-vpn-5fa13be6",
+            "status": "The resource is up to date"
+          }, {
+            "kind": "ComputeNetwork",
+            "name": "sydney-internal-vpn-5fa13be6",
+            "status": "The resource is up to date"
+          }, {
+            "kind": "ComputeSubnetwork",
+            "name": "sydney-internal-vpn-5fa13be6",
+            "status": "The resource is up to date"
+          }, {
+            "kind": "ComputeRouter",
+            "name": "sydney-internal-vpn-5fa13be6-router",
+            "status": "The resource is up to date"
+          }, {
+            "kind": "ComputeRouterNAT",
+            "name": "sydney-internal-vpn-5fa13be6-nat",
+            "status": "The resource is up to date"
+          }, {
+            "kind": "ComputeRoute",
+            "name": "sydney-internal-vpn-5fa13be6",
+            "status": "The resource is up to date"
+          } ],
+          "servicename": "vpnservice1"
+        } ]
+      }
+    }
+  }, {
+    "agentUtterance": {
+      "text": "The deployed services for customer acme are: vpnservice1"
+    }
+  } ],
+  "displayName": "get services, get locations, get deployed services",
+  "retrievalStrategy": "DEFAULT",
+  "conversationState": "OUTPUT_STATE_PENDING",
+  "languageCode": "en"
+}

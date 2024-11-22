@@ -1,0 +1,54 @@
+{
+  "name": "be2d0653-f129-43d3-badf-0109d4829352",
+  "actions": [ {
+    "userUtterance": {
+      "text": "hi"
+    }
+  }, {
+    "agentUtterance": {
+      "text": "Hi there! How can I help you today? I can help you with tasks such as understanding which networking services are available to use, understanding which networking services are deployed already for a particular company, understanding which networking locations are available for a particular customer, deploying new networking services, deleting existing networking services, and understanding metrics from an existing deployed connectivity service."
+    }
+  }, {
+    "userUtterance": {
+      "text": "get metrics for a deployed service"
+    }
+  }, {
+    "agentUtterance": {
+      "text": "Which service would you like to get the metrics for?"
+    }
+  }, {
+    "userUtterance": {
+      "text": "acme3fd771f1"
+    }
+  }, {
+    "agentUtterance": {
+      "text": "Please provide the time period you would like to get the metrics for. For example, you can say \"last hour\", \"last day\", or \"last week\"."
+    }
+  }, {
+    "userUtterance": {
+      "text": "last 5 minutes"
+    }
+  }, {
+    "toolUse": {
+      "tool": "projects/free5gc-384814/locations/us-central1/agents/411228d8-5b52-474d-8e41-46ef2de67de6/tools/f3c478b5-65ea-423f-8169-8e7c6b516663",
+      "action": "main.getServicePerformanceMetrics",
+      "inputActionParameters": {
+        "name": "acme3fd771f1",
+        "period": 5
+      },
+      "outputActionParameters": {
+      
+      }
+    }
+  }, {
+    "agentUtterance": {
+      "text": "Here are the performance metrics for the service \"acme3fd771f1\" for the last 5 minutes."
+    }
+  } ],
+  "playbookOutput": {
+    "executionSummary": "get the metrics for a given deployed service"
+  },
+  "displayName": "get metrics ",
+  "retrievalStrategy": "DEFAULT",
+  "languageCode": "en"
+}

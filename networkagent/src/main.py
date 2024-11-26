@@ -1,9 +1,10 @@
 import logging
-from agent.networkagent import NetworkAgent
-from langchain_core.messages import AIMessage, HumanMessage
+#from agent.networkagent import NetworkAgent
+#from langchain_core.messages import AIMessage, HumanMessage
 import streamlit as st
 from datetime import datetime
 import utils.st_extension as st_ext
+from streamlit.components.v1 import html
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
@@ -22,6 +23,44 @@ st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
 #         #stDecoration {display:none;}
 #     </style>
 # """, unsafe_allow_html=True)
+
+st.markdown(
+    """
+<style>
+    iframe.stIFrame{
+  height:670px !important;
+  }
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+agentbuilder="""<link rel="stylesheet" href="https://www.gstatic.com/dialogflow-console/fast/df-messenger/prod/v1/themes/df-messenger-default.css">
+<script src="https://www.gstatic.com/dialogflow-console/fast/df-messenger/prod/v1/df-messenger.js"></script>
+<df-messenger
+  location="us-central1"
+  project-id="free5gc-384814"
+  agent-id="411228d8-5b52-474d-8e41-46ef2de67de6"
+  language-code="en"
+  max-query-length="-1">
+  <df-messenger-chat-bubble
+   chat-title="BT Network Agent">
+  </df-messenger-chat-bubble>
+</df-messenger>
+<style>
+  df-messenger {
+    z-index: 999;
+    position: fixed;
+    --df-messenger-font-color: #000;
+    --df-messenger-font-family: Google Sans;
+    --df-messenger-chat-background: #f3f6fc;
+    --df-messenger-message-user-background: #d3e3fd;
+    --df-messenger-message-bot-background: #fff;
+    bottom: 16px;
+    right: 16px;
+  }
+</style>"""
+
 import graph.topology as topology
 
 # st.title("💬 Gemini Network Agent")
@@ -38,12 +77,15 @@ reset_chat = st.sidebar.button("Reset Chat")
 #     ]
 
 # Create columns
-# chatcolumn, graphcolumn = st.columns(2, )
-# chatcontainer = chatcolumn.container(height=500, border=True)
+chatcolumn, graphcolumn, vais = st.columns(3)
+chatcontainer = chatcolumn.container(height=700, border=True)
 
 # with graphcolumn:
-graphcontainer = st.container(height=500, border=True)
-graphelementcontainer = st.container(height=300, border=True)
+graphcontainer = graphcolumn.container(height=700, border=True)
+graphelementcontainer = graphcolumn.container(height=300, border=True)
+
+vaiscontainer = vais.container(height=700, border=True)
+
 
 with graphcontainer:
 
@@ -84,3 +126,6 @@ with graphelementcontainer:
 #         logger.info(response)
 #         st.markdown(response)
 #     st.session_state.chat_history.append(AIMessage(content=response))
+
+with vaiscontainer:
+  html(agentbuilder)

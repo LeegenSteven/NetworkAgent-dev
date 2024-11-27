@@ -1,0 +1,47 @@
+import logging
+import os
+import kopf
+from utils.compute import *
+import ansible_runner
+
+logger = logging.getLogger(__name__)
+
+
+########################################################
+# Install UPF to VM
+########################################################
+async def run_install(namespace, vm_name):
+    logger.debug("Installing nginx")
+
+    ip_address = await get_ip(namespace, vm_name)
+    if ip_address is None:
+        raise kopf.TemporaryError("waiting for ip address", delay=15)
+
+    # run ansible playbook to install prometheus on the VM
+    extravars = {
+        'GOOGLE_PROJECT': os.getenv("GOOGLE_PROJECT"),
+        'GOOGLE_REGION': os.getenv("GOOGLE_REGION"),
+        'GOOGLE_ZONE': os.getenv("GOOGLE_ZONE"),
+        'BASEDIR': constants.basedir
+    }
+    hosts = {
+        'hosts': {
+            "monitor": {
+                'ansible_host': ip_address,
+                'ansible_user': os.getenv("GOOGLE_USER"),
+                'ansible_connection': 'ssh',
+                'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
+                'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'
+            }
+        }
+    }
+    logger.debug(hosts)
+    logger.debug(extravars)
+    r = ansible_runner.run(private_data_dir=constants.basedir+"/free5gc/nginx/playbooks", 
+                           inventory={'all': hosts},
+                           playbook='install.yaml',
+                           extravars=extravars)
+
+    logger.info("status = %s", r.status)
+    if r.status != 'successful':
+        raise kopf.TemporaryError("Ansible Error.", delay=15)

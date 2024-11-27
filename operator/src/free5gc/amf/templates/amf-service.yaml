@@ -10,6 +10,9 @@ spec:
   ports:
     - port: 8000
       nodePort: 30506
+    - port: 38412
+      protocol: SCTP
+      nodePort: 38412
   selector:
     app: free5gc
     nf: amf

@@ -1,16 +1,16 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: userplanefunctions.google.dev
+  name: nginxs.google.dev
 spec:
   scope: Namespaced
   group: google.dev
   names:
-    kind: UserPlaneFunction
-    plural: userplanefunctions
-    singular: userplanefunction
+    kind: Nginx
+    plural: nginxs
+    singular: nginx
     shortNames:
-      - upf
+      - nginx
   versions:
     - name: v1
       served: true
@@ -22,8 +22,8 @@ spec:
             spec:
               type: object
               properties:
-                ingress: 
-                  description: internal network interface
+                interface: 
+                  description: The network interface
                   type: object
                   properties:
                     name:
@@ -32,16 +32,9 @@ spec:
                     namespace:
                       description: name of the vpc namespace
                       type: string
-                egress: 
-                  description: external network interface
-                  type: object
-                  properties:
-                    name:
-                      description: name of the vpc
-                      type: string
-                    namespace:
-                      description: name of the vpc namespace
-                      type: string
+                address: 
+                  description: The address to assign
+                  type: string
               x-kubernetes-preserve-unknown-fields: true
             status:
               type: object

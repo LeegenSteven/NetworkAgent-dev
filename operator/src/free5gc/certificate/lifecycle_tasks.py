@@ -1,7 +1,8 @@
 import kubernetes
 import base64
-from free5gc.certificate.k8s import *
+import logging
 
+logger = logging.getLogger(__name__)
 
 
 ########################################################################

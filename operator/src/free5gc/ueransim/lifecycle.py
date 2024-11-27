@@ -23,7 +23,7 @@ async def ueransim(spec, status, namespace, name, logger, **kwargs):
                         name, # parent name
                         name, # vm name
                         None, # external IP
-                        network_interface, # set this to the target network name to bind to
+                        [network_interface], # set this to the target network name to bind to
                         os.getenv("GOOGLE_PROJECT"),
                         os.getenv("GOOGLE_REGION"),
                         os.getenv("GOOGLE_ZONE"), 

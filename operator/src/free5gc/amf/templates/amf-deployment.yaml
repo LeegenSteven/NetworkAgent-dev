@@ -21,7 +21,10 @@ spec:
       initContainers:
       - name: wait-nrf
         image: appropriate/curl
-        command: ['sh', '-c', 'until curl -s -o /dev/null -w "%{http_code}" http://nrf-nnrf:8000 | grep "200"; do sleep 1; done;']
+        env:
+        - name: DEPENDENCIES
+          value: nrf-nnrf:8000
+        command: ["sh", "-c", "until nc -z $DEPENDENCIES; do echo waiting for the NRF; sleep 2; done;"]
       containers:
       - image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/networkagent/amf:latest
         imagePullPolicy: Always

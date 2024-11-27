@@ -153,6 +153,7 @@
     mode: '0644'
   loop:
     - upf.yaml
+    - nginx.yaml
     - Readme.md
 
 - name: push templated files
@@ -165,6 +166,7 @@
   loop:
     - london-cluster.yaml
     - london.yaml
+    - internet.yaml
 
 - name: add files to network function branch 
   command: sudo -u git git add .

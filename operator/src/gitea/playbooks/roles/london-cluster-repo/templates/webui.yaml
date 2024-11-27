@@ -7,7 +7,7 @@ metadata:
 data:
   webuicfg.yaml: |
     info:
-      version: 1.0.0
+      version: 1.0.1
       description: Docker-WebUI initial local configuration
     
     configuration:
@@ -19,9 +19,10 @@ data:
     # debugLevel: how detailed to output, value: trace, debug, info, warn, error, fatal, panic
     # ReportCaller: enable the caller report or not, value: true or false
     logger:
-      WEBUI:
-        debugLevel: info
-        ReportCaller: false
+      enable: true # true or false
+      level: info # how detailed to output, value: trace, debug, info, warn, error, fatal, panic
+      reportCaller: false # enable the caller report or not, value: true or false
+
 ---
 apiVersion: apps/v1
 kind: Deployment

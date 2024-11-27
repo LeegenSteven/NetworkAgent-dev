@@ -38,6 +38,8 @@
     mode: '0644'
   loop:
     - Readme.md
+    - amf-crd.yaml
+    - smf-crd.yaml
 
 - name: push templated files
   ansible.builtin.template:
@@ -76,6 +78,17 @@
   command: sudo -u git git checkout -b networkfunction
   args:
     chdir: /opt/london-cluster-repo
+
+- name: push files to network function branch
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/london-cluster-repo/{{item}}"
+    owner: git
+    group: git
+    mode: '0644'
+  loop:
+    - smf.yaml
+    - amf.yaml
 
 - name: push templated files
   ansible.builtin.template:

@@ -1,0 +1,16 @@
+apiVersion: google.dev/v1
+kind: SessionManagementFunction
+metadata:
+  name: smf
+  labels:
+    graph: "true"
+spec:
+  clusterName: london-cluster
+  upf:
+    name: upf-london
+    namespace: london
+  dnn:
+    cidr: 172.168.0.0/24
+    static_cidr: 172.168.0.0/24
+    gateway_address: 172.168.0.1
+    destination_ip: 172.168.0.10/32

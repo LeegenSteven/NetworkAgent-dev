@@ -24,11 +24,6 @@ spec:
   networkRef:
     name: newyork
     namespace: newyork
-  secondaryIpRange:
-  - rangeName: servicesrange
-    ipCidrRange: 10.7.0.0/16
-  - rangeName: clusterrange
-    ipCidrRange: 10.8.0.0/16
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeFirewall

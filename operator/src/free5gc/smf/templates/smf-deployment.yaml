@@ -20,18 +20,14 @@ spec:
         app: free5gc
         nf: smf
         name: smf
-      annotations:
-        k8s.v1.cni.cncf.io/networks: '[
-          { "name": "n4network", "interface": "n4", "ips": [ "10.10.4.101/24" ] }
-          ]'
     spec:
       initContainers:
-      - name: wait-ausf
+      - name: wait-nrf
         image: busybox:1.32.0
         env:
         - name: DEPENDENCIES
-          value: ausf-nausf:8000
-        command: ["sh", "-c", "until nc -z $DEPENDENCIES; do echo waiting for the AUSF; sleep 2; done;"]
+          value: nrf-nnrf:8000
+        command: ["sh", "-c", "until nc -z $DEPENDENCIES; do echo waiting for the NRF; sleep 2; done;"]
       containers:
       - image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/networkagent/smf:latest
         name: smf

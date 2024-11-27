@@ -1,0 +1,8 @@
+apiVersion: google.dev/v1
+kind: AccessManagementFunction
+metadata:
+  name: amf
+  labels:
+    graph: "true"
+spec:
+  clusterName: london-cluster

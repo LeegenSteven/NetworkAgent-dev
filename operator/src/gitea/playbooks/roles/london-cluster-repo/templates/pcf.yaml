@@ -7,7 +7,7 @@ metadata:
 data:
   pcfcfg.yaml: |
     info:
-      version: 1.0.1
+      version: 1.0.2
       description: PCF initial local configuration
 
     configuration:
@@ -18,8 +18,8 @@ data:
         bindingIPv4: 0.0.0.0  # IP used to bind the service
         port: 8000              # port used to bind the service
         tls: # the local path of TLS key
-          pem: config/TLS/pcf.pem # PCF TLS Certificate
-          key: config/TLS/pcf.key # PCF TLS Private key
+          pem: cert/pcf.pem # PCF TLS Certificate
+          key: cert/pcf.key # PCF TLS Private key
       timeFormat: 2019-01-02 15:04:05 # time format of this PCF
       defaultBdtRefId: BdtPolicyId-   # BDT Reference ID, indicating transfer policies of background data transfer.
       nrfUri: http://nrf-nnrf:8000  # a valid URI of NRF
@@ -41,9 +41,9 @@ data:
     # debugLevel: how detailed to output, value: trace, debug, info, warn, error, fatal, panic
     # ReportCaller: enable the caller report or not, value: true or false
     logger:
-      PCF:
-        debugLevel: info
-        ReportCaller: false
+      enable: true # true or false
+      level: info # how detailed to output, value: trace, debug, info, warn, error, fatal, panic
+      reportCaller: false # enable the caller report or not, value: true or false
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -70,8 +70,8 @@ spec:
         image: busybox:1.32.0
         env:
         - name: DEPENDENCIES
-          value: smf-nsmf:8000
-        command: ["sh", "-c", "until nc -z $DEPENDENCIES; do echo waiting for the SMF; sleep 2; done;"]
+          value: nrf-nnrf:8000
+        command: ["sh", "-c", "until nc -z $DEPENDENCIES; do echo waiting for the NRF; sleep 2; done;"]
       containers:
       - image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/networkagent/pcf:latest
         name: pcf

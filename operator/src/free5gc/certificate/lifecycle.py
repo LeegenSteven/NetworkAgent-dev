@@ -1,6 +1,7 @@
 import logging
 import kopf
-from utils.k8s import getClusterDetails, getClusterFeatureDetails
+from utils.k8s import getClusterDetails
+from free5gc.utils.k8s import get_api_client
 from free5gc.certificate.lifecycle_tasks import *
 
 logger = logging.getLogger(__name__)
@@ -28,16 +29,7 @@ async def creategitcertificate(spec, **_):
   if status is None or status.get("reason") != "UpToDate":
     raise kopf.TemporaryError("Waiting for cluster to be ready", 20)
 
-  # clusterFeature = await getClusterFeatureDetails(namespace, name+'-feature')
-  # if clusterFeature is None:    
-  #   raise kopf.TemporaryError("Waiting for cluster feature", 30)
-
-  # status = clusterFeature.get("status").get("conditions")[0]
-  # logger.debug(status)
-  # if status is None or status.get("reason") != "UpToDate":
-  #   raise kopf.TemporaryError("Waiting for cluster feature to be ready", 20)
-
   # create namespace and git secret in the new cluster
-  api_client= get_api_client(cluster)
+  api_client= get_api_client(cluster.get("status").get("endpoint"), cluster.get("spec").get("masterAuth").get("clusterCaCertificate"))
   await create_namespace(api_client, "config-management-system")
   await addSecret(api_client)

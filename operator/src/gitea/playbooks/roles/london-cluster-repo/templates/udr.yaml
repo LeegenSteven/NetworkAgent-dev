@@ -7,7 +7,7 @@ metadata:
 data:
   udrcfg.yaml: |
     info:
-      version: 1.0.1
+      version: 1.0.2
       description: UDR initial local configuration
 
     configuration:
@@ -17,8 +17,8 @@ data:
         bindingIPv4: 0.0.0.0  # IP used to bind the service
         port: 8000 # port used to bind the service
         tls: # the local path of TLS key
-          pem: config/TLS/udr.pem # UDR TLS Certificate
-          key: config/TLS/udr.key # UDR TLS Private key
+          pem: cert/udr.pem # UDR TLS Certificate
+          key: cert/udr.key # UDR TLS Private key
       mongodb:
         name: free5gc # Database name in MongoDB
         url: mongodb://mongodb:27017 # URL of MongoDB
@@ -28,9 +28,10 @@ data:
     # debugLevel: how detailed to output, value: trace, debug, info, warn, error, fatal, panic
     # ReportCaller: enable the caller report or not, value: true or false
     logger:
-      UDR:
-        debugLevel: info
-        ReportCaller: false
+      enable: true # true or false
+      level: info # how detailed to output, value: trace, debug, info, warn, error, fatal, panic
+      reportCaller: false # enable the caller report or not, value: true or false
+
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -57,8 +58,8 @@ spec:
         image: busybox:1.32.0
         env:
         - name: DEPENDENCIES
-          value: udm-nudm:8000
-        command: ["sh", "-c", "until nc -z $DEPENDENCIES; do echo waiting for the SMF; sleep 2; done;"]
+          value: nrf-nnrf:8000
+        command: ["sh", "-c", "until nc -z $DEPENDENCIES; do echo waiting for the NRF; sleep 2; done;"]
       containers:
       - image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/networkagent/udr:latest
         name: udr

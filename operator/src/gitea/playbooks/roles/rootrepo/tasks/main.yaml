@@ -37,39 +37,6 @@
     group: git
     mode: '0644'
 
-- name: add readme to root-repo
-  command: sudo -u git git add .
-  args:
-    chdir: /opt/root-repo
-
-- name: initial commit 
-  command: sudo -u git git commit -m "initial commit"
-  args:
-    chdir: /opt/root-repo
-
-- name: add remote repo
-  command: sudo -u git git remote add origin https://networkagent:password123@{{ansible_host}}:3000/networkagent/root-repo.git
-  args:
-    chdir: /opt/root-repo
-
-- name: push master to repo
-  command: sudo -u git git -c http.sslVerify=false push -u origin master
-  args:
-    chdir: /opt/root-repo
-
-###############################################
-# Dev Branch
-###############################################
-- name: checkout dev branch
-  command: sudo -u git git checkout -b dev
-  args:
-    chdir: /opt/root-repo
-
-- name: add readme to root-repo
-  command: sudo -u git git add .
-  args:
-    chdir: /opt/root-repo
-
 - name: add source repos to dev
   ansible.builtin.template:
     src: "{{item}}"
@@ -91,18 +58,23 @@
     - newyork-repo-sync.yaml
     - newyork-role.yaml
 
-- name: add dev files to root-repo
+- name: add to root-repo
   command: sudo -u git git add .
   args:
     chdir: /opt/root-repo
 
-- name: dev commit 
-  command: sudo -u git git commit -m "add repos"
+- name: initial commit 
+  command: sudo -u git git commit -m "initial commit"
   args:
     chdir: /opt/root-repo
 
-- name: push to repo
-  command: sudo -u git git -c http.sslVerify=false push -u origin dev
+- name: add remote repo
+  command: sudo -u git git remote add origin https://networkagent:password123@{{ansible_host}}:3000/networkagent/root-repo.git
+  args:
+    chdir: /opt/root-repo
+
+- name: push master to repo
+  command: sudo -u git git -c http.sslVerify=false push -u origin master
   args:
     chdir: /opt/root-repo
 

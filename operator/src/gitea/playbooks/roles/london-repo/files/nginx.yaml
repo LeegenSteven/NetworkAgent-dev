@@ -1,0 +1,9 @@
+apiVersion: google.dev/v1
+kind: Nginx
+metadata:
+  name: nginx-london
+spec:
+  interface: 
+    name: internet-dnn
+    namespace: london
+  address: 172.168.0.10

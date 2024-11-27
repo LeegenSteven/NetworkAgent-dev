@@ -62,7 +62,7 @@ spec:
   enableAutopilot: false
   enableLegacyAbac: true
   location: "{{GOOGLE_REGION}}"
-  initialNodeCount: 5
+  initialNodeCount: 10
   defaultMaxPodsPerNode: 16
   releaseChannel:
     channel: STABLE

@@ -3,6 +3,9 @@ kind: UserPlaneFunction
 metadata:
   name: upf-london
 spec:
-  interface: 
+  ingress: 
     name: london
+    namespace: london
+  egress: 
+    name: internet-dnn
     namespace: london

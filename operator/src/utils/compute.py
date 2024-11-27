@@ -219,7 +219,7 @@ async def create_nat(namespace, network_name, region):
 ########################################################################
 # Create ComputeInstance
 ########################################################################
-async def create_compute(namespace, parent_name, vm_name, external_ip, interface, project, region, zone, vpn=False, monitor=True,release="ubuntu-2204-lts",):
+async def create_compute(namespace, parent_name, vm_name, external_ip, interfaces, project, region, zone, vpn=False, monitor=True,release="ubuntu-2204-lts",):
   logger.debug("Create compute %s", vm_name)
   compute_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeInstance")
 
@@ -268,17 +268,23 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
     )
 
   # next add the interface to connect to - this equates to ens5 internal nic
-  if interface is not None:
-    # check the interface is up, and wait if not
-    await get_subnetwork(interface['namespace'], interface['name'])
-    networkInterfaces.append(
-        {
-          "subnetworkRef": {
-            "name": interface['name'],
-            "namespace": interface['namespace'] 
+  if interfaces is not None:
+    for interface in interfaces:
+      # check if the interface has already been added, if not then continue
+      for ni in networkInterfaces:
+        if 'name' in ni['subnetworkRef'] and ni['subnetworkRef']['name']== interface['name']:
+          continue
+
+      # check the interface is up, and wait if not
+      await get_subnetwork(interface['namespace'], interface['name'])
+      networkInterfaces.append(
+          {
+            "subnetworkRef": {
+              "name": interface['name'],
+              "namespace": interface['namespace'] 
+            }
           }
-        }
-    )
+      )
 
   machineType="e2-standard-2"
   # select the machinetype based on the number of interfaces, there must be the same or more number of cores 

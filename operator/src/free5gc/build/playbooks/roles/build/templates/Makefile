@@ -12,9 +12,9 @@ smf: base
 	docker build -t ${DOCKER_IMAGE_OWNER}/smf:${DOCKER_IMAGE_TAG} ./nf_smf
 	docker push ${DOCKER_IMAGE_OWNER}/smf:${DOCKER_IMAGE_TAG}
 amf: base
-	docker build --build-arg F5GC_MODULE=n3iwf -t free5gc/n3iwf-base:latest -f ./base/Dockerfile.nf ./base
-	docker build -t ${DOCKER_IMAGE_OWNER}/n3iwf:${DOCKER_IMAGE_TAG} ./nf_n3iwf
-	docker push ${DOCKER_IMAGE_OWNER}/n3iwf:${DOCKER_IMAGE_TAG}
+	docker build --build-arg F5GC_MODULE=amf -t free5gc/amf-base:latest -f ./base/Dockerfile.nf ./base
+	docker build -t ${DOCKER_IMAGE_OWNER}/amf:${DOCKER_IMAGE_TAG} ./nf_amf
+	docker push ${DOCKER_IMAGE_OWNER}/amf:${DOCKER_IMAGE_TAG}
 upf: base
 	docker build --build-arg F5GC_MODULE=upf -t free5gc/upf-base:latest -f ./base/Dockerfile.nf ./base
 	docker build -t ${DOCKER_IMAGE_OWNER}/upf:${DOCKER_IMAGE_TAG} ./nf_upf

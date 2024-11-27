@@ -1,0 +1,7 @@
+- name: nginx hello world
+  community.docker.docker_container:
+    name: demo
+    image: nginxdemos/hello
+    state: present
+    recreate: true
+    network_mode: host

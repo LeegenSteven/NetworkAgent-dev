@@ -58,3 +58,5 @@ spec:
           value: admin_briannaughton_altostrat_co
         - name: GRAPH
           value: "yes"
+        - name: FREE5GC
+          value: "yes"

@@ -217,7 +217,7 @@ Start()
     --workload-pool $GOOGLE_PROJECT.svc.id.goog \
     --zone $GOOGLE_ZONE\
     --node-locations $GOOGLE_ZONE \
-    --num-nodes 6 \
+    --num-nodes 8 \
     --enable-fleet \
     --network mgmt \
     --subnetwork mgmt-subnet

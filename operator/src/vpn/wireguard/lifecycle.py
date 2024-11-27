@@ -22,7 +22,7 @@ async def wireguard(body,spec, name, namespace, logger, **kwargs):
                         None, # parent name
                         name, # vmname
                         None, # external ip
-                        spec.get('sourceInterface'),
+                        [spec.get('sourceInterface')],
                         os.getenv("GOOGLE_PROJECT"),
                         os.getenv("GOOGLE_REGION"),
                         os.getenv("GOOGLE_ZONE"), 

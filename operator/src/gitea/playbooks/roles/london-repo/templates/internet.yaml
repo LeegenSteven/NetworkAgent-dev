@@ -2,7 +2,7 @@
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeNetwork
 metadata:
-  name: dublin
+  name: internet-dnn
   labels:
     customer: acme
     graph: "true"
@@ -13,22 +13,21 @@ spec:
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeSubnetwork
 metadata:
-  name: dublin
+  name: internet-dnn
   labels:
-    customer: acme
     graph: "true"
 spec:
-  ipCidrRange: 10.0.40.0/24
+  ipCidrRange: 172.168.0.0/24
   region: "{{GOOGLE_REGION}}"
-  description: dublin Network
+  description: internet DNN Network
   networkRef:
-    name: dublin
-    namespace: dublin
+    name: internet-dnn
+    namespace: london
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeFirewall
 metadata:
-  name: dublin-allowed
+  name: internet-dnn
   labels:
     customer: acme
     graph: "true"
@@ -42,8 +41,8 @@ spec:
        - "0-65535"
     - protocol: icmp
   networkRef:
-    name: dublin
-    name: dublin
+    name: internet-dnn
+    namespace: london
   direction: INGRESS
   sourceRanges:
     - 0.0.0.0/0

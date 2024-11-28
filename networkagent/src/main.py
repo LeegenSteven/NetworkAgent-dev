@@ -77,15 +77,16 @@ reset_chat = st.sidebar.button("Reset Chat")
 #     ]
 
 # Create columns
-chatcolumn, graphcolumn, vais = st.columns(3)
+chatcolumn, graphcolumn = st.columns(2)
 chatcontainer = chatcolumn.container(height=700, border=True)
 
 # with graphcolumn:
 graphcontainer = graphcolumn.container(height=700, border=True)
 graphelementcontainer = graphcolumn.container(height=300, border=True)
 
-vaiscontainer = vais.container(height=700, border=True)
 
+with chatcontainer:
+  html(agentbuilder)
 
 with graphcontainer:
 
@@ -127,5 +128,4 @@ with graphelementcontainer:
 #         st.markdown(response)
 #     st.session_state.chat_history.append(AIMessage(content=response))
 
-with vaiscontainer:
-  html(agentbuilder)
+

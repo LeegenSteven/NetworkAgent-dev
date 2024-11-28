@@ -2,6 +2,7 @@ import logging
 import streamlit as st
 import utils.st_extension as st_ext
 from streamlit.components.v1 import html
+from streamlit_autorefresh import st_autorefresh
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
@@ -9,6 +10,8 @@ logging.basicConfig(level='INFO', format=log_format)
 logger = logging.getLogger(__name__)
 
 st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
+
+count = st_autorefresh(interval=2000, key="counter")
 
 agentbuilder = """
 <div id="messenger">

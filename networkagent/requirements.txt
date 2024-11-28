@@ -14,3 +14,4 @@ scikit-learn
 st-cytoscape
 pandas
 numpy
+streamlit-autorefresh

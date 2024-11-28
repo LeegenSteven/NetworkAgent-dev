@@ -286,10 +286,12 @@ Start()
     echo "Spanner instance ready !"
 
     # Work around because the edition spec is not supported in the manifest file
-    # Same for backup schedule.
+    # Same for backup schedule updated to None as backup creation make the DB deletion
+    # more complex (not needed in this PoC)
     # (See https://b.corp.google.com/issues/372631209)
     echo "Updating Spanner instance to Enterprise Edition"
     gcloud spanner instances update $GOOGLE_SPANNER_INSTANCE --edition=ENTERPRISE
+    echo "Updating Spanner instance to no backup schedule"
     gcloud spanner instances update $GOOGLE_SPANNER_INSTANCE --default-backup-schedule-type=NONE
 
     echo "Creating Spanner database ${GOOGLE_SPANNER_DATABASE}..."
@@ -301,7 +303,7 @@ Start()
     echo "Spanner database ready !"
 
     echo "#####################################"
-    echo "Deploy the Operator and networks/git"
+    echo "Deploy the Operator, networks and git"
     echo "#####################################"
     Operator
 

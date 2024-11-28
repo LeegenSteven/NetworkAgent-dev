@@ -286,9 +286,11 @@ Start()
     echo "Spanner instance ready !"
 
     # Work around because the edition spec is not supported in the manifest file
+    # Same for backup schedule.
     # (See https://b.corp.google.com/issues/372631209)
     echo "Updating Spanner instance to Enterprise Edition"
     gcloud spanner instances update $GOOGLE_SPANNER_INSTANCE --edition=ENTERPRISE
+    gcloud spanner instances update $GOOGLE_SPANNER_INSTANCE --default-backup-schedule-type=NONE
 
     echo "Creating Spanner database ${GOOGLE_SPANNER_DATABASE}..."
     kubectl apply -f environment/spanner.yaml -l "kind=spanner-database"

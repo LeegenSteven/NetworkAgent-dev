@@ -205,6 +205,9 @@ def createService(payload):
     serviceApiVersion = payload['serviceInfo']['apiVersion']
     serviceSpec = payload['serviceInfo']['spec']
 
+    for n in serviceSpec.get('interfaces'):
+        n['namespace']=n['name']
+
     client = kubernetes.dynamic.DynamicClient(get_client())
     name = customerName.lower()
 
@@ -220,7 +223,8 @@ def createService(payload):
                 "name": name+str(uuid.uuid4())[:8],
                 "namespace": "automation",
                 "labels": {
-                    "customer": name
+                    "customer": name,
+                    "graph": "true"
                 },
             },
             "spec": serviceSpec

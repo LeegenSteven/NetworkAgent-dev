@@ -31,6 +31,7 @@ export GITEA_ADDRESS=`kubectl get giteas gitea -o jsonpath='{.status.create_gite
 git clone https://$GITEA_ADDRESS:3000/networkagent/core -c http.sslVerify=false
 git clone https://$GITEA_ADDRESS:3000/networkagent/dublin -c http.sslVerify=false
 git clone https://$GITEA_ADDRESS:3000/networkagent/london -c http.sslVerify=false
+git clone https://$GITEA_ADDRESS:3000/networkagent/london-cluster -c http.sslVerify=false
 git clone https://$GITEA_ADDRESS:3000/networkagent/newyork -c http.sslVerify=false
 ```
 

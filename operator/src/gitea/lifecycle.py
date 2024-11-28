@@ -10,7 +10,7 @@ async def create_gitea(spec, name, namespace, logger, **kwargs):
     logger.debug("Create gitea repo")
 
     # Create external IP address
-    await create_external_ip(namespace, "gitea", os.getenv("GOOGLE_REGION"))
+    await create_external_ip(namespace, "gitea", os.getenv("GOOGLE_REGION"), graph=False)
     external_ip_address = await get_external_ip_address(namespace, "gitea")
 
     # Create VM and attach IP address
@@ -22,7 +22,8 @@ async def create_gitea(spec, name, namespace, logger, **kwargs):
                          os.getenv("GOOGLE_PROJECT"),
                          os.getenv("GOOGLE_REGION"),
                          os.getenv("GOOGLE_ZONE"), 
-                         monitor=False) # set to false so this VM is not scraped by prometheus
+                         monitor=False, # set to false so this VM is not scraped by prometheus
+                         graph=False) # set to false so this VM is not showing on topology graph
 
     # Install Gitea
     await run_gitea_install(namespace, external_ip_address)

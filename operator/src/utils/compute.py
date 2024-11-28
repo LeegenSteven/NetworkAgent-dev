@@ -219,7 +219,7 @@ async def create_nat(namespace, network_name, region):
 ########################################################################
 # Create ComputeInstance
 ########################################################################
-async def create_compute(namespace, parent_name, vm_name, external_ip, interfaces, project, region, zone, vpn=False, monitor=True,release="ubuntu-2204-lts",):
+async def create_compute(namespace, parent_name, vm_name, external_ip, interfaces, project, region, zone, vpn=False, monitor=True,release="ubuntu-2204-lts",graph=True):
   logger.debug("Create compute %s", vm_name)
   compute_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeInstance")
 
@@ -296,7 +296,8 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
   labels = {}
   if monitor:
     labels["monitor"]="yes"
-  labels["graph"] = "true"
+  if graph:
+    labels["graph"] = "true"
 
   crd_manifest={
     "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
@@ -369,18 +370,22 @@ async def get_compute(namespace, vm_name):
 ########################################################################
 # Create External ComputeAddress
 ########################################################################
-async def create_external_ip(namespace, name, region):
+async def create_external_ip(namespace, name, region, graph=True):
   logger.debug("Create external ip")
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeAddress")
+
+  # build out labels
+  labels = {}
+  if graph:
+    labels["graph"] = "true"
+
   crd_manifest= {
     "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
     "kind": "ComputeAddress",
     "metadata": {
       "name": f"{name}",
       "namespace": namespace,
-      "labels": {
-        "graph": "true"
-      },
+      "labels": labels,
       "annotations": {
         "configmanagement.gke.io/managed": "disabled"
       }
@@ -391,7 +396,7 @@ async def create_external_ip(namespace, name, region):
       "location": region
     }
   }
-
+  
   # update manifest to be child of parent object
   kopf.adopt(crd_manifest)
   logger.debug(json.dumps(crd_manifest, indent=4))

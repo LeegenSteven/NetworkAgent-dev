@@ -392,7 +392,24 @@ Kill()
     kubectl delete -f environment/free5gc-build.yaml
     # kubectl delete -f environment/bigquery.yaml
     kubectl delete -f environment/spanner.yaml
-    kubectl delete -f environment/networks.yaml
+    # Sometimes kopf finalizers are not removed from the network resources
+    # and the kubectl command below hangs for ever. So clear the finalizers after
+    # a certain timeout if it is still hanging 
+
+    # Launch the kubectl command in the backgroun
+    kubectl delete -f environment/networks.yaml &
+    job_id=$!
+
+    # For the timeout duration check that the command is still running
+    # if the timeout popped (return code 124) then clean up the finalizers
+    # to unblock the kubectl command
+    timeout 2m sh -c "while kill -0 $job_id 2>/dev/null; do sleep 1; done"
+    if [ $? -eq 124 ]; then
+      kubectl patch computefirewalls dataplane --patch '{"metadata":{"finalizers":[]}}'  --type=merge
+      kubectl patch computesubnetworks dataplane --patch '{"metadata":{"finalizers":[]}}'  --type=merge
+      kubectl patch computenetworks dataplane --patch '{"metadata":{"finalizers":[]}}'  --type=merge
+    fi
+
     gcloud run services delete network-agent-api --region=$GOOGLE_REGION --quiet
     gcloud run services delete network-agent --region=$GOOGLE_REGION --quiet
 

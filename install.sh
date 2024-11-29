@@ -318,6 +318,11 @@ Start()
     # echo "Deploy Porch                      "
     # echo "##################################"
     # Porch
+
+    # Say how to access the gitea server
+    gitea_host=$(kubectl get ComputeInstance gitea -o=jsonpath='{.spec.networkInterface[0].accessConfig[0].natIpRef.external}')
+    gitea_port=3000
+    echo -e "\nGitea server is available at:\n\thttps://$gitea_host:$gitea_port/explore/repos\n"
 }
 
 ############################################################

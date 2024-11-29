@@ -38,6 +38,7 @@ def getCustomerLocations(name):
             logger.info(item)
             location = {
                 'name': item['metadata']['name'],
+                'namespace': item['metadata']['namespace'],
                 'description': item['spec']['description'],
                 'cidr': item['spec']['ipCidrRange']
             }
@@ -75,6 +76,7 @@ def getCustomerApplications(name):
             logger.info(item)
             app = {
                 'name': item['metadata']['name'],
+                'namespace': item['metadata']['namespace']
             }
             apps.append(app)
 
@@ -144,20 +146,26 @@ def getServices(name):
                 api_version=item['spec']['group']+'/'+item['spec']['versions'][0]['name'],
             )
 
-            services=svc_api.get(label_selector=f"customer={customerName}")
+            if svc_api is not None:
+                services=svc_api.get(label_selector=f"customer={customerName}")
 
-            for item in services.items:
-                logger.debug(item)
-                if item.get('status') is None or item.get('status').get('pointtopoint') is None:
-                    svc={"servicename": item['metadata']['name'],
-                         "status": "Starting"}
-                else:
-                    svc= {
-                        'servicename': item['metadata']['name'],
-                        'status': item.get('status').get('pointtopoint').get('status'),
-                        'vnfs': item.get('status').get('pointtopoint').get('edges')
-                    }
-                services_list.append(svc)
+                for item in services.items:
+                    logger.info(item)
+                    if item.get('status') is None:
+                        logger.info("no status yet")
+                        svc={"servicename": item['metadata']['name'],
+                            "status": "Starting"}
+                        services_list.append(svc)
+                    else:
+                        logger.info("status being returned")
+                        svc= {
+                            'servicename': item['metadata']['name'],
+                            'status': item.get('status').get('currentStatus')
+                        }
+                        services_list.append(svc)
+
+        logger.info("----SERVICE STATUS----")
+        logger.info(services_list)
 
         if len(services_list)==0:
             return {}, 404
@@ -205,8 +213,14 @@ def createService(payload):
     serviceApiVersion = payload['serviceInfo']['apiVersion']
     serviceSpec = payload['serviceInfo']['spec']
 
-    for n in serviceSpec.get('interfaces'):
-        n['namespace']=n['name']
+    # check the interfaces are correct
+    if 'interfaces' in serviceSpec:
+        for n in serviceSpec.get('interfaces'):
+            # if this is a string the model has ignored namespace so make it dict
+            if isinstance(n,str):
+                n={'name':n, 'namespace':n}
+            else:
+                n['namespace']=n['name']
 
     client = kubernetes.dynamic.DynamicClient(get_client())
     name = customerName.lower()

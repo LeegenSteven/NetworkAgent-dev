@@ -56,7 +56,7 @@ with agentcolumn:
 with graphcolumn:
     graphcontainer = st.container(height=700, border=True)
     with graphcontainer:
-        tab_labels = ["Network Topology", "K8s resources", "Combined View"]
+        tab_labels = ["Net Topology", "Net resources", "Combined View"]
         selected_tab = st_ext.segmented_control(tab_labels, default=tab_labels[0], max_size=4, key="graph_tabs")
 
         if selected_tab == tab_labels[0]:

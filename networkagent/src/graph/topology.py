@@ -180,7 +180,7 @@ def create_network_cytoscape():
   return cytoscape(
       elements,
       stylesheet,
-      height="450px",
+      height="600px",
       layout=layout,
       selection_type="single",
       user_panning_enabled=True,
@@ -199,7 +199,7 @@ def create_resource_cytoscape():
   return cytoscape(
       elements,
       stylesheet,
-      height="450px",
+      height="600px",
       layout=layout,
       selection_type="single",
       user_panning_enabled=True,
@@ -219,7 +219,7 @@ def create_combined_cytoscape():
   return cytoscape(
       elements,
       stylesheet,
-      height="450px",
+      height="600px",
       layout=layout,
       selection_type="single",
       user_panning_enabled=True,

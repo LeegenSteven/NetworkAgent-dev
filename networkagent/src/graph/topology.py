@@ -174,7 +174,7 @@ def create_network_cytoscape():
   layout = {"name": "fcose", "animationDuration": 3}
   layout["nodeRepulsion"] = 50000
 
-  hierarchical_layout(layout,elements)
+  #hierarchical_layout(layout,elements)
   edge_color(elements, 'isConnectedTo', google_green)
 
   return cytoscape(

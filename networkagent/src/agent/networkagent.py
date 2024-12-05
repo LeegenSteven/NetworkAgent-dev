@@ -13,7 +13,6 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
 from agent.tools import *
-from graph.topology import graph_nodes_dump
 import google.auth
 import logging
 import json

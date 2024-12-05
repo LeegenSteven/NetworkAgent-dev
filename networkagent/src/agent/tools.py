@@ -35,9 +35,9 @@ def getCustomerLocations(
             api_version="compute.cnrm.cloud.google.com/v1beta1", 
             kind="ComputeSubnetwork",
         )
-        result=network_api.get(label_selector=f"customer={name}")
+        result=network_api.get(label_selector=f"customer={name.lower()}")
         locations=f"""
-#### Network Locations for Customer {name}
+**Network Locations for Customer {name}**
 """
         for item in result.items:
             logger.info(item)
@@ -79,9 +79,9 @@ def getCustomerApplications(
             api_version="compute.cnrm.cloud.google.com/v1beta1", 
             kind="ComputeInstance",
         )
-        result=network_api.get(label_selector=f"customer={name}")
+        result=network_api.get(label_selector=f"customer={name.lower()}")
         apps=f"""
-### IT Applications for customer {name}
+**IT Applications for customer {name}**
 """
         for item in result.items:
             logger.info(item)
@@ -102,7 +102,8 @@ def getCustomerApplications(
 # Get a list of Service Definitions
 ######################################################################
 @tool
-def getServiceDefinitions()->List[str]:
+def getServiceDefinitions()->str:
+
     """
     Fetch the available network connectivity services that can be instantiated.
 
@@ -122,17 +123,20 @@ def getServiceDefinitions()->List[str]:
             kind="CustomResourceDefinition",
         )
         items=network_api.get(label_selector="type=connectivityservice")
+        logger.debug("NW SERVICES ITEMS")
+        logger.debug(items)
         services=[]
         for item in items.items:
-            services.append(item.to_dict())
+            services.append(f"{item}")
 
         if len(services)==0:
-            return []
-
-        return services
+            return ""
+        else:
+            return "\n".join(services)
+        
     except kubernetes.client.rest.ApiException as e:
         if e.status == 404:
-            return []
+            return ""
         else:
             logger.debug(e)
 
@@ -154,12 +158,12 @@ def getServices(
 
     client = kubernetes.dynamic.DynamicClient(get_client())
 
-    # need to flatten string or k8s freaks out
+    # need to lower case the cutomer name or k8s freaks out
     customerName = name.lower()
 
     try:
         services_list=f"""
-#### Connectivity Service Instances for {name}
+**Connectivity Service Instances for {name}**
 """
         network_api = client.resources.get(
             api_version="apiextensions.k8s.io/v1", 
@@ -220,6 +224,11 @@ def createService(
     client = kubernetes.dynamic.DynamicClient(get_client())
     name = customerName.lower()
 
+    # If the user gave the entire spec block then only keep its
+    # content which should be the 'interfaces' description
+    if "spec" in serviceSpec.keys():
+        serviceSpec = serviceSpec["spec"]
+    
     try:
         network_api = client.resources.get(
             api_version="google.dev/v1",
@@ -270,7 +279,7 @@ def deleteService(
             kind=kind,
         )
         network_api.delete(name=name, namespace="automation")
-        return f"Service {name } deleted request submitted"
+        return f"Service {name} deleted request submitted"
 
     except kubernetes.client.rest.ApiException as e: 
         logger.info(e.status)

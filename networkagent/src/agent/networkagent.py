@@ -13,11 +13,17 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
 from agent.tools import *
+from graph.topology import graph_nodes_dump
 import google.auth
 import logging
 import json
 from utils.tool_helpers import create_tool_node_with_fallback
 import os
+
+# Uncomment lines below to debug the Langchain flow of operations
+# from langchain.globals import set_debug, set_verbose
+# set_debug(True)
+# set_verbose(False)
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +40,7 @@ class NetworkAgent:
         credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE", "/networkagent.json"))[0]
 
         safe_tools=[getCustomerLocations, getCustomerApplications, getServiceDefinitions, getServices]#, getServicePerformanceMetrics]
-        unsafe_tools=[createService]#, deleteService, createTest, deleteTest]
+        unsafe_tools=[createService, deleteService] #, createTest, deleteTest]
         tools = safe_tools+unsafe_tools
 
         # build tools map for custom tool node
@@ -52,7 +58,7 @@ class NetworkAgent:
             HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
             HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
         }
-        llm = ChatVertexAI(model_name="gemini-1.5-flash-001", 
+        llm = ChatVertexAI(model_name="gemini-1.5-flash-002", 
                            temperature=0,
                            credentials=credentials,
                            request_parallelism=1,
@@ -64,38 +70,37 @@ class NetworkAgent:
                            location=os.getenv("GOOGLE_REGION"),
                            callback_manager=CallbackManager([StreamingStdOutCallbackHandler()]))
 
+        system_prompt = """
+            You are a networking engineer specialist helper bot.
+            You job is to communicate with the user to help them manage their network connectivity services. 
+            You can help the user fulfill tasks such as:
+            - understanding which network connectivity services are available to use
+            - understand which networking services are deployed already for a particular customer
+            - understand which networking locations are available for a particular customer
+            - deploy new network connectivity services
+            - delete existing network connectivity services
+            - create and delete network connectivity tests 
+            - understand performance metrics for deployed connectivity service
+
+            Greet the users and ask how you can help them today.
+            - If necessary, seek clarifying details on what their request is.
+            - If the request involoves any of the following, use the tools provided to help the user with their task:
+                - get a list of available networking services providing a summary description of each and the data needed to instantiate them
+                - get a set of network locations based on a customer
+                - get the currently deployed networking services based on a customer
+                - Delete an existing networking service for a customer
+                - Create an existing networking service for a customer
+                - Create an connectivity test for a customer IT application
+                - Delete an existing connectivity test for a customer IT application
+                - Get the performance metrics for a deployed connectivity service
+                - The networking orchestrator itself uses Kubernetes CRDs to control the networking operations state. Hence the responses from this Tool will be in a kubernetes CRD format.
+            - If the request involves anything else, try your best to answer, but explain that you are an agent to be used specfically for managing network connectivity services and you should then list the capabilities above
+
+            """
+
         network_agent_prompt=ChatPromptTemplate.from_messages(
             [
-                (
-                    "system",
-                    """
-                    You are a networking engineer specialist helper bot.
-                    You job is to communicate with the user to help them manage their network connectivity services. 
-                    You can help the user fulfill tasks such as:
-                    - understanding which network connectivity services are available to use
-                    - understand which networking services are deployed already for a particular customer
-                    - understand which networking locations are available for a particular customer
-                    - deploy new network connectivity services
-                    - delete existing network connectivity services
-                    - create and delete network connectivity tests 
-                    - understand performance metrics for deployed connectivity service
-
-                    Greet the users and ask how you can help them today.
-                    - If necessary, seek clarifying details on what their request is.
-                    - If the request involoves any of the following, use the tools provided to help the user with their task:
-                        - get a list of available networking services providing a summary description of each and the data needed to instantiate them
-                        - get a set of network locations based on a customer
-                        - get the currently deployed networking services based on a customer
-                        - Delete an existing networking service for a customer
-                        - Create an existing networking service for a customer
-                        - Create an connectivity test for a customer IT application
-                        - Delete an existing connectivity test for a customer IT application
-                        - Get the performance metrics for a deployed connectivity service
-                        - The networking orchestrator itself uses Kubernetes CRDs to control the networking operations state. Hence the responses from this Tool will be in a kubernetes CRD format.
-                    - If the request involves anything else, try your best to answer, but explain that you are an agent to be used specfically for managing network connectivity services and you should then list the capabilities above
-
-                    """
-                ),
+                ("system", system_prompt),
                 ("placeholder", "{messages}"),
             ]
         )
@@ -125,8 +130,9 @@ class NetworkAgent:
         messages = state["messages"]
 
         last_message = messages[-1]
+#       if hasattr(last_message, 'tool_calls') and (not last_message.tool_calls):
         if not last_message.tool_calls:
-            return END
+            return "__end__"
         else:
             return "tools"
     
@@ -136,14 +142,15 @@ class NetworkAgent:
             logger.debug("<MESSAGES>")
             for m in state['messages']:
                 if isinstance(m, AIMessage):
-                    logger.debug(f"AIMESSAGE")
+                    logger.debug("AIMESSAGE")
                 elif isinstance(m, HumanMessage):
-                    logger.debug(f"HUMAN")
+                    logger.debug("HUMAN")
                 elif isinstance(m, ToolMessage):
-                    logger.debug(f"TOOL")
+                    logger.debug("TOOL")
                 else:
+                    logger.debug("UNKNOWN")
                     logger.debug(m)
-
+            result = None
             while True:
                 # Append to state
                 state = {**state}
@@ -152,7 +159,7 @@ class NetworkAgent:
                 # If it is a tool call -> response is valid
                 # If it has meaningful text -> response is valid
                 # Otherwise, we re-prompt it b/c response is not meaningful
-                if not result.tool_calls and (
+                if result is None or not result.tool_calls and (
                     not result.content
                     or isinstance(result.content, list)
                     and not result.content[0].get("text")
@@ -168,6 +175,8 @@ class NetworkAgent:
         except Exception as e:
             logger.debug("Caught Exception")
             logger.debug(e)
+            logger.debug("*** RESULT IN EXCEPTION ***")
+            logger.debug(result)
 
     def call_tool(self, state: NetworkAgentState):
         messages = state["messages"]
@@ -175,6 +184,7 @@ class NetworkAgent:
         logger.debug("+++++++++++++++++++++++++    TOOL CALL  +++++++++++++++++++++++++++++++++")
         logger.debug(last_message)
         output_messages = []
+#        if not hasattr(last_message, 'tool_calls'): return {"messages": "No tool to be called"}
         for tool_call in last_message.tool_calls:
             try:
                 logger.debug(tool_call)

@@ -320,9 +320,18 @@ Start()
     # Porch
 
     # Say how to access the gitea server
-    gitea_host=$(kubectl get ComputeInstance gitea -o=jsonpath='{.spec.networkInterface[0].accessConfig[0].natIpRef.external}')
-    gitea_port=3000
-    echo -e "\nGitea server is available at:\n\thttps://$gitea_host:$gitea_port/explore/repos\n"
+    while [[ $(kubectl get gitea gitea -o 'jsonpath={..status.create_gitea.status}' 2>/dev/null) != "Running" ]]; do
+        sleep 60
+        echo "waiting for Gitea to be ready, sleeping for 60 secs..."
+    done
+    gitea_host=$(kubectl get gitea gitea -o 'jsonpath={..status.create_gitea.external_ip_address}')
+    echo -e "\nGitea server is available at:\n\thttps://$gitea_host:3000/explore/repos\n"
+    echo "You can clone the git repos as follows (username/password = networkagent/password123)"
+    echo "  git clone https://$gitea_host:3000/networkagent/core -c http.sslVerify=false"
+    echo "  git clone https://$gitea_host:3000/networkagent/dublin -c http.sslVerify=false"
+    echo "  git clone https://$gitea_host:3000/networkagent/london -c http.sslVerify=false"
+    echo "  git clone https://$gitea_host:3000/networkagent/london-cluster -c http.sslVerify=false"
+    echo "  git clone https://$gitea_host:3000/networkagent/newyork -c http.sslVerify=false"
 }
 
 ############################################################

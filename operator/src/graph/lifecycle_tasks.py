@@ -2,6 +2,7 @@ import logging
 import utils.constants as constants
 from utils.compute import *
 import json
+import ipaddress
 # Imports the Google Cloud Spanner Client Library.
 from google.cloud import spanner
 
@@ -9,11 +10,12 @@ SQL_TEMPLATES = {
   'create_nw_node': "INSERT NetworkNode (id, kind, name, display_name, self_link, status, node_property)" 
                     " VALUES ('{id}', '{kind}', '{name}', '{display_name}', {self_link}, {status}, JSON '{body}')",
   'delete_nw_node': "DELETE FROM NetworkNode WHERE id = '{id}'",
-  'update_nw_node': "UPDATE NetworkNode SET status = {status} WHERE id = '{id}'",
+  'update_nw_node': "UPDATE NetworkNode SET status = {status}, node_property = JSON '{body}' WHERE id = '{id}'",
   'create_rs_cnx': "INSERT ResourceConnection (id, to_id) VALUES ('{id}', '{to_id}')",
-  'delete_rs_cnx': "DELETE FROM ResourceConnection WHERE (id = '{id}' OR to_id = '{id}')",
+  'delete_node_rs_cnx': "DELETE FROM ResourceConnection WHERE (id = '{id}' OR to_id = '{id}')",
   'create_nw_cnx': "INSERT NetworkConnection (id, to_id) VALUES ('{id}', '{to_id}')",
-  'delete_nw_cnx': "DELETE FROM NetworkConnection WHERE (id = '{id}' OR to_id = '{id}')"
+  'delete_node_nw_cnx': "DELETE FROM NetworkConnection WHERE (id = '{id}' OR to_id = '{id}')",
+  'exist_nw_cnx': "SELECT id FROM NetworkConnection WHERE (id = '{id}' AND to_id = '{to_id}')"
 }
 
 # Connect to Spanner database
@@ -26,9 +28,46 @@ def spanner_connect():
 database = spanner_connect()
 logger = logging.getLogger(__name__)
 
-# extract the status and return a string well 
-# formatted for the SQL INSERT (either NULL or
+# ------------------------------------------
+# Build a serialized JSON representation of the 
+# body that fit into a INSERT/UPDATE SQL statement
+#
+# **WARNING** Please think twice before making modifications
+# here as it took me a lot of trial and errors to come up
+# with this solution
+# ------------------------------------------
+def body_sql_json_dump(body, kind, namespace, name):
+  # Do not rely on the body object from kopf. Get it from
+  # K8s directly
+  api = kubernetes.client.ApiClient()
+  client = kubernetes.dynamic.DynamicClient(api)
+  resource_api = get_resource_api(body.get('apiVersion'), kind, client)
+  resource = resource_api.get(namespace=namespace, name=name)
+  #sanitized_resource = api.sanitize_for_serialization(resource.to_dict())
+  #logger.debug("resource: %s",sanitized_resource)
+
+  # Remove some JSON keys that Spanner JSON doesn't like although it is perfectly
+  # valid and sanitized (invalid JSON litteral error on SQL INSERT)
+  resource_dict = api.sanitize_for_serialization(resource.to_dict())
+
+  resource_dict['metadata'].pop('managedFields', None)
+  if 'annotations' in resource_dict['metadata']:
+    # CAUTION !! We are iterating through keys that we can possibly delete 
+    # so keep the for loop below exactly as is (the call to list() does
+    # a copy of the keys)
+    for key in list(resource_dict['metadata']['annotations'].keys()):
+      if key.startswith('kopf'):
+        resource_dict['metadata']['annotations'].pop(key, None)
+  # Double escape the \" sequences created by the santitize call so as to build
+  # a syntactically correct SQL INSERT statement for Spanner to execute
+  return json.dumps(resource_dict, ensure_ascii = True).replace('\\n','\\\\n').replace('\\"', '\\\\"')
+
+
+# ------------------------------------------
+# Extract a human readbale status and return a well 
+# formatted string to use in SQL INSERT (either NULL or
 # "'status_string'")
+# ------------------------------------------
 def get_status(body):
   status_value = "NULL"
   status = body.get('status')
@@ -54,40 +93,17 @@ def create_network_node(body, spec, namespace, name, kind, uid):
 
   def sql_create_network_node(transaction):
     tmpl = SQL_TEMPLATES['create_nw_node']
-    display_name = f"{kind} ({name})"
-    status = get_status(body)
-    
-    # get the serialized JSON representation of the resource to store
-    # in the database
-    api = kubernetes.client.ApiClient()
-    client = kubernetes.dynamic.DynamicClient(api)
-    resource_api = get_resource_api(body.get('apiVersion'), kind, client)
-    resource = resource_api.get(namespace=namespace, name=name)
-    #sanitized_resource = api.sanitize_for_serialization(resource.to_dict())
-    #logger.debug("resource: %s",sanitized_resource)
-
-    # Remove some JSON keys that Spanner JSON doesn't like although it is perfectly
-    # valid and sanitized (invalid JSON litteral error on SQL INSERT)
-    resource_dict = api.sanitize_for_serialization(resource.to_dict())
-
-    resource_dict['metadata'].pop('managedFields', None)
-    if 'annotations' in resource_dict['metadata']:
-      # CAUTION !! We are iterating through keys that we can posibly delete 
-      # so keeps the for loop below exactly as is (the call to list() does
-      # a copy of the keys)
-      for key in list(resource_dict['metadata']['annotations'].keys()):
-        if key.startswith('kopf'):
-          resource_dict['metadata']['annotations'].pop(key, None)
-    # Double escape the \" sequences created by the santitize call so as to build
-    # a syntactically correct SQL INSERT statement for Spanner to execute
-    resource_json = json.dumps(resource_dict, ensure_ascii = True).replace('\\n','\\\\n').replace('\\"', '\\\\"')
-
     # Build and execute the SQL query
     sql = tmpl.format(id=uid, kind=kind, name=name, display_name=display_name, 
-                      self_link='NULL', status=status, body=resource_json)
+                      self_link='NULL', status=status, body=body_dump)
     logger.info(f"SQL: {sql}")
     return transaction.execute_update(sql)
   
+  display_name = f"{kind} ({name})"
+  status = get_status(body)
+  # Build a Spanner compatible JSON dump of Body
+  body_dump = body_sql_json_dump(body, kind, namespace, name)
+
   row_ct = 0
   success = True
   try:
@@ -107,17 +123,17 @@ def create_network_node(body, spec, namespace, name, kind, uid):
 # ------------------------------------------
 # Update a network node
 # ------------------------------------------
-
-def update_network_node(body, spec, name, kind, uid):
+def update_network_node(body, spec, namespace, name, kind, uid):
 
   def sql_update_network_node(transaction):
     tmpl = SQL_TEMPLATES['update_nw_node']
-    sql = tmpl.format(status=status, id=uid)
+    sql = tmpl.format(status=status, body=body_dump, id=uid)
     logger.info(f"SQL: {sql}")
     return transaction.execute_update(sql)
   
-  # For now we only update the status field
+  # For now we only update the status field and node property
   status = get_status(body)
+  body_dump = body_sql_json_dump(body, kind, namespace, name)
   if status == "NULL":
     logger.info("Status is NULL. No update performed.")
     return True
@@ -140,7 +156,6 @@ def update_network_node(body, spec, name, kind, uid):
 # ------------------------------------------
 # Delete a network node
 # ------------------------------------------
-
 def delete_network_node(uid):
 
   def sql_delete_network_node(transaction):
@@ -189,12 +204,35 @@ def create_network_connection(parent_uid, uid):
   return success
 
 # ------------------------------------------
+# Does a network connection exists
+# ------------------------------------------
+def exist_network_connection(parent_uid, uid):
+
+  tmpl = SQL_TEMPLATES['exist_nw_cnx']
+  sql = tmpl.format(id=parent_uid, to_id=uid)
+  logger.info("SQL: {}".format(sql))
+
+  try:
+    with database.snapshot() as snapshot:
+      results = snapshot.execute_sql(sql)
+    success = (results.one_or_none() is not None)
+  except Exception as e:
+    success = False
+    logger.error("SQL error: {}".format(e))
+
+  if success:
+    logger.info("{} -> {} network connection exists)".format(parent_uid,uid))
+  else:
+    logger.info("{} -> {} network connection doesn't exist)".format(parent_uid, uid))
+  return success
+
+# ------------------------------------------
 # Delete network connections
 # ------------------------------------------
-def delete_network_connection(uid):
+def delete_node_network_connections(uid):
 
-  def sql_delete_network_connection(transaction):
-    tmpl = SQL_TEMPLATES['delete_nw_cnx']
+  def sql_delete_node_network_connections(transaction):
+    tmpl = SQL_TEMPLATES['delete_node_nw_cnx']
     sql = tmpl.format(id=uid)
     logger.info("SQL: {}".format(sql))
     return transaction.execute_update(sql)
@@ -202,7 +240,7 @@ def delete_network_connection(uid):
   row_ct = 0
   success = True
   try:
-    row_ct = database.run_in_transaction(sql_delete_network_connection)
+    row_ct = database.run_in_transaction(sql_delete_node_network_connections)
   except Exception as e:
     success = False
     logger.error("SQL error: {}".format(e))
@@ -218,7 +256,7 @@ def delete_network_connection(uid):
 # ------------------------------------------
 def create_resource_connection(parent_uid, uid):
 
-  def sql_create_resource_connection(transaction):
+  def sql_create_resource_connections(transaction):
     tmpl = SQL_TEMPLATES['create_rs_cnx']
     sql = tmpl.format(id=parent_uid, to_id=uid)
     logger.info("SQL: {}".format(sql))
@@ -227,7 +265,7 @@ def create_resource_connection(parent_uid, uid):
   row_ct = 0
   success = True
   try:
-    row_ct = database.run_in_transaction(sql_create_resource_connection)
+    row_ct = database.run_in_transaction(sql_create_resource_connections)
   except Exception as e:
     success = False
     logger.error("SQL error: {}".format(e))
@@ -241,10 +279,10 @@ def create_resource_connection(parent_uid, uid):
 # ------------------------------------------
 # Delete K8s resource connections
 # ------------------------------------------
-def delete_resource_connection(uid):
+def delete_node_resource_connections(uid):
 
-  def sql_delete_resource_connection(transaction):
-    tmpl = SQL_TEMPLATES['delete_rs_cnx']
+  def sql_delete_node_resource_connection(transaction):
+    tmpl = SQL_TEMPLATES['delete_node_rs_cnx']
     sql = tmpl.format(id=uid)
     logger.info("SQL: {}".format(sql))
     return transaction.execute_update(sql)
@@ -252,7 +290,7 @@ def delete_resource_connection(uid):
   row_ct = 0
   success = True
   try:
-    row_ct = database.run_in_transaction(sql_delete_resource_connection)
+    row_ct = database.run_in_transaction(sql_delete_node_resource_connection)
   except Exception as e:
     success = False
     logger.error("SQL error: {}".format(e))
@@ -270,19 +308,21 @@ def delete_resource_connection(uid):
 # Find the (sub)network name either under
 # the name or external attirbutes
 def find_xnet_name(spec_base, attribute):
-  subnet_name = None
-  subnet_namespace = None
-  subnet_entry = spec_base.get(attribute)
-  if subnet_entry is not None:
-    subnet_name = subnet_entry.get('name')
-    subnet_namespace = subnet_entry.get('namespace')
-  return subnet_name, subnet_namespace
+  xnet_name = None
+  xnet_namespace = None
+  xnet_entry = spec_base.get(attribute)
+  if xnet_entry is not None:
+    xnet_name = xnet_entry.get('name')
+    xnet_namespace = xnet_entry.get('namespace')
+  return xnet_name, xnet_namespace
 
 # Find the reference network of of K8s resource
 # given its spec (or part of its spec) as a parameter
 async def find_network_reference(namespace, spec_base):
   # Try finding a subnet resource first
   subnet_name, subnet_namespace = find_xnet_name(spec_base, 'subnetworkRef')
+  if not subnet_namespace:
+    subnet_namespace = namespace
   if subnet_name is not None:
       subnet = await get_subnetwork(subnet_namespace, subnet_name)
       if subnet is not None:
@@ -291,7 +331,9 @@ async def find_network_reference(namespace, spec_base):
       
   # Try finding a net resource second
   net_name,net_namespace = find_xnet_name(spec_base, 'networkRef')
-  if net_name is not None and net_namespace is not None:
+  if not net_namespace:
+    net_namespace = namespace
+  if net_name is not None:
       try:
         net = await get_network(net_namespace, net_name)
         if net is not None:
@@ -299,8 +341,32 @@ async def find_network_reference(namespace, spec_base):
           return net
       except kubernetes.client.rest.ApiException as e:
         if e.status == 404:
-          logger.debug("%s in namespace %s not found", net_name, namespace)
+          logger.debug("%s in namespace %s not found", net_name, net_namespace)
         else:
           logger.debug(e)    
   # At that stage we haven't found any net or subnet resource
   return None
+
+# Find the route which nextHopIP matches the given destination
+# range
+async def find_destination_route(dest_range):
+  # Loop through route objects and find all matching
+  api = kubernetes.client.ApiClient()
+  client = kubernetes.dynamic.DynamicClient(api)
+  resource_api = get_resource_api(
+    api_version="compute.cnrm.cloud.google.com/v1beta1", 
+    kind="ComputeRoute")
+  routes = resource_api.get().items
+
+  # Select those routes for which the next hop ip matches
+  # the destination network range
+  network = ipaddress.ip_network(dest_range)
+  matching_routes = []
+  for r in routes:
+    next_hop_ip = r['spec']['nextHopIp']
+    if next_hop_ip and (next_hop_ip in network):
+      matching_routes.append(r)
+
+  return matching_routes
+
+

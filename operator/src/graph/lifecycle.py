@@ -51,9 +51,17 @@ async def create_node(body, spec, meta, uid, namespace, name, logger, **kwargs):
   for s in specs:
     logger.info("Looking for (sub)network ref in %s / %s", body.get('kind'), meta.get('name'))
     xnet = await find_network_reference(namespace, s)
-    if xnet is not None:
-      xnet_uid = xnet.get('metadata').get('uid')
+    if xnet:
+      xnet_uid = xnet['metadata']['uid']
       success |= create_network_connection(uid,xnet_uid)
+
+    # Special case for Routes. Find its peer destination route
+    # in addition to its network ref (see above)
+    if body['kind'] == 'ComputeRoute':
+      dest_route = await find_destination_route(spec['destRange'])
+      if dest_route:
+        xnet_uid = xnet['metadata']['uid']
+        success |= create_network_connection(uid,xnet_uid)
 
   logger.info("Created node '%s' (success: %s)", name, success)
   if not success:
@@ -61,7 +69,7 @@ async def create_node(body, spec, meta, uid, namespace, name, logger, **kwargs):
 
 # Catch update events
 @kopf.on.update(kopf.EVERYTHING, labels = {'graph': 'true'})
-async def update_node(body, spec, uid, name, logger, **kwargs):
+async def update_node(body, spec, meta, uid, namespace, name, logger, **kwargs):
   logger.info("Update graph network node")
   success = False
 
@@ -71,8 +79,34 @@ async def update_node(body, spec, uid, name, logger, **kwargs):
   else:
     logger.info("Graph node %s of kind %s detected", name, kind)
 
-  logger.info("Updating node for uid %s (%s:%s)", uid, kind, name)
-  success |= update_network_node(body, spec, name, kind, uid)
+  # --- Check if any network or resource connections need to
+  # be updated or created
+  # TODO: must rewrite because code duplication with create above
+  if body['kind'] == 'ComputeInstance':
+    specs = spec['networkInterface'] or []
+  else:
+    specs = [spec]
+
+  for s in specs:
+    logger.info("Looking for (sub)network ref in %s / %s", body.get('kind'), meta.get('name'))
+    xnet = await find_network_reference(namespace, s)
+    if xnet:
+      xnet_uid = xnet['metadata']['uid']
+      if not exist_network_connection(uid, xnet_uid):
+        success |= create_network_connection(uid,xnet_uid)
+
+    # Special case for Routes. Find its peer destination route
+    # in addition to its network ref (see above)
+    if body['kind'] == 'ComputeRoute':
+      dest_route = await find_destination_route(spec['destRange'])
+      if dest_route:
+        xnet_uid = xnet['metadata']['uid']
+        if not exist_network_connection(uid, xnet_uid):
+          success |= create_network_connection(uid,xnet_uid)
+
+  # Now update node attributes 
+  logger.info("Updating node attributes for uid %s (%s:%s)", uid, kind, name)
+  success |= update_network_node(body, spec, namespace, name, kind, uid)
 
   logger.info("Updated node '%s' (success: %s)", name, success)
   if not success:
@@ -91,12 +125,12 @@ async def delete_node(body, spec, uid, name, logger, **kwargs):
   else:
     logger.info("Graph node %s of kind %s detected", name, kind)
 
-  # delete network connections first because of database
-  # consistency foreign key rule
+  # First delete all the network connections involving this node 
+  # because of database consistency foreign key rule
   logger.info("Deleting resource connections for uid %s (%s:%s)", uid, kind, name)
-  success |= delete_resource_connection(uid)
+  success |= delete_node_resource_connections(uid)
   logger.info("Deleting network connections for uid %s (%s:%s)", uid, kind, name)
-  success |= delete_network_connection(uid)
+  success |= delete_node_network_connections(uid)
   if success:
     logger.info("Deleting network nodes for uid %s \n", uid)
     success |= delete_network_node(uid)

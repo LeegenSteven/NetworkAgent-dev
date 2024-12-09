@@ -13,6 +13,8 @@ def servicestatus(event,meta,namespace,status, **_):
     parent_kind = meta['labels']['kex-parent-kind']
     name = meta['name']
 
+    logger.info(f"Monitoring status of VPN {name}... ")
+
     logger.debug("++++++++++++++++++++Wireguard Change Event++++++++++++++++++++++++")
     logger.debug("Parent name = %s", parent_name)
     logger.debug("Parent namespace = %s", parent_namespace)

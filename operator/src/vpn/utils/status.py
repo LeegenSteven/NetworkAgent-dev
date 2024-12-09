@@ -26,7 +26,7 @@ def servicestatus(event,meta,namespace,status, **_):
     except kubernetes.client.rest.ApiException as e:
       if e.status == 404:
         logger.debug("No VPN Service Found")
-      if e.status == 409:
+      elif e.status == 409:
         logger.debug("Conflict - manifest is out of date - reload and  try again!!!!!!!!!!!!")
         updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, event, name)
       else:

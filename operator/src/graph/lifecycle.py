@@ -38,7 +38,7 @@ async def create_node(body, spec, meta, uid, namespace, name, logger, **kwargs):
     success &= create_resource_connection(parent_uid, uid)
 
   # --- Build network connections (traffic connections)
-  success &= create_or_update_network_connections(body, spec, meta, uid, namespace, name)
+  success &= await create_or_update_network_connections(body, spec, meta, uid, namespace, name)
   logger.info("Created node '%s' (success: %s)", name, success)
   if not success:
       raise kopf.TemporaryError("Create node error", delay=15)
@@ -60,7 +60,7 @@ async def update_node(body, spec, meta, uid, namespace, name, logger, **kwargs):
   success &= update_network_node(body, spec, namespace, name, kind, uid)
 
   # Update network connections
-  success &= create_or_update_network_connections(body, spec, meta, uid, namespace, name)
+  success &= await create_or_update_network_connections(body, spec, meta, uid, namespace, name)
 
   logger.info("Updated node '%s' (success: %s)", name, success)
   if not success:

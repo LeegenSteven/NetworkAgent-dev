@@ -369,7 +369,6 @@ async def find_destination_subnets(dest_range):
 # Idempotent function to create or update the
 # network connections of a resource
 # ------------------------------------------
-
 async def create_or_update_network_connections(body, spec, meta, uid, namespace, name):  # For all resources look for networkRef and subNetworkRef attributes in spec
   success = True
   # For ComputeInstances look for those fields in the list of NICs
@@ -384,7 +383,9 @@ async def create_or_update_network_connections(body, spec, meta, uid, namespace,
     xnet = await find_network_reference(namespace, s)
     if xnet:
       xnet_uid = xnet['metadata']['uid']
-      success &= create_network_connection(uid,xnet_uid)
+      if not exist_network_connection(uid, xnet_uid):
+        success &= create_network_connection(uid,xnet_uid)
+
 
     # Special case for Routes. Find its peer destination route
     # in addition to its network ref (see above)

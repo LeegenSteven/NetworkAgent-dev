@@ -9,7 +9,7 @@ st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
 
 import utils.st_extension as st_ext
 from streamlit.components.v1 import html
-#from streamlit_autorefresh import st_autorefresh
+from streamlit_autorefresh import st_autorefresh
 
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -30,7 +30,7 @@ if "chat_history" not in st.session_state:
   ]
 
 st.title("Autonomous Network Agent")
-#count = st_autorefresh(interval=5000, key="counter")
+count = st_autorefresh(interval=5000, key="counter")
 
 # Create columns with equal width
 agentcolumn, graphcolumn, detailscolumn = st.columns([1,1,1]) 

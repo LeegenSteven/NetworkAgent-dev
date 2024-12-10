@@ -14,6 +14,14 @@ logging_client.setup_logging()
 import logging
 logger = logging.getLogger(__name__)
 
+# After importing the Python standard logging library we end up with 2 log
+# handlers at the root level causing duplicate log entries to appear
+# in Cloud Logging, one that comes from the Cloud Logging Structured
+# handler and the other from the standard Python StreamHandler
+# Logger root handlers: [<StreamHandler <stderr> (NOTSET)>, <StructuredLogHandler <stderr> (NOTSET)>]
+# Remove the standard Python logging handler to avoid duplicate (first handler in the list)
+del logging.getLogger().handlers[0]
+
 import kopf
 
 # get base directory to figure out where playbooks are located

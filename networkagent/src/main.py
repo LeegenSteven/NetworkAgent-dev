@@ -85,5 +85,6 @@ with detailscolumn:
 project = os.environ.get("GOOGLE_PROJECT")
 st.markdown(f"""**Some useful links**
   * [Spanner Graph database](https://console.cloud.google.com/spanner/instances/networktopology-instance/databases/networktopology-db/details/tables?invt=Abiyrw&project={project})
-  * [Cluster Config status](https://console.cloud.google.com/kubernetes/config_management/packages?project={project})"""
+  * [Cluster Config status](https://console.cloud.google.com/kubernetes/config_management/packages?project={project})
+  * [Demo Scenario](https://docs.google.com/document/d/1gwCnLlgDaRWUv7I_hqd8aRv4B0ICsC7tj3pU7C8MRw0/edit?usp=sharing)"""
     )

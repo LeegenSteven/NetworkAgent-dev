@@ -341,32 +341,58 @@ async def find_network_reference(namespace, spec_base):
           return net
       except kubernetes.client.rest.ApiException as e:
         if e.status == 404:
-          logger.debug("%s in namespace %s not found", net_name, net_namespace)
+          logger.error("%s in namespace %s not found", net_name, net_namespace)
         else:
-          logger.debug(e)    
+          logger.error(e)    
   # At that stage we haven't found any net or subnet resource
   return None
 
-# Find the route which nextHopIP matches the given destination
+# Find the routes which nextHopIP matches the given destination
 # range
-async def find_destination_route(dest_range):
-  # Loop through route objects and find all matching
-  api = kubernetes.client.ApiClient()
-  client = kubernetes.dynamic.DynamicClient(api)
+async def find_destination_subnets(dest_range):
+  # Find all route resources
   resource_api = get_resource_api(
     api_version="compute.cnrm.cloud.google.com/v1beta1", 
-    kind="ComputeRoute")
-  routes = resource_api.get().items
+    kind="ComputeSubnetwork")
+  subnets = resource_api.get().items
 
-  # Select those routes for which the next hop ip matches
-  # the destination network range
-  network = ipaddress.ip_network(dest_range)
-  matching_routes = []
-  for r in routes:
-    next_hop_ip = r['spec']['nextHopIp']
-    if next_hop_ip and (next_hop_ip in network):
-      matching_routes.append(r)
+  matching_subnets = []
+  for r in subnets:
+    if r['spec']['ipCidrRange'] == dest_range:
+      matching_subnets.append(r)
+      logger.info(f"Matching Subnet {r['metadata']['name']} found for route destination range {dest_range}")
 
-  return matching_routes
+  return matching_subnets
 
 
+# ------------------------------------------
+# Idempotent function to create or update the
+# network connections of a resource
+# ------------------------------------------
+
+async def create_or_update_network_connections(body, spec, meta, uid, namespace, name):  # For all resources look for networkRef and subNetworkRef attributes in spec
+  success = True
+  # For ComputeInstances look for those fields in the list of NICs
+  # under spec/networkInterface 
+  if body['kind'] == 'ComputeInstance':
+    specs = spec['networkInterface'] or []
+  else:
+    specs = [spec]
+  
+  for s in specs:
+    logger.info("Looking for (sub)network ref in %s / %s", body.get('kind'), name)
+    xnet = await find_network_reference(namespace, s)
+    if xnet:
+      xnet_uid = xnet['metadata']['uid']
+      success &= create_network_connection(uid,xnet_uid)
+
+    # Special case for Routes. Find its peer destination route
+    # in addition to its network ref (see above)
+    # Commented. Not sure it is worth showing on the graph
+    #if body['kind'] == 'ComputeRoute':
+    #  dest_subnets = await find_destination_subnets(spec['destRange'])
+    #  for ds in dest_subnets:
+    #    dest_subnet_uid = ds['metadata']['uid']
+    #    if not exist_network_connection(uid, dest_subnet_uid):
+    #      success |= create_network_connection(uid, dest_subnet_uid)
+  return success

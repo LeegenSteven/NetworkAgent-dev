@@ -5,6 +5,7 @@ ansible-runner
 netaddr
 google-cloud-spanner
 google-cloud-container
+google-cloud-logging
 google-api-python-client
 ruamel.yaml
 PyNaCl

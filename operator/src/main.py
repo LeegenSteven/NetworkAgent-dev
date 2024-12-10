@@ -1,13 +1,20 @@
-import logging
-log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
-             "%(filename)s::%(lineno)d::%(message)s"
-logging.basicConfig(level='INFO', format=log_format)
-
-logger = logging.getLogger(__name__)
-
 import os
 import sys
 import utils.constants as constants
+
+# Attach the Cloud Logging handler to the Python root logger 
+# by calling the setup_logging method. By doing so Cloud Logging
+# will properly report the logs severity for instance. If we do it
+# directly (as above) all logs are classified with ERROR severity
+# (see https://cloud.google.com/logging/docs/setup/python)
+import google.cloud.logging
+logging_client = google.cloud.logging.Client()
+logging_client.setup_logging()
+
+import logging
+logger = logging.getLogger(__name__)
+
+import kopf
 
 # get base directory to figure out where playbooks are located
 if os.getenv("BASEDIR")==None:
@@ -54,6 +61,7 @@ if os.getenv("GOOGLE_REGION") is None or os.getenv("GOOGLE_ZONE") is None or os.
 @kopf.on.startup()
 def configure(settings: kopf.OperatorSettings, **_):
     settings.posting.level = logging.DEBUG
+    settings.posting.enabled = True
     settings.watching.connect_timeout = 1 * 60
     settings.watching.server_timeout = 10 * 60
 

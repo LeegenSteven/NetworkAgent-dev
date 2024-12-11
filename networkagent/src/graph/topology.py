@@ -62,6 +62,26 @@ dataplane_uids = set()
 service_uids = set()
 appliance_uids = set()
 
+def fetch_db_node(id):
+  results = None
+  with database.snapshot() as snapshot:
+    try:
+      sql = f"""GRAPH networkGraph
+        MATCH (a:NetworkNode {{id: '{id}' }})
+        RETURN a.id AS a_id, a.kind AS a_kind, a.name AS a_name, a.display_name AS a_display_name, 
+        a.status AS a_status, TO_JSON_STRING(a.node_property) AS a_property"""
+      results = snapshot.execute_sql(sql)
+    except Exception as e:
+      logger.error("SQL error: {}".format(e))
+
+  # There should be only one row
+  return results.one_or_none()
+
+def update_graph_node(id, kind, name, display_name, status, property):
+  if node_uniq_ids[id]:
+    node_uniq_ids[id]['status'] = status
+    node_uniq_ids[id]['property'] = json.dumps(json.loads(property), indent =2)
+
 def new_node(id, kind, name, display_name, status, property):
   if not (id in node_uniq_ids):
     node_uniq_ids[id] = {"id": id, "kind": kind, "name": name, "status": status, "property": json.dumps(json.loads(property), indent =2)}
@@ -130,6 +150,9 @@ def display_selected_elements(selected):
   for id in sn:
     #print(f">>> ID: {id}")
     #print(f">>> {node_uniq_ids[id]['property']}")
+    db_node = fetch_db_node(id)
+    print(db_node)
+    update_graph_node(*db_node)
     text += NODE_INFO_TMPL.format(**node_uniq_ids[id])
   return text
 

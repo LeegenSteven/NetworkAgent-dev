@@ -151,7 +151,6 @@ def display_selected_elements(selected):
     #print(f">>> ID: {id}")
     #print(f">>> {node_uniq_ids[id]['property']}")
     db_node = fetch_db_node(id)
-    print(db_node)
     update_graph_node(*db_node)
     text += NODE_INFO_TMPL.format(**node_uniq_ids[id])
   return text

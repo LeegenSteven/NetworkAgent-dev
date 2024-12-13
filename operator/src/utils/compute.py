@@ -45,9 +45,8 @@ async def create_network(namespace, network_name):
     result = network_api.create(crd_manifest)
     return result
   except kubernetes.client.rest.ApiException as e: 
-    logger.info(e.status)
     if e.status == 409:
-      logger.info("already exists - skipping")
+      logger.info("Compute network %s already exists - skipping", network_name)
     else:
       logger.debug(e)
 
@@ -60,7 +59,7 @@ async def delete_network(namespace, network_name):
   try: 
     result = network_api.delete(name=network_name, body={}, namespace=namespace)
   except kubernetes.client.rest.ApiException as e: 
-    logger.info(e.status)
+    logger.error("Exception raised while deleting network %s: %s", network_name, e.status)
     logger.debug(e)
 
 ########################################################################
@@ -102,7 +101,7 @@ async def create_subnetwork(namespace, network_name, subnet_name, cidr, region):
   except kubernetes.client.rest.ApiException as e: 
     logger.debug(e.status)
     if e.status == 409:
-      logger.info("Already exists - skipping")
+      logger.info("Subnetwork %s already exists - skipping", network_name)
     else:
       logger.debug(e)
 
@@ -117,8 +116,9 @@ async def get_subnetwork(namespace, name):
     return result
   except kubernetes.client.rest.ApiException as e:
     if e.status == 404:
-      logger.debug("%s in namespace %s Not found", name, namespace)
+      logger.warning("%s in namespace %s not found", name, namespace)
     else:
+      logger.error("Exception raised while getting subnetwork %s: %s", name, e.status)
       logger.debug(e)
 
 ########################################################################
@@ -131,6 +131,7 @@ async def get_network(namespace, name):
     result = network_api.get(namespace=namespace, name=name)
     return result
   except kubernetes.client.rest.ApiException as e:
+    logger.error("Exception raised while deleting network %s: %s", name, e.status)
     logger.debug(e)
 
 ########################################################################
@@ -139,11 +140,12 @@ async def get_network(namespace, name):
 async def create_router(namespace, network_name, region):
   logger.debug("Create Router")
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeRouter")
+  route_name = f"{network_name}-router"
   crd_manifest={
     "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
     "kind": "ComputeRouter",
     "metadata":{
-      "name": f"{network_name}-router",
+      "name": route_name,
       "namespace": namespace,
       "labels": {
         "graph": "true"
@@ -170,7 +172,7 @@ async def create_router(namespace, network_name, region):
   except kubernetes.client.rest.ApiException as e: 
     logger.debug(e.status)
     if e.status == 409:
-      logger.debug("Already exists - skipping")
+      logger.info("Route %s already exists - skipping", route_name)
     else:
       logger.debug(e)
 
@@ -180,11 +182,12 @@ async def create_router(namespace, network_name, region):
 async def create_nat(namespace, network_name, region):
   logger.debug("Create NAT")
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeRouterNAT")
+  nat_name = f"{network_name}-nat"
   crd_manifest={
     "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
     "kind": "ComputeRouterNAT",
     "metadata": {
-      "name": f"{network_name}-nat",
+      "name": nat_name,
       "namespace": namespace,
       "labels": {
         "graph": "true"
@@ -212,7 +215,7 @@ async def create_nat(namespace, network_name, region):
   except kubernetes.client.rest.ApiException as e: 
     logger.info(e.status)
     if e.status == 409:
-      logger.info("Already exists - skipping")
+      logger.info("NAT %s already exists - skipping", nat_name)
     else:
       logger.debug(e)
 
@@ -347,7 +350,7 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
     if e.status == 422:
       raise kopf.PermanentError("Unprocessable entity.")
     elif e.status == 409:
-      logger.debug("already exists - skipping")
+      logger.info("VM %s already exists - skipping", vm_name)
     else:
       logger.debug(e)
 
@@ -474,11 +477,12 @@ async def create_route(namespace, vm_name, source_subnetwork, peer_subnetwork):
   sourcenetwork = sourceresult.spec['networkRef']['name']
 
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeRoute")
+  route_name = vm_name+'-'+peer_subnetwork['name']
   crd_manifest= {
     "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
     "kind": "ComputeRoute",
     "metadata": {
-      "name": vm_name+'-'+peer_subnetwork['name'],
+      "name": route_name,
       "labels": {
         "graph": "true"
       },
@@ -509,7 +513,7 @@ async def create_route(namespace, vm_name, source_subnetwork, peer_subnetwork):
   except kubernetes.client.rest.ApiException as e: 
     logger.debug(e.status)
     if e.status == 409:
-      logger.debug("Already exists - skipping")
+      logger.info("Route %s already exists - skipping", route_name)
     else:
       logger.debug(e)
 
@@ -536,7 +540,7 @@ async def get_ip(namespace, name, networkname="mgmt"):
     if ip_address is None:
         raise kopf.TemporaryError("could not find ip address", 15)
     else:
-        logger.debug("found mgmt ip address %s", ip_address)
+        logger.debug("Found mgmt ip address %s", ip_address)
 
     return ip_address
 
@@ -553,7 +557,7 @@ async def get_subnet_info(namespace, subnetname):
         raise kopf.TemporaryError("Waiting for subnet to come up")
     return result
   except kubernetes.client.rest.ApiException as e: 
-    logger.info(e.status)
+    logger.debug(e.status)
     if e.status == 404:
         raise kopf.TemporaryError(f"No subnet {subnetname} found yet. Waiting...")
 

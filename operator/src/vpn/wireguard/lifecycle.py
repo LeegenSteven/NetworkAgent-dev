@@ -12,10 +12,11 @@ logger = logging.getLogger(__name__)
 # Create a Wireguard virtual network appliance
 #########################################################################
 @kopf.on.create('google.dev','v1','wireguardappliance')
-async def wireguard(body,spec, name, namespace, logger, **kwargs):
+async def wireguard(body,spec, name, namespace, kind, uid, logger, **kwargs):
     logger.debug(f"A wireguard handler is called with spec: {spec}")
 
     servicename = body['metadata']['ownerReferences'][0]['name']
+    kind = b
 
     # create children resources in the automation namespace
     await create_compute(namespace,
@@ -32,9 +33,9 @@ async def wireguard(body,spec, name, namespace, logger, **kwargs):
     mgmt_ip_address = await get_ip(namespace, name)
     data_ip_address = await get_ip(namespace, name, networkname="dataplane")
     if mgmt_ip_address is None or data_ip_address is None:
-        raise kopf.TemporaryError("No ip address found on VM yet - waiting")
+        raise kopf.TemporaryError("No ip address found on VM yet, temporary error - waiting")
 
-    logger.debug("found mgmt ip address %s", mgmt_ip_address )
+    logger.info("found mgmt ip address %s (%s, %s, %s)", mgmt_ip_address, kind, name, uid )
 
     # find the allowed interface cidr and VM ip address for each of the peers
     peersInfo=[]

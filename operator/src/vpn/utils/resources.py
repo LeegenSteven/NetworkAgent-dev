@@ -11,10 +11,11 @@ logger = logging.getLogger(__name__)
 async def create_vpn_edge(namespace, parent_name, parent_namespace, parent_kind, vpn_name, source_interface, tunnel_subnet, tunnel_ip, my_keys, peers):
   logger.debug("Create VPN Edge %s in ns %s", vpn_name, namespace)
   network_api = get_resource_api("google.dev/v1", "WireguardAppliance")
-
+  
+  kind = "WireguardAppliance"
   crd_manifest = {
     "apiVersion": "google.dev/v1",
-    "kind": "WireguardAppliance",
+    "kind": kind,
     "metadata": {
       "name": vpn_name,
       "namespace": namespace,
@@ -43,6 +44,8 @@ async def create_vpn_edge(namespace, parent_name, parent_namespace, parent_kind,
     result = network_api.create(body=crd_manifest, namespace=namespace)
     logger.debug("created wireguard-----------------------+====")
     logger.debug(result)
+    uid = result['metadata']['uid']
+    logger.info(f"Edge VPN {vpn_name} created successfully ({kind}, {uid})")
   except kubernetes.client.rest.ApiException as e: 
     logger.debug(e.status)
     if e.status == 409:

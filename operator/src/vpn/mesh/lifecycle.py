@@ -12,11 +12,11 @@ logger = logging.getLogger(__name__)
 # Create a new Mesh VPN
 ##########################################
 @kopf.on.create('meshservice')
-async def meshservice(spec, status, namespace, name, logger, **kwargs):
+async def meshservice(spec, status, namespace, name, kind, uid, logger, **kwargs):
   logger.debug(f"Create mesh connectivity service {name} with spec: {spec}")
 
   if len(spec.get('interfaces'))<3:
-    raise kopf.PermanentError("At least three interfaces must be provided.")
+    raise kopf.PermanentError(f"At least three interfaces must be provided ({kind}, {name}, {uid})")
 
   # check the interfaces are valid computesubnetworks
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
@@ -28,7 +28,7 @@ async def meshservice(spec, status, namespace, name, logger, **kwargs):
     for interface in spec.get('interfaces'):
       network_api.get(namespace=interface.get("namespace"), name=interface.get("name"))
   except:
-    raise kopf.PermanentError("compute sub networks not found")
+    raise kopf.PermanentError(f"Compute subnetworks missing {interface.get['name']} ({kind}, {name}, {uid})")
 
   # create persistent config for the service
   serviceInfo=await get_configmap(namespace, name)

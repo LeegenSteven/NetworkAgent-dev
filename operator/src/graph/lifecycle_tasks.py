@@ -121,9 +121,9 @@ def create_network_node(body, spec, namespace, name, kind, uid):
     raise
 
   if success:
-    logger.info(f"{uid} node inserted (row count: {row_ct})")
+    logger.info(f"{uid} node inserted (row count: {row_ct} ({kind}, {name}))")
   else:
-    logger.error(f"Node {uid} creation failed")
+    logger.error(f"Node {uid} creation failed  ({kind}, {name})")
   return success
 
 
@@ -135,7 +135,7 @@ def update_network_node(body, spec, namespace, name, kind, uid):
   def sql_update_network_node(transaction):
     tmpl = SQL_TEMPLATES['update_nw_node']
     sql = tmpl.format(status=status, body=body_dump, id=uid)
-    logger.info(f"SQL: {sql}")
+    logger.debug(f"SQL: {sql}")
     return transaction.execute_update(sql)
   
   # For now we only update the status field and node property
@@ -153,9 +153,9 @@ def update_network_node(body, spec, namespace, name, kind, uid):
     raise
 
   if success:
-    logger.info(f"{uid} node updated (row count: {row_ct})")
+    logger.info(f"{uid} node updated (row count: {row_ct}) ({kind}, {name})")
   else:
-    logger.error(f"Node {uid} update failed")
+    logger.error(f"Node {uid} update failed  ({kind}, {name})")
   return success
 
 # ------------------------------------------
@@ -166,7 +166,7 @@ def delete_network_node(uid):
   def sql_delete_network_node(transaction):
     tmpl = SQL_TEMPLATES['delete_nw_node']
     sql = tmpl.format(id=uid)
-    logger.info("SQL: {}".format(sql))
+    logger.debug(f"SQL: {sql}")
     return transaction.execute_update(sql)
   
   row_ct = 0
@@ -175,12 +175,12 @@ def delete_network_node(uid):
     row_ct = database.run_in_transaction(sql_delete_network_node)
   except Exception as e:
     success = False
-    logger.error("SQL error: {}".format(e))
+    logger.error(f"SQL error: {e}")
 
   if success:
-    logger.info("{} node deleted (row count: {})".format(uid,row_ct))
+    logger.info(f"{uid} node deleted (row count: {row_ct})")
   else:
-    logger.error("Node {} deletion failed".format(uid))
+    logger.error(f"Node {uid} deletion failed")
   return success
 
 # ------------------------------------------
@@ -191,7 +191,7 @@ def create_network_connection(parent_uid, uid):
   def sql_create_network_connection(transaction):
     tmpl = SQL_TEMPLATES['create_nw_cnx']
     sql = tmpl.format(id=parent_uid, to_id=uid)
-    logger.info("SQL: {}".format(sql))
+    logger.debug(f"SQL: {sql}")
     return transaction.execute_update(sql)
   
   row_ct = 0
@@ -200,7 +200,7 @@ def create_network_connection(parent_uid, uid):
     row_ct = database.run_in_transaction(sql_create_network_connection)
   except Exception as e:
     success = False
-    logger.error("SQL error: {}".format(e))
+    logger.error(f"SQL error: {e}")
 
   if success:
     logger.info("{} -> {} network connection inserted (row count: {})".format(parent_uid,uid,row_ct))
@@ -226,9 +226,9 @@ def exist_network_connection(parent_uid, uid):
     logger.error("SQL error: {}".format(e))
 
   if success:
-    logger.info("{} -> {} network connection exists)".format(parent_uid,uid))
+    logger.debug("{} -> {} network connection exists)".format(parent_uid,uid))
   else:
-    logger.info("{} -> {} network connection doesn't exist)".format(parent_uid, uid))
+    logger.debug("{} -> {} network connection doesn't exist)".format(parent_uid, uid))
   return success
 
 # ------------------------------------------
@@ -239,7 +239,7 @@ def delete_node_network_connections(uid):
   def sql_delete_node_network_connections(transaction):
     tmpl = SQL_TEMPLATES['delete_node_nw_cnx']
     sql = tmpl.format(id=uid)
-    logger.info("SQL: {}".format(sql))
+    logger.debug("SQL: {}".format(sql))
     return transaction.execute_update(sql)
   
   row_ct = 0
@@ -248,12 +248,12 @@ def delete_node_network_connections(uid):
     row_ct = database.run_in_transaction(sql_delete_node_network_connections)
   except Exception as e:
     success = False
-    logger.error("SQL error: {}".format(e))
+    logger.error(f"SQL error: {e}")
 
   if success:
-    logger.info("{} network connection(s) deleted for node {}".format(row_ct, uid))
+    logger.info(f"{row_ct} network connection(s) deleted for node {uid}")
   else:
-    logger.error("Network connection {} deletion failed".format(uid))
+    logger.error(f"Network connection {uid} deletion failed")
   return success
 
 # ------------------------------------------
@@ -264,7 +264,7 @@ def create_resource_connection(parent_uid, uid):
   def sql_create_resource_connections(transaction):
     tmpl = SQL_TEMPLATES['create_rs_cnx']
     sql = tmpl.format(id=parent_uid, to_id=uid)
-    logger.info("SQL: {}".format(sql))
+    logger.debug(f"SQL: {sql}")
     return transaction.execute_update(sql)
   
   row_ct = 0
@@ -273,12 +273,12 @@ def create_resource_connection(parent_uid, uid):
     row_ct = database.run_in_transaction(sql_create_resource_connections)
   except Exception as e:
     success = False
-    logger.error("SQL error: {}".format(e))
+    logger.error(f"SQL error: {e}")
 
   if success:
-    logger.info("{} -> {} resource connection inserted (row count: {})".format(parent_uid,uid,row_ct))
+    logger.info(f"{parent_uid} -> {uid} resource connection inserted (row count: {row_ct})")
   else:
-    logger.error("{} -> {} resource connection creation failed".format(parent_uid, uid))
+    logger.error(f"{parent_uid} -> {uid} resource connection creation failed")
   return success
 
 # ------------------------------------------
@@ -289,7 +289,7 @@ def delete_node_resource_connections(uid):
   def sql_delete_node_resource_connection(transaction):
     tmpl = SQL_TEMPLATES['delete_node_rs_cnx']
     sql = tmpl.format(id=uid)
-    logger.info("SQL: {}".format(sql))
+    logger.debug(f"SQL: {sql}")
     return transaction.execute_update(sql)
   
   row_ct = 0
@@ -298,12 +298,12 @@ def delete_node_resource_connections(uid):
     row_ct = database.run_in_transaction(sql_delete_node_resource_connection)
   except Exception as e:
     success = False
-    logger.error("SQL error: {}".format(e))
+    logger.error(f"SQL error: {e}")
 
   if success:
-    logger.info("{} resource connection(s) deleted for node {}".format(row_ct, uid))
+    logger.info(f"{row_ct} resource connection(s) deleted for node {uid}")
   else:
-    logger.error("Resource connection {} deletion failed".format(uid))
+    logger.error(f"Resource connection {uid} deletion failed")
   return success
 
 # ------------------------------------------
@@ -331,7 +331,7 @@ async def find_network_reference(namespace, spec_base):
   if subnet_name is not None:
       subnet = await get_subnetwork(subnet_namespace, subnet_name)
       if subnet is not None:
-        logger.info("Found subnet %s in ns %s", subnet_name, subnet_namespace)
+        logger.debug("Found subnet %s in ns %s", subnet_name, subnet_namespace)
         return subnet
       
   # Try finding a net resource second
@@ -384,7 +384,7 @@ async def create_or_update_network_connections(body, spec, meta, uid, namespace,
     specs = [spec]
   
   for s in specs:
-    logger.info("Looking for (sub)network ref in %s / %s", body.get('kind'), name)
+    logger.debug("Looking for (sub)network ref in %s / %s", body.get('kind'), name)
     xnet = await find_network_reference(namespace, s)
     if xnet:
       xnet_uid = xnet['metadata']['uid']

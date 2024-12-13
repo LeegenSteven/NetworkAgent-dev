@@ -231,7 +231,7 @@ def node_color(elements):
         e['style'] = { 'background-color': google_medium_grey }
       elif status in ['UpToDate', 'Running']:
         e['style'] = { 'background-color': google_light_green }
-      elif status in ['Pending', 'Starting']:
+      elif status in ['Pending', 'Starting', 'Updating']:
         e['style'] = { 'background-color': google_light_yellow }
       else:
         logger.warning("Node status with no color assigned: {status}")

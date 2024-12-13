@@ -79,11 +79,17 @@ def get_status(body):
       #message = conditions.get('message)')
       #type = conditions.get('type)')
       if reason is not None:
-        status_value = f"'{reason}'"
+        status_value = reason
     else:
       wireguard = status.get('wireguard')
       if wireguard is not None:
         status_value = wireguard.get('status')
+      elif body['kind'].lower() in ['pointtopointservice', 'meshservice']:
+        if 'currentStatus' in body['status']:
+          status_value = body['status']['currentStatus']
+        elif 'status' in body['status'][body['kind'].lower()]:
+          status_value = body['status'][body['kind'].lower()]['status']
+
   return status_value
 
 # ------------------------------------------
@@ -101,6 +107,7 @@ def create_network_node(body, spec, namespace, name, kind, uid):
   
   display_name = f"{kind} ({name})"
   status = get_status(body)
+  if status != 'NULL': status = f"'{status}'"
   # Build a Spanner compatible JSON dump of Body
   body_dump = body_sql_json_dump(body, kind, namespace, name)
 
@@ -133,10 +140,8 @@ def update_network_node(body, spec, namespace, name, kind, uid):
   
   # For now we only update the status field and node property
   status = get_status(body)
+  if status != 'NULL': status = f"'{status}'"
   body_dump = body_sql_json_dump(body, kind, namespace, name)
-  if status == "NULL":
-    logger.info("Status is NULL. No update performed.")
-    return True
   
   row_ct = 0
   success = True

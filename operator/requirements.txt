@@ -7,5 +7,7 @@ google-cloud-spanner
 google-cloud-container
 google-cloud-logging
 google-api-python-client
+# Version 3.1.0+ incompatible with kopf 3.2.x
+python-json-logger<3.1.0
 ruamel.yaml
 PyNaCl

@@ -50,10 +50,32 @@ short_kinds = {
   'WireguardAppliance': 'VNF',
 }
 
-google_blue = "#4285F4"
-google_red  = "#DB4437"
-google_yellow = "#F4B400"
-google_green  = "#0F9D58"
+# --------------------------------
+# Color Palette from Google News
+# (see https://partnermarketinghub.withgoogle.com/brands/google-news/visual-identity/color-palette/ )
+
+# Dark colors
+google_blue = "#174EA6"
+google_red  = "#A50E0E"
+google_orange = "#E37400"
+google_green  = "#0D652D"
+google_black  = "#202124"
+
+# Regular colors
+google_medium_blue = "#4285F4"
+google_medium_red  = "#EA4335"
+google_yellow = "#FBBC04"
+google_medium_green  = "#34A853"
+google_medium_grey  = "#9AA0A6"
+
+# Light colors
+google_light_blue = "#D2E3FC"
+google_light_red  = "#FAD2CF"
+google_light_yellow = "#FEEFC3"
+google_light_green  = "#CEEAD6"
+google_light_grey  = "#F1F3F4"
+
+#-------------------------------
 
 database = spanner_connect()
 
@@ -77,10 +99,10 @@ def fetch_db_node(id):
   # There should be only one row
   return results.one_or_none()
 
-def update_graph_node(id, kind, name, display_name, status, property):
+def update_node(id, kind, name, display_name, status, property):
   if node_uniq_ids[id]:
     node_uniq_ids[id]['status'] = status
-    node_uniq_ids[id]['property'] = json.dumps(json.loads(property), indent =2)
+    node_uniq_ids[id]['property'] = json.dumps(json.loads(property), indent=2)
 
 def new_node(id, kind, name, display_name, status, property):
   if not (id in node_uniq_ids):
@@ -140,9 +162,11 @@ NODE_INFO_TMPL="""
 """
 
 # Works both for single and additivie node selection on the Graph
-@st.cache_data
+# Do not cache this function as the node in the graph database
+# may have changed (e.g.status or property updated)
+# @st.cache_data
 def display_selected_elements(selected):
-  logger.info(f"Selected elements: {selected}")
+  logger.debug(f"Selected elements: {selected}")
   sn = selected['nodes']
   text = ""
   if not sn:
@@ -151,7 +175,7 @@ def display_selected_elements(selected):
     #print(f">>> ID: {id}")
     #print(f">>> {node_uniq_ids[id]['property']}")
     db_node = fetch_db_node(id)
-    update_graph_node(*db_node)
+    update_node(*db_node)
     text += NODE_INFO_TMPL.format(**node_uniq_ids[id])
   return text
 
@@ -186,10 +210,32 @@ def hierarchical_layout(layout, elements):
     if elt['group'] == 'edges':
       layout["relativePlacementConstraint"].append({"top": elt['data']['source'], "bottom": elt['data']['target']})
 
-def edge_color(elements, edge_label, color):
+def edge_color(elements, label):
   for e in elements:
-    if e['group'] == 'edges' and e['data']['label'] == edge_label:
+    if e['group'] == 'edges':
+      if label == 'isConnectedTo':
+        color = google_green
+      elif label == 'Manages':
+        color = google_blue
+      else:
+        logger.warning("Uknown graph edge label: {label}")
+        color = google_black
+
       e['style'] = { 'line-color': color, 'target-arrow-color': color,'source-arrow-color': color  }
+
+def node_color(elements):
+  for e in elements:
+    if e['group'] == 'nodes':
+      status = e['data']['status']
+      if status is None:
+        e['style'] = { 'background-color': google_medium_grey }
+      elif status in ['UpToDate', 'Running']:
+        e['style'] = { 'background-color': google_light_green }
+      elif status in ['Pending', 'Starting']:
+        e['style'] = { 'background-color': google_light_yellow }
+      else:
+        logger.warning("Node status with no color assigned: {status}")
+        e['style'] = { 'background-color': google_light_red }
 
 def create_network_cytoscape():
   elements, success = build_graph(database, 'isConnectedTo')
@@ -197,7 +243,8 @@ def create_network_cytoscape():
   layout["nodeRepulsion"] = 50000
 
   #hierarchical_layout(layout,elements)
-  edge_color(elements, 'isConnectedTo', google_green)
+  edge_color(elements, 'isConnectedTo')
+  node_color(elements)
 
   return cytoscape(
       elements,
@@ -216,7 +263,8 @@ def create_resource_cytoscape():
   layout["nodeRepulsion"] = 50000
 
   hierarchical_layout(layout,elements)
-  edge_color(elements, 'Manages', google_blue)
+  edge_color(elements, 'Manages')
+  node_color(elements)
 
   return cytoscape(
       elements,
@@ -235,8 +283,9 @@ def create_combined_cytoscape():
   layout["nodeRepulsion"] = 50000
 
   hierarchical_layout(layout,elements)
-  edge_color(elements, 'Manages', google_blue)
-  edge_color(elements, 'isConnectedTo', google_green)
+  edge_color(elements, 'Manages')
+  edge_color(elements, 'isConnectedTo')
+  node_color(elements)
 
   return cytoscape(
       elements,

@@ -5,6 +5,15 @@ import json
 import ipaddress
 # Imports the Google Cloud Spanner Client Library.
 from google.cloud import spanner
+# This is to generate KG node embeddings
+import vertexai
+from vertexai.language_models import TextEmbeddingInput, TextEmbeddingModel
+
+# Parameters for vertex AI embedding
+TASK_TYPE = "QUESTION_ANSWERING"
+ANSWER_TASK_TYPE="RETRIEVAL_DOCUMENT"
+EMBEDDING_MODEL_NAME="text-embedding-005"
+EMBEDDING_MODEL = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL_NAME)
 
 SQL_TEMPLATES = {
   'create_nw_node': "INSERT NetworkNode (id, kind, name, display_name, self_link, status, node_property)" 
@@ -15,7 +24,11 @@ SQL_TEMPLATES = {
   'delete_node_rs_cnx': "DELETE FROM ResourceConnection WHERE (id = '{id}' OR to_id = '{id}')",
   'create_nw_cnx': "INSERT NetworkConnection (id, to_id) VALUES ('{id}', '{to_id}')",
   'delete_node_nw_cnx': "DELETE FROM NetworkConnection WHERE (id = '{id}' OR to_id = '{id}')",
-  'exist_nw_cnx': "SELECT id FROM NetworkConnection WHERE (id = '{id}' AND to_id = '{to_id}')"
+  'exist_nw_cnx': "SELECT id FROM NetworkConnection WHERE (id = '{id}' AND to_id = '{to_id}')",
+  'create_kg_res_node': "INSERT KgResourceDescriptionNode (id, description, embedding)"
+                        " VALUES (@id, @description, @embedding)",
+  'update_kg_res_node': "UPDATE KgResourceDescriptionNode SET description = @description, embedding = @embedding WHERE id = @id",
+  'delete_kg_res_node': "DELETE FROM KgResourceDescriptionNode WHERE id = @id",
 }
 
 # Connect to Spanner database
@@ -36,7 +49,12 @@ logger = logging.getLogger(__name__)
 # here as it took me a lot of trial and errors to come up
 # with this solution
 # ------------------------------------------
-def body_sql_json_dump(body, kind, namespace, name):
+def body_sql_json_dump(string_dump):
+  # Double escape the \" sequences created by the santitize call so as to build
+  # a syntactically correct SQL INSERT statement for Spanner to execute
+  return string_dump.replace('\\n','\\\\n').replace('\\"', '\\\\"')
+ 
+def body_string_dump(body, kind, namespace, name):
   # Do not rely on the body object from kopf. Get it from
   # K8s directly
   api = kubernetes.client.ApiClient()
@@ -58,10 +76,8 @@ def body_sql_json_dump(body, kind, namespace, name):
     for key in list(resource_dict['metadata']['annotations'].keys()):
       if key.startswith('kopf'):
         resource_dict['metadata']['annotations'].pop(key, None)
-  # Double escape the \" sequences created by the santitize call so as to build
-  # a syntactically correct SQL INSERT statement for Spanner to execute
-  return json.dumps(resource_dict, ensure_ascii = True).replace('\\n','\\\\n').replace('\\"', '\\\\"')
-
+ 
+  return json.dumps(resource_dict, ensure_ascii = True)
 
 # ------------------------------------------
 # Extract a human readbale status and return a well 
@@ -93,6 +109,18 @@ def get_status(body):
   return status_value
 
 # ------------------------------------------
+# Given a piece of text return the embedding (Array of Float64)
+# ------------------------------------------
+def get_embedding(text, task_type, model):
+  try:
+    text_embedding_input = TextEmbeddingInput(task_type=task_type, text=text)
+    embeddings = model.get_embeddings([text_embedding_input])
+    return embeddings[0].values
+  except Exception as e:
+    logger.error(f"Embedding error: {e}")
+    return []
+
+# ------------------------------------------
 # Create a network node
 # ------------------------------------------
 def create_network_node(body, spec, namespace, name, kind, uid):
@@ -102,15 +130,16 @@ def create_network_node(body, spec, namespace, name, kind, uid):
     # Build and execute the SQL query
     sql = tmpl.format(id=uid, kind=kind, name=name, display_name=display_name, 
                       self_link='NULL', status=status, body=body_dump)
-    logger.info(f"SQL: {sql}")
+    logger.debug(f"SQL: {sql}")
     return transaction.execute_update(sql)
   
   display_name = f"{kind} ({name})"
   status = get_status(body)
   if status != 'NULL': status = f"'{status}'"
   # Build a Spanner compatible JSON dump of Body
-  body_dump = body_sql_json_dump(body, kind, namespace, name)
-
+  body_string = body_string_dump(body, kind, namespace, name)
+  body_dump = body_sql_json_dump(body_string)
+  
   row_ct = 0
   success = True
   try:
@@ -118,7 +147,8 @@ def create_network_node(body, spec, namespace, name, kind, uid):
   except Exception as e:
     success = False
     logger.error(f"SQL error: {e}")
-    raise
+
+  success &= create_kg_resource_description_node(uid, body_string)
 
   if success:
     logger.info(f"{uid} node inserted (row count: {row_ct} ({kind}, {name}))")
@@ -141,7 +171,8 @@ def update_network_node(body, spec, namespace, name, kind, uid):
   # For now we only update the status field and node property
   status = get_status(body)
   if status != 'NULL': status = f"'{status}'"
-  body_dump = body_sql_json_dump(body, kind, namespace, name)
+  body_string = body_string_dump(body, kind, namespace, name)
+  body_dump = body_sql_json_dump(body_string)
   
   row_ct = 0
   success = True
@@ -150,7 +181,8 @@ def update_network_node(body, spec, namespace, name, kind, uid):
   except Exception as e:
     success = False
     logger.error(f"SQL error: {e}")
-    raise
+
+  success &= update_kg_resource_description_node(uid, body_string)
 
   if success:
     logger.info(f"{uid} node updated (row count: {row_ct}) ({kind}, {name})")
@@ -176,6 +208,9 @@ def delete_network_node(uid):
   except Exception as e:
     success = False
     logger.error(f"SQL error: {e}")
+
+  # Delete related Knowledge Graph node
+  success &= delete_kg_resource_description_node(uid)
 
   if success:
     logger.info(f"{uid} node deleted (row count: {row_ct})")
@@ -215,7 +250,7 @@ def exist_network_connection(parent_uid, uid):
 
   tmpl = SQL_TEMPLATES['exist_nw_cnx']
   sql = tmpl.format(id=parent_uid, to_id=uid)
-  logger.info("SQL: {}".format(sql))
+  logger.debug("SQL: {}".format(sql))
 
   try:
     with database.snapshot() as snapshot:
@@ -304,6 +339,110 @@ def delete_node_resource_connections(uid):
     logger.info(f"{row_ct} resource connection(s) deleted for node {uid}")
   else:
     logger.error(f"Resource connection {uid} deletion failed")
+  return success
+
+# ------------------------------------------
+# Create K8s resource descriptions in Knowledge Graph
+# ------------------------------------------
+def create_kg_resource_description_node(id, body_string):
+
+  def sql_create_kg_resource_description_node(transaction):
+    sql = SQL_TEMPLATES['create_kg_res_node']
+    logger.debug(f"SQL: {sql}")
+    return transaction.execute_update(
+      sql,
+      params={"description": description, "embedding": embedding, "id": id},
+      param_types={
+        "description": spanner.param_types.STRING,
+        "embedding": spanner.param_types.Array(spanner.param_types.FLOAT64),
+        "id": spanner.param_types.STRING})
+  
+  # For now we only update the status field and node property
+  description = body_string
+  embedding = get_embedding(body_string, TASK_TYPE, EMBEDDING_MODEL)
+  
+  row_ct = 0
+  success = True
+  try:
+    row_ct = database.run_in_transaction(sql_create_kg_resource_description_node)
+  except Exception as e:
+    success = False
+    logger.error(f"SQL error: {e}")
+
+  if success:
+    logger.info(f"{id} KG Resource node created (row count: {row_ct})")
+  else:
+    logger.error(f"KG Resource Node {id} creation failed")
+  return success
+
+
+# ------------------------------------------
+# Update K8s resource descriptions in Knowledge Graph
+# ------------------------------------------
+def update_kg_resource_description_node(id, body_string):
+
+  def sql_update_kg_resource_description_node(transaction):
+    sql = SQL_TEMPLATES['update_kg_res_node']
+    logger.debug(f"SQL: {sql}")
+    return transaction.execute_update(
+      sql,
+      params={"description": description, "embedding": embedding, "id": id},
+      param_types={
+        "description": spanner.param_types.STRING,
+        "embedding": spanner.param_types.Array(spanner.param_types.FLOAT64),
+        "id": spanner.param_types.STRING})
+  
+  # For now we only update the status field and node property
+  description = body_string
+  embedding = get_embedding(body_string, TASK_TYPE, EMBEDDING_MODEL)
+  logger.debug(f"Embedding for node id {id}")
+  logger.debug(f"--> type: {type(body_string)}, body: {body_string}")
+  logger.debug(f"--> embedding: {embedding}")
+
+  row_ct = None
+  success = True
+  try:
+    row_ct = database.run_in_transaction(sql_update_kg_resource_description_node)
+  except Exception as e:
+    success = False
+    logger.error(f"SQL error: {e}")
+
+  # If no row updated then create it (Anti entropy mechanism)
+  if row_ct == 0:
+    success &= create_kg_resource_description_node(id, body_string)
+    return success
+  
+  if success:
+    logger.info(f"{id} KG Resource node updated (row count: {row_ct})")
+  else:
+    logger.error(f"KG Resource Node {id} update failed")
+  return success
+
+# ------------------------------------------
+# Update K8s resource descriptions in Knowledge Graph
+# ------------------------------------------
+def delete_kg_resource_description_node(id):
+
+  def sql_delete_kg_resource_description_node(transaction):
+    sql = SQL_TEMPLATES['delete_kg_res_node']
+    logger.debug(f"SQL: {sql}")
+    return transaction.execute_update(
+      sql,
+      params={"id": id},
+      param_types={"id": spanner.param_types.STRING})
+   
+  row_ct = None
+  success = True
+  try:
+    row_ct = database.run_in_transaction(sql_delete_kg_resource_description_node)
+  except Exception as e:
+    success = False
+    logger.error(f"SQL error: {e}")
+
+  if success:
+    logger.info(f"{id} KG Resource node deleted (row count: {row_ct})")
+  else:
+    logger.error(f"KG Resource Node {id} deletion failed")
   return success
 
 # ------------------------------------------

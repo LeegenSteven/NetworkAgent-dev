@@ -6,6 +6,7 @@ netaddr
 google-cloud-spanner
 google-cloud-container
 google-cloud-logging
+google-cloud-aiplatform
 google-api-python-client
 # Version 3.1.0+ incompatible with kopf 3.2.x
 python-json-logger<3.1.0

@@ -43,9 +43,11 @@ Create()
     echo "########################################"
     echo "Grant GCP permissions to GCP active user: $GOOGLE_ACTIVE_USER"
     echo "########################################"
-    gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="user:$GOOGLE_ACTIVE_USER" --role="roles/logging.logWriter"
-    # needed for the COlab Notebook to access the graph database
-    gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="user:$GOOGLE_ACTIVE_USER" --role="roles/spanner.databaseReader"
+    for role in "roles/logging.logWriter" "roles/spanner.databaseReader"; do
+        echo "$role"
+        gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="user:$GOOGLE_ACTIVE_USER" --role="$role" --no-user-output-enabled
+        # roles/spanner.databaseReader needed for the COlab Notebook to access the graph database
+    done
 
     # enable GCP Services API needed
     echo "########################################"
@@ -62,7 +64,7 @@ Create()
     gcloud services enable --project=$GOOGLE_PROJECT spanner.googleapis.com
     # For vertex AI workbench
     gcloud services enable --project=$GOOGLE_PROJECT notebooks.googleapis.com
-    # for colab enterprise in addition tu compute engine api
+    # for colab enterprise in addition to compute engine api
     gcloud services enable --project=$GOOGLE_PROJECT aiplatform.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT dataform.googleapis.com
 
@@ -71,9 +73,11 @@ Create()
     echo "Setup Cloud Build service account permissions "
     echo "########################################"
     CLOUD_BUILD_COMPUTE_SVC_ACCOUNT="${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
-    gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$CLOUD_BUILD_COMPUTE_SVC_ACCOUNT" --role="roles/storage.objectUser"
-    gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$CLOUD_BUILD_COMPUTE_SVC_ACCOUNT" --role="roles/logging.logWriter"
-    gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$CLOUD_BUILD_COMPUTE_SVC_ACCOUNT" --role="roles/artifactregistry.writer"
+    for role in "roles/storage.objectUser" "roles/logging.logWriter" "roles/artifactregistry.writer"; do
+        echo "$role"
+        gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$CLOUD_BUILD_COMPUTE_SVC_ACCOUNT" \
+          --role="$role" --no-user-output-enabled
+    done
 
     # Test if google compute ssh keys exist, it not generate them
     if ! test -f google-compute; then
@@ -108,25 +112,34 @@ Create()
         gcloud iam service-accounts create networkagent --description="Network Agent Service Account" --display-name="Network Agent"
         # recreate the service account environment variable
         export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
-        gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/editor"
-        gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/container.admin"
-        gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/compute.admin"
-        gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/compute.networkAdmin"
-        gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/iam.serviceAccountAdmin"
-        gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" --role="roles/monitoring.metricWriter"
-        # Grant Spanner access permissions from GKE cluster
+        
+        echo "Granting permissions to the GKE Cluster service account..."
+        for role in "roles/editor" "roles/container.admin" "roles/compute.admin" \
+          "roles/compute.networkAdmin" "roles/iam.serviceAccountAdmin" "roles/monitoring.metricWriter" \
+           "roles/aiplatform.user"; do
+            echo "$role"   
+            gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" \
+              --role="$role" --no-user-output-enabled
+        done
+
+        # Grant access permissions to the GKE cluster
         # See https://cloud.google.com/spanner/docs/connect-gke-cluster
         # For an unknown reason granting to the service account (line below) doesn't work...
         # gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
         #  --member="principal://iam.googleapis.com/projects/${GOOGLE_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GOOGLE_PROJECT}.svc.id.goog/subject/ns/${GOOGLE_NAMESPACE}/sa/${GOOGLE_SERVICE_ACCOUNT}" \
         #  --role=roles/spanner.databaseUser --condition=None
         #
-        #... so grant it to all service accounts in the name space. It works.
+        # So here is a variant that grants the spanner permission to all service accounts
+        # in the designated namespace. This one works.
+        #
+        # Same to give the operator access to the Vertex AI prediction API
 
-        gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
-          --member="principalSet://iam.googleapis.com/projects/${GOOGLE_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GOOGLE_PROJECT}.svc.id.goog/namespace/${GOOGLE_NAMESPACE}" \
-          --role="roles/spanner.databaseUser" \
-          --condition=None
+        for role in "roles/spanner.databaseUser" "roles/aiplatform.user"; do
+            gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
+              --member="principal://iam.googleapis.com/projects/${GOOGLE_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GOOGLE_PROJECT}.svc.id.goog/subject/ns/${GOOGLE_NAMESPACE}/sa/${GOOGLE_SERVICE_ACCOUNT}" \
+              --role="$role" --condition=None --no-user-output-enabled
+        done   
+        echo "done."
     fi
 
     if ! test -f networkagent.json; then

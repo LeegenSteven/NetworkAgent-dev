@@ -45,6 +45,11 @@ spec:
        to_id STRING(36) NOT NULL,
        connection_property JSON
     ) PRIMARY KEY(id, to_id)"
+  - "CREATE TABLE KgResourceDescriptionNode (
+       id STRING(36) NOT NULL,
+       description STRING(MAX),
+       embedding ARRAY<FLOAT64>
+    ) PRIMARY KEY (id)"
   - "CREATE OR REPLACE PROPERTY GRAPH networkGraph
        NODE TABLES (NetworkNode)
        EDGE TABLES (

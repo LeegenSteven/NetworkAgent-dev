@@ -29,6 +29,7 @@ SQL_TEMPLATES = {
                         " VALUES (@id, @description, @embedding)",
   'update_kg_res_node': "UPDATE KgResourceDescriptionNode SET description = @description, embedding = @embedding WHERE id = @id",
   'delete_kg_res_node': "DELETE FROM KgResourceDescriptionNode WHERE id = @id",
+  'exist_kg_res_node' : "SELECT id FROM KgResourceDescriptionNode WHERE id = '{id}'"
 }
 
 # Connect to Spanner database
@@ -103,8 +104,10 @@ def get_status(body):
       elif body['kind'].lower() in ['pointtopointservice', 'meshservice']:
         if 'currentStatus' in body['status']:
           status_value = body['status']['currentStatus']
-        elif 'status' in body['status'][body['kind'].lower()]:
-          status_value = body['status'][body['kind'].lower()]['status']
+        else:
+          svc = body['kind'].lower()
+          if (svc in body['status']) and ('status' in body['status'][svc]):
+            status_value = body['status'][svc]['status']
 
   return status_value
 
@@ -148,7 +151,7 @@ def create_network_node(body, spec, namespace, name, kind, uid):
     success = False
     logger.error(f"SQL error: {e}")
 
-  success &= create_kg_resource_description_node(uid, body_string)
+  success &= create_or_update_kg_resource_description_node(uid, body_string)
 
   if success:
     logger.info(f"{uid} node inserted (row count: {row_ct} ({kind}, {name}))")
@@ -182,7 +185,7 @@ def update_network_node(body, spec, namespace, name, kind, uid):
     success = False
     logger.error(f"SQL error: {e}")
 
-  success &= update_kg_resource_description_node(uid, body_string)
+  success &= create_or_update_kg_resource_description_node(uid, body_string)
 
   if success:
     logger.info(f"{uid} node updated (row count: {row_ct}) ({kind}, {name})")
@@ -342,6 +345,41 @@ def delete_node_resource_connections(uid):
   return success
 
 # ------------------------------------------
+# Idempotent function to create or update a
+# KG resource node
+# ------------------------------------------
+def create_or_update_kg_resource_description_node(id, body_string):
+  success = True
+  if exist_kg_resource_description_node(id):
+    success &= update_kg_resource_description_node(id, body_string)
+  else:
+    success &= create_kg_resource_description_node(id, body_string)
+  return success
+
+# ------------------------------------------
+# Does a KG resource node exists
+# ------------------------------------------
+def exist_kg_resource_description_node(id):
+
+  tmpl = SQL_TEMPLATES['exist_kg_res_node']
+  sql = tmpl.format(id=id)
+  logger.debug("SQL: {}".format(sql))
+
+  try:
+    with database.snapshot() as snapshot:
+      results = snapshot.execute_sql(sql)
+    success = (results.one_or_none() is not None)
+  except Exception as e:
+    success = False
+    logger.error("SQL error: {}".format(e))
+
+  if success:
+    logger.debug("{} KG resource node exists)".format(id))
+  else:
+    logger.debug("{} KG resource node doesn't exist)".format(id))
+  return success
+
+# ------------------------------------------
 # Create K8s resource descriptions in Knowledge Graph
 # ------------------------------------------
 def create_kg_resource_description_node(id, body_string):
@@ -406,11 +444,6 @@ def update_kg_resource_description_node(id, body_string):
   except Exception as e:
     success = False
     logger.error(f"SQL error: {e}")
-
-  # If no row updated then create it (Anti entropy mechanism)
-  if row_ct == 0:
-    success &= create_kg_resource_description_node(id, body_string)
-    return success
   
   if success:
     logger.info(f"{id} KG Resource node updated (row count: {row_ct})")

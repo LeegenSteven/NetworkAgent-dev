@@ -12,11 +12,11 @@ logger = logging.getLogger(__name__)
 # Create a Wireguard virtual network appliance
 #########################################################################
 @kopf.on.create('google.dev','v1','wireguardappliance')
-async def wireguard(body,spec, name, namespace, kind, uid, logger, **kwargs):
+async def wireguard(body,spec, name, namespace, uid, logger, **kwargs):
     logger.debug(f"A wireguard handler is called with spec: {spec}")
 
     servicename = body['metadata']['ownerReferences'][0]['name']
-    kind = b
+    kind = body.get('kind')
 
     # create children resources in the automation namespace
     await create_compute(namespace,

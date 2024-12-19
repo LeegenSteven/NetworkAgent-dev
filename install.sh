@@ -94,7 +94,7 @@ Create()
     cp google-compute.pub operator/src
 
     echo "Add ssh key to OS login"
-    gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=$GOOGLE_PROJECT --ttl=1d
+    gcloud compute os-login ssh-keys add --key-file=google-compute.pub --project=$GOOGLE_PROJECT --ttl=100d
 
     echo "Templating k8s manifest files"
 
@@ -112,7 +112,7 @@ Create()
         gcloud iam service-accounts create networkagent --description="Network Agent Service Account" --display-name="Network Agent"
         # recreate the service account environment variable
         export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
-        
+
         echo "Granting permissions to the GKE Cluster service account..."
         for role in "roles/editor" "roles/container.admin" "roles/compute.admin" \
           "roles/compute.networkAdmin" "roles/iam.serviceAccountAdmin" "roles/monitoring.metricWriter" \

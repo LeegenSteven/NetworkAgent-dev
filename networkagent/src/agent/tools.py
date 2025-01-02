@@ -148,7 +148,7 @@ def getServices(
     name: Annotated[str, "The Customer name"]
     )-> str:
     """
-    Fetch the connectivity service instances that are already deployed for a specified customer.
+    Fetch the network connectivity service instances that are already deployed for a specified customer.
 
     Returns:
         Connectivity service instances and their status in Markdown format
@@ -216,7 +216,7 @@ def createService(
     """
     Tool used to instantiate a new network connectivity service. 
 
-    The types of network services available can be discovered by calling the getServiceDefinitions tool
+    The types of network connectivity services available can be discovered by calling the getServiceDefinitions tool
 
     """
     logger.info("Create a new Service for %s from %s", customerName, str(serviceSpec))
@@ -266,7 +266,7 @@ def deleteService(
     kind: Annotated[str, "The kubernetes kind of the service instance to delete"]
     )->str:
     """
-    Delete a running connectivity service instance
+    Delete a running network connectivity service instance
     """
     if name is None or kind is None:
         return {}, 400
@@ -305,7 +305,7 @@ class TestInput(BaseModel):
 @tool("create-test-tool", args_schema=TestInput, return_direct=True)
 def createTest(payload)->Annotated[str, "Result of the create test request returned in Markdown"]:
     """
-    Create a connectivity test between two valid IT applications. 
+    Create a network connectivity test between two valid IT applications. 
     The IT application names must exist. 
     """
     logger.info("Create a new Test from %s", str(payload))
@@ -352,7 +352,7 @@ def deleteTest(
     name: Annotated[str, "The name of the test instance to delete"]
     )->Annotated[str, "The result of the delete test request, return in Markdown format"]:
     """
-    Delete a running connectivity test, the name provided must be the name of a running test instance
+    Delete a running network connectivity test, the name provided must be the name of a running test instance
     """
 
     client = kubernetes.dynamic.DynamicClient(get_client())

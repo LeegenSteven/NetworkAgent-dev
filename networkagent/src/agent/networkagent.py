@@ -5,27 +5,33 @@ from langchain.callbacks.manager import CallbackManager
 from langchain_core.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langgraph.graph import StateGraph, END, START
 from langgraph.graph.message import add_messages
-from typing import TypedDict, Annotated, Literal, cast
+from typing import TypedDict, Annotated, Sequence, Literal, cast
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage, ToolMessage, AIMessage
+from langchain_core.messages import HumanMessage, ToolMessage, AIMessage, BaseMessage
 from langchain_core.runnables.config import RunnableConfig
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langgraph.prebuilt import ToolNode, tools_condition
 from agent.tools import *
+from agent.rag_tools import *
 import google.auth
 import logging
 import os
 
-# Uncomment lines below to debug the Langchain flow of operations
-# from langchain.globals import set_debug, set_verbose
-# set_debug(True)
-# set_verbose(False)
+# Debug the Langchain flow of operations if logger is at DEBUG level
+if logger.getEffectiveLevel() == logging.DEBUG:
+  from langchain.globals import set_debug, set_verbose
+  set_debug(True)
+  set_verbose(False)
 
 logger = logging.getLogger(__name__)
 
+"""class NetworkAgentState(TypedDict):
+    messages: Annotated[list, add_messages]"""
+
 class NetworkAgentState(TypedDict):
-    messages: Annotated[list, add_messages]
+    # The add_messages function defines how an update should be processed
+    # Default is to replace. add_messages says "append"
+    messages: Annotated[Sequence[BaseMessage], add_messages]
 
 class NetworkAgent:
     def __init__(self):
@@ -38,7 +44,8 @@ class NetworkAgent:
 
         safe_tools=[getCustomerLocations, getCustomerApplications, getServiceDefinitions, getServices]#, getServicePerformanceMetrics]
         unsafe_tools=[createService, deleteService] #, createTest, deleteTest]
-        agent_tools = safe_tools+unsafe_tools
+        #rag_tools=[retrieve_resources]
+        agent_tools = safe_tools+unsafe_tools #+rag_tools
 
         safety_settings = {
             HarmCategory.HARM_CATEGORY_UNSPECIFIED: HarmBlockThreshold.BLOCK_ONLY_HIGH,
@@ -62,15 +69,17 @@ class NetworkAgent:
 
         system_prompt = """
             You are a networking engineer specialist helper bot.
-            You job is to communicate with the user to help them manage their network connectivity services. 
+            You job is to communicate with the user to help them manage their network connectivity services
+            and assess the state of the network resources in use. 
             You can help the user fulfill tasks such as:
             - understanding which network connectivity services are available to use
-            - understand which networking services are deployed already for a particular customer
+            - understand which network connectivity services are deployed already for a particular customer
             - understand which networking locations are available for a particular customer
             - deploy new network connectivity services
             - delete existing network connectivity services
             - create and delete network connectivity tests 
             - understand performance metrics for deployed connectivity service
+            - understand the state of the network resources deployed (net, subnet, routes...) and their configuration
 
             Greet the users and ask how you can help them today.
             - If necessary, seek clarifying details on what their request is.
@@ -84,18 +93,36 @@ class NetworkAgent:
                 - Delete an existing connectivity test for a customer IT application
                 - Get the performance metrics for a deployed connectivity service
                 - The networking orchestrator itself uses Kubernetes CRDs to control the networking operations state. Hence the responses from this Tool will be in a kubernetes CRD format.
-            - if the request involves anything else, try your best to answer, but explain that you are an agent to be used specifically 
+            - If the request is about about any network resource such as network, subnetwork, routes, firewalls, VMs... and their attribute like kind, name, status, parent node \
+    (           (also known as OwnerReference), network flow connection (also know as network or subnetwork reference), creation time,...\
+    c           use the relevant resource descriptions provided in the context below to answer (descriptions are formatted as a series of JSON strings)
+            - If you still cannot answer explain that you are an agent to be used specifically 
               for managing network connectivity services and you should then list the capabilities above
+
+            Context: {context}
+
+            Conversation history: {messages}
             """
 
         network_agent_prompt=ChatPromptTemplate.from_messages(
             [
                 ("system", system_prompt),
                 ("placeholder", "{messages}"),
+                ("human", "{question}")
             ]
         )
 
-        self.network_agent_runnable = network_agent_prompt | self.model_with_tools
+        def format_docs(docs):
+            logger.debug(f"--- DOCS FOUND: {len(docs)} ")
+            return "\n\n".join(doc.page_content for doc in docs)
+
+        self.network_agent_runnable = (
+            {"context": retrieval_tool | format_docs, 
+             "question": RunnablePassthrough(),
+             "messages": RunnableLambda(lambda x: x["messages"])}
+            | network_agent_prompt
+            | self.model_with_tools
+        )
         
         networkAgentGraph = StateGraph(NetworkAgentState)
         networkAgentGraph.add_node("agent_model", self.agent_model)
@@ -119,6 +146,10 @@ class NetworkAgent:
             #     "unsafe_tools"
             # ]
         )
+
+        # App config (see run function below)
+        self.config = {"configurable":{"thread_id": "1"}}
+
     
     def agent_model(self, state: NetworkAgentState, config: RunnableConfig):
         """
@@ -135,16 +166,18 @@ class NetworkAgent:
         logger.debug(f"state: {state}")
 
         response = self.network_agent_runnable.invoke(state)
+        logger.debug("---MODEL REPONSE---")
+        logger.debug(f"response: {response}")
         # We return a list, because this will get added to the existing list
         state["messages"] = response
         return state
 
-
+    def reset_agent(self):
+        self.networkAgentApp.get_state(self.config).values['messages'] = []
 
     def run(self, question):
-        logger.info("running network agent with question %s", question)
-        config = {"configurable":{"thread_id": "1"}}
+        logger.info("running network agent with question '%s'", question)
         inputs = {"messages": [HumanMessage(content=question)]}
-        response = self.networkAgentApp.invoke(inputs, config)
+        response = self.networkAgentApp.invoke(inputs, self.config)
         logger.info(response)
         return response['messages'][-1].content

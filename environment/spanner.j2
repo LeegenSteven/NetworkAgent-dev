@@ -47,9 +47,9 @@ spec:
     ) PRIMARY KEY(id, to_id)"
   - "CREATE TABLE KgResourceDescriptionNode (
        id STRING(36) NOT NULL,
-       description STRING(MAX),
+       content STRING(MAX),
        embedding ARRAY<FLOAT64>
-    ) PRIMARY KEY (id)"
+    ) PRIMARY KEY (id, content)"
   - "CREATE OR REPLACE PROPERTY GRAPH networkGraph
        NODE TABLES (NetworkNode)
        EDGE TABLES (

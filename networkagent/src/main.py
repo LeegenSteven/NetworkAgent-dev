@@ -1,7 +1,9 @@
 import logging
 import os
-import kubernetes
-from utils.k8s import get_client, get_credentials
+log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
+             "%(filename)s::%(lineno)d::%(message)s"
+logging.basicConfig(level='INFO', format=log_format)
+logger = logging.getLogger(__name__)
 
 import streamlit as st
 # set_page_config must be executed before any other streamlit code.
@@ -16,22 +18,37 @@ from langchain_core.messages import AIMessage, HumanMessage
 from agent.networkagent import NetworkAgent
 import graph.topology as topology
 
-log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
-             "%(filename)s::%(lineno)d::%(message)s"
-logging.basicConfig(level='INFO', format=log_format)
-logger = logging.getLogger(__name__)
+def reset_chat_history():
+  """
+  Resets the chat history in the Streamlit session state.
+  """
+  st.session_state.chat_history = [
+    AIMessage(content="Hello, I am your network assistant. How can I help you ?"),
+  ]
+  st.session_state.agent.reset_agent()
 
 # Setup Agent and chat history
 if "agent" not in st.session_state:
   st.session_state.agent = NetworkAgent()
 if "chat_history" not in st.session_state:
-  st.session_state.chat_history = [
-      AIMessage(content="Hello, I am your network assistant. How can I help you ?"),
-  ]
+  reset_chat_history()
 
 st.title("Autonomous Network Agent")
-count = st_autorefresh(interval=5000, key="counter")
 
+# --------------------------------------------
+# Side Bar 
+#---------------------------------------------
+
+with st.sidebar:
+  st.title("Settings")
+  if st.button("Reset chat"):
+    reset_chat_history()
+  if st.toggle("Graph autorefresh"):
+    count = st_autorefresh(interval=3000, key="counter")
+
+# --------------------------------------------
+# Main Panels
+#---------------------------------------------
 # Create columns with equal width
 agentcolumn, graphcolumn, detailscolumn = st.columns([1,1,1]) 
 
@@ -81,7 +98,9 @@ with detailscolumn:
     graph_info = topology.display_selected_elements(selected_elts)
     st.markdown(graph_info)
 
+# --------------------------------------------
 # Some useful Links at the foot of the page
+#---------------------------------------------
 project = os.environ.get("GOOGLE_PROJECT")
 st.markdown(f"""**Some useful links**
   * [Spanner Graph database](https://console.cloud.google.com/spanner/instances/networktopology-instance/databases/networktopology-db/details/tables?invt=Abiyrw&project={project})

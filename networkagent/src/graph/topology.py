@@ -8,6 +8,8 @@ import os
 import streamlit as st
 import json as json
 
+SPANNER_INSTANCE = 'networktopology-instance'
+SPANNER_DATABASE = 'networktopology-db'
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +23,8 @@ def spanner_connect():
   credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/agent/networkagent.json"))[0]
   logger.debug(credentials)
   spanner_client = spanner.Client(credentials=credentials)
-  instance = spanner_client.instance('networktopology-instance')
-  database = instance.database('networktopology-db')
+  instance = spanner_client.instance(SPANNER_INSTANCE)
+  database = instance.database(SPANNER_DATABASE)
   return database
 
 # FIXME : see how to set different colors

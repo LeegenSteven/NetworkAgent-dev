@@ -33,10 +33,12 @@ if "agent" not in st.session_state:
 if "chat_history" not in st.session_state:
   reset_chat_history()
 
+project = os.environ.get("GOOGLE_PROJECT")
+
 st.title("Autonomous Network Agent")
 
 # --------------------------------------------
-# Side Bar 
+# Side Bar (Settings and links)
 #---------------------------------------------
 
 with st.sidebar:
@@ -45,6 +47,12 @@ with st.sidebar:
     reset_chat_history()
   if st.toggle("Graph autorefresh"):
     count = st_autorefresh(interval=3000, key="counter")
+  st.title("Useful links")
+  st.markdown(f"""
+  * [Spanner Graph database](https://console.cloud.google.com/spanner/instances/networktopology-instance/databases/networktopology-db/details/tables?invt=Abiyrw&project={project})
+  * [Cluster Config status](https://console.cloud.google.com/kubernetes/config_management/packages?project={project})
+  * [Demo Scenario](https://docs.google.com/document/d/1gwCnLlgDaRWUv7I_hqd8aRv4B0ICsC7tj3pU7C8MRw0/edit?usp=sharing)"""
+    )
 
 # --------------------------------------------
 # Main Panels
@@ -54,7 +62,7 @@ agentcolumn, graphcolumn, detailscolumn = st.columns([1,1,1])
 
 # Agent Column
 with agentcolumn:
-  chatcontainer=st.container(height=645, border=True)
+  chatcontainer=st.container(height=745, border=True)
   # Display chat messages from history on app rerun
   for message in st.session_state.chat_history:
     if isinstance(message, AIMessage):
@@ -79,7 +87,7 @@ with agentcolumn:
 
 # Graph Column
 with graphcolumn:
-  graphcontainer = st.container(height=700, border=True)
+  graphcontainer = st.container(height=800, border=True)
   with graphcontainer:
       tab_labels = ["Net Topology", "Net Resources", "Combined View"]
       selected_tab = st_ext.segmented_control(tab_labels, default=tab_labels[0], max_size=4, key="graph_tabs")
@@ -93,17 +101,7 @@ with graphcolumn:
 
 # Details Column
 with detailscolumn:
-  detailscontainer = st.container(height=700, border=True)
+  detailscontainer = st.container(height=800, border=True)
   with detailscontainer:
     graph_info = topology.display_selected_elements(selected_elts)
     st.markdown(graph_info)
-
-# --------------------------------------------
-# Some useful Links at the foot of the page
-#---------------------------------------------
-project = os.environ.get("GOOGLE_PROJECT")
-st.markdown(f"""**Some useful links**
-  * [Spanner Graph database](https://console.cloud.google.com/spanner/instances/networktopology-instance/databases/networktopology-db/details/tables?invt=Abiyrw&project={project})
-  * [Cluster Config status](https://console.cloud.google.com/kubernetes/config_management/packages?project={project})
-  * [Demo Scenario](https://docs.google.com/document/d/1gwCnLlgDaRWUv7I_hqd8aRv4B0ICsC7tj3pU7C8MRw0/edit?usp=sharing)"""
-    )

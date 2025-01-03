@@ -49,7 +49,7 @@ spec:
        id STRING(36) NOT NULL,
        content STRING(MAX),
        embedding ARRAY<FLOAT64>
-    ) PRIMARY KEY (id, content)"
+    ) PRIMARY KEY (id)"
   - "CREATE OR REPLACE PROPERTY GRAPH networkGraph
        NODE TABLES (NetworkNode)
        EDGE TABLES (

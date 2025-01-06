@@ -25,9 +25,9 @@ SQL_TEMPLATES = {
   'create_nw_cnx': "INSERT NetworkConnection (id, to_id) VALUES ('{id}', '{to_id}')",
   'delete_node_nw_cnx': "DELETE FROM NetworkConnection WHERE (id = '{id}' OR to_id = '{id}')",
   'exist_nw_cnx': "SELECT id FROM NetworkConnection WHERE (id = '{id}' AND to_id = '{to_id}')",
-  'create_kg_res_node': "INSERT KgResourceDescriptionNode (id, description, embedding)"
-                        " VALUES (@id, @description, @embedding)",
-  'update_kg_res_node': "UPDATE KgResourceDescriptionNode SET description = @description, embedding = @embedding WHERE id = @id",
+  'create_kg_res_node': "INSERT KgResourceDescriptionNode (id, content, embedding)"
+                        " VALUES (@id, @content, @embedding)",
+  'update_kg_res_node': "UPDATE KgResourceDescriptionNode SET content = @content, embedding = @embedding WHERE id = @id",
   'delete_kg_res_node': "DELETE FROM KgResourceDescriptionNode WHERE id = @id",
   'exist_kg_res_node' : "SELECT id FROM KgResourceDescriptionNode WHERE id = '{id}'"
 }
@@ -188,7 +188,7 @@ def update_network_node(body, spec, namespace, name, kind, uid):
   success &= create_or_update_kg_resource_description_node(uid, body_string)
 
   if success:
-    logger.info(f"{uid} node updated (row count: {row_ct}) ({kind}, {name})")
+    logger.info(f"{uid} node updated (row count: {row_ct}) ({kind}, {name}, {status})")
   else:
     logger.error(f"Node {uid} update failed  ({kind}, {name})")
   return success
@@ -389,14 +389,14 @@ def create_kg_resource_description_node(id, body_string):
     logger.debug(f"SQL: {sql}")
     return transaction.execute_update(
       sql,
-      params={"description": description, "embedding": embedding, "id": id},
+      params={"content": content, "embedding": embedding, "id": id},
       param_types={
-        "description": spanner.param_types.STRING,
+        "content": spanner.param_types.STRING,
         "embedding": spanner.param_types.Array(spanner.param_types.FLOAT64),
         "id": spanner.param_types.STRING})
   
   # For now we only update the status field and node property
-  description = body_string
+  content = body_string
   embedding = get_embedding(body_string, TASK_TYPE, EMBEDDING_MODEL)
   
   row_ct = 0
@@ -424,14 +424,14 @@ def update_kg_resource_description_node(id, body_string):
     logger.debug(f"SQL: {sql}")
     return transaction.execute_update(
       sql,
-      params={"description": description, "embedding": embedding, "id": id},
+      params={"content": content, "embedding": embedding, "id": id},
       param_types={
-        "description": spanner.param_types.STRING,
+        "content": spanner.param_types.STRING,
         "embedding": spanner.param_types.Array(spanner.param_types.FLOAT64),
         "id": spanner.param_types.STRING})
   
   # For now we only update the status field and node property
-  description = body_string
+  content = body_string
   embedding = get_embedding(body_string, TASK_TYPE, EMBEDDING_MODEL)
   logger.debug(f"Embedding for node id {id}")
   logger.debug(f"--> type: {type(body_string)}, body: {body_string}")
@@ -566,11 +566,10 @@ async def create_or_update_network_connections(body, spec, meta, uid, namespace,
 
     # Special case for Routes. Find its peer destination route
     # in addition to its network ref (see above)
-    # Commented. Not sure it is worth showing on the graph
-    #if body['kind'] == 'ComputeRoute':
-    #  dest_subnets = await find_destination_subnets(spec['destRange'])
-    #  for ds in dest_subnets:
-    #    dest_subnet_uid = ds['metadata']['uid']
-    #    if not exist_network_connection(uid, dest_subnet_uid):
-    #      success |= create_network_connection(uid, dest_subnet_uid)
+    if body['kind'] == 'ComputeRoute':
+      dest_subnets = await find_destination_subnets(spec['destRange'])
+      for ds in dest_subnets:
+        dest_subnet_uid = ds['metadata']['uid']
+        if not exist_network_connection(uid, dest_subnet_uid):
+          success |= create_network_connection(uid, dest_subnet_uid)
   return success

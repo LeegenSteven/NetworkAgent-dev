@@ -220,7 +220,7 @@ def edge_color(elements, label):
       elif label == 'Manages':
         color = google_blue
       else:
-        logger.warning("Uknown graph edge label: {label}")
+        logger.warning("Unknown graph edge label: {label}")
         color = google_black
 
       e['style'] = { 'line-color': color, 'target-arrow-color': color,'source-arrow-color': color  }
@@ -238,6 +238,25 @@ def node_color(elements):
       else:
         logger.warning("Node status with no color assigned: {status}")
         e['style'] = { 'background-color': google_light_red }
+
+# Graph drawing
+# Example of a node element:
+# {'group': 'nodes',
+#  'data': {
+#    'id': '3430641f-f1c5-49cf-bbde-a1f6c38256c4', 
+#    'label': 'FW (dublin-allowed)', 
+#    'kind': 'ComputeFirewall', 
+#    'name': 'dublin-allowed', 
+#    'status': 'UpToDate' },
+#  'selectable': True}
+#
+# Example of a edge element:
+# {'group': 'edges', 
+#  'data': {
+#     'source': 'dd0e42a7-7ebe-430d-b2cf-f8c009209943', 
+#     'target': '8a448442-1808-45d0-a8b7-40b5844265c8', 
+#     'label': 'isConnectedTo' },
+#  'selectable': True}
 
 def create_network_cytoscape():
   elements, success = build_graph(database, 'isConnectedTo')

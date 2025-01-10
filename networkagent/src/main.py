@@ -2,7 +2,7 @@ import logging
 import os
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
-logging.basicConfig(level='INFO', format=log_format)
+logging.basicConfig(level=logging.INFO, format=log_format)
 logger = logging.getLogger(__name__)
 
 import streamlit as st
@@ -25,7 +25,6 @@ def reset_chat_history():
   st.session_state.chat_history = [
     AIMessage(content="Hello, I am your network assistant. How can I help you ?"),
   ]
-  st.session_state.agent.reset_agent()
 
 # Setup Agent and chat history
 if "agent" not in st.session_state:

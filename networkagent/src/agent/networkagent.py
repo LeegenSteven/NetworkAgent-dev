@@ -7,7 +7,7 @@ from langgraph.graph import StateGraph, END, START
 from langgraph.graph.message import add_messages
 from typing import TypedDict, Annotated, Sequence, Literal, cast
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage, ToolMessage, AIMessage, BaseMessage
+from langchain_core.messages import HumanMessage, ToolMessage, AIMessage, BaseMessage, trim_messages
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -17,13 +17,14 @@ import google.auth
 import logging
 import os
 
+logger = logging.getLogger(__name__)
+
 # Debug the Langchain flow of operations if logger is at DEBUG level
 if logger.getEffectiveLevel() == logging.DEBUG:
   from langchain.globals import set_debug, set_verbose
   set_debug(True)
   set_verbose(False)
 
-logger = logging.getLogger(__name__)
 
 """class NetworkAgentState(TypedDict):
     messages: Annotated[list, add_messages]"""
@@ -31,7 +32,10 @@ logger = logging.getLogger(__name__)
 class NetworkAgentState(TypedDict):
     # The add_messages function defines how an update should be processed
     # Default is to replace. add_messages says "append"
-    messages: Annotated[Sequence[BaseMessage], add_messages]
+    messages: Annotated[Sequence[BaseMessage], add_messages] # history of human and AI messages
+    question: str # the last question asked
+    context: str  # Context to answer the question from retrieved documents
+    response: str # last generated response.
 
 class NetworkAgent:
     def __init__(self):
@@ -83,6 +87,7 @@ class NetworkAgent:
 
             Greet the users and ask how you can help them today.
             - If necessary, seek clarifying details on what their request is.
+            - Connectivity services and networking services are synonyms
             - If the request involves any of the following, use the tools provided to help the user with their task:
                 - get a list of available networking services providing a summary description of each and the data needed to instantiate them
                 - get a set of network locations based on a customer
@@ -92,10 +97,13 @@ class NetworkAgent:
                 - Create an connectivity test for a customer IT application
                 - Delete an existing connectivity test for a customer IT application
                 - Get the performance metrics for a deployed connectivity service
-                - The networking orchestrator itself uses Kubernetes CRDs to control the networking operations state. Hence the responses from this Tool will be in a kubernetes CRD format.
-            - If the request is about about any network resource such as network, subnetwork, routes, firewalls, VMs... and their attribute like kind, name, status, parent node \
-    (           (also known as OwnerReference), network flow connection (also know as network or subnetwork reference), creation time,...\
-    c           use the relevant resource descriptions provided in the context below to answer (descriptions are formatted as a series of JSON strings)
+
+            - If the request is about network resources such as network, subnetwork, routes, firewalls, VMs... 
+              and their attributes like kind, name, status, parent node (also known as OwnerReference), network flow 
+              connections (also know as network or subnetwork reference), creation time,... then use the relevant resource 
+              descriptions provided in the Context below to answer. The resource descriptions provided in the context 
+              are formatted as JSON strings.
+
             - If you still cannot answer explain that you are an agent to be used specifically 
               for managing network connectivity services and you should then list the capabilities above
 
@@ -112,6 +120,9 @@ class NetworkAgent:
             ]
         )
 
+
+        retrieval_tool = ResourceRetrievalTool()
+
         def format_docs(docs):
             logger.debug(f"--- DOCS FOUND: {len(docs)} ")
             return "\n\n".join(doc.page_content for doc in docs)
@@ -119,15 +130,20 @@ class NetworkAgent:
         self.network_agent_runnable = (
             {"context": retrieval_tool | format_docs, 
              "question": RunnablePassthrough(),
-             "messages": RunnableLambda(lambda x: x["messages"])}
+             "messages": RunnableLambda(lambda x: x["messages"])
+             }
             | network_agent_prompt
             | self.model_with_tools
         )
         
-        networkAgentGraph = StateGraph(NetworkAgentState)
-        networkAgentGraph.add_node("agent_model", self.agent_model)
-        networkAgentGraph.add_node("agent_tools", ToolNode(agent_tools))
-        networkAgentGraph.add_conditional_edges(
+        # Workflow nodes
+        workflow = StateGraph(NetworkAgentState)
+        workflow.add_node("clear_history", self.clear_history)
+        workflow.add_node("agent_model", self.agent_model)
+        workflow.add_node("agent_tools", ToolNode(agent_tools))
+        # Workflow edges
+        workflow.add_edge("clear_history", END)
+        workflow.add_conditional_edges(
             "agent_model",
             # Assess agent decision
             tools_condition,
@@ -136,11 +152,14 @@ class NetworkAgent:
                 "tools": "agent_tools",
                 END: END,
             },
-            #self.should_continue
         )
-        networkAgentGraph.add_edge(START, "agent_model")
+        workflow.add_conditional_edges(
+            START, 
+            self.should_clear_history,
+            { "clear_history": "clear_history",
+              "agent_model": "agent_model"})
 
-        self.networkAgentApp = networkAgentGraph.compile(
+        self.networkAgentApp = workflow.compile(
             checkpointer=memory,
             # interrupt_before=[
             #     "unsafe_tools"
@@ -151,6 +170,28 @@ class NetworkAgent:
         self.config = {"configurable":{"thread_id": "1"}}
 
     
+    def should_clear_history(self, state: NetworkAgentState) -> str:
+        if state["question"].lower() in ['/reset', '/clear']: 
+            return "clear_history" 
+        else: 
+            return "agent_model"
+
+    # ---------------------
+    # Node functions
+    # ---------------------
+    
+    def clear_history(self, state: NetworkAgentState):
+        """
+        Reset the messages history.
+        """
+        logger.debug("---CLEAR HISTORY---")
+        question = state["question"]
+        if question in ['/clear', '/reset']:
+            logger.debug("Chat reset requested")
+            return {"messages": []}
+        else:
+            return state
+            
     def agent_model(self, state: NetworkAgentState, config: RunnableConfig):
         """
         Invokes the agent model to generate a response based on the current state. Given
@@ -171,13 +212,15 @@ class NetworkAgent:
         # We return a list, because this will get added to the existing list
         state["messages"] = response
         return state
-
-    def reset_agent(self):
-        self.networkAgentApp.get_state(self.config).values['messages'] = []
+    
+    # ---------------------
+    # Invoke agent app
+    # ---------------------
 
     def run(self, question):
         logger.info("running network agent with question '%s'", question)
-        inputs = {"messages": [HumanMessage(content=question)]}
+        inputs = {"messages": [HumanMessage(content=question)],
+                  "question": question}
         response = self.networkAgentApp.invoke(inputs, self.config)
-        logger.info(response)
+        logger.info(f"Agent response : {response}")
         return response['messages'][-1].content

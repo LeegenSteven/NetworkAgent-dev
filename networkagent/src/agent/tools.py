@@ -7,8 +7,15 @@ from utils.k8s import get_client, get_credentials
 import os
 from google.cloud import bigquery
 import uuid
+from utils.git_helpers import *
+import yaml
 
 logger = logging.getLogger(__name__)
+
+# if GITOPS true then the service deletion / creation
+# is performed through the Gitea repository + Config Sync
+# Otherwise it is executed directly through K8s apply/delete
+GITOPS = True
 
 ######################################################################
 # Get existing customer locations tool
@@ -18,7 +25,8 @@ def getCustomerLocations(
     name: Annotated[str, "The customer name"]
     )-> str:
     """
-    Fetch a list of Customer GCP network locations that can be connected with the available connectivity services
+    Fetch a list of Customer GCP network locations that can be connected 
+    with the available connectivity services
 
     Returns:
       A list of customer locations or network names in Markdown format.
@@ -36,9 +44,8 @@ def getCustomerLocations(
             kind="ComputeSubnetwork",
         )
         result=network_api.get(label_selector=f"customer={name.lower()}")
-        locations=f"""
-**Network Locations for Customer {name}**
-"""
+        locations=""
+
         for item in result.items:
             logger.info(item)
             location = f"""
@@ -46,10 +53,13 @@ __Network Name:__ {item['metadata']['name']}
 * _Description_: {item['spec']['description']}
 * _CIDR_: {item['spec']['ipCidrRange']}
             """
-            locations=locations + location
+            locations = locations + location
 
-        if len(locations)==0:
-            return "No locations found"
+        if locations:
+             locations = f"**Network Locations for Customer {name}**" + locations
+        else:
+            locations = f"Customer {name} has no locations"
+
 
         return locations
     except kubernetes.client.rest.ApiException as e:
@@ -148,7 +158,7 @@ def getServices(
     name: Annotated[str, "The Customer name"]
     )-> str:
     """
-    Fetch the network connectivity service instances that are already deployed for a specified customer.
+    Fetch the network connectivity service instances that are currently deployed for a specified customer.
 
     Returns:
         Connectivity service instances and their status in Markdown format
@@ -162,9 +172,7 @@ def getServices(
     customerName = name.lower()
 
     try:
-        services_list=f"""
-**Connectivity Service Instances for {name}**
-"""
+        services_list=""
         network_api = client.resources.get(
             api_version="apiextensions.k8s.io/v1", 
             kind="CustomResourceDefinition",
@@ -195,6 +203,11 @@ def getServices(
 """
                     services_list=services_list+service_description
 
+        if services_list:
+             services_list=f"**Connectivity Service Instances for {name}**" + services_list
+        else:
+            services_list=f"Customer {name} has no connectivty services currently deployed."
+
         logger.debug(services_list)
         return services_list
 
@@ -211,51 +224,65 @@ def getServices(
 def createService(
     customerName: Annotated[str, "customer name is required"],
     serviceKind: Annotated[str, "the kubernetes kind for this service instance"], 
+    serviceName: Annotated[str, "the kubernetes name for this service instance"], 
     serviceSpec: Annotated[Dict, "the kubernetes spec object for the new service"]
-    )->str:
+    ) -> str:
     """
-    Tool used to instantiate a new network connectivity service. 
-
-    The types of network connectivity services available can be discovered by calling the getServiceDefinitions tool
-
+    Tool used to deploy (also called instantiate) a new network connectivity service. 
+    The types and specifications of network connectivity services available can be discovered by calling the getServiceDefinitions tool.
+    Only call this tool if explicitely stated in the network agent query or question.
+    Always ask for an explicit confirmation by yes or no before deleting the service.
     """
     logger.info("Create a new Service for %s from %s", customerName, str(serviceSpec))
-
-    client = kubernetes.dynamic.DynamicClient(get_client())
-    name = customerName.lower()
 
     # If the user gave the entire spec block then only keep its
     # content which should be the 'interfaces' description
     if "spec" in serviceSpec.keys():
         serviceSpec = serviceSpec["spec"]
-    
-    try:
-        network_api = client.resources.get(
-            api_version="google.dev/v1",
-            kind=serviceKind,
-        )
-        crd_manifest= { 
-            "apiVersion": "google.dev/v1",
-            "kind": serviceKind,
-            "metadata": {
-                "name": name+str(uuid.uuid4())[:8],
-                "namespace": "automation",
-                "labels": {
-                    "customer": name
-                },
-            },
-            "spec": serviceSpec
-        }
-        result = network_api.create(crd_manifest)
+    customerName = customerName.lower()
+    if not serviceName:
+        serviceName = serviceKind.lower()+str(uuid.uuid4())[:8]
 
-        return "new service request successful"
-    except kubernetes.client.rest.ApiException as e: 
-        logger.info(e.status)
-        logger.debug(e)
-        if e.status == 409:
-            return f"service {name} already exists"
+    crd_manifest= { 
+        "apiVersion": "google.dev/v1",
+        "kind": serviceKind,
+        "metadata": {
+            "name": serviceName,
+            "labels": {
+                "customer": customerName,
+                "graph": "true"
+            },
+        },
+        "spec": serviceSpec
+    }
+
+    crd_manifest_string = yaml.dump(crd_manifest, indent=2)
+    if GITOPS:
+        filename = serviceName+".yaml"
+        result = commit_git_file(filename,
+                                 f"Deployment of {serviceName}",
+                                 crd_manifest_string)
+        if result:
+            return f"service {serviceName} manifest successfully submitted for deployment: ```{crd_manifest_string}```"
         else:
-            logger.info(e)
+            return f"service {serviceName} could not be deployed"
+
+    else:
+        client = kubernetes.dynamic.DynamicClient(get_client())
+        try:
+            network_api = client.resources.get(
+                api_version="google.dev/v1",
+                kind=serviceKind,
+            )
+            result = network_api.create(crd_manifest)
+            return "new service request successful"
+        except kubernetes.client.rest.ApiException as e: 
+            logger.info(e.status)
+            logger.debug(e)
+            if e.status == 409:
+                return f"service {serviceName} already exists"
+            else:
+                logger.info(e)
 
 ######################################################################
 # Delete an existing connectivity service
@@ -264,31 +291,41 @@ def createService(
 def deleteService(
     name: Annotated[str, "The name of the service instance to delete"], 
     kind: Annotated[str, "The kubernetes kind of the service instance to delete"]
-    )->str:
+     ) -> str:
     """
-    Delete a running network connectivity service instance
+    Delete a running network connectivity service instance.
+    Only call this tool if explicitely stated in the network agent query or question.
+    Always ask for an explicit confirmation by yes or no before deleting the service.
     """
     if name is None or kind is None:
         return {}, 400
-
-    client = kubernetes.dynamic.DynamicClient(get_client())
-
-    try:
-        network_api = client.resources.get(
-            api_version="google.dev/v1", 
-            kind=kind,
-        )
-        network_api.delete(name=name, namespace="automation")
-        return f"Service {name} deleted request submitted"
-
-    except kubernetes.client.rest.ApiException as e: 
-        logger.info(e.status)
-        logger.debug(e)
-        if e.status == 404:
-            logger.info("No service found")
-            return "No service found"
+    
+    if GITOPS:
+        filename = name+".yaml"
+        result = delete_git_file(filename, f"{name} deletion")
+        if result:
+            return f"service {name} successfully submitted for deletion"
         else:
-            logger.info(e)
+            return f"service {name} could not be deleted"
+
+    else:
+        client = kubernetes.dynamic.DynamicClient(get_client())
+        try:
+            network_api = client.resources.get(
+                api_version="google.dev/v1", 
+                kind=kind,
+            )
+            network_api.delete(name=name, namespace="automation")
+            return f"Service {name} deleted request submitted"
+
+        except kubernetes.client.rest.ApiException as e: 
+            logger.info(e.status)
+            logger.debug(e)
+            if e.status == 404:
+                logger.info("No service found")
+                return "No service found"
+            else:
+                logger.info(e)
 
 
 ######################################################################

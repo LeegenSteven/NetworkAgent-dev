@@ -1,12 +1,9 @@
 import logging
-import utils.constants as constants
 from utils.compute import *
 import json
-import ipaddress
 # Imports the Google Cloud Spanner Client Library.
 from google.cloud import spanner
 # This is to generate KG node embeddings
-import vertexai
 from vertexai.language_models import TextEmbeddingInput, TextEmbeddingModel
 
 # Parameters for vertex AI embedding

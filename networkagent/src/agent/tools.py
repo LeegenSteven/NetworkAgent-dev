@@ -263,7 +263,7 @@ def createService(
                                  f"Deployment of {serviceName}",
                                  crd_manifest_string)
         if result:
-            return f"service {serviceName} manifest successfully submitted for deployment: ```{crd_manifest_string}```"
+            return f"service {serviceName} manifest successfully submitted for deployment:\ `{crd_manifest_string}`"
         else:
             return f"service {serviceName} could not be deployed"
 

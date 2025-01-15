@@ -2,17 +2,15 @@ import logging
 import kubernetes
 import json
 from gitea import *
+from utils.k8s import get_client
 
 logger = logging.getLogger(__name__)
 
 PORT=3000
 
-# Comment out for local test
-kubernetes.config.load_kube_config()
-
 # Get the Gitea URL from the K8s resource description
 def get_gitea_url():
-  client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+  client = kubernetes.dynamic.DynamicClient(get_client())
   resource_api = client.resources.get(api_version='google.dev/v1', kind='Gitea')
   try:
     namespace='automation'

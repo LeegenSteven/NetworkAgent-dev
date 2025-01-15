@@ -17,8 +17,11 @@ then
     exit 0
 fi
 
-if [ -z "${GOOGLE_PROJECT}" ] || [ -z "${GOOGLE_REGION}" ] || [ -z "${GOOGLE_ZONE}" ] || [ -z "${GOOGLE_USER}" ]; then
-    echo "You must set GOOGLE_USER, GOOGLE_PROJECT, GOOGLE_REGION, and GOOGLE_ZONE environment variables"
+# The WEBAPPS_PWD is used for all web front ends like Gitea, Streamlit NW Agent
+# This is to avoid hard coding the passwd in source code
+if [ -z "${GOOGLE_PROJECT}" ] || [ -z "${GOOGLE_REGION}" ] || \
+   [ -z "${GOOGLE_ZONE}" ] || [ -z "${GOOGLE_USER}" ] || [ -z "${WEBAPPS_PWD}" ]; then
+    echo "You must set GOOGLE_USER, GOOGLE_PROJECT, GOOGLE_REGION, GOOGLE_ZONE and WEBAPPS_PWD environment variables"
     exit 0
 fi
 
@@ -339,7 +342,7 @@ Start()
     done
     gitea_host=$(kubectl get gitea gitea -o 'jsonpath={..status.create_gitea.external_ip_address}')
     echo -e "\nGitea server is available at:\n\thttps://$gitea_host:3000/explore/repos\n"
-    echo "You can clone the git repos as follows (username/password = networkagent/password123)"
+    echo "You can clone the git repos as follows (username/password = networkagent/${WEBAPPS_PWD})"
     echo "  git clone https://$gitea_host:3000/networkagent/core -c http.sslVerify=false"
     echo "  git clone https://$gitea_host:3000/networkagent/dublin -c http.sslVerify=false"
     echo "  git clone https://$gitea_host:3000/networkagent/london -c http.sslVerify=false"
@@ -524,9 +527,24 @@ Networkagent()
     cd networkagent
     export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
     gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+    # Check if allUsers access is already granted. 
+    # If not Allow allUsers to invoke the Cloud Run service
+    gcloud run services get-iam-policy network-agent --region=$GOOGLE_REGION --project=$GOOGLE_PROJECT \
+           --format="value(bindings.members)" 2>&1 | fgrep -q allUsers
+    if [ $? -ne 0 ]; then
+      gcloud run services add-iam-policy-binding network-agent --member='allUsers' --role='roles/run.invoker' \
+            --region=$GOOGLE_REGION --project=$GOOGLE_PROJECT >/dev/null 2>&1
+      if [ $? -eq 1 ]; then
+        echo "ERROR : could not setup access for all Users on the Cloud Run service network-agent"
+        echo "You must probably disable the Domain Restriction sharing policy of your domain."
+        echo "Then run this command again and re-enable the DRS policy"
+        exit 0
+      fi
+    fi
     gcloud run deploy network-agent --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networkagent:latest \
        --region $GOOGLE_REGION --service-account $GOOGLE_SERVICE_ACCOUNT \
-       --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT,GOOGLE_REGION=$GOOGLE_REGION,GOOGLE_ZONE=$GOOGLE_ZONE
+       --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT,GOOGLE_REGION=$GOOGLE_REGION,GOOGLE_ZONE=$GOOGLE_ZONE,WEBAPPS_PWD="$WEBAPPS_PWD" \
+       --allow-unauthenticated
     cd ..
 }
 
@@ -540,15 +558,21 @@ Help()
    echo
    echo "Syntax: install.sh [-c|-s|-o|-r|-n|-k|-d|-p]"
    echo "options:"
-   echo "  -c     create keys and manifests."
-   echo "  -s     start network agent environment (incl. operator)."
+   echo "  -c     create network agent environment (keys, manifests,..)"
+   echo "  -s     build and start network agent runtime (incl. the operator)"
    echo "  -o     build and deploy the operator"
    echo "  -t     build and deploy the rest tools"
    echo "  -n     build and deploy the networkagent"
-   echo "  -k     kill the environment resources."
-   echo "  -d     delete the network agent environment."
+   echo "  -k     stop and delete the network agent runtime (GKE cluster, VMS, DB, etc..)"
+   echo "  -d     delete the network agent environment (keys, manifests...)."
    echo "  -p     deploy porch tools"
-   echo
+   echo 
+   echo "Some typical use cases:"
+   echo " - To create and run a network agent environment including the operator: ./install.sh -c; ./install.sh -s"
+   echo " - To redeploy the operator alone : ./install.sh -o"
+   echo " - To (re)deploy the network agent Web UI alone : ./install.sh -n"
+   echo " - To regenerate the network agent runtime with the same environment setup: ./install.sh -k; ./install.sh -s"
+   echo " - To recreate a complete environment and runtime from scratch: ./install.sh -k; ./install.sh -d; ./install.sh -c; ./install.sh -s"
 }
 
 ############################################################

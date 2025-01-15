@@ -221,6 +221,8 @@ class NetworkAgent:
         logger.info("running network agent with question '%s'", question)
         inputs = {"messages": [HumanMessage(content=question)],
                   "question": question}
-        response = self.networkAgentApp.invoke(inputs, self.config)
-        logger.info(f"Agent response : {response}")
-        return response['messages'][-1].content
+        responses = self.networkAgentApp.invoke(inputs, self.config)
+        last_response_content = responses['messages'][-1].content
+        logger.debug(f"Agent full response : {responses}")
+        logger.info(f"Agent last response : {last_response_content}")
+        return last_response_content

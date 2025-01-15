@@ -1,3 +1,4 @@
+import os
 import base64
 import logging
 logger = logging.getLogger(__name__)
@@ -8,7 +9,7 @@ from utils.gitea_extension import *
 # FIXME: change this user credentials into an authentication token
 # generated at Gitea server creation time 
 USER = 'networkagent'
-PWD = 'password123'
+PWD = os.environ['WEBAPPS_PWD']
 SERVICE_REPO = 'core'
 MASTER_BRANCH = 'master'
 

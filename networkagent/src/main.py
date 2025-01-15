@@ -1,8 +1,9 @@
+import hmac
 import logging
 import os
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
-logging.basicConfig(level=logging.INFO, format=log_format)
+logging.basicConfig(level=logging.DEBUG, format=log_format)
 logger = logging.getLogger(__name__)
 
 import streamlit as st
@@ -17,6 +18,30 @@ from streamlit_autorefresh import st_autorefresh
 from langchain_core.messages import AIMessage, HumanMessage
 from agent.networkagent import NetworkAgent
 import graph.topology as topology
+
+# From https://ploomber.io/blog/streamlit-password/
+def check_password():
+    """Returns `True` if the user had the correct password."""
+    def password_entered():
+        # If you use .streamlit/secrets.toml, replace os.environ.get with st.secrets["STREAMLIT_PASSWORD"]
+        if hmac.compare_digest(st.session_state["password"], os.environ.get("WEBAPPS_PWD", "")):
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]
+        else:
+            st.session_state["password_correct"] = False
+
+    # Return True if the password is validated.
+    if st.session_state.get("password_correct", False):
+        return True
+
+    # Show input for password.
+    st.text_input(
+        "Password", type="password", on_change=password_entered, key="password"
+    )
+    if "password_correct" in st.session_state:
+        st.error("😕 Password incorrect")
+    return False
+
 
 def reset_chat_history():
   """
@@ -35,6 +60,9 @@ if "chat_history" not in st.session_state:
 project = os.environ.get("GOOGLE_PROJECT")
 
 st.title("Autonomous Network Agent")
+
+if not check_password():
+  st.stop()
 
 # --------------------------------------------
 # Side Bar (Settings and links)

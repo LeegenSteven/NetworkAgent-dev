@@ -82,5 +82,5 @@
   register: users
 
 - name: create networkagent user
-  command: "sudo -u git /usr/local/bin/gitea admin user create --username networkagent --password password123 --email me@example.com --config /etc/gitea/app.ini"
+  command: "sudo -u git /usr/local/bin/gitea admin user create --username networkagent --password {{ lookup('env', 'WEBAPPS_PWD') }} --email me@example.com --config /etc/gitea/app.ini"
   when: not "networkagent" in users.stdout

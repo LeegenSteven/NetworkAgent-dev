@@ -62,7 +62,7 @@
     chdir: /opt/london-cluster-repo
 
 - name: add remote repo
-  command: sudo -u git git remote add origin https://networkagent:password123@{{ansible_host}}:3000/networkagent/london-cluster.git
+  command: sudo -u git git remote add origin https://networkagent:{{ lookup('env', 'WEBAPPS_PWD') }}@{{ansible_host}}:3000/networkagent/london-cluster.git
   args:
     chdir: /opt/london-cluster-repo
 

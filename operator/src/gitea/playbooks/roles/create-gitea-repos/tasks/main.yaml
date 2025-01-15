@@ -2,7 +2,7 @@
 # Get API token
 ########################################################
 - name: authenticate with gitea
-  command: "curl -H 'Content-Type: application/json' -d '{\"name\":\"root-repo\", \"scopes\":[\"write:repository\", \"write:user\", \"write:admin\"]}' -u networkagent:password123 https://{{ansible_host}}:3000/api/v1/users/networkagent/tokens --insecure"
+  command: "curl -H 'Content-Type: application/json' -d '{\"name\":\"root-repo\", \"scopes\":[\"write:repository\", \"write:user\", \"write:admin\"]}' -u networkagent:{{ lookup('env', 'WEBAPPS_PWD') }} https://{{ansible_host}}:3000/api/v1/users/networkagent/tokens --insecure"
   register: result
 
 - set_fact:

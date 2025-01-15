@@ -69,7 +69,7 @@
     chdir: /opt/root-repo
 
 - name: add remote repo
-  command: sudo -u git git remote add origin https://networkagent:password123@{{ansible_host}}:3000/networkagent/root-repo.git
+  command: sudo -u git git remote add origin https://networkagent:{{ lookup('env', 'WEBAPPS_PWD') }}@{{ansible_host}}:3000/networkagent/root-repo.git
   args:
     chdir: /opt/root-repo
 

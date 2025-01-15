@@ -48,7 +48,7 @@
     chdir: /opt/core-repo
 
 - name: add remote repo
-  command: sudo -u git git remote add origin https://networkagent:password123@{{ansible_host}}:3000/networkagent/core.git
+  command: sudo -u git git remote add origin https://networkagent:{{ lookup('env', 'WEBAPPS_PWD') }}@{{ansible_host}}:3000/networkagent/core.git
   args:
     chdir: /opt/core-repo
 
@@ -75,8 +75,8 @@
 
 - name: push mesh
   ansible.builtin.copy:
-    src: mesh.yaml
-    dest: /opt/core-repo/mesh.yaml
+    src: meshservice1.yaml
+    dest: /opt/core-repo/meshservice1.yaml
     owner: git
     group: git
     mode: '0644'

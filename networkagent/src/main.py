@@ -50,6 +50,7 @@ def reset_chat_history():
   st.session_state.chat_history = [
     AIMessage(content="Hello, I am your network assistant. How can I help you ?"),
   ]
+  st.session_state.agent = NetworkAgent()
 
 # Setup Agent and chat history
 if "agent" not in st.session_state:

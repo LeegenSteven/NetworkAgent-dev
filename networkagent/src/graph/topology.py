@@ -270,7 +270,7 @@ def create_network_cytoscape():
   return cytoscape(
       elements,
       stylesheet,
-      height="700px",
+      height="680px",
       layout=layout,
       selection_type="single",
       user_panning_enabled=True,

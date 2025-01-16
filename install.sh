@@ -527,6 +527,16 @@ Networkagent()
     cd networkagent
     export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
     gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+
+    gcloud run deploy network-agent --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networkagent:latest \
+       --region $GOOGLE_REGION --service-account $GOOGLE_SERVICE_ACCOUNT \
+       --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
+       --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
+       --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
+       --update-env-vars WEBAPPS_PWD=${WEBAPPS_PWD} \
+       --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
+       --allow-unauthenticated
+
     # Check if allUsers access is already granted. 
     # If not Allow allUsers to invoke the Cloud Run service
     gcloud run services get-iam-policy network-agent --region=$GOOGLE_REGION --project=$GOOGLE_PROJECT \
@@ -536,15 +546,11 @@ Networkagent()
             --region=$GOOGLE_REGION --project=$GOOGLE_PROJECT >/dev/null 2>&1
       if [ $? -eq 1 ]; then
         echo "ERROR : could not setup access for all Users on the Cloud Run service network-agent"
-        echo "You must probably disable the Domain Restriction sharing policy of your domain."
+        echo "You must probably disable the Domain Restricted Sharing policy of your domain."
         echo "Then run this command again and re-enable the DRS policy"
         exit 0
       fi
     fi
-    gcloud run deploy network-agent --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networkagent:latest \
-       --region $GOOGLE_REGION --service-account $GOOGLE_SERVICE_ACCOUNT \
-       --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT,GOOGLE_REGION=$GOOGLE_REGION,GOOGLE_ZONE=$GOOGLE_ZONE,WEBAPPS_PWD="$WEBAPPS_PWD" \
-       --allow-unauthenticated
     cd ..
 }
 

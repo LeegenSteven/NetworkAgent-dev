@@ -84,3 +84,9 @@
 - name: create networkagent user
   command: "sudo -u git /usr/local/bin/gitea admin user create --username networkagent --password password123 --email me@example.com --config /etc/gitea/app.ini"
   when: not "networkagent" in users.stdout
+
+- name: copy ssh private key to /opt
+  copy:
+    src: "{{BASEDIR}}/google-compute"
+    dest: "/opt/google-compute"
+    mode: '0600'

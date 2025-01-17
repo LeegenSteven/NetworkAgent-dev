@@ -11,7 +11,7 @@ async def create_gitea(spec, name, namespace, logger, **kwargs):
 
     # Create external IP address
     await create_external_ip(namespace, "gitea", os.getenv("GOOGLE_REGION"), graph=False)
-    external_ip_address = await get_external_ip_address(namespace, "gitea")
+    external_ip_address = await get_ip_address(namespace, "gitea")
 
     # Create VM and attach IP address
     await create_compute(namespace, 

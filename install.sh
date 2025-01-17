@@ -230,7 +230,8 @@ Start()
     --workload-pool $GOOGLE_PROJECT.svc.id.goog \
     --zone $GOOGLE_ZONE\
     --node-locations $GOOGLE_ZONE \
-    --num-nodes 8 \
+    --num-nodes 2 \
+    --machine-type "n1-standard-4" \
     --enable-fleet \
     --network mgmt \
     --subnetwork mgmt-subnet
@@ -411,7 +412,8 @@ Kill()
     echo "##############################################"
     echo "Killing the environment - will take a few mins"
     echo "##############################################"
-
+    kubectl config set-context --current --namespace $GOOGLE_NAMESPACE
+    
     # kubectl delete -f sample-services/connectivity-services
     # kubectl delete -f sample-services/locations
     # kubectl delete -f environment/prometheus.yaml

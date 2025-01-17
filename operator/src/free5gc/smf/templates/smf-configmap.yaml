@@ -50,14 +50,14 @@ data:
       pfcp: # the IP address of N4 interface on this SMF (PFCP)
         nodeID: smf-nsmf # the Node ID of this SMF
         listenAddr: 0.0.0.0 # the IP/FQDN of N4 interface on this SMF (PFCP)
-        externalAddr: smf-nsmf # the IP/FQDN of N4 interface on this SMF (PFCP)
+        externalAddr: {{ LOADBALANCERIP }} # the IP/FQDN of N4 interface on this SMF (PFCP)
       userplaneInformation: # list of userplane information
         upNodes: # information of userplane node (AN or UPF)
           gNB1: # the name of the node
             type: AN # the type of the node (AN or UPF)
-          UPF: # the name of the node
+          {{UPFNAME}}: # the name of the node
             type: UPF # the type of the node (AN or UPF)
-            nodeID: {{UPFNAME}} # the Node ID of this UPF
+            nodeID: {{UPFADDRESS}} # the Node ID of this UPF
             addr: {{UPFADDRESS}} # the IP/FQDN of N4 interface on this UPF (PFCP)
             sNssaiUpfInfos: # S-NSSAI information list for this UPF
               - sNssai: # S-NSSAI (Single Network Slice Selection Assistance Information)
@@ -66,9 +66,9 @@ data:
                 dnnUpfInfoList: # DNN information list for this S-NSSAI
                   - dnn: internet
                     pools:
-                      - cidr: {{DNN_CIDR}}
+                      - cidr: 10.60.0.0/16
                     staticPools:
-                      - cidr: {{DNN_STATIC_CIDR}}
+                      - cidr: 10.60.100.0/24
             interfaces: # Interface list for this UPF
               - interfaceType: N3 # the type of the interface (N3 or N9)
                 endpoints: # the IP address of this N3/N9 interface on this UPF
@@ -77,7 +77,7 @@ data:
                   - internet
         links: # the topology graph of userplane, A and B represent the two nodes of each link
           - A: gNB1
-            B: UPF
+            B: {{UPFNAME}}
       # retransmission timer for pdu session modification command
       t3591:
         enable: true     # true or false
@@ -110,7 +110,7 @@ data:
           - A: gNB1
             B: {{UPFNAME}}
         specificPath:
-          - dest: {{DNN_DESTINATION_IP}} # the destination IP address on Data Network (DN)
+          - dest: 10.0.0.11/32 # the destination IP address on Data Network (DN)
             # the order of UPF nodes in this path. We use the UPF's name to represent each UPF node.
             # The UPF's name should be consistent with smfcfg.yaml
             path: [{{UPFNAME}}]
@@ -124,7 +124,7 @@ data:
           - A: gNB1
             B: {{UPFNAME}}
         specificPath:
-          - dest: {{DNN_DESTINATION_IP}} # the destination IP address on Data Network (DN)
+          - dest: 10.0.0.11/32 # the destination IP address on Data Network (DN)
             # the order of UPF nodes in this path. We use the UPF's name to represent each UPF node.
             # The UPF's name should be consistent with smfcfg.yaml
             path: [{{UPFNAME}}]
@@ -138,4 +138,4 @@ data:
         pfds: # PFDs for the Application
           - pfdID: pfd1 # PFD identifier
             flowDescriptions: # Represents a 3-tuple with protocol, server ip and server port for UL/DL application traffic
-              - permit out ip from {{DNN_GATEWAY_ADDRESS}} 8080 to any
+              - permit out ip from 10.60.0.1 8080 to any

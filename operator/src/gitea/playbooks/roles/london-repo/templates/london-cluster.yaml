@@ -1,3 +1,14 @@
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeAddress
+metadata:
+  name: london-cluster-ip-lb
+spec:
+  addressType: INTERNAL
+  description: a shared IP for london cluster internal load balancer
+  location: "{{GOOGLE_REGION}}"
+  purpose: SHARED_LOADBALANCER_VIP
+  subnetworkRef:
+    name: london
 ---
 apiVersion: gkehub.cnrm.cloud.google.com/v1beta1
 kind: GKEHubFeatureMembership
@@ -9,8 +20,6 @@ spec:
   projectRef:
     name: {{GOOGLE_PROJECT}}
   location: global
-  # membershipLocation needs to be explicitly set here because the dependent membership is regional.
-  # membershipLocation: {{GOOGLE_REGION}}
   membershipRef:
     name: london-cluster-membership
   featureRef:
@@ -62,8 +71,16 @@ spec:
   enableAutopilot: false
   enableLegacyAbac: true
   location: "{{GOOGLE_REGION}}"
-  initialNodeCount: 10
+  initialNodeCount: 4
   defaultMaxPodsPerNode: 16
+  enableL4IlbSubsetting: true
+  nodeConfig:
+    machineType: n1-standard-4
+    diskSizeGb: 100
+    diskType: pd-standard
+    preemptible: false
+    minCpuPlatform: "Intel Haswell"
+    imageType: "ubuntu_containerd"
   releaseChannel:
     channel: STABLE
   workloadIdentityConfig:
@@ -80,7 +97,6 @@ spec:
     namespace: london
   nodeLocations:
     - "{{GOOGLE_ZONE}}"
-
 ---
 apiVersion: resourcemanager.cnrm.cloud.google.com/v1beta1
 kind: Project

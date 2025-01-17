@@ -22,7 +22,8 @@ async def run_install(namespace, upf_vm_name):
         'GOOGLE_PROJECT': os.getenv("GOOGLE_PROJECT"),
         'GOOGLE_REGION': os.getenv("GOOGLE_REGION"),
         'GOOGLE_ZONE': os.getenv("GOOGLE_ZONE"),
-        'BASEDIR': constants.basedir
+        'BASEDIR': constants.basedir, 
+        'amfAddress': '10.0.0.0:1234'
     }
     hosts = {
         'hosts': {

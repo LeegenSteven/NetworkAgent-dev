@@ -11,7 +11,7 @@ async def create_netbox(spec, name, namespace, logger, **kwargs):
 
     # Create external IP address
     await create_external_ip(namespace, "netbox", os.getenv("GOOGLE_REGION"))
-    external_ip_address = await get_external_ip_address(namespace, "netbox")
+    external_ip_address = await get_ip_address(namespace, "netbox")
 
     # Create VM and attach IP address
     await create_compute(namespace, 

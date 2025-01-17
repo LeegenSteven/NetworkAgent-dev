@@ -49,6 +49,7 @@ spec:
   networkRef:
     name: london
     namespace: london
-  direction: INGRESS
+  direction: INGRESS\
+  priority: 500
   sourceRanges:
     - 0.0.0.0/0

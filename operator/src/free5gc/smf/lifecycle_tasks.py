@@ -1,6 +1,7 @@
 import kubernetes
 import kopf
 import logging
+from utils.compute import get_ip_address
 from free5gc.utils.k8s import get_api_client, getClusterDetails
 from jinja2 import Environment, FileSystemLoader
 import os
@@ -8,9 +9,23 @@ import os
 logger = logging.getLogger(__name__)
 
 ##########################################################
+# get the load balancer IP address
+##########################################################
+async def getLoadBalancerIP():
+    logger.info("Get load balancer IP address for london-cluster")
+    cluster = await getClusterDetails("networkautomation")
+    if cluster is None:
+        raise kopf.PermanentError("No networkautation cluster found")
+
+    # get the ip address of the shared loadbalancer compute ip
+    networkautomation_api_client= get_api_client(cluster.endpoint, cluster.master_auth.cluster_ca_certificate)
+    lbIp = await get_ip_address("london", "london-cluster-ip-lb", networkautomation_api_client)
+    return lbIp
+
+##########################################################
 # template the smf manifests
 ##########################################################
-async def template_smf_manifest(folder, filename,upfname,upfip,dnn_cidr,dnn_static_cidr,dnn_gateway_address,dnn_destination_ip):
+async def template_smf_manifest(folder, filename,upfname,upfip, lbip):
     environment = Environment(loader=FileSystemLoader(folder))
     template = environment.get_template(filename)
     output=template.render(
@@ -19,10 +34,7 @@ async def template_smf_manifest(folder, filename,upfname,upfip,dnn_cidr,dnn_stat
         GOOGLE_PROJECT=os.getenv("GOOGLE_PROJECT"),
         UPFNAME=upfname,
         UPFADDRESS=upfip,
-        DNN_CIDR=dnn_cidr,
-        DNN_STATIC_CIDR=dnn_static_cidr,
-        DNN_GATEWAY_ADDRESS=dnn_gateway_address,
-        DNN_DESTINATION_IP=dnn_destination_ip
+        LOADBALANCERIP=lbip
         )
     return output
 

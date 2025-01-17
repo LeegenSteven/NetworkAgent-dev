@@ -38,7 +38,6 @@
     mode: '0644'
   loop:
     - Readme.md
-    - amf-crd.yaml
     - smf-crd.yaml
 
 - name: push templated files
@@ -88,7 +87,6 @@
     mode: '0644'
   loop:
     - smf.yaml
-    - amf.yaml
 
 - name: push templated files
   ansible.builtin.template:
@@ -99,6 +97,7 @@
     mode: '0644'
   loop:
     - ausf.yaml
+    - amf.yaml
     - mongodb.yaml
     - nrf.yaml
     - nssf.yaml

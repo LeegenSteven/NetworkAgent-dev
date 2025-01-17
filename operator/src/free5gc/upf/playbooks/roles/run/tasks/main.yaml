@@ -6,11 +6,13 @@
   - upfcfg.yaml
   - upf-iptables.sh
 
+# docker run -d --name upf --network host -v $(pwd)/upfcfg.yaml:/free5gc/config/upfcfg.yaml -v $(pwd)/upf-iptables.sh:/free5gc/upf-iptables.sh --cap-add NET_ADMIN 
+# docker run -ti --name upf --network host -v $(pwd)/upfcfg.yaml:/free5gc/config/upfcfg.yaml -v $(pwd)/upf-iptables.sh:/free5gc/upf-iptables.sh --cap-add NET_ADMIN europe-west2-docker.pkg.dev/mobie-core-999/networkagent/upf /bin/bash
+
 # run upf image with config above, docker with host networking
 # - name: Container present
 #   docker_container:
 #     name: upf
 #     state: present
-#     image: 
-#     command: ??
+#     image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/networkagent/upf:latest
 #     network_mode: host

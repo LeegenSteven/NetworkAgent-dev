@@ -55,6 +55,10 @@
   ansible.builtin.git:
     repo: https://github.com/free5gc/gtp5g.git
     dest: /opt/gtp5
+    version: "v0.8.10"
+    clone: yes  # Ensure the repo is cloned (not just updated)
+    update: yes
+    force: yes 
 
 - name: Build and install gtp module
   ansible.builtin.shell: |
@@ -72,5 +76,5 @@
 - name: authenticate with the artefact repo
   raw: "cat /opt/networkagent.json | docker login -u _json_key --password-stdin https://{{GOOGLE_REGION}}-docker.pkg.dev"
 
-# - name: docker pull upf
-#   command: "docker pull {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/networkagent/upf:latest"
+- name: docker pull upf
+  command: "docker pull {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/networkagent/upf:latest"

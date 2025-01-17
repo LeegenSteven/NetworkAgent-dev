@@ -2,7 +2,7 @@ import logging
 from utils.compute import get_resource_api
 import utils.constants as constants
 import kopf
-from free5gc.smf.lifecycle_tasks import getUPFAddress, template_smf_manifest
+from free5gc.smf.lifecycle_tasks import getUPFAddress, template_smf_manifest, getLoadBalancerIP
 from free5gc.utils.k8s import getClusterIP
 from ruamel.yaml import YAML
 import kubernetes
@@ -10,20 +10,23 @@ import kubernetes
 logger = logging.getLogger(__name__)
 
 ##########################################
-# Create a new userplanefunction
+# Create a new userplanefunctionget_resource_api
 ##########################################
 @kopf.on.create('google.dev', 'v1', 'sessionmanagementfunction')
 async def smf(spec, status, namespace, name, logger, **kwargs):
-  logger.debug(f"Create smf {name} with spec: {spec}")
+  logger.info(f"Create smf {name} with spec: {spec}")
 
   # get the ip address of the named cluster
   ip = await getClusterIP(spec.get("clusterName"))
-  logger.debug("Cluster Public endpoint %s",ip)
+  logger.info("Cluster Public endpoint %s",ip)
 
   # get the ip address of the spec named UPF
   upfname = spec.get("upf").get("name")
   upfnamespace = spec.get("upf").get("namespace")
   upfaddress=await getUPFAddress(upfname, upfnamespace)
+
+  # get the ip address for london cluster load balancer from the networkautomation cluster
+  lbIp = await getLoadBalancerIP()
 
   # render the smf manifests
   smf_files=["smf-configmap.yaml","smf-deployment.yaml","smf-service.yaml"]
@@ -32,10 +35,7 @@ async def smf(spec, status, namespace, name, logger, **kwargs):
                                           f,
                                           upfname,
                                           upfaddress,
-                                          spec.get('dnn').get('cidr'),
-                                          spec.get('dnn').get('static_cidr'),
-                                          spec.get('dnn').get('gateway_address'),
-                                          spec.get('dnn').get('destination_ip'),
+                                          lbIp
                                           )
     logger.debug(manifest)
 

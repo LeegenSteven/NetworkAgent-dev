@@ -75,8 +75,8 @@
 
 - name: push mesh
   ansible.builtin.copy:
-    src: mesh.yaml
-    dest: /opt/core-repo/mesh.yaml
+    src: meshservice1.yaml
+    dest: /opt/core-repo/meshservice1.yaml
     owner: git
     group: git
     mode: '0644'

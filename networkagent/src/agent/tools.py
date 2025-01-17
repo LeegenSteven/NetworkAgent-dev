@@ -256,14 +256,14 @@ def createService(
         "spec": serviceSpec
     }
 
-    crd_manifest_string = yaml.dump(crd_manifest, indent=2)
+    crd_manifest_yaml = yaml.dump(crd_manifest, indent=2)
     if GITOPS:
         filename = serviceName+".yaml"
         result = commit_git_file(filename,
                                  f"Deployment of {serviceName}",
-                                 crd_manifest_string)
+                                 crd_manifest_yaml)
         if result:
-            return f"service {serviceName} manifest successfully submitted for deployment:\ `{crd_manifest_string}`"
+            return f"service {serviceName} manifest successfully submitted for deployment:\n```yaml\n{crd_manifest_yaml}\n```"
         else:
             return f"service {serviceName} could not be deployed"
 

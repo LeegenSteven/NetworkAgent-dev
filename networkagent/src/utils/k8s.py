@@ -9,7 +9,7 @@ import os
 logger = logging.getLogger(__name__)
 
 def external_service_account():
-    credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/tools/networkagent.json"))[0]
+    credentials = get_credentials()
     cluster_manager_client = ClusterManagerClient(credentials=credentials)
 
     GOOGLE_PROJECT = os.getenv("GOOGLE_PROJECT")

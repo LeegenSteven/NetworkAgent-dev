@@ -1,3 +1,4 @@
+import os
 import kopf
 import logging
 from utils.compute import *
@@ -30,6 +31,7 @@ async def run_gitea_install(namespace, external_ip_address):
         'GOOGLE_REGION': os.getenv("GOOGLE_REGION"),
         'GOOGLE_ZONE': os.getenv("GOOGLE_ZONE"),
         'GOOGLE_USER': os.getenv("GOOGLE_USER"),
+        'WEBAPPS_PWD': os.getenv("WEBAPPS_PWD"),
         'BASEDIR': constants.basedir,
         'external_ip_address': external_ip_address,
         'GOOGLE_SSH_KEY': key
@@ -122,7 +124,7 @@ async def create_root_sync(ip_address):
       "sourceType": "git",
       "sourceFormat": "unstructured",
       "git": {
-        "repo": f"https://networkagent:password123@{ip_address}:3000/networkagent/root-repo",
+        "repo": f"https://networkagent:{os.environ['WEBAPPS_PWD']}@{ip_address}:3000/networkagent/root-repo",
         "auth": "none",
         "revision": "HEAD",
         "branch": "master",

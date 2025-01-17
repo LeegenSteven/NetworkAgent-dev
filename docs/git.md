@@ -20,7 +20,8 @@ kubectl get giteas gitea -o jsonpath='{.status.create_gitea.external_ip_address}
 
 Then open a browser at https://<<external_ip_address>>:3000
 
-Log into gitea with the username/password __networkagent/password123__
+Log into gitea with the username/password __networkagent/your_password__ \
+(where your password is the password that you setup at built time in the WEBAPPS_PWD environment variable)
 
 ## Clone the repos to your local machine
 
@@ -39,5 +40,5 @@ git clone https://$GITEA_ADDRESS:3000/networkagent/newyork -c http.sslVerify=fal
 
 ```
 export GITEA_ADDRESS=`kubectl get giteas gitea -o jsonpath='{.status.create_gitea.external_ip_address}'`
-kpt alpha repo register --namespace default --repo-basic-username=networkagent --repo-basic-password=password123 https://$GITEA_ADDRESS:3000/networkagent/blueprints.git
+kpt alpha repo register --namespace default --repo-basic-username=networkagent --repo-basic-password=your_password https://$GITEA_ADDRESS:3000/networkagent/blueprints.git
 ```

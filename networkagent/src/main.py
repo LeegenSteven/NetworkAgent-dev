@@ -13,8 +13,6 @@ import streamlit as st
 st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
 
 import utils.st_extension as st_ext
-from streamlit.components.v1 import html
-from streamlit_autorefresh import st_autorefresh
 
 from langchain_core.messages import AIMessage, HumanMessage
 from agent.networkagent import NetworkAgent
@@ -79,11 +77,14 @@ def graphcontainer_fragment():
      # should not happen but just in case
      selected_elts = { 'nodes': [] }
 
-  time_str = f"<p style='font-size:14px;'>Last updated: {datetime.now().replace(microsecond=0)}</p>"
+  on_off = "ON" if st.session_state.graph_autorefresh else "OFF"
+  time_str = f"<p style='font-size:14px;'>Last updated: {datetime.now().replace(microsecond=0)} (Autorefresh: <b>{on_off})</b></p>"
   st.markdown(time_str, unsafe_allow_html=True)
+
   # The hack below is needed to run the agent again
-  # when an element is selected on the graph for the
-  # propeties panel to refresh but we don't want to go
+  # when an element is selected on the graph so that the
+  # property panel refreshes and display the selected node
+  # properties. But we don't want to go
   # throuh the authentication process again
   st.session_state.fragment_rerun = True
   if "selected_elts" not in st.session_state or (st.session_state["selected_elts"] != selected_elts):
@@ -128,7 +129,7 @@ with st.sidebar:
   st.title("Settings")
   if st.button("Reset chat"):
     reset_chat_history()
-  if st.toggle("Graph Autoreresh", st.session_state.graph_autorefresh, on_change=toggle_autorefresh):
+  if st.toggle("Graph Autorefresh", st.session_state.graph_autorefresh, on_change=toggle_autorefresh):
     logger.info("Graph autorefresh ON")
   else:
     st.session_state.graph_autorefresh = False
@@ -161,7 +162,7 @@ with agentcolumn:
         st.markdown(message.content)
 
   # Accept user input
-  if prompt := st.chat_input("Type your message here...?"):
+  if prompt := st.chat_input("Type your message here..."):
     st.session_state.chat_history.append(HumanMessage(content=prompt))
 
     with chatcontainer.chat_message("Human"):

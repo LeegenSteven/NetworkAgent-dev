@@ -25,7 +25,7 @@
 # Master Branch
 ###############################################
 - name: checkout master branch
-  command: sudo -u git git checkout -b master
+  command: sudo -u git git checkout -B master
   args:
     chdir: /opt/dublin-repo
 
@@ -63,7 +63,7 @@
 # Location Branch
 ###############################################
 - name: checkout location branch
-  command: sudo -u git git checkout -b location
+  command: sudo -u git git checkout -B location
   args:
     chdir: /opt/dublin-repo
 
@@ -104,7 +104,7 @@
 # app Branch
 ###############################################
 - name: checkout app branch
-  command: sudo -u git git checkout -b app
+  command: sudo -u git git checkout -B app
   args:
     chdir: /opt/dublin-repo
 
@@ -138,7 +138,7 @@
 # Network Function Branch
 ###############################################
 - name: checkout network function branch
-  command: sudo -u git git checkout -b networkfunction
+  command: sudo -u git git checkout -B networkfunction
   args:
     chdir: /opt/dublin-repo
 

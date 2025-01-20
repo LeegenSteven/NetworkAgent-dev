@@ -25,7 +25,7 @@
 # Master Branch
 ###############################################
 - name: checkout master branch
-  command: sudo -u git git checkout -b master
+  command: sudo -u git git checkout -B master
   args:
     chdir: /opt/root-repo
 

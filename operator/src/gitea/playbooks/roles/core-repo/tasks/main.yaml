@@ -25,7 +25,7 @@
 # Skeleton Master Branch
 ###############################################
 - name: checkout master branch
-  command: sudo -u git git checkout -b master
+  command: sudo -u git git checkout -B master
   args:
     chdir: /opt/core-repo
 
@@ -61,7 +61,7 @@
 # NetworkFunction branch
 ###############################################
 - name: checkout networkfunction branch
-  command: sudo -u git git checkout -b networkfunction
+  command: sudo -u git git checkout -B networkfunction
   args:
     chdir: /opt/core-repo
 

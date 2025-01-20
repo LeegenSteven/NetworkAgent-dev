@@ -63,7 +63,7 @@
 # location Branch
 ###############################################
 - name: checkout location branch
-  command: sudo -u git git checkout -b location
+  command: sudo -u git git checkout -B location
   args:
     chdir: /opt/london-repo
 
@@ -106,7 +106,7 @@
 # app Branch
 ###############################################
 - name: checkout app branch
-  command: sudo -u git git checkout -b app
+  command: sudo -u git git checkout -B app
   args:
     chdir: /opt/london-repo
 

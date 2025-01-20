@@ -17,6 +17,7 @@ import utils.st_extension as st_ext
 from langchain_core.messages import AIMessage, HumanMessage
 from agent.networkagent import NetworkAgent
 import graph.topology as topology
+from utils.gitea_extension import get_gitea_url
 
 # From https://ploomber.io/blog/streamlit-password/
 def check_password():
@@ -142,6 +143,7 @@ with st.sidebar:
   st.markdown(f"""
   * [Spanner Graph database](https://console.cloud.google.com/spanner/instances/networktopology-instance/databases/networktopology-db/details/tables?invt=Abiyrw&project={project})
   * [Cluster Config status](https://console.cloud.google.com/kubernetes/config_management/packages?project={project})
+  * [GitOps repository]({get_gitea_url()}/networkagent)
   * [Demo Scenario](https://docs.google.com/document/d/1gwCnLlgDaRWUv7I_hqd8aRv4B0ICsC7tj3pU7C8MRw0/edit?usp=sharing)"""
     )
 

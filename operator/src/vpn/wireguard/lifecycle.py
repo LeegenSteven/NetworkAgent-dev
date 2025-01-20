@@ -68,7 +68,7 @@ async def wireguard(body,spec, name, namespace, uid, logger, **kwargs):
     # once the vpn is running create the route from source to allowed interface
     # loop over all allowed interfaces and create routes from source interface
     for peer in peersInfo:
-        logger.debug("Creating route from %s to %s",spec.get('sourceInterface'), peer['allowedInterface'])
+        logger.info("Creating route from %s to %s",spec.get('sourceInterface'), peer['allowedInterface'])
         await create_route(namespace, name, spec.get('sourceInterface'), peer['allowedInterface'])
 
     return {

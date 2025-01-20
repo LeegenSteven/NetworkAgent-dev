@@ -51,16 +51,19 @@ def reset_chat_history():
   ]
   st.session_state.agent = NetworkAgent()
 
+def init_graph_autorefresh():
+  st.session_state.graph_autorefresh = True
+
 # ---------------------------------
 # Graph fragment autorefresh
 # ---------------------------------
 # Start with auto refresh disabled
 if "graph_autorefresh" not in st.session_state:
-  st.session_state.graph_autorefresh = False
+  init_graph_autorefresh()
 if st.session_state.graph_autorefresh:
-   run_every = 3
+  run_every = 3
 else:
-   run_every = None
+  run_every = None
 
 @st.fragment(run_every=run_every)
 def graphcontainer_fragment():
@@ -96,7 +99,7 @@ def graphcontainer_fragment():
 
 def toggle_autorefresh():
   if "graph_autorefresh" not in st.session_state:
-    st.session_state.graph_autorefresh = False
+    init_graph_autorefresh()
   else:
     st.session_state.graph_autorefresh = not st.session_state.graph_autorefresh
 
@@ -132,9 +135,8 @@ with st.sidebar:
   if st.toggle("Graph Autorefresh", st.session_state.graph_autorefresh, on_change=toggle_autorefresh):
     logger.info("Graph autorefresh ON")
   else:
-    st.session_state.graph_autorefresh = False
     logger.info("Graph autorefresh OFF")
-  st.session_state.show_source = st.toggle("Show reponse source", True)
+  st.session_state.show_source = st.toggle("Show response source", True)
 
   st.title("Useful links")
   st.markdown(f"""

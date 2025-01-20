@@ -252,6 +252,9 @@ def createService(
                 "customer": customerName,
                 "graph": "true"
             },
+            "annotations": {
+                "client.lifecycle.config.k8s.io/mutation": "ignore"
+            }
         },
         "spec": serviceSpec
     }

@@ -120,18 +120,30 @@ class NetworkAgent:
             ]
         )
 
-
         retrieval_tool = ResourceRetrievalTool()
 
         def format_docs(docs):
             logger.debug(f"--- DOCS FOUND: {len(docs)} ")
             return "\n\n".join(doc.page_content for doc in docs)
+        
+        # Only keep the mast N messages in the history. Keeping
+        # too many messages slows down Gemini as the RAG documents
+        # stored in the context can be quite lengthy
+        # FIXME: could not find a way to insert this trimmer in the 
+        # runnable chain as it only understqnd a simple list of
+        # not structured input as used below (context, question, messages)
+        trimmer = trim_messages(
+            token_counter=len,
+            strategy="last",
+            max_tokens=6,
+            include_system=True,
+        )
 
         self.network_agent_runnable = (
             {"context": retrieval_tool | format_docs, 
              "question": RunnablePassthrough(),
              "messages": RunnableLambda(lambda x: x["messages"])
-             }
+            }
             | network_agent_prompt
             | self.model_with_tools
         )
@@ -209,9 +221,21 @@ class NetworkAgent:
         response = self.network_agent_runnable.invoke(state)
         logger.debug("---MODEL REPONSE---")
         logger.debug(f"response: {response}")
-        # We return a list, because this will get added to the existing list
+        # We return just the response, because this will get 
+        # added to the history of messages (see NetworkAgentState
+        # definition above)
         state["messages"] = response
+
         return state
+    
+    def response_source(self,response):
+        if isinstance(response, ToolMessage):
+            response_source = "Tool API"
+        elif isinstance(response, AIMessage):
+            response_source = "Gemini"
+        else:
+            response_source = ""
+        return response_source
     
     # ---------------------
     # Invoke agent app
@@ -222,7 +246,11 @@ class NetworkAgent:
         inputs = {"messages": [HumanMessage(content=question)],
                   "question": question}
         responses = self.networkAgentApp.invoke(inputs, self.config)
-        last_response_content = responses['messages'][-1].content
+        last_response = responses['messages'][-1]
+        source = self.response_source(last_response)
+
+        last_response_content = last_response.content
         logger.debug(f"Agent full response : {responses}")
         logger.info(f"Agent last response : {last_response_content}")
-        return last_response_content
+
+        return last_response_content,source

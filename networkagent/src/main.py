@@ -134,6 +134,7 @@ with st.sidebar:
   else:
     st.session_state.graph_autorefresh = False
     logger.info("Graph autorefresh OFF")
+  st.session_state.show_source = st.toggle("Show reponse source", True)
 
   st.title("Useful links")
   st.markdown(f"""
@@ -169,8 +170,8 @@ with agentcolumn:
         st.markdown(prompt)
 
     with chatcontainer.chat_message("AI"):
-      response=st.session_state.agent.run(prompt)
-      st.markdown(response)
+      response,source = st.session_state.agent.run(prompt)
+      st.markdown(f":blue[[{source}]] {response}")
       st.session_state.chat_history.append(AIMessage(content=response))
 
 # Graph Column

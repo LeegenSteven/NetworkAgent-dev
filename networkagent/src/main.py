@@ -175,7 +175,10 @@ with agentcolumn:
 
     with chatcontainer.chat_message("AI"):
       response,source = st.session_state.agent.run(prompt)
-      st.markdown(f":blue[[{source}]] {response}")
+      if st.session_state.show_source:
+        st.markdown(f":blue[[{source}]] \n{response}")
+      else:
+        st.markdown(response)
       st.session_state.chat_history.append(AIMessage(content=response))
 
 # Graph Column

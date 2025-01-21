@@ -34,13 +34,16 @@ def check_password():
     if st.session_state.get("password_correct", False):
         return True
 
-    # Show input for password.
-    st.text_input(
-        "Password", type="password", on_change=password_entered, key="password"
-    )
-    if "password_correct" in st.session_state:
-        st.error("😕 Password incorrect")
-    return False
+    # Show input for password. Use a 25%
+    # width column to limit size of input field
+    col1, _ = st.columns([1,3])
+    with col1:
+      st.text_input(
+          "Password", type="password", on_change=password_entered, key="password"
+      )
+      if "password_correct" in st.session_state:
+          st.error("😕 Password incorrect")
+      return False
 
 
 def reset_chat_history():

@@ -137,7 +137,7 @@ def getServiceDefinitions()->str:
         logger.debug(items)
         services=[]
         for item in items.items:
-            services.append(f"{item}")
+            services.append(f"```json\n{item}\n```")
 
         if len(services)==0:
             return ""

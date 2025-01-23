@@ -82,7 +82,7 @@
   register: users
 
 - name: create networkagent user
-  command: "sudo -u git /usr/local/bin/gitea admin user create --username networkagent --password {{ lookup('env', 'WEBAPPS_PWD') }} --email me@example.com --config /etc/gitea/app.ini"
+  command: "sudo -u git /usr/local/bin/gitea admin user create --username {{ lookup('env', 'WEBAPPS_LOGIN') }} --password {{ lookup('env', 'WEBAPPS_PWD') }} --email me@example.com --config /etc/gitea/app.ini"
   when: not "networkagent" in users.stdout
 
 - name: copy ssh private key to /opt

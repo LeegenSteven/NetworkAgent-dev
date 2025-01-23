@@ -20,8 +20,9 @@ kubectl get giteas gitea -o jsonpath='{.status.create_gitea.external_ip_address}
 
 Then open a browser at https://<<external_ip_address>>:3000
 
-Log into gitea with the username/password __networkagent/your_password__ \
-(where your password is the password that you setup at built time in the WEBAPPS_PWD environment variable)
+Log into gitea with the username/password __your_login__/your_password__ \
+(where your_password is the password that you setup at built time in the WEBAPPS_PWD environment variable
+and your_login is the login name you set in the WEBAPPS_LOGIN environment variable)
 
 ## Clone the repos to your local machine
 

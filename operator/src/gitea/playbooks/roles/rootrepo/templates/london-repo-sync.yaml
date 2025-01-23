@@ -7,7 +7,7 @@ spec:
   sourceType: git
   sourceFormat: unstructured
   git:
-    repo: https://networkagent:{{ lookup('env', 'WEBAPPS_PWD') }}@{{external_ip_address}}:3000/networkagent/london
+    repo: https://{{ lookup('env', 'WEBAPPS_LOGIN') }}:{{ lookup('env', 'WEBAPPS_PWD') }}@{{external_ip_address}}:3000/networkagent/london
     revision: HEAD
     branch: master
     auth: none

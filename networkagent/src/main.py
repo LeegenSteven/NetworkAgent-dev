@@ -20,29 +20,38 @@ import graph.topology as topology
 from utils.gitea_extension import get_gitea_url
 
 # From https://ploomber.io/blog/streamlit-password/
-def check_password():
-    """Returns `True` if the user had the correct password."""
+def check_login_password():
+    # Returns `True` if the user had the correct password.
     def password_entered():
-        # If you use .streamlit/secrets.toml, replace os.environ.get with st.secrets["STREAMLIT_PASSWORD"]
-        if hmac.compare_digest(st.session_state["password"], os.environ.get("WEBAPPS_PWD", "")):
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]
-        else:
-            st.session_state["password_correct"] = False
+      # If you use .streamlit/secrets.toml, replace os.environ.get with st.secrets["STREAMLIT_PASSWORD"]
+      if hmac.compare_digest(st.session_state["password"], os.environ.get("WEBAPPS_PWD", "")):
+          st.session_state["password_correct"] = True
+          del st.session_state["password"]
+      else:
+          st.session_state["password_correct"] = False
 
-    # Return True if the password is validated.
-    if st.session_state.get("password_correct", False):
+    # Returns `True` if the user had the correct login.
+    def login_entered():
+      # If you use .streamlit/secrets.toml, replace os.environ.get with st.secrets["STREAMLIT_PASSWORD"]
+      if hmac.compare_digest(st.session_state["login"], os.environ.get("WEBAPPS_LOGIN", "")):
+          st.session_state["login_correct"] = True
+          del st.session_state["login"]
+      else:
+          st.session_state["login_correct"] = False
+
+    # Return True if the login and passwords are correct.
+    if st.session_state.get("password_correct", False) and st.session_state.get("login_correct", False):
         return True
 
     # Show input for password. Use a 25%
     # width column to limit size of input field
     col1, _ = st.columns([1,3])
     with col1:
-      st.text_input(
-          "Password", type="password", on_change=password_entered, key="password"
-      )
+      st.text_input("Login", type="default", on_change=login_entered, key="login")
+      st.text_input("Password", type="password", on_change=password_entered, key="password")
+
       if "password_correct" in st.session_state:
-          st.error("😕 Password incorrect")
+          st.error("😕 Login or password incorrect")
       return False
 
 
@@ -119,13 +128,14 @@ project = os.environ.get("GOOGLE_PROJECT")
 st.title("Autonomous Network Agent")
 
 # Don't go through the authentication process
-# again if the rerun coms from the graph fragment
+# again if the rerun comes from the graph fragment
 # (see comment in the fragment function)
 if "fragment_rerun" not in st.session_state:
-  if not check_password():
+  if not check_login_password():
     st.stop()
 else:
   del st.session_state["fragment_rerun"]
+  st.session_state["login"] = os.environ.get("WEBAPPS_LOGIN", "")
   st.session_state["password"] = os.environ.get("WEBAPPS_PWD", "")
 
 # --------------------------------------------

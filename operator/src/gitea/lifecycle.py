@@ -22,7 +22,6 @@ async def create_gitea(spec, name, namespace, logger, **kwargs):
                          os.getenv("GOOGLE_PROJECT"),
                          os.getenv("GOOGLE_REGION"),
                          os.getenv("GOOGLE_ZONE"), 
-                         os.getenv("WEBAPPS_PWD"), 
                          monitor=False, # set to false so this VM is not scraped by prometheus
                          graph=False) # set to false so this VM is not showing on topology graph
 

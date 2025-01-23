@@ -50,7 +50,7 @@
     chdir: /opt/newyork-repo
 
 - name: add remote repo
-  command: sudo -u git git remote add origin https://networkagent:{{ lookup('env', 'WEBAPPS_PWD') }}@{{ansible_host}}:3000/networkagent/newyork.git
+  command: sudo -u git git remote add origin https://{{ lookup('env', 'WEBAPPS_LOGIN') }}:{{ lookup('env', 'WEBAPPS_PWD') }}@{{ansible_host}}:3000/networkagent/newyork.git
   args:
     chdir: /opt/newyork-repo
 

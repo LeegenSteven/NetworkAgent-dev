@@ -17,11 +17,12 @@ then
     exit 0
 fi
 
-# The WEBAPPS_PWD is used for all web front ends like Gitea, Streamlit NW Agent
+# The WEBAPPS_PWD and WEBAPPS_LOGIN used for all web front ends like Gitea, Streamlit NW Agent
 # This is to avoid hard coding the passwd in source code
 if [ -z "${GOOGLE_PROJECT}" ] || [ -z "${GOOGLE_REGION}" ] || \
-   [ -z "${GOOGLE_ZONE}" ] || [ -z "${GOOGLE_USER}" ] || [ -z "${WEBAPPS_PWD}" ]; then
-    echo "You must set GOOGLE_USER, GOOGLE_PROJECT, GOOGLE_REGION, GOOGLE_ZONE and WEBAPPS_PWD environment variables"
+   [ -z "${GOOGLE_ZONE}" ] || [ -z "${GOOGLE_USER}" ] || \
+   [ -z "${WEBAPPS_PWD}" ] || [ -z "${WEBAPPS_LOGIN}" ]; then
+    echo "You must set GOOGLE_USER, GOOGLE_PROJECT, GOOGLE_REGION, GOOGLE_ZONE, WEBAPPS_LOGIN and WEBAPPS_PWD environment variables"
     exit 0
 fi
 
@@ -343,7 +344,7 @@ Start()
     done
     gitea_host=$(kubectl get gitea gitea -o 'jsonpath={..status.create_gitea.external_ip_address}')
     echo -e "\nGitea server is available at:\n\thttps://$gitea_host:3000/explore/repos\n"
-    echo "You can clone the git repos as follows (username/password = networkagent/${WEBAPPS_PWD})"
+    echo "You can clone the git repos as follows (username/password = ${WEBAPPS_LOGIN}/${WEBAPPS_PWD})"
     echo "  git clone https://$gitea_host:3000/networkagent/core -c http.sslVerify=false"
     echo "  git clone https://$gitea_host:3000/networkagent/dublin -c http.sslVerify=false"
     echo "  git clone https://$gitea_host:3000/networkagent/london -c http.sslVerify=false"
@@ -536,6 +537,7 @@ Networkagent()
        --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
        --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
        --update-env-vars WEBAPPS_PWD=${WEBAPPS_PWD} \
+       --update-env-vars WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
        --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
        --allow-unauthenticated
 

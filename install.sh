@@ -7,14 +7,14 @@
 if ! command -v gcloud &> /dev/null
 then
     echo "gcloud could not be found, you must install it"
-    exit 0
+    exit 1
 fi
 
 # test if jinja exists
 if ! command -v jinja &> /dev/null
 then
     echo "jinja could not be found, you must run 'pip install jinja-cli'"
-    exit 0
+    exit 1
 fi
 
 # The WEBAPPS_PWD and WEBAPPS_LOGIN used for all web front ends like Gitea, Streamlit NW Agent
@@ -23,7 +23,7 @@ if [ -z "${GOOGLE_PROJECT}" ] || [ -z "${GOOGLE_REGION}" ] || \
    [ -z "${GOOGLE_ZONE}" ] || [ -z "${GOOGLE_USER}" ] || \
    [ -z "${WEBAPPS_PWD}" ] || [ -z "${WEBAPPS_LOGIN}" ]; then
     echo "You must set GOOGLE_USER, GOOGLE_PROJECT, GOOGLE_REGION, GOOGLE_ZONE, WEBAPPS_LOGIN and WEBAPPS_PWD environment variables"
-    exit 0
+    exit 1
 fi
 
 export GOOGLE_PROJECT_NUMBER=`gcloud projects describe $GOOGLE_PROJECT --format="value(projectNumber)"`
@@ -165,7 +165,7 @@ Create()
         echo "create service account keys or if you have exceeded the number "
         echo "of keys allowed."
         echo "##############################################################"
-        exit 0
+        exit 1
     fi
 
     echo "####################################################"
@@ -209,7 +209,7 @@ Start()
     # Create the service account if it doesnt exist
     if [ -z "${GOOGLE_SERVICE_ACCOUNT}" ]; then
         echo "Cannot find the service account - run this script with the -c option"
-        exit 0
+        exit 1
     fi
 
     echo "#####################"
@@ -468,7 +468,7 @@ Operator()
 {
     if ! test -f operator/deployment.yaml; then
         echo "No deployment.yaml found - you can generate by running ./install.sh -c"
-        exit 0
+        exit 1
     fi
 
     cd operator
@@ -505,7 +505,7 @@ Tools()
 {
     if ! test -f tools/deployment.yaml; then
         echo "No deployment.yaml found - you can generate by running ./install.sh -c"
-        exit 0
+        exit 1
     fi
 
     cd tools
@@ -524,7 +524,7 @@ Networkagent()
 {
     if ! test -f networkagent/deployment.yaml; then
         echo "No deployment.yaml found - you can generate by running ./install.sh -c"
-        exit 0
+        exit 1
     fi
 
     cd networkagent
@@ -552,7 +552,7 @@ Networkagent()
         echo "ERROR : could not setup access for all Users on the Cloud Run service network-agent"
         echo "You must probably disable the Domain Restricted Sharing policy of your domain."
         echo "Then run this command again and re-enable the DRS policy"
-        exit 0
+        exit 1
       fi
     fi
     cd ..

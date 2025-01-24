@@ -132,7 +132,7 @@ def create_network_node(body, spec, namespace, name, kind, uid):
     # Build and execute the SQL query
     sql = tmpl.format(id=uid, kind=kind, name=name, display_name=display_name, 
                       self_link='NULL', status=status, body=body_dump)
-    logger.info(f"SQL: {sql}")
+    logger.debug(f"SQL: {sql}")
     return transaction.execute_update(sql)
   
   display_name = f"{kind} ({name})"

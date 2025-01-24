@@ -49,8 +49,10 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------
 def body_sql_json_dump(string_dump):
   # Double escape the \" sequences created by the santitize call so as to build
-  # a syntactically correct SQL INSERT statement for Spanner to execute
-  return string_dump.replace('\\n','\\\\n').replace('\\"', '\\\\"')
+  # a syntactically correct SQL INSERT statement for Spanner to execute.
+  # Also escape single quotes as single quotes are used to enclose the
+  # JSON string in the SQL statement.
+  return string_dump.replace('\\n','\\\\n').replace('\\"', '\\\\"').replace("'", "\\'")
  
 def body_string_dump(body, kind, namespace, name):
   # Do not rely on the body object from kopf. Get it from
@@ -130,7 +132,7 @@ def create_network_node(body, spec, namespace, name, kind, uid):
     # Build and execute the SQL query
     sql = tmpl.format(id=uid, kind=kind, name=name, display_name=display_name, 
                       self_link='NULL', status=status, body=body_dump)
-    logger.debug(f"SQL: {sql}")
+    logger.info(f"SQL: {sql}")
     return transaction.execute_update(sql)
   
   display_name = f"{kind} ({name})"

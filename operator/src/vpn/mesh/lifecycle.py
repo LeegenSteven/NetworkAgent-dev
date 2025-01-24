@@ -13,12 +13,12 @@ logger = logging.getLogger(__name__)
 ##########################################
 @kopf.on.create('meshservice')
 async def meshservice(body, spec, status, namespace, name, uid, logger, **kwargs):
-  logger.debug(f"Create mesh connectivity service {name} with spec: {spec}")
-
-  if len(spec.get('interfaces'))<3:
-    raise kopf.PermanentError(f"At least three interfaces must be provided ({kind}, {name}, {uid})")
+  logger.debug(f"Creating mesh connectivity service {name} with spec: {spec}")
 
   kind = body.get('kind')
+
+  if len(spec.get('interfaces'))<3:
+    raise kopf.PermanentError(f"At least three interfaces must be provided for a {kind} (name: {name}, id: {uid})")
   
   # check the interfaces are valid computesubnetworks
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
@@ -30,7 +30,7 @@ async def meshservice(body, spec, status, namespace, name, uid, logger, **kwargs
     for interface in spec.get('interfaces'):
       network_api.get(namespace=interface.get("namespace"), name=interface.get("name"))
   except:
-    raise kopf.PermanentError(f"Compute subnetworks missing {interface.get['name']} ({kind}, {name}, {uid})")
+    raise kopf.PermanentError(f"Compute subnetworks missing {interface.get['name']} for {kind} (name: {name}, id: {uid})")
 
   # create persistent config for the service
   serviceInfo=await get_configmap(namespace, name)
@@ -96,7 +96,7 @@ async def meshservice(body, spec, status, namespace, name, uid, logger, **kwargs
 ##########################################
 @kopf.on.delete('meshservice')
 async def delete_service_resources(namespace, name, logger, **kwargs):
-  logger.debug(f"Delete mesh service {name} in ns {namespace}")
+  logger.info(f"Deleting mesh service {name} in namespace {namespace}")
 
   # remove the configmap for this service
   await delete_configmap(namespace, name)

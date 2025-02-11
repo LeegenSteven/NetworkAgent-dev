@@ -33,6 +33,10 @@ export GOOGLE_NAMESPACE="automation"
 export GOOGLE_SPANNER_INSTANCE="networktopology-instance"
 export GOOGLE_SPANNER_DATABASE="networktopology-db"
 
+SINK_NAME="nwoplogs-sink"
+TOPIC_NAME="nwoplogs-topic"
+CAPTURE_LOG_FUNCTION="capture_log"
+
 ############################################################
 # Create keys and manifest files                           #
 ############################################################
@@ -59,6 +63,8 @@ Create()
     echo "########################################"
     gcloud services enable --project=$GOOGLE_PROJECT artifactregistry.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT cloudbuild.googleapis.com
+    gcloud services enable --project=$GOOGLE_PROJECT cloudfunctions.googleapis.com
+    gcloud services enable --project=$GOOGLE_PROJECT eventarc.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT compute.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT container.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT gkehub.googleapis.com
@@ -77,7 +83,7 @@ Create()
     echo "Setup Cloud Build service account permissions "
     echo "########################################"
     CLOUD_BUILD_COMPUTE_SVC_ACCOUNT="${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
-    for role in "roles/storage.objectUser" "roles/logging.logWriter" "roles/artifactregistry.writer"; do
+    for role in "roles/storage.objectUser" "roles/logging.logWriter" "roles/artifactregistry.writer" "roles/cloudbuild.builds.builder"; do
         echo "$role"
         gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$CLOUD_BUILD_COMPUTE_SVC_ACCOUNT" \
           --role="$role" --no-user-output-enabled
@@ -172,6 +178,7 @@ Create()
     echo "generating environment yaml files"
     echo "####################################################"
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/bigquery.j2 >  environment/bigquery.yaml
+    jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_PROJECT_NUMBER -E GOOGLE_SERVICE_ACCOUNT environment/logsink.j2 >  environment/logsink.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_SPANNER_DATABASE -E GOOGLE_SPANNER_INSTANCE environment/spanner.j2 >  environment/spanner.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/configconnector.j2 > environment/configconnector.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/networks.j2 > environment/networks.yaml
@@ -325,9 +332,65 @@ Start()
     echo "#####################################"
     Operator
 
+    echo "#####################################"
+    echo "Create Operator Log Sink and capture"
+    echo "#####################################"
+
+    # Create a  network log sink to bigquery and collect
+    # logs from the network operator
+    #
+    # ==> Sink to BQ dataset
+    #bq mk --location=$GOOGLE_REGION --description="Network operator logs" --dataset nwoplogs
+    #gcloud logging sinks create nwoplogs-sink bigquery.googleapis.com/projects/${GOOGLE_PROJECT}/datasets/nwoplogs \
+    #  --log-filter='resource.labels.project_id="networkagent-434609" AND resource.type="k8s_container" \
+    #      AND resource.labels.cluster_name="networkautomation" AND resource.labels.namespace_name="automation"  \
+    #      AND labels.python_logger!="kopf._cogs.clients.watching"' \
+    #  --description="Network operator logs"
+    #gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
+    #    --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+    #    --role="roles/bigquery.dataEditor" --condition=None --no-user-output-enabled
+    #
+    # ==> Sink to PubSub topic
+    gcloud pubsub topics create $TOPIC_NAME --project=${GOOGLE_PROJECT}
+    gcloud logging sinks create $SINK_NAME pubsub.googleapis.com/projects/${GOOGLE_PROJECT}/topics/${TOPIC_NAME} \
+      --log-filter='resource.labels.project_id="networkagent-434609" AND resource.type="k8s_container" 
+          AND resource.labels.cluster_name="networkautomation" AND resource.labels.namespace_name="automation" 
+          AND labels.python_logger!="kopf._cogs.clients.watching"' \
+      --description="Network operator logs"
+    #gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
+    #    --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+    #    --role="roles/pubsub.publisher" --condition=None --no-user-output-enabled
+    # Grant the Cloud Logging service account used by the Log sink to publish 
+    # log entries to the PubSub topic
+    gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
+        --member="serviceAccount:service-${GOOGLE_PROJECT_NUMBER}@gcp-sa-logging.iam.gserviceaccount.com" \
+        --role="roles/pubsub.publisher" --condition=None --no-user-output-enabled
+    
+    # Create the Cloud Run function that receives the eventarc
+    # events from pub/pub
+    gcloud functions deploy $CAPTURE_LOG_FUNCTION --source ./logcollector --runtime python312 \
+      --trigger-topic $TOPIC_NAME  --entry-point=capture_log --memory=512MB \
+      --project=$GOOGLE_PROJECT --region=$GOOGLE_REGION
+    # Give the eventarc service account (by default the compute service account of the
+    # project) the permission to invoke the cloud run function
+    gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
+        --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+        --role="roles/run.invoker" --condition=None --no-user-output-enabled
+    # Give th Cloud Function service account (by default the compute service account of the
+    # project) the permission to use (read/write) Spanner
+    gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
+        --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+        --role="roles/spanner.databaseUser" --condition=None --no-user-output-enabled   
+
+
     # start the network and git repos
     kubectl apply -f environment/networks.yaml
     # kubectl apply -f environment/bigquery.yaml
+
+    # I tried hard to create the Log Sink to BQ or PubSub with Config Connector
+    # to no avail. I couldn't fix the dataset or topic access permission problem :-(
+    # That's why it is created by hand above
+    # kubectl apply -f environment/logsink.yaml
     # kubectl apply -f environment/prometheus.yaml
     kubectl apply -f environment/git.yaml
     # kubectl apply -f environment/free5gc-build.yaml
@@ -428,6 +491,12 @@ Kill()
     # Sometimes kopf finalizers are not removed from the network resources
     # and the kubectl command below hangs for ever. So clear the finalizers after
     # a certain timeout if it is still hanging 
+
+    # Delete log sink, pub/sub topic and log processing Cloud Function
+    gcloud logging sinks delete $SINK_NAME
+    gcloud pubsub topics delete $TOPIC_NAME
+    gcloud functions delete $CAPTURE_LOG_FUNCTION --region=$GOOGLE_REGION 
+    #bq rm --recursive --force --dataset nwoplogs
 
     # Launch the kubectl command in the backgroun
     kubectl delete -f environment/networks.yaml &

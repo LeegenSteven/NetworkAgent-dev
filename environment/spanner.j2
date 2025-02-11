@@ -50,6 +50,14 @@ spec:
        content STRING(MAX),
        embedding ARRAY<FLOAT64>
     ) PRIMARY KEY (id)"
+  - "CREATE TABLE KgLogEntryNode (
+       id STRING(17) NOT NULL,
+       severity STRING(16) NOT NULL,
+       message STRING(MAX),
+       timestamp TIMESTAMP,
+       content STRING(MAX),
+       embedding ARRAY<FLOAT64>
+    ) PRIMARY KEY (id)"
   - "CREATE OR REPLACE PROPERTY GRAPH networkGraph
        NODE TABLES (NetworkNode)
        EDGE TABLES (

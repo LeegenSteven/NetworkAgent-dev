@@ -17,6 +17,7 @@ import utils.st_extension as st_ext
 from langchain_core.messages import AIMessage, HumanMessage
 from agent.networkagent import NetworkAgent
 import graph.topology as topology
+import agent.logs as logs
 from utils.gitea_extension import get_gitea_url
 
 # From https://ploomber.io/blog/streamlit-password/
@@ -78,6 +79,7 @@ if st.session_state.graph_autorefresh:
 else:
   run_every = None
 
+# Graph fragment to refresh
 @st.fragment(run_every=run_every)
 def graphcontainer_fragment():
   tab_labels = ["Net Topology", "Net Resources", "Combined View"]
@@ -109,6 +111,12 @@ def graphcontainer_fragment():
   # I'm still returning this but it is of no use
   # in a fragment
   return selected_elts
+
+# Log fragment to refresh (same refresh rate as graph)
+@st.fragment(run_every=run_every)
+def logcontainer_fragment():
+  log_entries = logs.fetch_log_entries()
+  st.text(logs.format_rows(log_entries))
 
 def toggle_autorefresh():
   if "graph_autorefresh" not in st.session_state:
@@ -202,7 +210,10 @@ with graphcolumn:
 
 # Details Column
 with detailscolumn:
-  detailscontainer = st.container(height=800, border=True)
+  detailscontainer = st.container(height=400, border=True)
+  logcontainer = st.container(height=400, border=True)
   with detailscontainer:
     graph_info = topology.display_selected_elements(st.session_state["selected_elts"])
     st.markdown(graph_info)
+  with logcontainer:
+    logcontainer_fragment()

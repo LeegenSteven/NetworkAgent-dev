@@ -24,7 +24,6 @@ def spanner_connect():
 
 database = spanner_connect()
 
-
 def fetch_log_entries():
   with database.snapshot() as snapshot:
     try:

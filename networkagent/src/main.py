@@ -210,8 +210,8 @@ with graphcolumn:
 
 # Details Column
 with detailscolumn:
-  detailscontainer = st.container(height=400, border=True)
-  logcontainer = st.container(height=400, border=True)
+  detailscontainer = st.container(height=500, border=True)
+  logcontainer = st.container(height=300, border=True)
   with detailscontainer:
     graph_info = topology.display_selected_elements(st.session_state["selected_elts"])
     st.markdown(graph_info)

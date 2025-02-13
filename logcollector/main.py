@@ -141,7 +141,11 @@ def capture_log(cloud_event: CloudEvent) -> None:
   content = nwop_logging_json_string
   embedding = get_embedding(content, TASK_TYPE, EMBEDDING_MODEL)
 
-  try:
-    database.run_in_transaction(insert_log_entry)
-  except Exception as e:
-    logger.error(f"Log insert error: {e}")
+  # In rare cases the vector generation fails and embedding 
+  # comes back empty. Do not insert this log entry in Spanner
+  # is it will result in error when searchin by similarity
+  if embedding:
+    try:
+      database.run_in_transaction(insert_log_entry)
+    except Exception as e:
+      logger.error(f"Log insert error: {e}")

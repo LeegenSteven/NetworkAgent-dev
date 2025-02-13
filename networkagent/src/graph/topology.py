@@ -1,6 +1,4 @@
 from st_cytoscape import cytoscape
-import numpy as np
-import pandas as pd
 from google.cloud import spanner
 import logging
 import google.auth

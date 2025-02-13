@@ -355,7 +355,7 @@ Start()
     gcloud logging sinks create $SINK_NAME pubsub.googleapis.com/projects/${GOOGLE_PROJECT}/topics/${TOPIC_NAME} \
       --log-filter='resource.labels.project_id="networkagent-434609" 
                     AND resource.labels.container_name="free5gc-operator"  
-                    AND NOT labels.python_logger=~"kopf.*"' \
+                    AND labels.python_logger!="kopf._cogs.clients.watching"' \
       --description="Network operator logs"
     #gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
     #    --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \

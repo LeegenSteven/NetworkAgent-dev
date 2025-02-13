@@ -85,12 +85,12 @@ async def delete_node(body, spec, uid, name, logger, **kwargs):
   # First delete all the network connections involving this node 
   # because of database consistency foreign key rule
   logger.debug("Deleting resource connections for uid %s (%s:%s)", uid, kind, name)
-  success &= delete_node_resource_connections(uid)
+  success &= delete_node_resource_connections(uid, kind, name)
   logger.debug("Deleting network connections for uid %s (%s:%s)", uid, kind, name)
-  success &= delete_node_network_connections(uid)
+  success &= delete_node_network_connections(uid,kind,name)
   if success:
     logger.debug("Deleting network nodes for uid %s \n", uid)
-    success &= delete_network_node(uid)
+    success &= delete_network_node(uid, kind, name)
 
   logger.debug("Deleted node '%s' (success: %s)", name, success)
   if not success:

@@ -153,9 +153,9 @@ def create_network_node(body, spec, namespace, name, kind, uid):
   success &= create_or_update_kg_resource_description_node(uid, body_string)
 
   if success:
-    logger.info(f"{uid} node inserted (row count: {row_ct} ({kind}, {name}))")
+    logger.info(f"Network node inserted id: {uid}, kind: {kind}, name: {name} (row count: {row_ct})")
   else:
-    logger.error(f"Node {uid} creation failed  ({kind}, {name})")
+    logger.error(f"Network node creation failed id: {uid}, kind: {kind}, name: {name}")
   return success
 
 
@@ -187,15 +187,15 @@ def update_network_node(body, spec, namespace, name, kind, uid):
   success &= create_or_update_kg_resource_description_node(uid, body_string)
 
   if success:
-    logger.info(f"{uid} node updated (row count: {row_ct}) ({kind}, {name}, {status})")
+    logger.info(f"Network node updated id: {uid}, kind: {kind}, name: {name} (row count: {row_ct})")
   else:
-    logger.error(f"Node {uid} update failed  ({kind}, {name})")
+    logger.error(f"Network node update failed id: {uid}, kind: {kind}, name: {name}")
   return success
 
 # ------------------------------------------
 # Delete a network node
 # ------------------------------------------
-def delete_network_node(uid):
+def delete_network_node(uid, kind, name):
 
   def sql_delete_network_node(transaction):
     tmpl = SQL_TEMPLATES['delete_nw_node']
@@ -215,9 +215,9 @@ def delete_network_node(uid):
   success &= delete_kg_resource_description_node(uid)
 
   if success:
-    logger.info(f"{uid} node deleted (row count: {row_ct})")
+    logger.info(f"Network node deleted id: {uid}, kind: {kind}, name: {name} (row count: {row_ct})")
   else:
-    logger.error(f"Node {uid} deletion failed")
+    logger.error(f"Network node deletion failed id: {uid}, kind: {kind}, name: {name}")
   return success
 
 # ------------------------------------------
@@ -240,9 +240,9 @@ def create_network_connection(parent_uid, uid):
     logger.error(f"SQL error: {e}")
 
   if success:
-    logger.info("{} -> {} network connection inserted (row count: {})".format(parent_uid,uid,row_ct))
+    logger.info("Network node connection from id: {} to id: {} created (row count: {})".format(parent_uid,uid,row_ct))
   else:
-    logger.error("{} -> {} network connection creation failed".format(parent_uid, uid))
+    logger.error("Network node connection from id: {} to id: {} creation failed".format(parent_uid, uid))
   return success
 
 # ------------------------------------------
@@ -263,9 +263,9 @@ def exist_network_connection(parent_uid, uid):
     logger.error("SQL error: {}".format(e))
 
   if success:
-    logger.debug("{} -> {} network connection exists)".format(parent_uid,uid))
+    logger.debug("Network node connection from id: {} to id: {} exists".format(parent_uid,uid))
   else:
-    logger.debug("{} -> {} network connection doesn't exist)".format(parent_uid, uid))
+    logger.debug("Network node connection from id: {} to id: {} doesn't exist".format(parent_uid, uid))
   return success
 
 # ------------------------------------------
@@ -288,9 +288,9 @@ def delete_node_network_connections(uid):
     logger.error(f"SQL error: {e}")
 
   if success:
-    logger.info(f"{row_ct} network connection(s) deleted for node {uid}")
+    logger.info(f"{row_ct} Network node connection(s) deleted for node {uid}")
   else:
-    logger.error(f"Network connection {uid} deletion failed")
+    logger.error(f"Network node connection(s) {uid} deletion failed")
   return success
 
 # ------------------------------------------
@@ -313,15 +313,16 @@ def create_resource_connection(parent_uid, uid):
     logger.error(f"SQL error: {e}")
 
   if success:
-    logger.info(f"{parent_uid} -> {uid} resource connection inserted (row count: {row_ct})")
+    logger.debug("Resource node connection from id: {} to id: {} created (row count: {})".format(parent_uid,uid,row_ct))
   else:
-    logger.error(f"{parent_uid} -> {uid} resource connection creation failed")
+    logger.debug("Resource node connection from id: {} to id: {} creation failed".format(parent_uid, uid))
+
   return success
 
 # ------------------------------------------
 # Delete K8s resource connections
 # ------------------------------------------
-def delete_node_resource_connections(uid):
+def delete_node_resource_connections(uid, kind, name):
 
   def sql_delete_node_resource_connection(transaction):
     tmpl = SQL_TEMPLATES['delete_node_rs_cnx']
@@ -338,9 +339,9 @@ def delete_node_resource_connections(uid):
     logger.error(f"SQL error: {e}")
 
   if success:
-    logger.info(f"{row_ct} resource connection(s) deleted for node {uid}")
+    logger.info(f"{row_ct} resource node connection(s) deleted for node id; {uid}, kind: {kind}, name: {name}")
   else:
-    logger.error(f"Resource connection {uid} deletion failed")
+    logger.error(f"Resource connection for node id: {uid} deletion failed")
   return success
 
 # ------------------------------------------
@@ -407,9 +408,9 @@ def create_kg_resource_description_node(id, body_string):
     logger.error(f"SQL error: {e}")
 
   if success:
-    logger.info(f"{id} KG Resource node created (row count: {row_ct})")
+    logger.info(f"KG Resource node created id: {id} (row count: {row_ct})")
   else:
-    logger.error(f"KG Resource Node {id} creation failed")
+    logger.error(f"KG Resource Node creation failed id: {id}")
   return success
 
 
@@ -445,9 +446,9 @@ def update_kg_resource_description_node(id, body_string):
     logger.error(f"SQL error: {e}")
   
   if success:
-    logger.info(f"{id} KG Resource node updated (row count: {row_ct})")
+    logger.info(f"KG Resource node updated id: {id} (row count: {row_ct})")
   else:
-    logger.error(f"KG Resource Node {id} update failed")
+    logger.error(f"KG Resource Node update failed id: {id} ")
   return success
 
 # ------------------------------------------
@@ -472,9 +473,9 @@ def delete_kg_resource_description_node(id):
     logger.error(f"SQL error: {e}")
 
   if success:
-    logger.info(f"{id} KG Resource node deleted (row count: {row_ct})")
+    logger.info(f"{id} KG Resource node deleted id: {id} (row count: {row_ct})")
   else:
-    logger.error(f"KG Resource Node {id} deletion failed")
+    logger.error(f"KG Resource Node deletion failed id: {id}")
   return success
 
 # ------------------------------------------

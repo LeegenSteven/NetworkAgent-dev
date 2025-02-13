@@ -353,9 +353,9 @@ Start()
     # ==> Sink to PubSub topic
     gcloud pubsub topics create $TOPIC_NAME --project=${GOOGLE_PROJECT}
     gcloud logging sinks create $SINK_NAME pubsub.googleapis.com/projects/${GOOGLE_PROJECT}/topics/${TOPIC_NAME} \
-      --log-filter='resource.labels.project_id="networkagent-434609" AND resource.type="k8s_container" 
-          AND resource.labels.cluster_name="networkautomation" AND resource.labels.namespace_name="automation" 
-          AND labels.python_logger!="kopf._cogs.clients.watching"' \
+      --log-filter='resource.labels.project_id="networkagent-434609" 
+                    AND resource.labels.container_name="free5gc-operator"  
+                    AND NOT labels.python_logger=~"kopf.*"' \
       --description="Network operator logs"
     #gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
     #    --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \

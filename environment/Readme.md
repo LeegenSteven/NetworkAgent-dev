@@ -39,7 +39,9 @@ Setup the following environment variables. They are used throughout the setup do
 export GOOGLE_PROJECT=<YOUR PROJECT>
 export GOOGLE_REGION=<YOUR REGION>
 export GOOGLE_ZONE=<YOUR ZONE>
-export GOOGLE_USER=<GCE USERNAME> # the name of the default Operating System user when you connect to a GCE VM 
+export GOOGLE_USER=<GCE USERNAME> # the name of the default Operating System user when you connect to a GCE VM
+export WEBAPPS_LOGIN=<USERNAME> # the login name to access both the NW Agent Web App and the Git repo Web frontend
+export WEBAPPS_PWD=<PASSWORD> # the password for the same Web apps 
 ```
 
 ## Network Agent Installation Script
@@ -48,7 +50,7 @@ The __install.sh__ script creates the Network Agent GCP environment in your proj
 
 The script options are as follows:
 
-```
+```shell
 ./install.sh
 Network Agent environment manager.
 
@@ -65,13 +67,24 @@ options:
 
 The first step is to generate keys and deployment descriptors for each of the network agent GCP components by running the following command. 
 
-```
+```shell
 ./install.sh -c
 ```
 
 Then run the command below to start the GCP services, e.g. VPCs, GKE Cluster, Network Agent K8s operastor, Git repos, network AI agent etc. 
 
-```
+```shell
 ./install.sh -s
 ```
 
+To deploy the Network Agent UI in Cloud Run (recommended)
+
+```shell
+./install.sh -n
+```
+Alternatively you may install the Network Agent on your own machine
+
+```shell
+pip install -r ./networkagent/requirements.txt
+(cd ./networkagent/src; streamlit run ./main.py)
+```

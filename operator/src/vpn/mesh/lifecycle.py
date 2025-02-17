@@ -17,8 +17,9 @@ async def meshservice(body, spec, status, namespace, name, uid, logger, **kwargs
 
   kind = body.get('kind')
 
-  if len(spec.get('interfaces'))<3:
-    raise kopf.PermanentError(f"At least three interfaces must be provided for a {kind} (name: {name}, id: {uid})")
+  iface_count = len(spec.get('interfaces'))
+  if iface_count != 2:
+    raise kopf.PermanentError(f"Error creating {kind} name: {name}, (id: {uid}). It requires two interfaces (got {iface_count})")
   
   # check the interfaces are valid computesubnetworks
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
@@ -51,7 +52,7 @@ async def meshservice(body, spec, status, namespace, name, uid, logger, **kwargs
   vpnStatus=[]
 
   # create a wireguard vpn appliance for each interface
-  for i in range(len(spec['interfaces'])):
+  for i in range(iface_count):
     interface = spec['interfaces'][i]
     allowedInterfaces = spec['interfaces'][:i] + spec['interfaces'][i + 1:]
 
@@ -72,9 +73,9 @@ async def meshservice(body, spec, status, namespace, name, uid, logger, **kwargs
     logger.debug(json.dumps(peers, indent=4))
 
     # deploy the vpn virtual machine in the same namespace as the network object
-    await create_vpn_edge( namespace,
-                           name,
-                           namespace,
+    await create_vpn_edge(namespace,
+                          name,
+                          namespace,
                           "meshservice",
                           instanceName,
                           interface,

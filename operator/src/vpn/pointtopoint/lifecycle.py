@@ -10,15 +10,21 @@ logger = logging.getLogger(__name__)
 # Create a new Point To Point VPN
 ##########################################
 @kopf.on.create('pointtopointservice')
-async def pointtopointservice(spec, status, namespace, name, logger, **kwargs):
+async def pointtopointservice(body, spec, status, namespace, name, uid, logger, **kwargs):
   logger.debug(f"Create pointtopoint service {name} with spec: {spec}")
 
-  if len(spec.get('interfaces'))!=2:
-    raise kopf.PermanentError("Two interfaces must be provided.")
+  kind = body.get('kind')
+
+  iface_count = len(spec.get('interfaces'))
+  if iface_count != 2:
+    raise kopf.PermanentError(f"Error creating {kind} name: {name}, (id: {uid}). It requires two interfaces (got {iface_count})")
 
   # get the a and b end variables
   aend=spec.get('interfaces')[0]
   bend=spec.get('interfaces')[1]
+
+  if aend.get('name') == bend.get('name'):
+    raise kopf.PermanentError(f"Error creating {kind} name: {name}, (id: {uid}). It requires two distinct interfaces (got {aend.get('name')} twice)")
 
   # check that aend and bend are valid computesubnetworks
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
@@ -27,10 +33,11 @@ async def pointtopointservice(spec, status, namespace, name, logger, **kwargs):
     kind="ComputeSubnetwork",
   )
   try:
-    network_api.get(namespace=namespace, name=aend)
-    network_api.get(namespace=namespace, name=bend)
+    for interface in [aend, bend]:
+      network_api.get(namespace=interface.get("namespace"), name=interface.get("name"))
   except:
-    raise kopf.PermanentError("compute sub networks not found")
+    raise kopf.PermanentError(f"Compute subnetworks missing {interface.get['name']} for {kind} (name: {name}, id: {uid})")
+
 
   # if persistent config for this service exists, grab it
   # if this is first time this is called then create it
@@ -49,13 +56,14 @@ async def pointtopointservice(spec, status, namespace, name, logger, **kwargs):
   logger.debug(serviceInfo)
 
   # create instance and peer information
-  asitename=aend+'-vpn-'+serviceInfo['uuid']
-  bsitename=bend+'-vpn-'+serviceInfo['uuid']
+  asitename=aend.get("name")+'-vpn-'+serviceInfo['uuid']
+  bsitename=bend.get("name")+'-vpn-'+serviceInfo['uuid']
   asitepeers=[{"peerName": bsitename, "allowedInterface": bend, "keys": serviceInfo['keys']['bkeys']}]
   bsitepeers=[{"peerName": asitename, "allowedInterface": aend, "keys": serviceInfo['keys']['akeys']}]
 
   await create_vpn_edge(namespace,
                         name,
+                        namespace,
                         "pointtopointservice",
                         asitename,
                         aend,
@@ -66,6 +74,7 @@ async def pointtopointservice(spec, status, namespace, name, logger, **kwargs):
 
   await create_vpn_edge(namespace,
                         name,
+                        namespace,
                         "pointtopointservice",
                         bsitename,
                         bend,

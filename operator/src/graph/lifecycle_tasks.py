@@ -271,7 +271,7 @@ def exist_network_connection(parent_uid, uid):
 # ------------------------------------------
 # Delete network connections
 # ------------------------------------------
-def delete_node_network_connections(uid):
+def delete_node_network_connections(uid, kind, name):
 
   def sql_delete_node_network_connections(transaction):
     tmpl = SQL_TEMPLATES['delete_node_nw_cnx']
@@ -288,7 +288,7 @@ def delete_node_network_connections(uid):
     logger.error(f"SQL error: {e}")
 
   if success:
-    logger.info(f"{row_ct} Network node connection(s) deleted for node {uid}")
+    logger.info(f"{row_ct} resource node connection(s) deleted for node id; {uid}, kind: {kind}, name: {name}")
   else:
     logger.error(f"Network node connection(s) {uid} deletion failed")
   return success

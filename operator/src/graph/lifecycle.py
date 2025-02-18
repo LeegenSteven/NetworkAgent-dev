@@ -87,7 +87,7 @@ async def delete_node(body, spec, uid, name, logger, **kwargs):
   logger.debug("Deleting resource connections for uid %s (%s:%s)", uid, kind, name)
   success &= delete_node_resource_connections(uid, kind, name)
   logger.debug("Deleting network connections for uid %s (%s:%s)", uid, kind, name)
-  success &= delete_node_network_connections(uid,kind,name)
+  success &= delete_node_network_connections(uid, kind, name)
   if success:
     logger.debug("Deleting network nodes for uid %s \n", uid)
     success &= delete_network_node(uid, kind, name)

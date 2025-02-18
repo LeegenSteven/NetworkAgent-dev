@@ -17,6 +17,25 @@ async def meshservice(body, spec, status, namespace, name, uid, logger, **kwargs
 
   kind = body.get('kind')
 
+  # create persistent config for the service. Do this before
+  # checking for errors so that if there is any error 
+  # subsequently in creating the mesh service the configmap
+  # appears a link to the mesh service on the graph representation
+  serviceInfo=await get_configmap(namespace, name)
+  if serviceInfo is None:
+    keys={}
+    for interface in spec.get('interfaces'):
+      keys[interface.get('name')]= WgKey().to_dict() 
+
+    serviceInfo=await create_configmap(
+      namespace,
+      name,
+      str(uuid.uuid4())[:8],
+      keys
+    )
+  logger.debug(serviceInfo)
+
+  # Do some sanity check
   iface_count = len(spec.get('interfaces'))
   if iface_count != 2:
     raise kopf.PermanentError(f"Error creating {kind} name: {name}, (id: {uid}). It requires two interfaces (got {iface_count})")
@@ -33,20 +52,6 @@ async def meshservice(body, spec, status, namespace, name, uid, logger, **kwargs
   except:
     raise kopf.PermanentError(f"Compute subnetworks missing {interface.get['name']} for {kind} (name: {name}, id: {uid})")
 
-  # create persistent config for the service
-  serviceInfo=await get_configmap(namespace, name)
-  if serviceInfo is None:
-    keys={}
-    for interface in spec.get('interfaces'):
-      keys[interface.get('name')]= WgKey().to_dict() 
-
-    serviceInfo=await create_configmap(
-      namespace,
-      name,
-      str(uuid.uuid4())[:8],
-      keys
-    )
-  logger.debug(serviceInfo)
 
   # Create the initial vpn status for each instance
   vpnStatus=[]

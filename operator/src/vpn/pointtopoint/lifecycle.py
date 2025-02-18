@@ -15,6 +15,25 @@ async def pointtopointservice(body, spec, status, namespace, name, uid, logger, 
 
   kind = body.get('kind')
 
+  # create persistent config for the service. Do this before
+  # checking for errors so that if there is any error 
+  # subsequently in creating the mesh service the configmap
+  # appears a link to the mesh service on the graph representation
+  serviceInfo=await get_configmap(namespace, name)
+  if serviceInfo is None:
+    keys={
+      "akeys": WgKey().to_dict(),
+      "bkeys": WgKey().to_dict()
+    }
+    serviceInfo=await create_configmap(
+      namespace,
+      name,
+      str(uuid.uuid4())[:8],
+      keys
+    )
+  logger.debug(serviceInfo)
+
+  # Do some sanity check
   iface_count = len(spec.get('interfaces'))
   if iface_count != 2:
     raise kopf.PermanentError(f"Error creating {kind} name: {name}, (id: {uid}). It requires two interfaces (got {iface_count})")
@@ -37,23 +56,6 @@ async def pointtopointservice(body, spec, status, namespace, name, uid, logger, 
       network_api.get(namespace=interface.get("namespace"), name=interface.get("name"))
   except:
     raise kopf.PermanentError(f"Compute subnetworks missing {interface.get['name']} for {kind} (name: {name}, id: {uid})")
-
-
-  # if persistent config for this service exists, grab it
-  # if this is first time this is called then create it
-  serviceInfo=await get_configmap(namespace, name)
-  if serviceInfo is None:
-    keys={
-      "akeys": WgKey().to_dict(),
-      "bkeys": WgKey().to_dict()
-    }
-    serviceInfo=await create_configmap(
-      namespace,
-      name,
-      str(uuid.uuid4())[:8],
-      keys
-    )
-  logger.debug(serviceInfo)
 
   # create instance and peer information
   asitename=aend.get("name")+'-vpn-'+serviceInfo['uuid']

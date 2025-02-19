@@ -105,8 +105,41 @@ def get_status(body):
           status_value = body['status']['currentStatus']
         else:
           svc = body['kind'].lower()
-          if (svc in body['status']) and ('status' in body['status'][svc]):
-            status_value = body['status'][svc]['status']
+          if (svc in body['status']):
+            if ('status' in body['status'][svc]):
+              status_value = body['status'][svc]['status']
+          # This case happen when the NW operator raise a PermanentError
+          # and the deployment of the network service stops. In this case 
+          # no currentStatus is defined yet
+          # e.g.
+          # "apiVersion": "google.dev/v1",
+          #   "kind": "MeshService",
+          #   ......
+          #   "status": {
+          #    "kopf": {
+          #      "progress": {
+          #        "create_node": {
+          #          "failure": false,
+          #          "purpose": "create",
+          #          "retries": 0,
+          #          "started": "2025-02-19T13:36:26.900512+00:00",
+          #          "success": false
+          #        },
+          #        "meshservice": {
+          #          "failure": true,
+          #          "message": "Failed creating MeshService ms1",
+          #          "purpose": "create",
+          #          "retries": 1,
+          #          "started": "2025-02-19T13:36:26.900493+00:00",
+          #          "stopped": "2025-02-19T13:36:27.010239+00:00",
+          #          "success": false
+          #        }
+          #      }
+          #    }
+          #  }
+          elif ('kopf' in body['status']) and ('progress' in body['status']['kopf']) and (svc in body['status']['kopf']['progress']):
+            if ('failure' in body['status']['kopf']['progress'][svc]) and (body['status']['kopf']['progress'][svc]['failure'] == True):
+              status_value = 'Failed'
 
   return status_value
 

@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, Type
 
 embeddings = VertexAIEmbeddings(model="text-embedding-005")
-vector_store = SpannerVectorStore(
+resource_vector_store = SpannerVectorStore(
   instance_id=SPANNER_INSTANCE,
   database_id=SPANNER_DATABASE,
   table_name="KgResourceDescriptionNode",
@@ -22,7 +22,18 @@ vector_store = SpannerVectorStore(
   embedding_service=embeddings
 )
 
-retriever = vector_store.as_retriever(search_kwargs={"k": 8})
+logging_vector_store = SpannerVectorStore(
+  instance_id=SPANNER_INSTANCE,
+  database_id=SPANNER_DATABASE,
+  table_name="KgLogEntryNode",
+  id_column="id",
+  content_column="content",
+  metadata_columns=["timestamp", "severity", "message"],
+  embedding_service=embeddings
+)
+
+resource_retriever = resource_vector_store.as_retriever(search_kwargs={"k": 8})
+logging_retriever = logging_vector_store.as_retriever(search_kwargs={"k": 20})
 
 class ResourceRetrievalInput(BaseModel):
   messages: list = Field(description="message history")
@@ -40,8 +51,23 @@ class ResourceRetrievalTool(BaseTool):
   def _run(self, messages: list, question: str, 
            run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
       logger.debug(f"Resource Retriever called with query: {question}")
-      return retriever.invoke(question)
+      return resource_retriever.invoke(question)
 
+class LoggingRetrievalInput(BaseModel):
+  messages: list = Field(description="message history")
+  question: str = Field(description="last question asked")
 
+class LoggingRetrievalTool(BaseTool):
+  name: str = "LoggingRetriever"
+  description: str = "Based on the last question, retrieve relevant log entries \
+    in order of decreasing relevancy. Each description is formatted as a text line and \
+    contains a timestamp, followed by the severity of the log and then the log message. \
+    The log message may contain references to network nodes id, kind and name."
+  args_schema: Type[BaseModel] = LoggingRetrievalInput
+
+  def _run(self, messages: list, question: str, 
+           run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+      logger.debug(f"Logging Retriever called with query: {question}")
+      return logging_retriever.invoke(question)
 
 

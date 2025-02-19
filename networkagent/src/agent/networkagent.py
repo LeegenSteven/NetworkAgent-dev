@@ -12,7 +12,8 @@ from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langgraph.prebuilt import ToolNode, tools_condition
 from agent.tools import *
-from agent.rag_tools import *
+from agent.rag_tools import ResourceRetrievalTool, LoggingRetrievalTool
+from datetime import datetime
 import google.auth
 import logging
 import os
@@ -84,6 +85,7 @@ class NetworkAgent:
             - create and delete network connectivity tests 
             - understand performance metrics for deployed connectivity service
             - understand the state of the network resources deployed (net, subnet, routes...) and their configuration
+            - find errors in the logs and analyze them
 
             Greet the users and ask how you can help them today.
             - If necessary, seek clarifying details on what their request is.
@@ -101,13 +103,24 @@ class NetworkAgent:
             - If the request is about network resources such as network, subnetwork, routes, firewalls, VMs... 
               and their attributes like kind, name, status, parent node (also known as OwnerReference), network flow 
               connections (also know as network or subnetwork reference), creation time,... then use the relevant resource 
-              descriptions provided in the Context below to answer. The resource descriptions provided in the context 
+              descriptions provided in the Resource context below to answer. The resource descriptions provided in the Resource context 
               are formatted as JSON strings.
+
+            - If the request is about finding or explaining any informative events or error events affecting the deployed network
+              services then use the log entries provided in the Logging context below. Each log entry is
+              materialized in a line of text that starts with the timestamp when the log event occured, followed by the level
+              of severity (INFO for informative logs, ERROR reveals an error happened, DEBUG for detailed debug information)
+              and finally the log message. The log message may contain references to network resources in the form of id, kind or name.
+              In the response sort the log entries from the newest to the oldest.
 
             - If you still cannot answer explain that you are an agent to be used specifically 
               for managing network connectivity services and you should then list the capabilities above
 
-            Context: {context}
+            Current time: {current_time}
+
+            Resource context: {resource_context}
+
+            Logging context: {logging_context}
 
             Conversation history: {messages}
             """
@@ -120,12 +133,20 @@ class NetworkAgent:
             ]
         )
 
-        retrieval_tool = ResourceRetrievalTool()
+        resource_retrieval_tool = ResourceRetrievalTool()
+        logging_retrieval_tool = LoggingRetrievalTool()
 
-        def format_docs(docs):
-            logger.debug(f"--- DOCS FOUND: {len(docs)} ")
-            return "\n\n".join(doc.page_content for doc in docs)
-        
+        def format_resource_docs(docs):
+            logger.debug(f"--- RESOURCE DOCS FOUND: {len(docs)} ")
+            output = "\n\n".join(doc.page_content for doc in docs)
+            return output
+ 
+        def format_logging_docs(docs):
+            logger.info(f"--- LOG ENTRIES FOUND: {len(docs)} ")
+            output = "\n".join(doc.page_content for doc in docs)
+            logger.info(output)
+            return output
+
         # Only keep the mast N messages in the history. Keeping
         # too many messages slows down Gemini as the RAG documents
         # stored in the context can be quite lengthy
@@ -140,7 +161,9 @@ class NetworkAgent:
         )
 
         self.network_agent_runnable = (
-            {"context": retrieval_tool | format_docs, 
+            {"resource_context": resource_retrieval_tool | format_resource_docs,
+             "logging_context": logging_retrieval_tool | format_logging_docs, 
+             "current_time": RunnableLambda(lambda x: f"{datetime.now()}"[0:23] ),
              "question": RunnablePassthrough(),
              "messages": RunnableLambda(lambda x: x["messages"])
             }

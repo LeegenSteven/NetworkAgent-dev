@@ -143,7 +143,7 @@ def capture_log(cloud_event: CloudEvent) -> None:
 
   # In rare cases the vector generation fails and embedding 
   # comes back empty. Do not insert this log entry in Spanner
-  # is it will result in error when searchin by similarity
+  # as it will result in error when searching by similarity
   if embedding:
     try:
       database.run_in_transaction(insert_log_entry)

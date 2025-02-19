@@ -16,6 +16,7 @@ async def meshservice(body, spec, status, namespace, name, uid, logger, **kwargs
   logger.debug(f"Creating mesh connectivity service {name} with spec: {spec}")
 
   kind = body.get('kind')
+  interfaces = spec.get('interfaces')
 
   # create persistent config for the service. Do this before
   # checking for errors so that if there is any error 
@@ -24,7 +25,7 @@ async def meshservice(body, spec, status, namespace, name, uid, logger, **kwargs
   serviceInfo=await get_configmap(namespace, name)
   if serviceInfo is None:
     keys={}
-    for interface in spec.get('interfaces'):
+    for interface in interfaces:
       keys[interface.get('name')]= WgKey().to_dict() 
 
     serviceInfo=await create_configmap(
@@ -36,10 +37,20 @@ async def meshservice(body, spec, status, namespace, name, uid, logger, **kwargs
   logger.debug(serviceInfo)
 
   # Do some sanity check
-  iface_count = len(spec.get('interfaces'))
-  if iface_count != 2:
-    raise kopf.PermanentError(f"Error creating {kind} name: {name}, (id: {uid}). It requires two interfaces (got {iface_count})")
+  iface_count = len(interfaces)
+  if iface_count < 3:
+    logger.error(f"Error creating {kind} {name}, (id: {uid}). It requires at least 3 interfaces (got {iface_count})")
+    raise kopf.PermanentError(f"Failed creating {kind} {name}")
   
+  unique_inames = []
+  for i in interfaces:
+    iname = i['name']
+    if iname not in unique_inames:
+      unique_inames.append(iname)
+  if len(unique_inames) != len(interfaces):
+    logger.error(f"Error creating {kind} {name}, (id: {uid}). All interfaces must be distinct")
+    raise kopf.PermanentError(f"Failed creating {kind} {name}")
+    
   # check the interfaces are valid computesubnetworks
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
   network_api = client.resources.get(
@@ -47,18 +58,18 @@ async def meshservice(body, spec, status, namespace, name, uid, logger, **kwargs
     kind="ComputeSubnetwork",
   )
   try:
-    for interface in spec.get('interfaces'):
+    for interface in interfaces:
       network_api.get(namespace=interface.get("namespace"), name=interface.get("name"))
   except:
-    raise kopf.PermanentError(f"Compute subnetworks missing {interface.get['name']} for {kind} (name: {name}, id: {uid})")
-
+    logger.error(f"Error creating {kind} {name}, (id: {uid}). Compute subnetwork {interface.get('name')} not found")
+    raise kopf.PermanentError(f"Failed creating {kind} {name}")
 
   # Create the initial vpn status for each instance
   vpnStatus=[]
 
   # create a wireguard vpn appliance for each interface
   for i in range(iface_count):
-    interface = spec['interfaces'][i]
+    interface = interfaces[i]
     allowedInterfaces = spec['interfaces'][:i] + spec['interfaces'][i + 1:]
 
     logger.debug("building mesh for interface %s", interface.get("name"))

@@ -584,8 +584,10 @@ async def get_ip(namespace, name, networkname="mgmt"):
                     ip_address = int['networkIpRef']['external']
 
     if ip_address is None:
+        logger.error(f"Could not find IP address for VM {name}. Temporary error. Waiting...")
         raise kopf.TemporaryError("could not find ip address", 15)
     else:
+        logger.info(f"Mgmt IP address for VM {name} is {ip_address}")
         logger.debug("Found mgmt ip address %s", ip_address)
 
     return ip_address
@@ -600,11 +602,15 @@ async def get_subnet_info(namespace, subnetname):
     result = network_api.get(name=subnetname, namespace=namespace)
     conditions = result.get('status').get('conditions')
     if conditions[-1].get('reason') != "UpToDate":
+        logger.info(f"Waiting for subnet {subnetname} to come up")
         raise kopf.TemporaryError("Waiting for subnet to come up")
+    else:
+      logger.info(f"Subnet {subnetname} is now up and running")
     return result
   except kubernetes.client.rest.ApiException as e: 
     logger.debug(e.status)
     if e.status == 404:
+        logger.error(f"No subnet {subnetname} found yet. Temporary error. Waiting...")
         raise kopf.TemporaryError(f"No subnet {subnetname} found yet. Waiting...")
 
 #####################################################################
@@ -617,9 +623,13 @@ async def get_vm_info(namespace, vmname):
     result = compute_api.get(name=vmname, namespace=namespace)
     status = result.get('status')
     if status.get('currentStatus') != "RUNNING":
-      raise kopf.TemporaryError("Waiting for VM to come up")
+      logger.info(f"Waiting for VM {vmname} to come up")
+      raise kopf.TemporaryError(f"Waiting for VM {vmname} to come up")
+    else:
+      logger.info(f"VM {vmname} is now up and running")
     return result
   except kubernetes.client.rest.ApiException as e: 
     logger.debug(e.status)
     if e.status == 404:
+      logger.error(f"No VM {vmname} found yet. Temporary error. Waiting...")
       raise kopf.TemporaryError(f"No VM {vmname} found yet")

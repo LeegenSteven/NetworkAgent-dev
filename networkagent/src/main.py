@@ -154,6 +154,8 @@ with st.sidebar:
   st.title("Settings")
   if st.button("Reset chat"):
     reset_chat_history()
+  if st.button("Reset logs"):
+    topology.reset_logs()
   if st.toggle("Graph Autorefresh", st.session_state.graph_autorefresh, on_change=toggle_autorefresh):
     logger.info("Graph autorefresh ON")
   else:

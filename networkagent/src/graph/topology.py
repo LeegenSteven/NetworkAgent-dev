@@ -25,6 +25,16 @@ def spanner_connect():
   database = instance.database(SPANNER_DATABASE)
   return database
 
+def reset_logs():
+  success = True
+  with database.batch() as batch:
+    try:
+      batch.delete("KgLogEntryNode", spanner.KeySet(all_=True))
+    except Exception as e:
+      logger.error("Spanner Delete error: {}".format(e))
+      success = False
+  return success
+
 # FIXME : see how to set different colors
 # for each kind of node
 node_palette = [

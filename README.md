@@ -58,3 +58,7 @@ Following the steps below to create a network agent demo environment.
 ## Demo Scenario
 
 * [Deploy free5gc network](docs/demo.md)
+
+# LICENSES
+
+The source code of this project is provided under the [Apache 2.0 license](LICENSE). All other artifacts such as images, video, audio and data as free/open material is provided under the [CC-BY 4.0 license](http://creativecommons.org/licenses/by/4.0/).

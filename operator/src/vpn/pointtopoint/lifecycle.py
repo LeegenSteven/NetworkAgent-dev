@@ -36,14 +36,16 @@ async def pointtopointservice(body, spec, status, namespace, name, uid, logger, 
   # Do some sanity check
   iface_count = len(spec.get('interfaces'))
   if iface_count != 2:
-    raise kopf.PermanentError(f"Error creating {kind} name: {name}, (id: {uid}). It requires two interfaces (got {iface_count})")
+    logger.error(f"Error creating {kind} {name}, (id: {uid}). It requires exactly 2 interfaces (got {iface_count})")
+    raise kopf.PermanentError(f"Failed creating {kind} {name}")
 
   # get the a and b end variables
   aend=spec.get('interfaces')[0]
   bend=spec.get('interfaces')[1]
 
   if aend.get('name') == bend.get('name'):
-    raise kopf.PermanentError(f"Error creating {kind} name: {name}, (id: {uid}). It requires two distinct interfaces (got {aend.get('name')} twice)")
+    logger.error(f"Error creating {kind} {name}, (id: {uid}). The 2 interfaces must be distinct")
+    raise kopf.PermanentError(f"Failed creating {kind} {name}")
 
   # check that aend and bend are valid computesubnetworks
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
@@ -55,7 +57,8 @@ async def pointtopointservice(body, spec, status, namespace, name, uid, logger, 
     for interface in [aend, bend]:
       network_api.get(namespace=interface.get("namespace"), name=interface.get("name"))
   except:
-    raise kopf.PermanentError(f"Compute subnetworks missing {interface.get['name']} for {kind} (name: {name}, id: {uid})")
+    logger.error(f"Error creating {kind} {name}, (id: {uid}). Compute subnetwork {interface.get('name')} not found")
+    raise kopf.PermanentError(f"Failed creating {kind} {name}")
 
   # create instance and peer information
   asitename=aend.get("name")+'-vpn-'+serviceInfo['uuid']

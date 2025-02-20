@@ -335,53 +335,7 @@ Start()
     echo "#####################################"
     echo "Create Operator Log Sink and capture"
     echo "#####################################"
-
-    # Create a  network log sink to bigquery and collect
-    # logs from the network operator
-    #
-    # ==> Sink to BQ dataset
-    #bq mk --location=$GOOGLE_REGION --description="Network operator logs" --dataset nwoplogs
-    #gcloud logging sinks create nwoplogs-sink bigquery.googleapis.com/projects/${GOOGLE_PROJECT}/datasets/nwoplogs \
-    #  --log-filter='resource.labels.project_id="networkagent-434609" AND resource.type="k8s_container" \
-    #      AND resource.labels.cluster_name="networkautomation" AND resource.labels.namespace_name="automation"  \
-    #      AND labels.python_logger!="kopf._cogs.clients.watching"' \
-    #  --description="Network operator logs"
-    #gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
-    #    --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
-    #    --role="roles/bigquery.dataEditor" --condition=None --no-user-output-enabled
-    #
-    # ==> Sink to PubSub topic
-    gcloud pubsub topics create $TOPIC_NAME --project=${GOOGLE_PROJECT}
-    gcloud logging sinks create $SINK_NAME pubsub.googleapis.com/projects/${GOOGLE_PROJECT}/topics/${TOPIC_NAME} \
-      --log-filter='resource.labels.project_id="networkagent-434609" 
-                    AND resource.labels.container_name="free5gc-operator"  
-                    AND labels.python_logger!="kopf._cogs.clients.watching"' \
-      --description="Network operator logs"
-    #gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
-    #    --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
-    #    --role="roles/pubsub.publisher" --condition=None --no-user-output-enabled
-    # Grant the Cloud Logging service account used by the Log sink to publish 
-    # log entries to the PubSub topic
-    gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
-        --member="serviceAccount:service-${GOOGLE_PROJECT_NUMBER}@gcp-sa-logging.iam.gserviceaccount.com" \
-        --role="roles/pubsub.publisher" --condition=None --no-user-output-enabled
-    
-    # Create the Cloud Run function that receives the eventarc
-    # events from pub/pub
-    gcloud functions deploy $CAPTURE_LOG_FUNCTION --source ./logcollector --runtime python312 \
-      --trigger-topic $TOPIC_NAME  --entry-point=capture_log --memory=512MB \
-      --project=$GOOGLE_PROJECT --region=$GOOGLE_REGION
-    # Give the eventarc service account (by default the compute service account of the
-    # project) the permission to invoke the cloud run function
-    gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
-        --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
-        --role="roles/run.invoker" --condition=None --no-user-output-enabled
-    # Give th Cloud Function service account (by default the compute service account of the
-    # project) the permission to use (read/write) Spanner
-    gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
-        --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
-        --role="roles/spanner.databaseUser" --condition=None --no-user-output-enabled   
-
+    Log
 
     # start the network and git repos
     kubectl apply -f environment/networks.yaml
@@ -553,6 +507,79 @@ Operator()
 }
 
 ############################################################
+# Build and deploy the log capture                         #
+############################################################
+Log()
+{
+    # Create a  network log sink to bigquery and collect
+    # logs from the network operator
+    #
+    # ==> Sink to BQ dataset
+    #bq mk --location=$GOOGLE_REGION --description="Network operator logs" --dataset nwoplogs
+    #gcloud logging sinks create nwoplogs-sink bigquery.googleapis.com/projects/${GOOGLE_PROJECT}/datasets/nwoplogs \
+    #  --log-filter='resource.labels.project_id="networkagent-434609" AND resource.type="k8s_container" \
+    #      AND resource.labels.cluster_name="networkautomation" AND resource.labels.namespace_name="automation"  \
+    #      AND labels.python_logger!="kopf._cogs.clients.watching"' \
+    #  --description="Network operator logs"
+    #gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
+    #    --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+    #    --role="roles/bigquery.dataEditor" --condition=None --no-user-output-enabled
+    #
+    # ==> Sink to PubSub topic
+
+    # Create the pubsub topic if it doesn't exist yet
+    gcloud pubsub topics describe $TOPIC_NAME > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo "Creating Pub/Sub topic '${TOPIC_NAME}'..."
+        gcloud pubsub topics create $TOPIC_NAME --project=${GOOGLE_PROJECT}
+    else
+        echo "Pub/Sub topic '${TOPIC_NAME}' already exists..."
+    fi
+
+    # Create the logging sink if it doesn't exist yet
+    gcloud logging sinks describe $SINK_NAME > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo "Creating Logging sink '${SINK_NAME}'..."
+        gcloud logging sinks create $SINK_NAME pubsub.googleapis.com/projects/${GOOGLE_PROJECT}/topics/${TOPIC_NAME} \
+            --log-filter='resource.labels.project_id="networkagent-434609" 
+                    AND resource.labels.container_name="free5gc-operator"  
+                    AND labels.python_logger!="kopf._cogs.clients.watching"' \
+            --description="Network operator logs"
+    else
+        echo "Logging sink '${SINK_NAME}' already exists..."
+    fi
+
+    #gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
+    #    --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+    #    --role="roles/pubsub.publisher" --condition=None --no-user-output-enabled
+
+    # Grant the Cloud Logging service account used by the Log sink the right to publish 
+    # log entries to the PubSub topic
+    gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
+        --member="serviceAccount:service-${GOOGLE_PROJECT_NUMBER}@gcp-sa-logging.iam.gserviceaccount.com" \
+        --role="roles/pubsub.publisher" --condition=None --no-user-output-enabled
+    
+    # Create the Cloud Run function that receives the eventarc
+    # events from pub/pub        echo "Deploying Log capture function..."
+    echo "Deploying Log capture function..."
+    gcloud functions deploy $CAPTURE_LOG_FUNCTION --source ./logcollector --runtime python312 \
+      --trigger-topic $TOPIC_NAME  --entry-point=capture_log --memory=512MB \
+      --project=$GOOGLE_PROJECT --region=$GOOGLE_REGION
+    # Give the eventarc service account (by default the compute service account of the
+    # project) the permission to invoke the cloud run function
+    gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
+        --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+        --role="roles/run.invoker" --condition=None --no-user-output-enabled
+    # Give th Cloud Function service account (by default the compute service account of the
+    # project) the permission to use (read/write) Spanner
+    gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
+        --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+        --role="roles/spanner.databaseUser" --condition=None --no-user-output-enabled   
+
+}
+
+
+############################################################
 # Deploy the Porch systems                                 #
 ############################################################
 Porch()
@@ -639,7 +666,8 @@ Help()
    echo "options:"
    echo "  -c     create network agent environment (keys, manifests,..)"
    echo "  -s     build and start network agent runtime (incl. the operator)"
-   echo "  -o     build and deploy the operator"
+   echo "  -o     build and deploy the network operator"
+   echo "  -l     build and deploy the logs capture function"
    echo "  -t     build and deploy the rest tools"
    echo "  -n     build and deploy the networkagent"
    echo "  -k     stop and delete the network agent runtime (GKE cluster, VMS, DB, etc..)"
@@ -658,7 +686,7 @@ Help()
 # Process the input options. Add options as needed.        #
 ############################################################
 # Get the options
-while getopts ":hcsotnkdp" option; do
+while getopts ":hcsoltnkdp" option; do
    case $option in
       h) 
         Help
@@ -671,6 +699,9 @@ while getopts ":hcsotnkdp" option; do
         exit;;
       o) 
         Operator
+        exit;;
+      l) 
+        Log
         exit;;
       t) 
         Tools

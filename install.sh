@@ -41,6 +41,41 @@ if [ -z "${GOOGLE_PROJECT}" ] || [ -z "${GOOGLE_REGION}" ] || \
     exit 1
 fi
 
+# Make sure that the designated project has a billing account. If not all else will fail
+gcloud beta billing projects describe $GOOGLE_PROJECT > /dev/null 2>&1
+if [[ $? -ne 0 ]]; then
+    echo "Project $GOOGLE_PROJECT has no billing account. Billing must be enabled prior to activation of GCP services"
+    exit 1
+fi
+
+# Check that we can use non shielded VMs
+shielded_vm_enforced=$(gcloud resource-manager org-policies describe compute.requireShieldedVm --project $GOOGLE_PROJECT --effective --format="value(booleanPolicy.enforced)")
+if [ "$shielded_vm_enforced" = "True" ]; then
+    echo "compute.requireShieldedVm is enforced on this project. Please change this org Policy to False before proceeding"
+    exit 1
+fi
+
+# Check that we can use external IP addresses (needed by the gitea VM)
+external_ip_access=$(gcloud resource-manager org-policies describe compute.vmExternalIpAccess --project $GOOGLE_PROJECT --effective --format="value(listPolicy.allValues)")
+if [ "$external_ip_access" = "DENY" ]; then
+    echo "compute.vmExternalIpAccess is denied on this project. Please change this org Policy to ALLOW before proceeding"
+    exit 1
+fi
+
+# Check that VM can IP forward (needed by the gitea VM)
+vm_can_ip_forward=$(gcloud resource-manager org-policies describe compute.vmCanIpForward --project $GOOGLE_PROJECT --effective --format="value(listPolicy.allValues)")
+if [ "$vm_can_ip_forward" = "DENY" ]; then
+    echo "compute.vmCanIpForward is denied on this project. Please change this org Policy to ALLOW before proceeding"
+    exit 1
+fi
+
+# Check that account can be created on service accounts
+svc_account_key_disabled=$(gcloud resource-manager org-policies describe iam.disableServiceAccountKeyCreation --project $GOOGLE_PROJECT --effective --format="value(booleanPolicy.enforced)")
+if [ "$svc_account_key_disabled" = "True" ]; then
+    echo "iam.disableServiceAccountKeyCreation is enforced on this project. Please change this org Policy to False before proceeding"
+    exit 1
+fi
+
 export GOOGLE_PROJECT_NUMBER=`gcloud projects describe $GOOGLE_PROJECT --format="value(projectNumber)"`
 export GOOGLE_ACTIVE_USER=`gcloud auth list --filter=status:ACTIVE --format="value(account)"`
 export GOOGLE_REPO="networkagent"
@@ -98,6 +133,7 @@ Create()
     echo "Setup Cloud Build service account permissions "
     echo "########################################"
     CLOUD_BUILD_COMPUTE_SVC_ACCOUNT="${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+    echo "Granting roles to Cloud Build service account ${CLOUD_BUILD_COMPUTE_SVC_ACCOUNT}..."
     for role in "roles/storage.objectUser" "roles/logging.logWriter" "roles/artifactregistry.writer" "roles/cloudbuild.builds.builder"; do
         echo "$role"
         gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$CLOUD_BUILD_COMPUTE_SVC_ACCOUNT" \
@@ -127,47 +163,35 @@ Create()
     export GOOGLE_SSH_KEY=$(cat google-compute.pub)
 
     # check if SERVICE ACCOUNT exists
-    export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
+    export GOOGLE_SERVICE_ACCOUNT="networkagent@${GOOGLE_PROJECT}.iam.gserviceaccount.com"
+    gcloud iam service-accounts describe $GOOGLE_SERVICE_ACCOUNT > /dev/null 2>&1
 
-    # Create the service account if it doesnt exist
-    if [ -z "${GOOGLE_SERVICE_ACCOUNT}" ]; then
+    # Create the service account if it doesn't exist
+    if [[ $? -ne 0 ]]; then
         echo "########################################"
         echo "No Service Account, trying to create one"
         echo "########################################"
         gcloud iam service-accounts create networkagent --description="Network Agent Service Account" --display-name="Network Agent"
-        # recreate the service account environment variable
-        export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
+        if [[ $? -ne 0 ]]; then
+            echo "Creation of the GKE cluster service account failed. Fix the error and re-run the install command"
+            exit 1
+        fi
 
         echo "Granting permissions to the GKE Cluster service account..."
         for role in "roles/editor" "roles/container.admin" "roles/compute.admin" \
-          "roles/compute.networkAdmin" "roles/iam.serviceAccountAdmin" "roles/monitoring.metricWriter" \
-           "roles/aiplatform.user"; do
+            "roles/compute.networkAdmin" "roles/iam.serviceAccountAdmin" "roles/monitoring.metricWriter" \
+            "roles/aiplatform.user"; do
             echo "$role"   
             gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" \
               --role="$role" --no-user-output-enabled
         done
 
-        # Grant access permissions to the GKE cluster
-        # See https://cloud.google.com/spanner/docs/connect-gke-cluster
-        # For an unknown reason granting to the service account (line below) doesn't work...
-        # gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
-        #  --member="principal://iam.googleapis.com/projects/${GOOGLE_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GOOGLE_PROJECT}.svc.id.goog/subject/ns/${GOOGLE_NAMESPACE}/sa/${GOOGLE_SERVICE_ACCOUNT}" \
-        #  --role=roles/spanner.databaseUser --condition=None
-        #
-        # So here is a variant that grants the spanner permission to all service accounts
-        # in the designated namespace. This one works.
-        #
-        # Same to give the operator access to the Vertex AI prediction API
-
-        for role in "roles/spanner.databaseUser" "roles/aiplatform.user"; do
-            gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
-              --member="principal://iam.googleapis.com/projects/${GOOGLE_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GOOGLE_PROJECT}.svc.id.goog/subject/ns/${GOOGLE_NAMESPACE}/sa/${GOOGLE_SERVICE_ACCOUNT}" \
-              --role="$role" --condition=None --no-user-output-enabled
-        done   
-        echo "done."
     fi
 
-    if ! test -f networkagent.json; then
+    # if the creadentail file doesn't exist or as a zero byte size 
+    # then create it
+    if [[ ! ( -f "networkagent" && -s "networkagent" ) ]]; then
+        echo "Creating the application credential file for service account $GOOGLE_SERVICE_ACCOUNT..."
         gcloud iam service-accounts keys create "networkagent.json" --iam-account=$GOOGLE_SERVICE_ACCOUNT
     fi
 
@@ -219,34 +243,44 @@ Start()
     echo "########################################"
     echo "Create Artifact Repository "
     echo "########################################"
-    gcloud artifacts repositories create $GOOGLE_REPO --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository" --quiet
+    gcloud artifacts repositories describe $GOOGLE_REPO --location=$GOOGLE_REGION > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        gcloud artifacts repositories create $GOOGLE_REPO --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository" --quiet
+    fi
     gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev --quiet
 
     echo "###########################"
     echo "Starting the network agent"
     echo "###########################"
     # check if SERVICE ACCOUNT exists
-    export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
+    export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter="networkagent@${GOOGLE_PROJECT}."`
+    echo "GKE Cluster Service Account: $GOOGLE_SERVICE_ACCOUNT"
 
     # Create the service account if it doesnt exist
     if [ -z "${GOOGLE_SERVICE_ACCOUNT}" ]; then
-        echo "Cannot find the service account - run this script with the -c option"
+        echo "Cannot find the service account - run this script with the -c option first"
         exit 1
     fi
 
     echo "#####################"
     echo "Creating mgmt network"
     echo "#####################"
-    gcloud compute networks create mgmt --subnet-mode=custom
-    gcloud compute networks subnets create mgmt-subnet --network=mgmt --range=10.0.100.0/24 --region=$GOOGLE_REGION
-    gcloud compute firewall-rules create mgmt-ingress --network=mgmt --allow=tcp,udp,icmp --source-ranges="0.0.0.0/0"
-    gcloud compute routers create mgmt --network mgmt --region=$GOOGLE_REGION
-    gcloud compute routers nats create mgmt --router=mgmt --region=$GOOGLE_REGION --auto-allocate-nat-external-ips --nat-all-subnet-ip-ranges --enable-logging
+    (gcloud compute networks describe mgmt > /dev/null 2>&1) || \
+        gcloud compute networks create mgmt --subnet-mode=custom
+    (gcloud compute networks subnets describe mgmt-subnet --region=$GOOGLE_REGION > /dev/null 2>&1) || \
+        gcloud compute networks subnets create mgmt-subnet --network=mgmt --range=10.0.100.0/24 --region=$GOOGLE_REGION
+    (gcloud compute firewall-rules describe mgmt-ingress > /dev/null 2>&1) || \
+        gcloud compute firewall-rules create mgmt-ingress --network=mgmt --allow=tcp,udp,icmp --source-ranges="0.0.0.0/0"
+    (gcloud compute routers describe mgmt --region=$GOOGLE_REGION > /dev/null 2>&1) || \
+        gcloud compute routers create mgmt --network mgmt --region=$GOOGLE_REGION
+    (gcloud compute routers nats describe mgmt --router=mgmt --region=$GOOGLE_REGION > /dev/null 2>&1) || \
+        gcloud compute routers nats create mgmt --router=mgmt --region=$GOOGLE_REGION --auto-allocate-nat-external-ips --nat-all-subnet-ip-ranges --enable-logging
 
     # create the GKE cluster
     echo "###################################################"
     echo "Creating GKE cluster - this will take a few minutes"
     echo "###################################################"
+    (gcloud container clusters describe networkautomation --zone=$GOOGLE_ZONE > /dev/null 2>&1) || \
     gcloud container clusters create networkautomation \
     --release-channel stable \
     --addons ConfigConnector \
@@ -260,7 +294,7 @@ Start()
     --machine-type "n1-standard-4" \
     --enable-fleet \
     --network mgmt \
-    --subnetwork mgmt-subnet
+    --subnetwork mgmt-subnet 
 
     # On glinux machines gcloud components cannot be installed
     # through gcloud. apt must be used instead
@@ -290,6 +324,24 @@ Start()
     gcloud iam service-accounts add-iam-policy-binding $GOOGLE_SERVICE_ACCOUNT \
         --role roles/iam.workloadIdentityUser \
         --member "serviceAccount:$GOOGLE_PROJECT.svc.id.goog[$GOOGLE_NAMESPACE/networkoperator-account]"
+
+    # Grant access permissions to the GKE cluster
+    # See https://cloud.google.com/spanner/docs/connect-gke-cluster
+    # For an unknown reason granting to the service account (line below) doesn't work...
+    # gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
+    #  --member="principal://iam.googleapis.com/projects/${GOOGLE_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GOOGLE_PROJECT}.svc.id.goog/subject/ns/${GOOGLE_NAMESPACE}/sa/${GOOGLE_SERVICE_ACCOUNT}" \
+    #  --role=roles/spanner.databaseUser --condition=None
+    #
+    # So here is a variant that grants the spanner permission to all service accounts
+    # in the designated namespace. This one works.
+    #
+    # Same to give the operator access to the Vertex AI prediction API
+    for role in "roles/spanner.databaseUser" "roles/aiplatform.user"; do
+        gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
+            --member="principalSet://iam.googleapis.com/projects/${GOOGLE_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GOOGLE_PROJECT}.svc.id.goog/namespace/${GOOGLE_NAMESPACE}" \
+            --role="$role" --condition=None --no-user-output-enabled
+    done   
+    echo "done."
 
     # Setup the one config connector we will be using 
     kubectl apply -f environment/configconnector.yaml
@@ -462,9 +514,9 @@ Kill()
     # a certain timeout if it is still hanging 
 
     # Delete log sink, pub/sub topic and log processing Cloud Function
-    gcloud logging sinks delete $SINK_NAME
-    gcloud pubsub topics delete $TOPIC_NAME
-    gcloud functions delete $CAPTURE_LOG_FUNCTION --region=$GOOGLE_REGION 
+    gcloud logging sinks delete $SINK_NAME --quiet
+    gcloud pubsub topics delete $TOPIC_NAME --quiet
+    gcloud functions delete $CAPTURE_LOG_FUNCTION --region=$GOOGLE_REGION  --quiet
     #bq rm --recursive --force --dataset nwoplogs
 
     # Launch the kubectl command in the backgroun
@@ -540,8 +592,8 @@ Log()
     #    --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
     #    --role="roles/bigquery.dataEditor" --condition=None --no-user-output-enabled
     #
-    # ==> Sink to PubSub topic
 
+    # ==> Sink to PubSub topic
     # Create the pubsub topic if it doesn't exist yet
     gcloud pubsub topics describe $TOPIC_NAME > /dev/null 2>&1
     if [[ $? -ne 0 ]]; then
@@ -556,41 +608,42 @@ Log()
     if [[ $? -ne 0 ]]; then
         echo "Creating Logging sink '${SINK_NAME}'..."
         gcloud logging sinks create $SINK_NAME pubsub.googleapis.com/projects/${GOOGLE_PROJECT}/topics/${TOPIC_NAME} \
-            --log-filter='resource.labels.project_id="networkagent-434609" 
-                    AND resource.labels.container_name="free5gc-operator"  
-                    AND labels.python_logger!="kopf._cogs.clients.watching"' \
+            --log-filter="resource.labels.project_id=\"${GOOGLE_PROJECT}\" 
+                    AND resource.labels.container_name=\"free5gc-operator\"  
+                    AND labels.python_logger!=\"kopf._cogs.clients.watching\"" \
             --description="Network operator logs"
     else
         echo "Logging sink '${SINK_NAME}' already exists..."
     fi
-
-    #gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
-    #    --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
-    #    --role="roles/pubsub.publisher" --condition=None --no-user-output-enabled
 
     # Grant the Cloud Logging service account used by the Log sink the right to publish 
     # log entries to the PubSub topic
     gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
         --member="serviceAccount:service-${GOOGLE_PROJECT_NUMBER}@gcp-sa-logging.iam.gserviceaccount.com" \
         --role="roles/pubsub.publisher" --condition=None --no-user-output-enabled
-    
-    # Create the Cloud Run function that receives the eventarc
-    # events from pub/pub        echo "Deploying Log capture function..."
-    echo "Deploying Log capture function..."
-    gcloud functions deploy $CAPTURE_LOG_FUNCTION --source ./logcollector --runtime python312 \
-      --trigger-topic $TOPIC_NAME  --entry-point=capture_log --memory=512MB \
-      --project=$GOOGLE_PROJECT --region=$GOOGLE_REGION
+
     # Give the eventarc service account (by default the compute service account of the
     # project) the permission to invoke the cloud run function
     gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
         --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
         --role="roles/run.invoker" --condition=None --no-user-output-enabled
-    # Give th Cloud Function service account (by default the compute service account of the
+    # Give the Cloud Function service account (by default the compute service account of the
     # project) the permission to use (read/write) Spanner
     gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
         --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
         --role="roles/spanner.databaseUser" --condition=None --no-user-output-enabled   
+    # Give the Cloud Function service account (by default the compute service account of the
+    # project) the permission to use Vertex AI (e.g. embedding generation)
+    gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
+        --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+        --role="roles/aiplatform.user" --condition=None --no-user-output-enabled   
 
+    # Create the Cloud Run function that receives the eventarc
+    # events from pub/pub  and feed the Spanner DB
+    echo "Deploying Log capture function..."
+    gcloud functions deploy $CAPTURE_LOG_FUNCTION --source ./logcollector --runtime python312 \
+      --trigger-topic $TOPIC_NAME  --entry-point=capture_log --memory=512MB \
+      --project=$GOOGLE_PROJECT --region=$GOOGLE_REGION
 }
 
 
@@ -639,7 +692,7 @@ Networkagent()
     fi
 
     cd networkagent
-    export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
+    export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter="networkagent@${GOOGLE_PROJECT}."`
     gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
 
     gcloud run deploy network-agent --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networkagent:latest \
@@ -677,7 +730,7 @@ Help()
    # Display Help
    echo "Network Agent environment manager."
    echo
-   echo "Syntax: install.sh [-c|-s|-o|-r|-n|-k|-d|-p]"
+   echo "Syntax: install.sh [-c|-s|-o|-l|-r|-n|-k|-d|-p]"
    echo "options:"
    echo "  -c     create network agent environment (keys, manifests,..)"
    echo "  -s     build and start network agent runtime (incl. the operator)"

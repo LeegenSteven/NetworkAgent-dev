@@ -54,17 +54,18 @@ The script options are as follows:
 
 ```shell
 ./install.sh
-Network Agent environment manager.
-
-Syntax: install.sh [-c|-s|-o|-r|-n|-k|-d]
+Syntax: install.sh [-c|-s|-o|-l|-r|-n|-k|-d|-p]
 options:
-  -c     create keys and manifests.
-  -s     start network agent environment.
-  -o     build and deploy the operator
-  -r     build and deploy the rest tools
+  -c     create network agent environment (keys, manifests,..)
+  -s     build and start network agent runtime (incl. the operator)
+  -o     build and deploy the network operator
+  -l     build and deploy the logs capture function
+  -t     build and deploy the rest tools
   -n     build and deploy the networkagent
-  -k     kill the environment resources.
-  -d     delete the network agent environment.
+  -k     stop and delete the network agent runtime (GKE cluster, VMS, DB, etc..)
+  -d     delete the network agent environment (keys, manifests...).
+  -p     deploy porch tools
+
 ```
 
 The first step is to generate keys and deployment descriptors for each of the network agent GCP components by running the following command. 
@@ -89,4 +90,8 @@ Alternatively you may install the Network Agent on your own machine
 ```shell
 pip install -r ./networkagent/requirements.txt
 (cd ./networkagent/src; streamlit run ./main.py)
+```
+To recreate a complete environment and runtime from scratch: 
+```shell
+./install.sh -k; ./install.sh -d; ./install.sh -c; ./install.sh -s
 ```

@@ -76,8 +76,26 @@ if [ "$svc_account_key_disabled" = "True" ]; then
     exit 1
 fi
 
+# Create a gcloud configuration for this demo project 
+GCLOUD_CONFIG="${GOOGLE_PROJECT}-config"
+gcloud config configurations describe $GCLOUD_CONFIG > /dev/null 2>&1
+if [[ $? -ne 0 ]]; then
+    echo "Creating a specific gcloud config ($GCLOUD_CONFIG) for this project.."
+    gcloud config configurations create $GCLOUD_CONFIG
+    gcloud config set core/project $GOOGLE_PROJECT
+    gcloud config set core/account $GOOGLE_USER
+    gcloud config set core/disable_usage_reporting False
+fi
+gcloud config configurations activate $GCLOUD_CONFIG
+
+# register gcloud as a Docker credential helper
+gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev --quiet
+
 export GOOGLE_PROJECT_NUMBER=`gcloud projects describe $GOOGLE_PROJECT --format="value(projectNumber)"`
-export GOOGLE_ACTIVE_USER=`gcloud auth list --filter=status:ACTIVE --format="value(account)"`
+if [[ "$GOOGLE_PROJECT_NUMBER" = "" ]]; then
+    echo "Could not determine project number. Check that GOOGLE_PROJECT is set properly"
+    exit 1
+fi
 export GOOGLE_REPO="networkagent"
 export GOOGLE_NAMESPACE="automation"
 export GOOGLE_SPANNER_INSTANCE="networktopology-instance"
@@ -99,11 +117,11 @@ Create()
 
     # Make sure the active GCP user has proper permissions
     echo "########################################"
-    echo "Grant GCP permissions to GCP active user: $GOOGLE_ACTIVE_USER"
+    echo "Grant GCP permissions to GCP active user: $GOOGLE_USER"
     echo "########################################"
     for role in "roles/logging.logWriter" "roles/spanner.databaseReader"; do
         echo "$role"
-        gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="user:$GOOGLE_ACTIVE_USER" --role="$role" --no-user-output-enabled
+        gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="user:$GOOGLE_USER" --role="$role" --no-user-output-enabled
         # roles/spanner.databaseReader needed for the COlab Notebook to access the graph database
     done
 

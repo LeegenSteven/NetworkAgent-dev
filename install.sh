@@ -138,7 +138,7 @@ SetDemoEnv()
 {
     # Create a gcloud configuration for this demo project 
     gcloud_config="${GOOGLE_PROJECT}-config"
-    gcloud config configurations describe $GCLOUD_CONFIG > /dev/null 2>&1
+    gcloud config configurations describe $gcloud_config > /dev/null 2>&1
     if [[ $? -ne 0 ]]; then
         echo "Creating a specific gcloud config ($gcloud_config) for this project.."
         gcloud config configurations create $gcloud_config
@@ -146,7 +146,7 @@ SetDemoEnv()
         gcloud config set core/account $GOOGLE_USER
         gcloud config set core/disable_usage_reporting False
     fi
-    gcloud config configurations activate $GCLOUD_CONFIG
+    gcloud config configurations activate $gcloud_config
     gcloud config set account $GOOGLE_USER
 
     # register gcloud as a Docker credential helper

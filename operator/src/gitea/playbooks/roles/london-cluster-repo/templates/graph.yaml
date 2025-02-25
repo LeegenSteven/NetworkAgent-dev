@@ -68,8 +68,8 @@ spec:
           value: {{GOOGLE_REGION}}
         - name: GOOGLE_ZONE
           value: {{GOOGLE_ZONE}}
-        - name: GOOGLE_USER
-          value: admin_briannaughton_altostrat_co
+        - name: GOOGLE_VM_USER
+          value: {{GOOGLE_VM_USER}}
         - name: GRAPH
           value: "yes"
         - name: FREE5GC

@@ -104,14 +104,14 @@ async def deletetest(spec, name, namespace, logger, **kwargs):
         'hosts': {
             'client': {
                 'ansible_host': client_mgmt_ip,
-                'ansible_user': os.getenv("GOOGLE_USER"),
+                'ansible_user': os.getenv("GOOGLE_VM_USER"),
                 'ansible_connection': 'ssh',
                 'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
                 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'
             },
             'server': {
                 'ansible_host': server_mgmt_ip,
-                'ansible_user': os.getenv("GOOGLE_USER"),
+                'ansible_user': os.getenv("GOOGLE_VM_USER"),
                 'ansible_connection': 'ssh',
                 'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
                 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'

@@ -241,9 +241,9 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
   compute_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeInstance")
 
   # get the google user
-  google_user = os.getenv("GOOGLE_USER")
-  if google_user is None:
-    raise kopf.PermanentError("No GOOGLE_USER environment variable.")
+  vm_user = os.getenv("GOOGLE_VM_USER")
+  if vm_user is None:
+    raise kopf.PermanentError("No GOOGLE_VM_USER environment variable.")
 
   google_ssh_pub=None
   with open(f'{constants.basedir}/google-compute.pub') as f:
@@ -372,7 +372,7 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
       "metadata": [
         { 
           "key": "ssh-keys",
-          "value": f"{google_user}:{google_ssh_pub}"
+          "value": f"{vm_user}:{google_ssh_pub}"
         }
       ]
     }

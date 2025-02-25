@@ -45,7 +45,7 @@ async def install_vpn(servicename, vmname, mgmt_ip_address, data_ip_address, tun
         'hosts': {
             vmname: {
                 'ansible_host': mgmt_ip_address,
-                'ansible_user': os.getenv("GOOGLE_USER"),
+                'ansible_user': os.getenv("GOOGLE_VM_USER"),
                 'ansible_connection': 'ssh',
                 'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
                 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'

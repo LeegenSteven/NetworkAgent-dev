@@ -44,7 +44,7 @@ async def run_gitea_install(namespace, external_ip_address):
         'GOOGLE_PROJECT': os.getenv("GOOGLE_PROJECT"),
         'GOOGLE_REGION': os.getenv("GOOGLE_REGION"),
         'GOOGLE_ZONE': os.getenv("GOOGLE_ZONE"),
-        'GOOGLE_USER': os.getenv("GOOGLE_USER"),
+        'GOOGLE_VM_USER': os.getenv("GOOGLE_VM_USER"),
         'WEBAPPS_LOGIN': os.getenv("WEBAPPS_LOGIN"),
         'WEBAPPS_PWD': os.getenv("WEBAPPS_PWD"),
         'BASEDIR': constants.basedir,
@@ -55,7 +55,7 @@ async def run_gitea_install(namespace, external_ip_address):
         'hosts': {
             "monitor": {
                 'ansible_host': ip_address,
-                'ansible_user': os.getenv("GOOGLE_USER"),
+                'ansible_user': os.getenv("GOOGLE_VM_USER"),
                 'ansible_connection': 'ssh',
                 'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
                 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'

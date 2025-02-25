@@ -40,7 +40,7 @@ async def run_update(nodes):
         'hosts': {
             "monitor": {
                 'ansible_host': ip_address,
-                'ansible_user': os.getenv("GOOGLE_USER"),
+                'ansible_user': os.getenv("GOOGLE_VM_USER"),
                 'ansible_connection': 'ssh',
                 'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
                 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'
@@ -77,7 +77,7 @@ async def run_install():
         'hosts': {
             "monitor": {
                 'ansible_host': ip_address,
-                'ansible_user': os.getenv("GOOGLE_USER"),
+                'ansible_user': os.getenv("GOOGLE_VM_USER"),
                 'ansible_connection': 'ssh',
                 'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
                 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'

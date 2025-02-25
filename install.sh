@@ -15,95 +15,159 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 ############################################################
-# Check pre-requisites                                     #
+# Check the work environment                               #
 ############################################################
-# test if gcloud exists
-if ! command -v gcloud &> /dev/null
-then
-    echo "gcloud could not be found, you must install it"
-    exit 1
-fi
+CheckGCPEnv()
+{
+    echo; echo -n "Checking your work environment..."
 
-# test if jinja exists
-if ! command -v jinja &> /dev/null
-then
-    echo "jinja could not be found, you must run 'pip install jinja-cli'"
-    exit 1
-fi
+    # test if gcloud exists
+    if ! command -v gcloud &> /dev/null
+    then
+        echo "gcloud could not be found, you must install it"
+        exit 1
+    fi
 
-# The WEBAPPS_PWD and WEBAPPS_LOGIN used for all web front ends like Gitea, Streamlit NW Agent
-# This is to avoid hard coding the passwd in source code
-if [ -z "${GOOGLE_PROJECT}" ] || [ -z "${GOOGLE_REGION}" ] || \
-   [ -z "${GOOGLE_ZONE}" ] || [ -z "${GOOGLE_USER}" ] || \
-   [ -z "${WEBAPPS_PWD}" ] || [ -z "${WEBAPPS_LOGIN}" ]; then
-    echo "You must set GOOGLE_USER, GOOGLE_PROJECT, GOOGLE_REGION, GOOGLE_ZONE, WEBAPPS_LOGIN and WEBAPPS_PWD environment variables"
-    exit 1
-fi
+    # test if jinja exists
+    if ! command -v jinja &> /dev/null
+    then
+        echo "jinja could not be found, you must run 'pip install jinja-cli'"
+        exit 1
+    fi
 
-# Make sure that the designated project has a billing account. If not all else will fail
-gcloud beta billing projects describe $GOOGLE_PROJECT > /dev/null 2>&1
-if [[ $? -ne 0 ]]; then
-    echo "Project $GOOGLE_PROJECT has no billing account. Billing must be enabled prior to activation of GCP services"
-    exit 1
-fi
+    # The WEBAPPS_PWD and WEBAPPS_LOGIN used for all web front ends like Gitea, Streamlit NW Agent
+    # This is to avoid hard coding the passwd in source code
+    if [ -z "${GOOGLE_PROJECT}" ] || [ -z "${GOOGLE_REGION}" ] || \
+    [ -z "${GOOGLE_ZONE}" ] || [ -z "${GOOGLE_USER}" ] || [ -z "${GOOGLE_VM_USER}" ] || \
+    [ -z "${WEBAPPS_PWD}" ] || [ -z "${WEBAPPS_LOGIN}" ]; then
+        cat << EOF
+Prior to running the installation script, you must set and export the following environment variables (see ./SetDemoEnv.sh):
+    export GOOGLE_PROJECT=<YOUR PROJECT>  # the GCP project name hosting the NW Agent demo (You MUST create it first on GCP)
+    export GOOGLE_USER=<GCP_USERNAME>  # the user you authenticate with on GCP. It MUST be the owner of the GOOGLE_PROJECT (e.g. john.doe@mydomain.com)
+    export GOOGLE_VM_USER=<GCE_VM_USERNAME>  # the default user name on GCE VMs (usually john_doe_mydomain_com but to be sure create a VM, SSH connect from the web console, type whoami', delete VM)
+    export GOOGLE_REGION=<YOUR_REGION>  # the GCP region to host the demo environment (e.g. europe-west1)
+    export GOOGLE_ZONE=<YOUR_ZONE>  # the GCP zone in the region to host the demo environment (e.g.europe-west1-c)
+    export WEBAPPS_LOGIN=<YOUR_WEB_LOGIN>  # the login name to access web apps like the NW Agent UI or the Gitops Web UI
+    export WEBAPPS_PWD=<YOUR_WEB_PWD>  # the password to access the web apps
+EOF
+        exit 1
+    fi
 
-# Check that we can use non shielded VMs
-shielded_vm_enforced=$(gcloud resource-manager org-policies describe compute.requireShieldedVm --project $GOOGLE_PROJECT --effective --format="value(booleanPolicy.enforced)")
-if [ "$shielded_vm_enforced" = "True" ]; then
-    echo "compute.requireShieldedVm is enforced on this project. Please change this org Policy to False before proceeding"
-    exit 1
-fi
+    # Check GCP project is valid
+    gcloud projects describe $GOOGLE_PROJECT > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo "**ERROR** GCP project $GOOGLE_PROJECT is invalid. Please set the GOOGLE_PROJECT environment variable with a valid project name"
+        exit 1
+    fi
 
-# Check that we can use external IP addresses (needed by the gitea VM)
-external_ip_access=$(gcloud resource-manager org-policies describe compute.vmExternalIpAccess --project $GOOGLE_PROJECT --effective --format="value(listPolicy.allValues)")
-if [ "$external_ip_access" = "DENY" ]; then
-    echo "compute.vmExternalIpAccess is denied on this project. Please change this org Policy to ALLOW before proceeding"
-    exit 1
-fi
+    # Check GCP region is valid
+    gcloud compute regions describe $GOOGLE_REGION > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo "**ERROR** GCP Region $GOOGLE_REGION is invalid. Please set the GOOGLE_REGION environment variable with a valid region name"
+        exit 1
+    fi
 
-# Check that VM can IP forward (needed by the gitea VM)
-vm_can_ip_forward=$(gcloud resource-manager org-policies describe compute.vmCanIpForward --project $GOOGLE_PROJECT --effective --format="value(listPolicy.allValues)")
-if [ "$vm_can_ip_forward" = "DENY" ]; then
-    echo "compute.vmCanIpForward is denied on this project. Please change this org Policy to ALLOW before proceeding"
-    exit 1
-fi
+    # Check GCP zone is valid
+    gcloud compute zones describe $GOOGLE_ZONE > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo "**ERROR** GCP zone $GOOGLE_ZONE is invalid. Please set the GOOGLE_ZONE environment variable with a valid zone name"
+        exit 1
+    fi
 
-# Check that account can be created on service accounts
-svc_account_key_disabled=$(gcloud resource-manager org-policies describe iam.disableServiceAccountKeyCreation --project $GOOGLE_PROJECT --effective --format="value(booleanPolicy.enforced)")
-if [ "$svc_account_key_disabled" = "True" ]; then
-    echo "iam.disableServiceAccountKeyCreation is enforced on this project. Please change this org Policy to False before proceeding"
-    exit 1
-fi
+    # Check GCP user is the owner of GCP project
+    result=$(gcloud projects get-iam-policy "$GOOGLE_PROJECT" --flatten=bindings \
+        --filter="bindings.members:user:$GOOGLE_USER AND bindings.role=roles/owner" --format="value(bindings.members)")
+    if [[ -z "$result" ]]; then
+        echo "**ERROR** GCP user $GOOGLE_USER is not the Owner of project $GOOGLE_PROJECT. Please assign 'roles/owner' permission to $GOOGLE_USER."
+        exit 1
+   fi
 
-# Create a gcloud configuration for this demo project 
-GCLOUD_CONFIG="${GOOGLE_PROJECT}-config"
-gcloud config configurations describe $GCLOUD_CONFIG > /dev/null 2>&1
-if [[ $? -ne 0 ]]; then
-    echo "Creating a specific gcloud config ($GCLOUD_CONFIG) for this project.."
-    gcloud config configurations create $GCLOUD_CONFIG
-    gcloud config set core/project $GOOGLE_PROJECT
-    gcloud config set core/account $GOOGLE_USER
-    gcloud config set core/disable_usage_reporting False
-fi
-gcloud config configurations activate $GCLOUD_CONFIG
+    # Make sure the declared Google user is the active one
+    active_gcp_user=$(gcloud auth list --filter="status:ACTIVE" --format="value(account)" 2> /dev/null)
+    if [[ ! "$active_gcp_user" = "$GOOGLE_USER" ]]; then
+        echo "**ERROR** the currently GCP active user ($active_gcp_user) doesn't match GOOGLE_USER ($GOOGLE_USER)"
+        echo "Please issue the following command to authenticate with GCP:"
+        echo "  gcloud auth login $GOOGLE_USER"
+        exit 1
+    fi
 
-# register gcloud as a Docker credential helper
-gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev --quiet
+    # Make sure that the designated project has a billing account. If not all else will fail
+    gcloud beta billing projects describe $GOOGLE_PROJECT > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo "Project $GOOGLE_PROJECT has no billing account. Billing must be enabled prior to activation of GCP services"
+        exit 1
+    fi
 
-export GOOGLE_PROJECT_NUMBER=`gcloud projects describe $GOOGLE_PROJECT --format="value(projectNumber)"`
-if [[ "$GOOGLE_PROJECT_NUMBER" = "" ]]; then
-    echo "Could not determine project number. Check that GOOGLE_PROJECT is set properly"
-    exit 1
-fi
-export GOOGLE_REPO="networkagent"
-export GOOGLE_NAMESPACE="automation"
-export GOOGLE_SPANNER_INSTANCE="networktopology-instance"
-export GOOGLE_SPANNER_DATABASE="networktopology-db"
+    # Check that we can use non shielded VMs
+    shielded_vm_enforced=$(gcloud resource-manager org-policies describe compute.requireShieldedVm --project $GOOGLE_PROJECT --effective --format="value(booleanPolicy.enforced)")
+    if [ "$shielded_vm_enforced" = "True" ]; then
+        echo "compute.requireShieldedVm is enforced on this project. Please change this org Policy to False before proceeding"
+        exit 1
+    fi
 
-SINK_NAME="nwoplogs-sink"
-TOPIC_NAME="nwoplogs-topic"
-CAPTURE_LOG_FUNCTION="capture_log"
+    # Check that we can use external IP addresses (needed by the gitea VM)
+    external_ip_access=$(gcloud resource-manager org-policies describe compute.vmExternalIpAccess --project $GOOGLE_PROJECT --effective --format="value(listPolicy.allValues)")
+    if [ "$external_ip_access" = "DENY" ]; then
+        echo "compute.vmExternalIpAccess is denied on this project. Please change this org Policy to ALLOW before proceeding"
+        exit 1
+    fi
+
+    # Check that VM can IP forward (needed by the gitea VM)
+    vm_can_ip_forward=$(gcloud resource-manager org-policies describe compute.vmCanIpForward --project $GOOGLE_PROJECT --effective --format="value(listPolicy.allValues)")
+    if [ "$vm_can_ip_forward" = "DENY" ]; then
+        echo "compute.vmCanIpForward is denied on this project. Please change this org Policy to ALLOW before proceeding"
+        exit 1
+    fi
+
+    # Check that account can be created on service accounts
+    svc_account_key_disabled=$(gcloud resource-manager org-policies describe iam.disableServiceAccountKeyCreation --project $GOOGLE_PROJECT --effective --format="value(booleanPolicy.enforced)")
+    if [ "$svc_account_key_disabled" = "True" ]; then
+        echo "iam.disableServiceAccountKeyCreation is enforced on this project. Please change this org Policy to False before proceeding"
+        exit 1
+    fi
+
+    echo " all good!"
+}
+
+############################################################
+# Set the work environment                                 #
+############################################################
+SetDemoEnv()
+{
+    # Create a gcloud configuration for this demo project 
+    gcloud_config="${GOOGLE_PROJECT}-config"
+    gcloud config configurations describe $GCLOUD_CONFIG > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo "Creating a specific gcloud config ($gcloud_config) for this project.."
+        gcloud config configurations create $gcloud_config
+        gcloud config set core/project $GOOGLE_PROJECT
+        gcloud config set core/account $GOOGLE_USER
+        gcloud config set core/disable_usage_reporting False
+    fi
+    gcloud config configurations activate $GCLOUD_CONFIG
+    gcloud config set account $GOOGLE_USER
+
+    # register gcloud as a Docker credential helper
+    gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev --quiet
+
+    export GOOGLE_PROJECT_NUMBER=`gcloud projects describe $GOOGLE_PROJECT --format="value(projectNumber)"`
+    if [[ "$GOOGLE_PROJECT_NUMBER" = "" ]]; then
+        echo "Could not determine project number. Check that GOOGLE_PROJECT is set properly"
+        exit 1
+    fi
+    export GOOGLE_REPO="networkagent"
+    export GOOGLE_NAMESPACE="automation"
+    export GOOGLE_SPANNER_INSTANCE="networktopology-instance"
+    export GOOGLE_SPANNER_DATABASE="networktopology-db"
+
+    export SINK_NAME="nwoplogs-sink"
+    export TOPIC_NAME="nwoplogs-topic"
+    export CAPTURE_LOG_FUNCTION="capture_log"
+    export NETWORK_OPERATOR="free5gc-operator"
+    export GIT_OPERATOR="gitea-operator"
+}
 
 ############################################################
 # Create keys and manifest files                           #
@@ -117,7 +181,7 @@ Create()
 
     # Make sure the active GCP user has proper permissions
     echo "########################################"
-    echo "Grant GCP permissions to GCP active user: $GOOGLE_USER"
+    echo "Grant GCP permissions to GCP user: $GOOGLE_USER"
     echo "########################################"
     for role in "roles/logging.logWriter" "roles/spanner.databaseReader"; do
         echo "$role"
@@ -243,12 +307,12 @@ Create()
     echo "#######################################################"
     echo "generating networkagent, tools and operator yaml files"
     echo "#######################################################"
-    jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO -E WEBAPPS_LOGIN -E WEBAPPS_PWD operator/deployment.j2 > operator/deployment.yaml
-    jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO operator/cloudbuild.j2 > operator/cloudbuild.yaml
-    jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO tools/deployment.j2 > tools/deployment.yaml
-    jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO tools/cloudbuild.j2 > tools/cloudbuild.yaml
-    jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO -E WEBAPPS_LOGIN -E WEBAPPS_PWD networkagent/deployment.j2 > networkagent/deployment.yaml
-    jinja -E GOOGLE_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagent/cloudbuild.j2 > networkagent/cloudbuild.yaml
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO -E WEBAPPS_LOGIN -E WEBAPPS_PWD -E NETWORK_OPERATOR -E GIT_OPERATOR operator/deployment.j2 > operator/deployment.yaml
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO operator/cloudbuild.j2 > operator/cloudbuild.yaml
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO tools/deployment.j2 > tools/deployment.yaml
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO tools/cloudbuild.j2 > tools/cloudbuild.yaml
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO -E WEBAPPS_LOGIN -E WEBAPPS_PWD networkagent/deployment.j2 > networkagent/deployment.yaml
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagent/cloudbuild.j2 > networkagent/cloudbuild.yaml
 
 }
 
@@ -586,8 +650,8 @@ Operator()
     kubectl apply -f deployment.yaml
     kubectl get pods 
     echo "Waiting for deployment to be ready..."
-    kubectl rollout status deployment gitea-operator -n $GOOGLE_NAMESPACE --timeout=120s
-    kubectl rollout status deployment free5gc-operator -n $GOOGLE_NAMESPACE --timeout=120s
+    kubectl rollout status deployment $GIT_OPERATOR -n $GOOGLE_NAMESPACE --timeout=120s
+    kubectl rollout status deployment $NETWORK_OPERATOR -n $GOOGLE_NAMESPACE --timeout=120s
     cd ..
 }
 
@@ -627,8 +691,8 @@ Log()
         echo "Creating Logging sink '${SINK_NAME}'..."
         gcloud logging sinks create $SINK_NAME pubsub.googleapis.com/projects/${GOOGLE_PROJECT}/topics/${TOPIC_NAME} \
             --log-filter="resource.labels.project_id=\"${GOOGLE_PROJECT}\" 
-                    AND resource.labels.container_name=\"free5gc-operator\"  
-                    AND labels.python_logger!=\"kopf._cogs.clients.watching\"" \
+                AND resource.labels.container_name=\"${NETWORK_OPERATOR}\" 
+                AND labels.python_logger!=\"kopf._cogs.clients.watching\"" \
             --description="Network operator logs"
     else
         echo "Logging sink '${SINK_NAME}' already exists..."
@@ -778,30 +842,48 @@ while getopts ":hcsoltnkdp" option; do
         Help
         exit;;
       c) 
+        CheckGCPEnv
+        SetDemoEnv
         Create
         exit;;
       s) 
+        CheckGCPEnv
+        SetDemoEnv
         Start
         exit;;
       o) 
+        CheckGCPEnv
+        SetDemoEnv
         Operator
         exit;;
       l) 
+        CheckGCPEnv
+        SetDemoEnv
         Log
         exit;;
       t) 
+        CheckGCPEnv
+        SetDemoEnv
         Tools
         exit;;
       n) 
+        CheckGCPEnv
+        SetDemoEnv
         Networkagent
         exit;;
       k) 
+        CheckGCPEnv
+        SetDemoEnv
         Kill
         exit;;
       d)
+        CheckGCPEnv
+        SetDemoEnv
         Delete
         exit;;
       p)
+        CheckGCPEnv
+        SetDemoEnv
         Porch
         exit;;
      \?) # Invalid option

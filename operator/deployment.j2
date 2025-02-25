@@ -16,22 +16,22 @@ subjects:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: free5gc-operator
+  name: {{NETWORK_OPERATOR}}
 spec:
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      application: free5gc-operator
+      application: {{NETWORK_OPERATOR}}
   template:
     metadata:
       labels:
-        application: free5gc-operator
+        application: {{NETWORK_OPERATOR}}
     spec:
       serviceAccountName: networkoperator-account
       containers:
-      - name: free5gc-operator
+      - name: {{NETWORK_OPERATOR}}
         image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/networkoperator:latest
         imagePullPolicy: Always
         env:
@@ -43,8 +43,8 @@ spec:
           value: {{GOOGLE_REGION}}
         - name: GOOGLE_ZONE
           value: {{GOOGLE_ZONE}}
-        - name: GOOGLE_USER
-          value: {{GOOGLE_USER}}
+        - name: GOOGLE_VM_USER
+          value: {{GOOGLE_VM_USER}}
         - name: FREE5GC
           value: "yes"
         - name: VPN
@@ -56,22 +56,22 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: gitea-operator
+  name: {{GIT_OPERATOR}}
 spec:
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      application: gitea-operator
+      application: {{GIT_OPERATOR}}
   template:
     metadata:
       labels:
-        application: gitea-operator
+        application: {{GIT_OPERATOR}}
     spec:
       serviceAccountName: networkoperator-account
       containers:
-      - name: gitea-operator
+      - name: {{GIT_OPERATOR}}
         image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/networkoperator:latest
         imagePullPolicy: Always
         env:
@@ -83,8 +83,8 @@ spec:
           value: {{GOOGLE_REGION}}
         - name: GOOGLE_ZONE
           value: {{GOOGLE_ZONE}}
-        - name: GOOGLE_USER
-          value: {{GOOGLE_USER}}
+        - name: GOOGLE_VM_USER
+          value: {{GOOGLE_VM_USER}}
         - name: WEBAPPS_LOGIN
           value: {{WEBAPPS_LOGIN}}
         - name: WEBAPPS_PWD

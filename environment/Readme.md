@@ -33,15 +33,17 @@ gcloud init --no-launch-browser
 
 ## Setup GCP environment variables
 
-Setup the following environment variables. They are used throughout the setup docs and installation scripts.
+Setup and export the following environment variables. They are used throughout the setup docs and installation scripts.
 
 ```
-export GOOGLE_PROJECT=<YOUR PROJECT>
-export GOOGLE_REGION=<YOUR REGION>
-export GOOGLE_ZONE=<YOUR ZONE>
-export GOOGLE_USER=<GCE USERNAME> # the name of the default Operating System user when you connect to a GCE VM
-export WEBAPPS_LOGIN=<USERNAME> # the login name to access both the NW Agent Web App and the Git repo Web frontend
-export WEBAPPS_PWD=<PASSWORD> # the password for the same Web apps 
+  export GOOGLE_PROJECT=<YOUR PROJECT>  # the GCP project name hosting the NW Agent demo (You MUST create it first on GCP)
+  export GOOGLE_USER=<GCP_USERNAME>  # the user you authenticate with on GCP. It MUST be the owner of the GOOGLE_PROJECT (e.g. john.doe@mydomain.com)
+  export GOOGLE_VM_USER=<GCE_VM_USERNAME>  # the default user name on GCE VMs (usually john_doe_mydomain_com but to be sure create a VM, SSH connect from the web console, type whoami', delete VM)
+  export GOOGLE_REGION=<YOUR_REGION>  # the GCP region to host the demo environment (e.g. europe-west1)
+  export GOOGLE_ZONE=<YOUR_ZONE>  # the GCP zone in the region to host the demo environment (e.g.europe-west1-c)
+  export WEBAPPS_LOGIN=<YOUR_WEB_LOGIN>  # the login name to access web apps like the NW Agent UI or the Gitops Web UI"
+  export WEBAPPS_PWD=<YOUR_WEB_PWD>  # the password to access the web apps
+
 ```
 
 ## Network Agent Installation Script

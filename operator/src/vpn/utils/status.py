@@ -22,11 +22,10 @@ logger = logging.getLogger(__name__)
 # Monitor service children and update status
 ############################################
 @kopf.on.event('google.dev', 'v1', 'WireguardAppliance')
-async def servicestatus(event,meta,namespace,status, **_):
+async def servicestatus(event, meta, namespace, status, name, uid, **_):
     parent_name = meta['labels']['kex-parent-name']
     parent_namespace = meta['labels']['kex-parent-namespace']
     parent_kind = meta['labels']['kex-parent-kind']
-    name = meta['name']
 
     logger.info(f"Monitoring status of VPN {name}... ")
 
@@ -37,19 +36,17 @@ async def servicestatus(event,meta,namespace,status, **_):
     logger.debug("Wireguard name = %s", name)
 
     try:
-
-      updateStatus(namespace,parent_kind, parent_name, parent_namespace, status, event, name)
-
+      updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, event, name, uid)
     except kubernetes.client.rest.ApiException as e:
       if e.status == 404:
         logger.debug("No VPN Service Found")
       elif e.status == 409:
         logger.debug("Conflict - manifest is out of date - reload and  try again!!!!!!!!!!!!")
-        updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, event, name)
+        updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, event, name, uid)
       else:
         logger.error(e)
 
-def updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, event, name):
+def updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, event, name, uid):
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
     kind = None
     if parent_kind=="pointtopointservice":
@@ -71,8 +68,10 @@ def updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, 
         if "wireguard" in status and status['wireguard']['status']=="Running":
           for edge in newservice['status'][parent_kind]['edges']:
             if edge['name'] == name:
-              edge['status']="Running"
-              logger.info(f"VPN edge {name} of service {parent_name} status updated to {edge['status']}")
+              previous_status = edge['status']
+              edge['status'] = "Running"
+              if previous_status != edge['status']: 
+                logger.info(f"VPN edge {name} of service {parent_name} status updated to {edge['status']}")
               break
 
       logger.debug("====NEW STATUS ====")
@@ -85,13 +84,16 @@ def updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, 
 
       logger.debug("-------------------------------ALL RUNNING = %s------------------------------", allRunning)
 
+      previous_current_status = newservice['status']['currentStatus']
       if allRunning:
-        newservice['status'][parent_kind]['status']="Running"
-        newservice['status']['currentStatus']="Running"
+        newservice['status'][parent_kind]['status'] = "Running"
+        newservice['status']['currentStatus'] = "Running"
       else:
-        newservice['status']['currentStatus']="Starting"
+        newservice['status']['currentStatus'] = "Starting"
 
-      logger.info(f"Service {parent_name} of kind {parent_kind} status updated to {newservice['status']['currentStatus']}")
+      current_status = newservice['status']['currentStatus']
+      if previous_current_status != previous_status:
+        logger.info(f"Service {parent_name} of kind {parent_kind} status updated to {current_status}")
 
       # Update the K8s resource and graph node properties
       network_api.patch(body=newservice, name=parent_name, namespace=parent_namespace, content_type='application/merge-patch+json')

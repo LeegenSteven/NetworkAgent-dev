@@ -84,7 +84,7 @@ def updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, 
 
       logger.debug("-------------------------------ALL RUNNING = %s------------------------------", allRunning)
 
-      previous_current_status = newservice['status']['currentStatus']
+      previous_status = newservice['status']['currentStatus']
       if allRunning:
         newservice['status'][parent_kind]['status'] = "Running"
         newservice['status']['currentStatus'] = "Running"
@@ -92,7 +92,7 @@ def updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, 
         newservice['status']['currentStatus'] = "Starting"
 
       current_status = newservice['status']['currentStatus']
-      if previous_current_status != previous_status:
+      if previous_status != current_status:
         logger.info(f"Service {parent_name} of kind {parent_kind} status updated to {current_status}")
 
       # Update the K8s resource and graph node properties

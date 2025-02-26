@@ -690,11 +690,16 @@ Log()
     gcloud logging sinks describe $SINK_NAME > /dev/null 2>&1
     if [[ $? -ne 0 ]]; then
         echo "Creating Logging sink '${SINK_NAME}'..."
+        # The log sink filter captures:
+        # 1) all logs from the network operator except kopf logs
+        # and also
+        # 2) the error logs from the config manager in case something goes
+        #    wrong when GCP resources are instantiated or deleted
         gcloud logging sinks create $SINK_NAME pubsub.googleapis.com/projects/${GOOGLE_PROJECT}/topics/${TOPIC_NAME} \
-            --log-filter="resource.labels.project_id=\"${GOOGLE_PROJECT}\" 
-                AND resource.labels.container_name=\"${NETWORK_OPERATOR}\" 
-                AND labels.python_logger!=\"kopf._cogs.clients.watching\"" \
-            --description="Network operator logs"
+            --log-filter="resource.labels.project_id=${GOOGLE_PROJECT} AND 
+                ((resource.labels.container_name=${NETWORK_OPERATOR} AND labels.python_logger!~ \"^kopf.*\")
+                  OR (resource.labels.container_name=manager AND severity=ERROR))" \
+            --description="Network operator logs sink"
     else
         echo "Logging sink '${SINK_NAME}' already exists..."
     fi

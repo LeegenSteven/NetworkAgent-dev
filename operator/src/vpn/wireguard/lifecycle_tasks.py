@@ -59,6 +59,6 @@ async def install_vpn(servicename, vmname, mgmt_ip_address, data_ip_address, tun
                            playbook='install.yaml',
                            extravars=extravars)
 
-    logger.info("status = %s", r.status)
     if r.status != 'successful':
+        logger.info(f"Waiting for Edge VPN VM {vmname} used by service {servicename} to come up.")
         raise kopf.TemporaryError("Waiting for VM to come up.", delay=20)

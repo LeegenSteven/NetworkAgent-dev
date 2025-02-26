@@ -17,4 +17,4 @@ ADD ./requirements.txt /
 RUN pip install -r /requirements.txt
 ADD ./src/ /agent
 WORKDIR /agent
-CMD streamlit run main.py --server.port 8080
+CMD streamlit run main.py --server.port 8080 --server.address=0.0.0.0 --server.enableCORS=false

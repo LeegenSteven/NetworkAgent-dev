@@ -136,21 +136,22 @@ EOF
 ############################################################
 SetDemoEnv()
 {
+    echo "Setting your demo environment..."
     # Create a gcloud configuration for this demo project 
     gcloud_config="${GOOGLE_PROJECT}-config"
     gcloud config configurations describe $gcloud_config > /dev/null 2>&1
     if [[ $? -ne 0 ]]; then
         echo "Creating a specific gcloud config ($gcloud_config) for this project.."
         gcloud config configurations create $gcloud_config
-        gcloud config set core/project $GOOGLE_PROJECT
-        gcloud config set core/account $GOOGLE_USER
-        gcloud config set core/disable_usage_reporting False
     fi
+    gcloud auth application-default set-quota-project $GOOGLE_PROJECT > /dev/null 2>&1
     gcloud config configurations activate $gcloud_config
-    gcloud config set account $GOOGLE_USER
+    gcloud config set core/project $GOOGLE_PROJECT        
+    gcloud config set core/account $GOOGLE_USER
+    gcloud config set core/disable_usage_reporting False
 
     # register gcloud as a Docker credential helper
-    gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev --quiet
+    gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev > /dev/null 2>&1
 
     export GOOGLE_PROJECT_NUMBER=`gcloud projects describe $GOOGLE_PROJECT --format="value(projectNumber)"`
     if [[ "$GOOGLE_PROJECT_NUMBER" = "" ]]; then
@@ -167,6 +168,8 @@ SetDemoEnv()
     export CAPTURE_LOG_FUNCTION="capture_log"
     export NETWORK_OPERATOR="free5gc-operator"
     export GIT_OPERATOR="gitea-operator"
+
+    echo "done!"
 }
 
 ############################################################
@@ -329,7 +332,6 @@ Start()
     if [[ $? -ne 0 ]]; then
         gcloud artifacts repositories create $GOOGLE_REPO --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository" --quiet
     fi
-    gcloud auth configure-docker $GOOGLE_REGION-docker.pkg.dev --quiet
 
     echo "###########################"
     echo "Starting the network agent"
@@ -364,19 +366,19 @@ Start()
     echo "###################################################"
     (gcloud container clusters describe networkautomation --zone=$GOOGLE_ZONE > /dev/null 2>&1) || \
     gcloud container clusters create networkautomation \
-    --release-channel stable \
-    --addons ConfigConnector \
-    --enable-ip-alias \
-    --service-account $GOOGLE_SERVICE_ACCOUNT\
-    --scopes "default,storage-full,cloud-platform,bigquery" \
-    --workload-pool $GOOGLE_PROJECT.svc.id.goog \
-    --zone $GOOGLE_ZONE\
-    --node-locations $GOOGLE_ZONE \
-    --num-nodes 2 \
-    --machine-type "n1-standard-4" \
-    --enable-fleet \
-    --network mgmt \
-    --subnetwork mgmt-subnet 
+        --release-channel stable \
+        --addons ConfigConnector \
+        --enable-ip-alias \
+        --service-account $GOOGLE_SERVICE_ACCOUNT\
+        --scopes "default,storage-full,cloud-platform,bigquery" \
+        --workload-pool $GOOGLE_PROJECT.svc.id.goog \
+        --zone $GOOGLE_ZONE\
+        --node-locations $GOOGLE_ZONE \
+        --num-nodes 2 \
+        --machine-type "n1-standard-4" \
+        --enable-fleet \
+        --network mgmt \
+        --subnetwork mgmt-subnet 
 
     # On glinux machines gcloud components cannot be installed
     # through gcloud. apt must be used instead

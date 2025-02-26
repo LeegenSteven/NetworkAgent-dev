@@ -698,8 +698,8 @@ Log()
         #    wrong when GCP resources are instantiated or deleted
         gcloud logging sinks create $SINK_NAME pubsub.googleapis.com/projects/${GOOGLE_PROJECT}/topics/${TOPIC_NAME} \
             --log-filter="resource.labels.project_id=${GOOGLE_PROJECT} AND 
-                ((resource.labels.container_name=${NETWORK_OPERATOR} AND labels.python_logger!~ \"^kopf.*\")
-                  OR (resource.labels.container_name=manager AND severity=ERROR))" \
+                ((resource.labels.container_name=${NETWORK_OPERATOR} AND labels.python_logger!=kopf._cogs.clients.watching)
+                  OR (resource.labels.container_name=(manager OR reconciler) AND severity=ERROR))" \
             --description="Network operator logs sink"
     else
         echo "Logging sink '${SINK_NAME}' already exists..."

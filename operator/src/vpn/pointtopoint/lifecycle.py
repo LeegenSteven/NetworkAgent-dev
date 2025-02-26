@@ -29,10 +29,9 @@ async def pointtopointservice(body, spec, status, namespace, name, uid, logger, 
 
   kind = body.get('kind')
 
-  # create persistent config for the service. Do this before
-  # checking for errors so that if there is any error 
-  # subsequently in creating the mesh service the configmap
-  # appears a link to the mesh service on the graph representation
+  # Create the persistent config map before checking for errors
+  # so that the config map and the connectivity service always
+  # appear on the graph representation even in case of error.
   serviceInfo=await get_configmap(namespace, name)
   if serviceInfo is None:
     keys={

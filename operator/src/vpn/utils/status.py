@@ -84,7 +84,14 @@ def updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, 
 
       logger.debug("-------------------------------ALL RUNNING = %s------------------------------", allRunning)
 
-      previous_status = newservice['status']['currentStatus']
+      # Save current status before it is udpated so as to log
+      # the status change only if it's value changed for real.
+      # see conditional logger.info below
+      if 'currentStatus' in newservice['status']:
+        previous_status = newservice['status']['currentStatus']
+      else:
+        previous_status = None
+
       if allRunning:
         newservice['status'][parent_kind]['status'] = "Running"
         newservice['status']['currentStatus'] = "Running"

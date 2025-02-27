@@ -73,7 +73,7 @@ class NetworkAgent:
             HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
             HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
         }
-        self.model = ChatVertexAI(model_name="gemini-1.5-flash-002", 
+        self.model = ChatVertexAI(model_name="gemini-2.0-flash-001", #model_name="gemini-1.5-flash-002",
                            temperature=0,
                            credentials=credentials,
                            request_parallelism=1,

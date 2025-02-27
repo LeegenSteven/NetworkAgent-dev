@@ -142,8 +142,8 @@ def new_node(id, kind, name, display_name, status, property):
 
   return {"group": "nodes", "data": {"id": id, "label": disp_name, "kind": kind, "name": name, "status": status}, "selectable": True}
 
-def new_edge(edge_label, id, to_id):
-  return {"group":"edges", "data": {"source": id, "target": to_id, "label": edge_label}, "selectable": True}
+def new_edge(edge_label, id, to_id, src_kind, tgt_kind):
+  return {"group":"edges", "data": {"source": id, "target": to_id, "label": edge_label, "src_kind": src_kind, "tgt_kind": tgt_kind}, "selectable": True}
 
 def build_graph(database, edge_label):
   results = []
@@ -168,11 +168,16 @@ def build_graph(database, edge_label):
   elements = []
   if success:
     for row in results:
+      # Source node
       elt = new_node(*row[0:6])
       if elt is not None: elements.append(elt)
+      # Target node
       elt = new_node(*row[6:12])
       if elt is not None: elements.append(elt)
-      elements.append(new_edge(row[12][0], row[0], row[6]))
+      label = row[12][0]
+      src_id, src_kind = row[0], row[1]
+      tgt_id, tgt_kind = row[6], row[7] 
+      elements.append(new_edge(label, src_id, tgt_id, src_kind, tgt_kind))
 
   return elements, success
 
@@ -238,7 +243,10 @@ def edge_color(elements, label):
   for e in elements:
     if e['group'] == 'edges':
       if label == 'isConnectedTo':
-        color = google_green
+        if (e['data']['src_kind'] == 'ComputeRoute') or (e['data']['src_kind'] == 'ComputeRoute'):
+          color = google_yellow
+        else:
+          color = google_medium_grey
       elif label == 'Manages':
         color = google_blue
       else:
@@ -257,9 +265,11 @@ def node_color(elements):
         e['style'] = { 'background-color': google_light_green }
       elif status in ['Pending', 'Starting', 'Updating', 'DependencyNotReady', 'DependencyNotFound']:
         e['style'] = { 'background-color': google_light_yellow }
-      else:
-        logger.warning("Node status with no color assigned: {status}")
+      elif status in ['Failed']:
         e['style'] = { 'background-color': google_light_red }
+      else:
+        logger.warning(f"Node status with no color assigned: {status}")
+        e['style'] = { 'background-color': google_light_grey }
 
 # Graph drawing
 # Example of a node element:

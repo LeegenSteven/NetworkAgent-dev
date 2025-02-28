@@ -187,7 +187,9 @@ NODE_INFO_TMPL="""
 * name : {name}
 * status: {status}
 * Property: 
-```{property}```
+```json
+{property}
+```
 """
 
 # Works both for single and additivie node selection on the Graph

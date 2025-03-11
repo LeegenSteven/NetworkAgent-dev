@@ -178,6 +178,7 @@ with st.sidebar:
 
   st.title("Useful links")
   st.markdown(f"""
+  * [GCP project {project}](https://console.cloud.google.com/home/dashboard?project={project})
   * [Spanner Graph database](https://console.cloud.google.com/spanner/instances/networktopology-instance/databases/networktopology-db/details/tables?invt=Abiyrw&project={project})
   * [Cluster Config status](https://console.cloud.google.com/kubernetes/config_management/packages?project={project})
   * [GitOps repository]({get_gitea_url()}/networkagent)

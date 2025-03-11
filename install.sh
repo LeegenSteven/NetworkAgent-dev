@@ -213,6 +213,8 @@ Create()
     # for colab enterprise in addition to compute engine api
     gcloud services enable --project=$GOOGLE_PROJECT aiplatform.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT dataform.googleapis.com
+    # For Free5GC london cluster resources management
+    gcloud services enable --project=$GOOGLE_PROJECT cloudresourcemanager.googleapis.com
 
     # Configure Cloud Build service account
     echo "########################################"

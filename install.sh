@@ -162,6 +162,7 @@ SetDemoEnv()
     export GOOGLE_NAMESPACE="automation"
     export GOOGLE_SPANNER_INSTANCE="networktopology-instance"
     export GOOGLE_SPANNER_DATABASE="networktopology-db"
+    export GOOGLE_ORG_NAME=$(gcloud organizations list --format "value(name)")
 
     export SINK_NAME="nwoplogs-sink"
     export TOPIC_NAME="nwoplogs-topic"
@@ -310,7 +311,8 @@ Create()
     echo "#######################################################"
     echo "generating networkagent, tools and operator yaml files"
     echo "#######################################################"
-    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO -E WEBAPPS_LOGIN -E WEBAPPS_PWD -E NETWORK_OPERATOR -E GIT_OPERATOR operator/deployment.j2 > operator/deployment.yaml
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO -E WEBAPPS_LOGIN \
+          -E WEBAPPS_PWD -E NETWORK_OPERATOR -E GIT_OPERATOR -E GOOGLE_ORG_NAME operator/deployment.j2 > operator/deployment.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO operator/cloudbuild.j2 > operator/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO tools/deployment.j2 > tools/deployment.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO tools/cloudbuild.j2 > tools/cloudbuild.yaml

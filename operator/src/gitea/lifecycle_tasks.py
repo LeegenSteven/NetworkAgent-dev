@@ -41,6 +41,7 @@ async def run_gitea_install(namespace, external_ip_address):
 
     # run ansible playbook to install prometheus on the VM
     extravars = {
+        'GOOGLE_ORG_NAME': os.getenv("GOOGLE_ORG_NAME"),
         'GOOGLE_PROJECT': os.getenv("GOOGLE_PROJECT"),
         'GOOGLE_REGION': os.getenv("GOOGLE_REGION"),
         'GOOGLE_ZONE': os.getenv("GOOGLE_ZONE"),

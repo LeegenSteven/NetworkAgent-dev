@@ -121,7 +121,7 @@ metadata:
 spec:
   name: {{GOOGLE_PROJECT}}
   organizationRef:
-    external: {{GOOGLE_ORG_NAME}}
+    external: "{{GOOGLE_ORG_NAME}}"
 
 ---
 apiVersion: google.dev/v1

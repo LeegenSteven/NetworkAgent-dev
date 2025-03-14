@@ -23,7 +23,7 @@
 import streamlit as st
 
 def segmented_control(labels: list[str], key: str, default: str | None = None, max_size: int = 6) -> str:
-    """Group of buttons with the given labels. Return the selected label."""
+    """Group of buttons with the given labels styled in Google Cloud design. Return the selected label."""
     if key not in st.session_state:
         st.session_state[key] = default or labels[0]
 
@@ -32,10 +32,43 @@ def segmented_control(labels: list[str], key: str, default: str | None = None, m
     def set_label(label: str) -> None:
         st.session_state.update(**{key: label})
 
+    # Add Google Cloud style to buttons
+    st.markdown("""
+    <style>
+    /* Google Cloud style for button containers */
+    div[data-testid="column"] > div[data-testid="stButton"] > button {
+        background-color: #F1F3F4;
+        color: #5F6368;
+        border: none;
+        border-radius: 18px;
+        font-family: 'Google Sans', sans-serif;
+        font-weight: 500;
+        padding: 4px 16px;
+        transition: all 0.2s ease;
+    }
+    
+    /* Active button style */
+    div[data-testid="column"] > div[data-testid="stButton"] > button[kind="primary"] {
+        background-color: white !important;
+        color: #4285F4 !important;
+        box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3);
+    }
+    
+    /* Button container styling for segmented control */
+    div.row-widget.stButton {
+        background-color: #F1F3F4;
+        border-radius: 20px;
+        padding: 3px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Use columns for the buttons
     cols = st.columns([1] * len(labels) + [max_size - len(labels)])
-
+    
+    # Display buttons with GCP style
     for col, label in zip(cols, labels):
         btn_type = "primary" if selected_label == label else "secondary"
         col.button(label, on_click=set_label, args=(label,), use_container_width=True, type=btn_type)
-
+    
     return selected_label

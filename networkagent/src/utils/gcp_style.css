@@ -1,0 +1,174 @@
+/* Google Cloud Platform Style for Streamlit */
+
+/* Import Google Sans font */
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap');
+
+/* Base styling */
+:root {
+  --gcp-blue: #4285F4;
+  --gcp-red: #EA4335;
+  --gcp-yellow: #FBBC05;
+  --gcp-green: #34A853;
+  --gcp-gray: #5F6368;
+  --gcp-light-gray: #E8EAED;
+  --gcp-white: #FFFFFF;
+  --gcp-border-radius: 8px;
+  --gcp-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+}
+
+/* Main layout and typography */
+.main, .sidebar .sidebar-content {
+  font-family: 'Google Sans', 'Roboto', sans-serif;
+}
+
+/* Header styling */
+header {
+  background-color: var(--gcp-white);
+  border-bottom: 1px solid var(--gcp-light-gray);
+}
+
+h1, h2, h3 {
+  font-family: 'Google Sans', sans-serif;
+  font-weight: 500;
+  color: var(--gcp-gray);
+}
+
+h1 {
+  color: var(--gcp-blue);
+}
+
+/* Container styling */
+div.stContainer, div[data-testid="stDecoration"] {
+  border-radius: var(--gcp-border-radius);
+  box-shadow: var(--gcp-shadow);
+  border: 1px solid var(--gcp-light-gray);
+}
+
+/* Button styling */
+button, .stButton > button, div[data-testid="stButton"] {
+  font-family: 'Google Sans', sans-serif;
+  border-radius: 4px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0.25px;
+  transition: box-shadow 0.2s ease;
+}
+
+.stButton > button:hover {
+  box-shadow: var(--gcp-shadow);
+}
+
+button[data-baseweb="tab"], button[kind="secondary"] {
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 0.25rem 0.75rem;
+}
+
+button[data-baseweb="tab"][aria-selected="true"], button[kind="primary"] {
+  background-color: var(--gcp-blue);
+  color: white;
+}
+
+/* Chat container styling */
+[data-testid="stChatMessageContent"] {
+  background: var(--gcp-white);
+  border-radius: var(--gcp-border-radius);
+  border: 1px solid var(--gcp-light-gray);
+  padding: 10px 15px;
+}
+
+[data-testid="stChatMessageContent"].user {
+  background-color: var(--gcp-blue);
+  color: white;
+}
+
+/* Sidebar styling */
+section[data-testid="stSidebar"] {
+  background-color: var(--gcp-white);
+  border-right: 1px solid var(--gcp-light-gray);
+}
+
+.sidebar .sidebar-content {
+  background-color: var(--gcp-white);
+}
+
+/* Toggle styles */
+[data-testid="stCheckbox"], [data-testid="stToggle"] {
+  accent-color: var(--gcp-blue);
+}
+
+/* Input field styling */
+input, textarea, [data-baseweb="input"] {
+  border-radius: 4px;
+  border: 1px solid var(--gcp-light-gray);
+}
+
+/* Select box styling */
+[data-baseweb="select"] {
+  border-radius: 4px;
+}
+
+/* Progress and metric styling */
+[data-testid="stMetric"] {
+  background-color: var(--gcp-white);
+  border-radius: var(--gcp-border-radius);
+  border: 1px solid var(--gcp-light-gray);
+  padding: 10px;
+}
+
+/* Alert and notification styling */
+[data-testid="stAlert"] {
+  border-radius: var(--gcp-border-radius);
+}
+
+/* Help text and small print */
+.help-text, small {
+  color: var(--gcp-gray);
+}
+
+/* Logo and branding area */
+.logo-container {
+  background-color: var(--gcp-white);
+  padding: 10px;
+  text-align: center;
+}
+
+/* Graph container specific styling */
+[data-testid="element-container"] div.stContainer {
+  background-color: var(--gcp-white);
+}
+
+/* Datatables and dataframes */
+.dataframe {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 12px;
+}
+
+/* Specific Google Cloud style segmented control */
+.gcp-segmented-control {
+  display: flex;
+  background-color: var(--gcp-light-gray);
+  border-radius: 20px;
+  padding: 2px;
+  margin-bottom: 10px;
+}
+
+.gcp-segmented-control button {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-family: 'Google Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--gcp-gray);
+}
+
+.gcp-segmented-control button.active {
+  background-color: var(--gcp-white);
+  color: var(--gcp-blue);
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3);
+}

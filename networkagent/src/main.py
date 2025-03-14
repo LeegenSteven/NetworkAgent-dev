@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from datetime import datetime
-
+import base64
 import hmac
 import logging
 import os
@@ -24,9 +24,21 @@ logger = logging.getLogger(__name__)
 
 import streamlit as st
 # set_page_config must be executed before any other streamlit code.
-st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(
+    layout="wide", 
+    initial_sidebar_state="collapsed",
+    page_title="Google Cloud Network Agent",
+    page_icon="https://www.gstatic.com/devrel-devsite/prod/v3e5e49c86560fe8aebd7562946a9b92dcd2697eb969fce8339f1018fe54a5078/cloud/images/favicons/onecloud/favicon.ico"
+)
 
 import utils.st_extension as st_ext
+
+# Load custom Google Cloud style
+def load_gcp_style():
+    with open(os.getenv("ROOT_DIR",'/agent/')+'utils/gcp_style.css', 'r') as f:
+        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+
+load_gcp_style()
 
 from langchain_core.messages import AIMessage, HumanMessage
 from agent.networkagent import NetworkAgent
@@ -58,15 +70,31 @@ def check_login_password():
     if st.session_state.get("password_correct", False) and st.session_state.get("login_correct", False):
         return True
 
-    # Show input for password. Use a 25%
-    # width column to limit size of input field
-    col1, _ = st.columns([1,3])
-    with col1:
-      st.text_input("Login", type="default", on_change=login_entered, key="login")
-      st.text_input("Password", type="password", on_change=password_entered, key="password")
+    # Create GCP style login form
+    st.markdown("""
+    <div style="display: flex; justify-content: center; margin: 50px 0;">
+        <div style="width: 400px; padding: 30px; border: 1px solid #E8EAED; border-radius: 8px; box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3);">
+            <div style="text-align: center; margin-bottom: 30px;">
+                <div style="background-color: #4285F4; color: white; width: 50px; height: 50px; border-radius: 25px; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; font-size: 24px; margin-bottom: 10px;">G</div>
+                <h2 style="color: #4285F4; margin: 10px 0 0 0;">Network Agent Login</h2>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+      st.text_input("Username", type="default", on_change=login_entered, key="login", placeholder="Enter your username")
+      st.text_input("Password", type="password", on_change=password_entered, key="password", placeholder="Enter your password")
+      
+      if st.button("Sign in", use_container_width=True, type="primary"):
+        if "login" in st.session_state and "password" in st.session_state:
+            login_entered()
+            password_entered()
+            st.rerun()
 
       if "password_correct" in st.session_state:
-          st.error("😕 Login or password incorrect")
+          st.error("Invalid username or password. Please try again.")
       return False
 
 
@@ -147,7 +175,13 @@ if "chat_history" not in st.session_state:
 
 project = os.environ.get("GOOGLE_PROJECT")
 
-st.title("Autonomous Network Agent")
+# GCP style header with logo - using a simple colored circle with 'G' instead of image
+st.markdown("""
+<div style="display: flex; align-items: center; margin-bottom: 20px;">
+    <div style="background-color: #4285F4; color: white; width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 24px; margin-right: 10px;">G</div>
+    <h1 style="color: #4285F4; margin: 0;">Autonomous Network Agent</h1>
+</div>
+""", unsafe_allow_html=True)
 
 # Don't go through the authentication process
 # again if the rerun comes from the graph fragment
@@ -165,18 +199,31 @@ else:
 #---------------------------------------------
 
 with st.sidebar:
-  st.title("Settings")
-  if st.button("Reset chat"):
-    reset_chat_history()
-  if st.button("Reset logs"):
-    topology.reset_logs()
+  st.markdown("""
+  <div style="text-align: center; margin-bottom: 20px;">
+      <div style="background-color: #4285F4; color: white; width: 30px; height: 30px; border-radius: 15px; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px;">G</div>
+  </div>
+  """, unsafe_allow_html=True)
+  
+  st.markdown("<h3 style='color: #4285F4;'>Settings</h3>", unsafe_allow_html=True)
+  
+  col1, col2 = st.columns(2)
+  with col1:
+    if st.button("Reset chat", use_container_width=True):
+      reset_chat_history()
+  with col2:
+    if st.button("Reset logs", use_container_width=True):
+      topology.reset_logs()
+      
+  st.markdown("<hr style='margin: 15px 0; border-color: #E8EAED;'>", unsafe_allow_html=True)
+  
   if st.toggle("Graph Autorefresh", st.session_state.graph_autorefresh, on_change=toggle_autorefresh):
     logger.info("Graph autorefresh ON")
   else:
     logger.info("Graph autorefresh OFF")
   st.session_state.show_source = st.toggle("Show response source", True)
 
-  st.title("Useful links")
+  st.markdown("<h3 style='color: #4285F4; margin-top: 20px;'>Useful links</h3>", unsafe_allow_html=True)
   st.markdown(f"""
   * [GCP project {project}](https://console.cloud.google.com/home/dashboard?project={project})
   * [Spanner Graph database](https://console.cloud.google.com/spanner/instances/networktopology-instance/databases/networktopology-db/details/tables?invt=Abiyrw&project={project})
@@ -194,7 +241,8 @@ agentcolumn, graphcolumn, detailscolumn = st.columns([1,1,1])
 
 # Agent Column
 with agentcolumn:
-  chatcontainer=st.container(height=745, border=True)
+  st.markdown("<h3 style='color: #4285F4; margin-bottom: 10px;'>Network Assistant</h3>", unsafe_allow_html=True)
+  chatcontainer=st.container(height=710, border=True)
   # Display chat messages from history on app rerun
   for message in st.session_state.chat_history:
     if isinstance(message, AIMessage):
@@ -221,14 +269,17 @@ with agentcolumn:
 
 # Graph Column
 with graphcolumn:
-  graphcontainer = st.container(height=800, border=True)
+  st.markdown("<h3 style='color: #4285F4; margin-bottom: 10px;'>Network Visualization</h3>", unsafe_allow_html=True)
+  graphcontainer = st.container(height=765, border=True)
   with graphcontainer:
     selected_elts = graphcontainer_fragment()
 
 # Details Column
 with detailscolumn:
-  detailscontainer = st.container(height=500, border=True)
-  logcontainer = st.container(height=300, border=True)
+  st.markdown("<h3 style='color: #4285F4; margin-bottom: 10px;'>Network Details</h3>", unsafe_allow_html=True)
+  detailscontainer = st.container(height=465, border=True)
+  st.markdown("<h3 style='color: #4285F4; margin: 10px 0;'>System Logs</h3>", unsafe_allow_html=True)
+  logcontainer = st.container(height=285, border=True)
   with detailscontainer:
     graph_info = topology.display_selected_elements(st.session_state["selected_elts"])
     st.markdown(graph_info)

@@ -24,8 +24,12 @@
       - gnupg-agent
       - apt-transport-https 
       - software-properties-common
+      - iproute2
     state: latest
     update_cache: true
+
+- name: HACK create make route to London GKE work. this needs to be made generic for any VPC later
+  command: ip route 10.4.0.0/24 via 10.0.50.1
 
 - name: install pip dependencies
   ansible.builtin.pip:

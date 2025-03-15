@@ -21,13 +21,14 @@ log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
 logger = logging.getLogger(__name__)
+BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 import streamlit as st
 # set_page_config must be executed before any other streamlit code.
 st.set_page_config(
     layout="wide", 
     initial_sidebar_state="collapsed",
-    page_title="Google Cloud Network Agent",
+    page_title="Google Cloud Autonomous Network Agent",
     page_icon="https://www.gstatic.com/devrel-devsite/prod/v3e5e49c86560fe8aebd7562946a9b92dcd2697eb969fce8339f1018fe54a5078/cloud/images/favicons/onecloud/favicon.ico"
 )
 
@@ -35,7 +36,7 @@ import utils.st_extension as st_ext
 
 # Load custom Google Cloud style
 def load_gcp_style():
-    with open(os.getenv("ROOT_DIR",'/agent/')+'utils/gcp_style.css', 'r') as f:
+    with open(os.path.join(BASE_DIR,'assets/css/gcp_style.css'), 'r') as f:
         st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
 load_gcp_style()
@@ -66,14 +67,11 @@ def check_login_password():
       else:
           st.session_state["login_correct"] = False
 
-    # Return True if the login and passwords are correct.
-    if st.session_state.get("password_correct", False) and st.session_state.get("login_correct", False):
-        return True
 
     # Create GCP style login form
     st.markdown("""
     <div style="display: flex; justify-content: center; margin: 50px 0;">
-        <div style="width: 400px; padding: 30px; border: 1px solid #E8EAED; border-radius: 8px; box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3);">
+        <div style="width: 600px; padding: 30px; border: 1px solid #E8EAED; border-radius: 8px; box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3);">
             <div style="text-align: center; margin-bottom: 30px;">
                 <div style="background-color: #4285F4; color: white; width: 50px; height: 50px; border-radius: 25px; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; font-size: 24px; margin-bottom: 10px;">G</div>
                 <h2 style="color: #4285F4; margin: 10px 0 0 0;">Network Agent Login</h2>
@@ -88,13 +86,15 @@ def check_login_password():
       st.text_input("Password", type="password", on_change=password_entered, key="password", placeholder="Enter your password")
       
       if st.button("Sign in", use_container_width=True, type="primary"):
-        if "login" in st.session_state and "password" in st.session_state:
-            login_entered()
-            password_entered()
-            st.rerun()
-
-      if "password_correct" in st.session_state:
-          st.error("Invalid username or password. Please try again.")
+          if "login" in st.session_state and "password" in st.session_state:
+            # Return True if the login and passwords are correct.
+            if st.session_state.get("password_correct", False) and st.session_state.get("login_correct", False):
+                return True
+            else:
+              if "password_correct" in st.session_state:
+                st.error("Invalid username or password. Please try again.")
+              else:
+                st.info("Please enter a username and password.")
       return False
 
 
@@ -175,13 +175,17 @@ if "chat_history" not in st.session_state:
 
 project = os.environ.get("GOOGLE_PROJECT")
 
-# GCP style header with logo - using a simple colored circle with 'G' instead of image
-st.markdown("""
-<div style="display: flex; align-items: center; margin-bottom: 20px;">
-    <div style="background-color: #4285F4; color: white; width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 24px; margin-right: 10px;">G</div>
-    <h1 style="color: #4285F4; margin: 0;">Autonomous Network Agent</h1>
-</div>
-""", unsafe_allow_html=True)
+# Load the project logo
+def load_logo(width=192):
+    logo_path = os.path.join(BASE_DIR, 'assets/images/logo_96.png')
+    return st.image(logo_path, width=width)
+
+# GCP style header with logo
+col1, col2 = st.columns([1, 10])
+with col1:
+    load_logo(width=80)
+with col2:
+    st.markdown("<h1 style='color: #4285F4; margin: 0;'>Autonomous Network Agent</h1>", unsafe_allow_html=True)
 
 # Don't go through the authentication process
 # again if the rerun comes from the graph fragment

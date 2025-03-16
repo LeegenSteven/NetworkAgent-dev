@@ -473,11 +473,12 @@ async def get_ip_address(namespace, name, api_client=None):
   )
   try:
     result = network_api.get(name=name, namespace=namespace)
-    if result.get('spec') is not None:
-      if result.get('spec')['address'] is not None:
-        return result.get('spec').get('address')
-      else:
-        raise kopf.TemporaryError(f"Waiting for IP address", 15)
+    if result.get('status') is not None:
+      if result.get('status').get('observedState') is not None:
+          if result.get('status').get('observedState').get('address') is not None:
+            return result.get('status').get('observedState').get('address')
+    else:
+      raise kopf.TemporaryError(f"Waiting for IP address", 15)
 
   except kubernetes.client.rest.ApiException as e: 
     if e.status == 404:
@@ -578,10 +579,10 @@ async def get_ip(namespace, name, networkname="mgmt"):
 
     ip_address=None
     for int in interfaces:
-        if int.get('networkRef') is not None:
-            if int.get('networkRef').get('external') is not None:
-                if networkname in int['networkRef']['external']:
-                    ip_address = int['networkIpRef']['external']
+        logger.info(int)
+        if int.get('subnetworkRef') is not None:
+            if networkname in int['subnetworkRef']['external']:
+                ip_address = int['accessConfig'][0]['natIpRef']['external']
 
     if ip_address is None:
         logger.error(f"Could not find IP address for VM {name}. Temporary error. Waiting...")

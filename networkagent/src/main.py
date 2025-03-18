@@ -29,7 +29,7 @@ st.set_page_config(
     layout="wide", 
     initial_sidebar_state="collapsed",
     page_title="Google Cloud Autonomous Network Agent",
-    page_icon="https://www.gstatic.com/devrel-devsite/prod/v3e5e49c86560fe8aebd7562946a9b92dcd2697eb969fce8339f1018fe54a5078/cloud/images/favicons/onecloud/favicon.ico"
+    page_icon=os.path.join(BASE_DIR,'assets/images/logo_32.png')
 )
 
 import utils.st_extension as st_ext

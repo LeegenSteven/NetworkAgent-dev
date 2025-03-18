@@ -368,9 +368,11 @@ Start()
     echo "###################################################"
     echo "Creating GKE cluster - this will take a few minutes"
     echo "###################################################"
+    # Stay on version 1.29 as Config Connector in 1.30 breaks the ComputeInstance API
     (gcloud container clusters describe networkautomation --zone=$GOOGLE_ZONE > /dev/null 2>&1) || \
     gcloud container clusters create networkautomation \
-        --release-channel stable \
+        --cluster-version="1.29.14-gke.1018000" \
+        --no-enable-autoupgrade \
         --addons ConfigConnector \
         --enable-ip-alias \
         --service-account $GOOGLE_SERVICE_ACCOUNT\
@@ -383,6 +385,10 @@ Start()
         --enable-fleet \
         --network mgmt \
         --subnetwork mgmt-subnet 
+
+    if [ $? -ne 0 ]; then
+      echo "ERROR while creating the networkautomation cluster. Exiting"
+    fi
 
     # On glinux machines gcloud components cannot be installed
     # through gcloud. apt must be used instead
@@ -397,6 +403,8 @@ Start()
 
     gcloud container clusters get-credentials networkautomation --region=$GOOGLE_ZONE
 
+    # Give the Kubernetes ServiceAccount access to impersonate the IAM service account
+    # See https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity#authenticating_to
     gcloud iam service-accounts add-iam-policy-binding \
     $GOOGLE_SERVICE_ACCOUNT \
         --member="serviceAccount:$GOOGLE_PROJECT.svc.id.goog[cnrm-system/cnrm-controller-manager]" \

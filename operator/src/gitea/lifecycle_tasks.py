@@ -144,7 +144,7 @@ async def create_root_sync(ip_address):
         "auth": "none",
         "revision": "HEAD",
         "branch": "master",
-        "gcpServiceAccountEmail": f"networkagent@{os.environ['GOOGLE_PROJECT']}.iam.gserviceaccount.com",
+        "gcpServiceAccountEmail": f"networkagent@{os.getenv("GOOGLE_PROJECT")}.iam.gserviceaccount.com",
         "noSSLVerify": True
       }
     }

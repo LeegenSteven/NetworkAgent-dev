@@ -70,7 +70,7 @@ async def wireguard(body,spec, name, namespace, uid, logger, **kwargs):
     # Run ansible to install software on the VM
     await install_vpn(
                 servicename,
-                spec.get('vmname'),
+                name,
                 mgmt_ip_address,
                 data_ip_address,
                 spec.get('tunnelAddress'),

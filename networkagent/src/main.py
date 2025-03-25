@@ -280,9 +280,8 @@ with graphcolumn:
 
 # Details Column
 with detailscolumn:
-  st.markdown("<h3 style='color: #4285F4; margin-bottom: 10px;'>Network Details</h3>", unsafe_allow_html=True)
+  st.markdown("<h3 style='color: #4285F4; margin-bottom: 10px;'>Resource View & System Logs</h3>", unsafe_allow_html=True)
   detailscontainer = st.container(height=465, border=True)
-  st.markdown("<h3 style='color: #4285F4; margin: 10px 0;'>System Logs</h3>", unsafe_allow_html=True)
   logcontainer = st.container(height=285, border=True)
   with detailscontainer:
     graph_info = topology.display_selected_elements(st.session_state["selected_elts"])

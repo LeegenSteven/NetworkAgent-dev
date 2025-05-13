@@ -17,6 +17,7 @@ import os
 import kopf
 from utils.compute import *
 import ansible_runner
+from utils.ansible import event_handler
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,8 @@ async def run_install(namespace, upf_vm_name):
         'GOOGLE_PROJECT': os.getenv("GOOGLE_PROJECT"),
         'GOOGLE_REGION': os.getenv("GOOGLE_REGION"),
         'GOOGLE_ZONE': os.getenv("GOOGLE_ZONE"),
-        'BASEDIR': constants.basedir
+        'BASEDIR': constants.basedir,
+        'VMNAME': upf_vm_name
     }
     hosts = {
         'hosts': {
@@ -51,9 +53,11 @@ async def run_install(namespace, upf_vm_name):
     }
     logger.debug(hosts)
     logger.debug(extravars)
+
     r = ansible_runner.run(private_data_dir=constants.basedir+"/free5gc/upf/playbooks", 
                            inventory={'all': hosts},
                            playbook='install.yaml',
+                           event_handler=event_handler,
                            extravars=extravars)
 
     logger.info("status = %s", r.status)

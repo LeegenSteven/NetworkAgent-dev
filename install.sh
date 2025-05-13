@@ -17,6 +17,17 @@
 
 
 ############################################################
+# Display current work environment information             #
+############################################################
+DisplayGCPEnv()
+{
+    echo "  - GCP user: $(gcloud config list account --format="value(core.account)")"
+    echo "  - GCP project: $(gcloud config get-value project 2>/dev/null)"
+    echo "  - Active configuration: $(gcloud config configurations list --filter="IS_ACTIVE=True" --format="value(NAME)")"
+    echo "  - GKE context: $(kubectl config current-context)"
+}
+
+############################################################
 # Check the work environment                               #
 ############################################################
 CheckGCPEnv()
@@ -170,6 +181,9 @@ SetDemoEnv()
     export NETWORK_OPERATOR="free5gc-operator"
     export GIT_OPERATOR="gitea-operator"
 
+    # Display current work environment information
+    DisplayGCPEnv
+
     echo "done!"
 }
 
@@ -208,6 +222,7 @@ Create()
     gcloud services enable --project=$GOOGLE_PROJECT run.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT bigquery.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT spanner.googleapis.com
+    gcloud services enable --project=$GOOGLE_PROJECT logging.googleapis.com
     # For vertex AI workbench
     gcloud services enable --project=$GOOGLE_PROJECT notebooks.googleapis.com
     # for colab enterprise in addition to compute engine api
@@ -268,7 +283,7 @@ Create()
         echo "Granting permissions to the GKE Cluster service account..."
         for role in "roles/editor" "roles/container.admin" "roles/compute.admin" \
             "roles/compute.networkAdmin" "roles/iam.serviceAccountAdmin" "roles/monitoring.metricWriter" \
-            "roles/aiplatform.user"; do
+            "roles/aiplatform.user" "roles/logging.logWriter"; do
             echo "$role"   
             gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" \
               --role="$role" --no-user-output-enabled
@@ -281,6 +296,10 @@ Create()
     if [[ ! ( -f "networkagent" && -s "networkagent" ) ]]; then
         echo "Creating the application credential file for service account $GOOGLE_SERVICE_ACCOUNT..."
         gcloud iam service-accounts keys create "networkagent.json" --iam-account=$GOOGLE_SERVICE_ACCOUNT
+        if [[ $? -ne 0 ]]; then
+            echo "Creation of key for service account $GOOGLE_SERVICE_ACCOUNT failed. Exiting."
+            exit 1
+        fi        
     fi
 
     # check networkagent.json is not zero size and copy around if it is
@@ -289,7 +308,6 @@ Create()
         echo "#########################"
         echo "copying networkagent.json"
         echo "#########################"
-        cp networkagent.json tools/src
         cp networkagent.json operator/src
         cp networkagent.json networkagent/src
     else
@@ -311,15 +329,13 @@ Create()
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/networks.j2 > environment/networks.yaml
 
     echo "#######################################################"
-    echo "generating networkagent, tools and operator yaml files"
+    echo "generating networkagent and operator yaml files"
     echo "#######################################################"
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO -E WEBAPPS_LOGIN \
           -E WEBAPPS_PWD -E NETWORK_OPERATOR -E GIT_OPERATOR -E GOOGLE_ORG_NAME operator/deployment.j2 > operator/deployment.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO operator/cloudbuild.j2 > operator/cloudbuild.yaml
-    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO tools/deployment.j2 > tools/deployment.yaml
-    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO tools/cloudbuild.j2 > tools/cloudbuild.yaml
-    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO -E WEBAPPS_LOGIN -E WEBAPPS_PWD networkagent/deployment.j2 > networkagent/deployment.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagent/cloudbuild.j2 > networkagent/cloudbuild.yaml
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO dashboard/cloudbuild.j2 > dashboard/cloudbuild.yaml
 
 }
 
@@ -368,11 +384,11 @@ Start()
     echo "###################################################"
     echo "Creating GKE cluster - this will take a few minutes"
     echo "###################################################"
-    # Stay on version 1.29 as Config Connector in 1.30 breaks the ComputeInstance API
+
     (gcloud container clusters describe networkautomation --zone=$GOOGLE_ZONE > /dev/null 2>&1) || \
     gcloud container clusters create networkautomation \
-        --cluster-version="1.29.14-gke.1018000" \
         --no-enable-autoupgrade \
+        --cluster-version="1.30.10-gke.1070000" \
         --addons ConfigConnector \
         --enable-ip-alias \
         --service-account $GOOGLE_SERVICE_ACCOUNT\
@@ -393,8 +409,9 @@ Start()
     # On glinux machines gcloud components cannot be installed
     # through gcloud. apt must be used instead
     if [[ `uname -v` =~ "rodete" ]]; then
-        sudo apt install kubectl
-        sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin
+        for p in kubectl google-cloud-cli-gke-gcloud-auth-plugin; do
+            (dpkg -s $p &> /dev/null) || sudo apt install $p
+        done
     else
         gcloud components install kubectl
         gcloud components install kpt
@@ -478,7 +495,17 @@ Start()
     # more complex (not needed in this PoC)
     # (See https://b.corp.google.com/issues/372631209)
     echo "Updating Spanner instance to Enterprise Edition"
-    gcloud spanner instances update $GOOGLE_SPANNER_INSTANCE --edition=ENTERPRISE
+    gcloud spanner instances update $GOOGLE_SPANNER_INSTANCE --edition=ENTERPRISE &
+    job_id=$!
+
+    # Sometimes changing to Enterprise edition hangs.. but it actually does the job
+    # so simply kill after a timeout
+    timeout 2m sh -c "while kill -0 $job_id 2>/dev/null; do sleep 1; done"
+    if [ $? -eq 124 ]; then
+        kill -TERM $job_id
+        # Do nothing for now
+    fi
+
     echo "Updating Spanner instance to no backup schedule"
     gcloud spanner instances update $GOOGLE_SPANNER_INSTANCE --default-backup-schedule-type=NONE
 
@@ -499,6 +526,11 @@ Start()
     echo "Create Operator Log Sink and capture"
     echo "#####################################"
     Log
+
+    # echo "#####################################"
+    # echo "Create the Agent"
+    # echo "#####################################"
+    # Networkagent
 
     # start the network and git repos
     kubectl apply -f environment/networks.yaml
@@ -526,10 +558,9 @@ Start()
     echo -e "\nGitea server is available at:\n\thttps://$gitea_host:3000/explore/repos\n"
     echo "You can clone the git repos as follows (username/password = ${WEBAPPS_LOGIN}/${WEBAPPS_PWD})"
     echo "  git clone https://$gitea_host:3000/networkagent/core -c http.sslVerify=false"
-    echo "  git clone https://$gitea_host:3000/networkagent/dublin -c http.sslVerify=false"
-    echo "  git clone https://$gitea_host:3000/networkagent/london -c http.sslVerify=false"
-    echo "  git clone https://$gitea_host:3000/networkagent/london-cluster -c http.sslVerify=false"
-    echo "  git clone https://$gitea_host:3000/networkagent/newyork -c http.sslVerify=false"
+    echo "  git clone https://$gitea_host:3000/networkagent/vpn -c http.sslVerify=false"
+    echo "  git clone https://$gitea_host:3000/networkagent/cellsite1 -c http.sslVerify=false"
+    echo "  git clone https://$gitea_host:3000/networkagent/cellsite2 -c http.sslVerify=false"
 }
 
 ############################################################
@@ -544,31 +575,36 @@ Delete()
         * ) echo "please enter y/n";;
     esac
 
-    echo "######################"
-    echo "Deleting Artifact Repo"
-    echo "######################"
-    gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+    # DO NOT DELETE the artifact repo as it takes sooooo long to generate
+    # the Free5GC build (kernel recompilation)
+    if false; then
+        echo "######################"
+        echo "Deleting Artifact Repo"
+        echo "######################"
+        (gcloud artifacts repositories describe $GOOGLE_REPO --location=$GOOGLE_REGION > /dev/null 2>&1) && \
+        gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+    fi
 
     echo "#######################################"
     echo "Deleting environment manifests and keys"
     echo "#######################################"
     rm operator/deployment.yaml
+    rm operator/cloudbuild.yaml
     rm operator/src/google-compute*
     rm operator/src/networkagent.json
 
-    rm tools/deployment.yaml
-    rm tools/src/networkagent.json
-
-    rm networkagent/deployment.yaml
     rm networkagent/src/networkagent.json
+    rm networkagent/cloudbuild.yaml
 
-    rm environment/bigquery.yaml
-    rm environment/spanner.yaml
-    rm environment/configconnector.yaml
-    rm environment/networks.yaml
+    rm dashboard/cloudbuild.yaml
 
-    rm networkagent.json
-    rm google-compute*
+    rm -f environment/bigquery.yaml
+    rm -f environment/spanner.yaml
+    rm -f environment/configconnector.yaml
+    rm -f environment/networks.yaml
+
+    rm -f networkagent.json
+    rm -f google-compute*
 
 }
 
@@ -631,6 +667,7 @@ Kill()
 
     gcloud run services delete network-agent-api --region=$GOOGLE_REGION --quiet
     gcloud run services delete network-agent --region=$GOOGLE_REGION --quiet
+    gcloud run services delete network-dashboard --region=$GOOGLE_REGION --quiet
 
     echo "#####################"
     echo "Deleting GKE Cluster"
@@ -641,7 +678,9 @@ Kill()
     echo "Deleting mgmt network"
     echo "#####################"
     gcloud compute routers delete mgmt --region=$GOOGLE_REGION --quiet
-    gcloud compute firewall-rules delete mgmt-ingress --project=$GOOGLE_PROJECT --quiet
+    for r in $(gcloud compute firewall-rules list --filter="name~'^mgmt-'" --format="value(name)" --project=$GOOGLE_PROJECT); do
+        gcloud compute firewall-rules delete $r --project=$GOOGLE_PROJECT --quiet
+    done
     gcloud compute networks subnets delete mgmt-subnet --region=$GOOGLE_REGION --quiet
     gcloud compute networks delete mgmt --project=$GOOGLE_PROJECT --quiet
 
@@ -659,13 +698,17 @@ Operator()
 
     cd operator
     gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
-    kubectl apply -f config
     kubectl delete -f deployment.yaml
     kubectl apply -f deployment.yaml
-    kubectl get pods 
     echo "Waiting for deployment to be ready..."
     kubectl rollout status deployment $GIT_OPERATOR -n $GOOGLE_NAMESPACE --timeout=120s
     kubectl rollout status deployment $NETWORK_OPERATOR -n $GOOGLE_NAMESPACE --timeout=120s
+
+    # load the crds
+    kubectl apply -f config/gitea.yaml
+    kubectl apply -f config/connectivity/
+    kubectl apply -f config/free5gc/
+
     cd ..
 }
 
@@ -709,10 +752,15 @@ Log()
         # 2) the error logs from the config manager in case something goes
         #    wrong when GCP resources are instantiated or deleted
         gcloud logging sinks create $SINK_NAME pubsub.googleapis.com/projects/${GOOGLE_PROJECT}/topics/${TOPIC_NAME} \
+            --description="Network operator logs sink" \
             --log-filter="resource.labels.project_id=${GOOGLE_PROJECT} AND 
-                ((resource.labels.container_name=${NETWORK_OPERATOR} AND labels.python_logger!=kopf._cogs.clients.watching)
-                  OR (resource.labels.container_name=(manager OR reconciler) AND severity=ERROR))" \
-            --description="Network operator logs sink"
+                 (resource.labels.container_name=${NETWORK_OPERATOR} AND labels.python_logger!=kopf._cogs.clients.watching)"
+            # capture docker CNF logs also
+            # --log-filter="resource.labels.project_id=${GOOGLE_PROJECT} AND 
+            #     (
+            #      (resource.labels.container_name=${NETWORK_OPERATOR} AND labels.python_logger!=kopf._cogs.clients.watching)
+            #       OR jsonPayload.container.metadata.free5gc_name=("amf" OR "upf" OR "udm" OR "udr" OR "smf" OR "pcf" OR "nrf" OR "ueransim")
+            #     )" \
     else
         echo "Logging sink '${SINK_NAME}' already exists..."
     fi
@@ -764,31 +812,14 @@ Porch()
 
 
 ############################################################
-# Build and deploy the tools                               #
-############################################################
-Tools()
-{
-    if ! test -f tools/deployment.yaml; then
-        echo "No deployment.yaml found - you can generate by running ./install.sh -c"
-        exit 1
-    fi
-
-    cd tools
-    export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter=name:"networkagent@"`
-    gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
-    gcloud run deploy network-agent-api --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networktools:latest \
-       --region $GOOGLE_REGION --service-account $GOOGLE_SERVICE_ACCOUNT \
-       --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT,GOOGLE_REGION=$GOOGLE_REGION,GOOGLE_ZONE=$GOOGLE_ZONE
-    cd ..
-}
-
-############################################################
 # Build and deploy the networkagent                        #
 ############################################################
 Networkagent()
 {
-    if ! test -f networkagent/deployment.yaml; then
-        echo "No deployment.yaml found - you can generate by running ./install.sh -c"
+    # check if flutter installed locally for now
+    if ! command -v flutter &> /dev/null
+    then
+        echo "flutter could not be found in your path, you must install it"
         exit 1
     fi
 
@@ -796,15 +827,17 @@ Networkagent()
     export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter="networkagent@${GOOGLE_PROJECT}."`
     gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
 
-    gcloud run deploy network-agent --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networkagent:latest \
+    gcloud run deploy network-agent \
+       --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networkagent:latest \
        --region $GOOGLE_REGION --service-account $GOOGLE_SERVICE_ACCOUNT \
+       --min 1 \
        --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
        --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
        --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
        --update-env-vars WEBAPPS_PWD=${WEBAPPS_PWD} \
        --update-env-vars WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
        --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
-       --allow-unauthenticated
+       --allow-unauthenticated    
 
     # Check if allUsers access is already granted. 
     # If not Allow allUsers to invoke the Cloud Run service
@@ -820,7 +853,41 @@ Networkagent()
         exit 1
       fi
     fi
+
     cd ..
+
+    # build and deploy the network dashboard
+    cd dashboard
+    gitea_host=$(kubectl get gitea gitea -o 'jsonpath={..status.create_gitea.external_ip_address}')
+    echo "Git IP address is ${gitea_host}"
+
+    agent_url=$(gcloud run services describe network-agent --region=$GOOGLE_REGION --format="value(status.url)")
+    echo "Agent URL is ${agent_url}"
+
+    echo "Cleaning flutter environment"
+    flutter clean
+
+    echo "Building flutter web app"
+    flutter build web \
+            --dart-define=WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
+            --dart-define=WEBAPPS_PWD=${WEBAPPS_PWD} \
+            --dart-define=GCP_PROJECT=${GOOGLE_PROJECT}\
+            --dart-define=GITEA_URL=https://${gitea_host}:3000 \
+            --dart-define=NETWORKAGENT_URL=${agent_url}
+
+    gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+
+    gcloud run deploy network-dashboard --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/dashboard:latest \
+       --region $GOOGLE_REGION --service-account $GOOGLE_SERVICE_ACCOUNT \
+       --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
+       --update-env-vars NETWORKAGENT_URL=${agent_url} \
+       --update-env-vars GITEA_URL=https://${gitea_host}:3000 \
+       --update-env-vars WEBAPPS_PWD=${WEBAPPS_PWD} \
+       --update-env-vars WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
+       --allow-unauthenticated
+
+    cd ..
+
 }
 
 ############################################################
@@ -837,7 +904,6 @@ Help()
    echo "  -s     build and start network agent runtime (incl. the operator)"
    echo "  -o     build and deploy the network operator"
    echo "  -l     build and deploy the logs capture function"
-   echo "  -t     build and deploy the rest tools"
    echo "  -n     build and deploy the networkagent"
    echo "  -k     stop and delete the network agent runtime (GKE cluster, VMS, DB, etc..)"
    echo "  -d     delete the network agent environment (keys, manifests...)."
@@ -855,7 +921,7 @@ Help()
 # Process the input options. Add options as needed.        #
 ############################################################
 # Get the options
-while getopts ":hcsoltnkdp" option; do
+while getopts ":hcsoltnkdpi" option; do
    case $option in
       h) 
         Help
@@ -880,11 +946,6 @@ while getopts ":hcsoltnkdp" option; do
         SetDemoEnv
         Log
         exit;;
-      t) 
-        CheckGCPEnv
-        SetDemoEnv
-        Tools
-        exit;;
       n) 
         CheckGCPEnv
         SetDemoEnv
@@ -905,6 +966,9 @@ while getopts ":hcsoltnkdp" option; do
         SetDemoEnv
         Porch
         exit;;
+      i)
+        DisplayGCPEnv
+        exit;;
      \?) # Invalid option
         echo "Error: Invalid option"
         exit;;
@@ -912,4 +976,3 @@ while getopts ":hcsoltnkdp" option; do
 done
 
 Help
-

@@ -30,6 +30,7 @@ RUN wget https://github.com/Kitware/CMake/archive/refs/tags/v3.27.0-rc1.tar.gz -
 
 RUN git clone -b master -j `nproc` https://github.com/aligungr/UERANSIM \
     && cd ./UERANSIM \
+    && git checkout 3a96298 \
     && make
 
 FROM bitnami/minideb:bullseye

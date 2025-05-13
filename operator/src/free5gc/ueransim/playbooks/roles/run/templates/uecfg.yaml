@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # IMSI number of the UE. IMSI = [MCC|MNC|MSISDN] (In total 15 digits)
-supi: 'imsi-208930000000003'
+supi: 'imsi-{{imsi}}'
 # Mobile Country Code value of HPLMN
 mcc: '208'
 # Mobile Network Code value of HPLMN (2 or 3 digits)
@@ -34,7 +34,7 @@ imeiSv: '4370816125816151'
 
 # List of gNB IP addresses for Radio Link Simulation
 gnbSearchList:
-  - 127.0.0.1
+  - {{ ansible_facts.ens5.ipv4.address }}
 
 # UAC Access Identities Configuration
 uacAic:

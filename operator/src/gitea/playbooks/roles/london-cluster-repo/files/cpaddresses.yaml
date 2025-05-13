@@ -1,0 +1,95 @@
+# Copyright 2024-2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+kind: Gateway
+apiVersion: gateway.networking.k8s.io/v1beta1
+metadata:
+  namespace: default
+  name: allowed-pod-ips
+spec:
+  gatewayClassName: gke-persistent-regional-internal-managed
+
+  listeners:
+    - name: default
+      port: 443
+      protocol: none
+      allowedRoutes:
+        namespaces:
+          from: All
+
+  addresses:
+    - value: "10.3.0.100/32"
+      type: "gke.networking.io/cidr"
+    - value: "10.3.0.101/32"
+      type: "gke.networking.io/cidr"
+    - value: "10.3.0.102/32"
+      type: "gke.networking.io/cidr"
+
+---
+kind: GKEIPRoute
+apiVersion: networking.gke.io/v1
+metadata:
+  namespace: default
+  name: smf-pod-ip
+spec:
+  parentRefs:
+  - name: allowed-pod-ips
+    namespace: default
+  addresses:
+  - value: "10.3.0.100/32"
+    type: "gke.networking.io/cidr"
+  network: controlplane
+  reactionMode: ReadyCondition
+  podSelector:
+    matchLabels:
+      app: free5gc
+      nf: smf
+---
+kind: GKEIPRoute
+apiVersion: networking.gke.io/v1
+metadata:
+  namespace: default
+  name: amf-pod-ip
+spec:
+  parentRefs:
+  - name: allowed-pod-ips
+    namespace: default
+  addresses:
+  - value: "10.3.0.101/32"
+    type: "gke.networking.io/cidr"
+  network: controlplane
+  reactionMode: ReadyCondition
+  podSelector:
+    matchLabels:
+      app: free5gc
+      nf: amf
+---
+kind: GKEIPRoute
+apiVersion: networking.gke.io/v1
+metadata:
+  namespace: default
+  name: webui-pod-ip
+spec:
+  parentRefs:
+  - name: allowed-pod-ips
+    namespace: default
+  addresses:
+  - value: "10.3.0.102/32"
+    type: "gke.networking.io/cidr"
+  network: controlplane
+  reactionMode: ReadyCondition
+  podSelector:
+    matchLabels:
+      app: free5gc
+      nf: webui

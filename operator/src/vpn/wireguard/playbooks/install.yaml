@@ -17,17 +17,21 @@
   gather_facts: False
   tasks:
 
-  - name: run install
-    import_role:
-      name: install
+    - name: run install wireguard
+      import_role:
+        name: install
 
-  # - name: install ops agent
-  #   import_role:
-  #     name: opsagent
+    - name: install and run metrics collector
+      import_role:
+        name: metricscollector
 
-  - name: run wireguard
-    become: True
-    ansible.builtin.systemd_service:
-      state: restarted
-      enabled: true
-      name: wg-quick@wg0
+    # - name: install ops agent
+    #   import_role:
+    #     name: opsagent
+
+    - name: run wireguard
+      become: True
+      ansible.builtin.systemd_service:
+        state: restarted
+        enabled: true
+        name: wg-quick@wg0

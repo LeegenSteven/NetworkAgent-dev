@@ -14,7 +14,7 @@
 
 - hosts: all
   become: True
-  gather_facts: False
+  gather_facts: True
   tasks:
 
     - name: install Gitea
@@ -25,25 +25,21 @@
       import_role:
         name: create-gitea-repos
     
-    - name: london-repo
-      import_role:
-        name: london-repo
-
-    - name: london-cluster-repo
-      import_role:
-        name: london-cluster-repo
-
-    - name: dublin-repo
-      import_role:
-        name: dublin-repo
-
-    - name: newyork-repo
-      import_role:
-        name: newyork-repo
-
     - name: core-repo
       import_role:
         name: core-repo
+
+    - name: cellsite1-repo
+      import_role:
+        name: cellsite1-repo
+
+    - name: cellsite2-repo
+      import_role:
+        name: cellsite2-repo
+
+    - name: vpn-repo
+      import_role:
+        name: vpn-repo
 
     - name: root-repo
       import_role:

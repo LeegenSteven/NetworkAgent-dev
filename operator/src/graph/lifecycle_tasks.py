@@ -111,10 +111,7 @@ def get_status(body):
       if reason is not None:
         status_value = reason
     else:
-      wireguard = status.get('wireguard')
-      if wireguard is not None:
-        status_value = wireguard.get('status')
-      elif body['kind'].lower() in ['pointtopointservice', 'meshservice']:
+      if body['kind'].lower() in ['wireguardappliance', 'pointtopointservice', 'meshservice', 'userplanefunction', 'controlplane', 'datanetwork','ueransim']:
         if 'currentStatus' in body['status']:
           status_value = body['status']['currentStatus']
         else:
@@ -160,7 +157,7 @@ def get_status(body):
 # ------------------------------------------
 # Given a piece of text return the embedding (Array of Float64)
 # ------------------------------------------
-def get_embedding(text, task_type, model):
+async def get_embedding(text, task_type, model):
   try:
     text_embedding_input = TextEmbeddingInput(task_type=task_type, text=text)
     embeddings = model.get_embeddings([text_embedding_input])
@@ -172,7 +169,7 @@ def get_embedding(text, task_type, model):
 # ------------------------------------------
 # Create a network node
 # ------------------------------------------
-def create_network_node(body, spec, namespace, name, kind, uid):
+async def create_network_node(body, spec, namespace, name, kind, uid):
 
   def sql_create_network_node(transaction):
     tmpl = SQL_TEMPLATES['create_nw_node']
@@ -197,19 +194,19 @@ def create_network_node(body, spec, namespace, name, kind, uid):
     success = False
     logger.error(f"SQL error: {e}")
 
-  success &= create_or_update_kg_resource_description_node(uid, body_string)
+  success = success & await create_or_update_kg_resource_description_node(uid, body_string)
 
   if success:
-    logger.info(f"Network node inserted id: {uid}, kind: {kind}, name: {name} (row count: {row_ct})")
+    logger.debug(f"Network node inserted id: {uid}, kind: {kind}, name: {name}, status: {status} (row count: {row_ct})")
   else:
-    logger.error(f"Network node creation failed id: {uid}, kind: {kind}, name: {name}")
+    logger.error(f"Network node creation failed id: {uid}, kind: {kind}, name: {name}, status: {status}")
   return success
 
 
 # ------------------------------------------
 # Update a network node
 # ------------------------------------------
-def update_network_node(body, spec, namespace, name, kind, uid):
+async def update_network_node(body, spec, namespace, name, kind, uid):
 
   def sql_update_network_node(transaction):
     tmpl = SQL_TEMPLATES['update_nw_node']
@@ -231,18 +228,18 @@ def update_network_node(body, spec, namespace, name, kind, uid):
     success = False
     logger.error(f"SQL error: {e}")
 
-  success &= create_or_update_kg_resource_description_node(uid, body_string)
+  success = success & await create_or_update_kg_resource_description_node(uid, body_string)
 
   if success:
-    logger.info(f"Network node updated id: {uid}, kind: {kind}, name: {name} (row count: {row_ct})")
+    logger.debug(f"Network node updated id: {uid}, kind: {kind}, name: {name}, status: {status} (row count: {row_ct})")
   else:
-    logger.error(f"Network node update failed id: {uid}, kind: {kind}, name: {name}")
+    logger.error(f"Network node update failed id: {uid}, kind: {kind}, name: {name}, status: {status}")
   return success
 
 # ------------------------------------------
 # Delete a network node
 # ------------------------------------------
-def delete_network_node(uid, kind, name):
+async def delete_network_node(uid, kind, name):
 
   def sql_delete_network_node(transaction):
     tmpl = SQL_TEMPLATES['delete_nw_node']
@@ -259,10 +256,10 @@ def delete_network_node(uid, kind, name):
     logger.error(f"SQL error: {e}")
 
   # Delete related Knowledge Graph node
-  success &= delete_kg_resource_description_node(uid)
+  success = success & await delete_kg_resource_description_node(uid)
 
   if success:
-    logger.info(f"Network node deleted id: {uid}, kind: {kind}, name: {name} (row count: {row_ct})")
+    logger.debug(f"Network node deleted id: {uid}, kind: {kind}, name: {name} (row count: {row_ct})")
   else:
     logger.error(f"Network node deletion failed id: {uid}, kind: {kind}, name: {name}")
   return success
@@ -270,7 +267,7 @@ def delete_network_node(uid, kind, name):
 # ------------------------------------------
 # Create a network connection
 # ------------------------------------------
-def create_network_connection(parent_uid, uid):
+async def create_network_connection(parent_uid, uid):
 
   def sql_create_network_connection(transaction):
     tmpl = SQL_TEMPLATES['create_nw_cnx']
@@ -287,7 +284,7 @@ def create_network_connection(parent_uid, uid):
     logger.error(f"SQL error: {e}")
 
   if success:
-    logger.info("Network node connection from id: {} to id: {} created (row count: {})".format(parent_uid,uid,row_ct))
+    logger.debug("Network node connection from id: {} to id: {} created (row count: {})".format(parent_uid,uid,row_ct))
   else:
     logger.error("Network node connection from id: {} to id: {} creation failed".format(parent_uid, uid))
   return success
@@ -295,7 +292,7 @@ def create_network_connection(parent_uid, uid):
 # ------------------------------------------
 # Does a network connection exists
 # ------------------------------------------
-def exist_network_connection(parent_uid, uid):
+async def exist_network_connection(parent_uid, uid):
 
   tmpl = SQL_TEMPLATES['exist_nw_cnx']
   sql = tmpl.format(id=parent_uid, to_id=uid)
@@ -318,7 +315,7 @@ def exist_network_connection(parent_uid, uid):
 # ------------------------------------------
 # Delete network connections
 # ------------------------------------------
-def delete_node_network_connections(uid, kind, name):
+async def delete_node_network_connections(uid, kind, name):
 
   def sql_delete_node_network_connections(transaction):
     tmpl = SQL_TEMPLATES['delete_node_nw_cnx']
@@ -335,7 +332,7 @@ def delete_node_network_connections(uid, kind, name):
     logger.error(f"SQL error: {e}")
 
   if success:
-    logger.info(f"{row_ct} resource node connection(s) deleted for node id; {uid}, kind: {kind}, name: {name}")
+    logger.debug(f"{row_ct} resource node connection(s) deleted for node id; {uid}, kind: {kind}, name: {name}")
   else:
     logger.error(f"Network node connection(s) {uid} deletion failed")
   return success
@@ -343,7 +340,7 @@ def delete_node_network_connections(uid, kind, name):
 # ------------------------------------------
 # Create K8s resource connection
 # ------------------------------------------
-def create_resource_connection(parent_uid, uid):
+async def create_resource_connection(parent_uid, uid):
 
   def sql_create_resource_connections(transaction):
     tmpl = SQL_TEMPLATES['create_rs_cnx']
@@ -369,7 +366,7 @@ def create_resource_connection(parent_uid, uid):
 # ------------------------------------------
 # Delete K8s resource connections
 # ------------------------------------------
-def delete_node_resource_connections(uid, kind, name):
+async def delete_node_resource_connections(uid, kind, name):
 
   def sql_delete_node_resource_connection(transaction):
     tmpl = SQL_TEMPLATES['delete_node_rs_cnx']
@@ -386,7 +383,7 @@ def delete_node_resource_connections(uid, kind, name):
     logger.error(f"SQL error: {e}")
 
   if success:
-    logger.info(f"{row_ct} resource node connection(s) deleted for node id; {uid}, kind: {kind}, name: {name}")
+    logger.debug(f"{row_ct} resource node connection(s) deleted for node id; {uid}, kind: {kind}, name: {name}")
   else:
     logger.error(f"Resource connection for node id: {uid} deletion failed")
   return success
@@ -395,18 +392,18 @@ def delete_node_resource_connections(uid, kind, name):
 # Idempotent function to create or update a
 # KG resource node
 # ------------------------------------------
-def create_or_update_kg_resource_description_node(id, body_string):
+async def create_or_update_kg_resource_description_node(id, body_string):
   success = True
-  if exist_kg_resource_description_node(id):
-    success &= update_kg_resource_description_node(id, body_string)
+  if await exist_kg_resource_description_node(id):
+    success = success & await update_kg_resource_description_node(id, body_string)
   else:
-    success &= create_kg_resource_description_node(id, body_string)
+    success = success & await create_kg_resource_description_node(id, body_string)
   return success
 
 # ------------------------------------------
 # Does a KG resource node exists
 # ------------------------------------------
-def exist_kg_resource_description_node(id):
+async def exist_kg_resource_description_node(id):
 
   tmpl = SQL_TEMPLATES['exist_kg_res_node']
   sql = tmpl.format(id=id)
@@ -429,7 +426,7 @@ def exist_kg_resource_description_node(id):
 # ------------------------------------------
 # Create K8s resource descriptions in Knowledge Graph
 # ------------------------------------------
-def create_kg_resource_description_node(id, body_string):
+async def create_kg_resource_description_node(id, body_string):
 
   def sql_create_kg_resource_description_node(transaction):
     sql = SQL_TEMPLATES['create_kg_res_node']
@@ -444,7 +441,7 @@ def create_kg_resource_description_node(id, body_string):
   
   # For now we only update the status field and node property
   content = body_string
-  embedding = get_embedding(body_string, TASK_TYPE, EMBEDDING_MODEL)
+  embedding = await get_embedding(body_string, TASK_TYPE, EMBEDDING_MODEL)
   
   row_ct = 0
   success = True
@@ -455,7 +452,7 @@ def create_kg_resource_description_node(id, body_string):
     logger.error(f"SQL error: {e}")
 
   if success:
-    logger.info(f"KG Resource node created id: {id} (row count: {row_ct})")
+    logger.debug(f"KG Resource node created id: {id} (row count: {row_ct})")
   else:
     logger.error(f"KG Resource Node creation failed id: {id}")
   return success
@@ -464,7 +461,7 @@ def create_kg_resource_description_node(id, body_string):
 # ------------------------------------------
 # Update K8s resource descriptions in Knowledge Graph
 # ------------------------------------------
-def update_kg_resource_description_node(id, body_string):
+async def update_kg_resource_description_node(id, body_string):
 
   def sql_update_kg_resource_description_node(transaction):
     sql = SQL_TEMPLATES['update_kg_res_node']
@@ -479,7 +476,7 @@ def update_kg_resource_description_node(id, body_string):
   
   # For now we only update the status field and node property
   content = body_string
-  embedding = get_embedding(body_string, TASK_TYPE, EMBEDDING_MODEL)
+  embedding = await get_embedding(body_string, TASK_TYPE, EMBEDDING_MODEL)
   logger.debug(f"Embedding for node id {id}")
   logger.debug(f"--> type: {type(body_string)}, body: {body_string}")
   logger.debug(f"--> embedding: {embedding}")
@@ -493,7 +490,7 @@ def update_kg_resource_description_node(id, body_string):
     logger.error(f"SQL error: {e}")
   
   if success:
-    logger.info(f"KG Resource node updated id: {id} (row count: {row_ct})")
+    logger.debug(f"KG Resource node updated id: {id} (row count: {row_ct})")
   else:
     logger.error(f"KG Resource Node update failed id: {id} ")
   return success
@@ -501,7 +498,7 @@ def update_kg_resource_description_node(id, body_string):
 # ------------------------------------------
 # Update K8s resource descriptions in Knowledge Graph
 # ------------------------------------------
-def delete_kg_resource_description_node(id):
+async def delete_kg_resource_description_node(id):
 
   def sql_delete_kg_resource_description_node(transaction):
     sql = SQL_TEMPLATES['delete_kg_res_node']
@@ -520,7 +517,7 @@ def delete_kg_resource_description_node(id):
     logger.error(f"SQL error: {e}")
 
   if success:
-    logger.info(f"{id} KG Resource node deleted id: {id} (row count: {row_ct})")
+    logger.debug(f"{id} KG Resource node deleted id: {id} (row count: {row_ct})")
   else:
     logger.error(f"KG Resource Node deletion failed id: {id}")
   return success
@@ -534,42 +531,46 @@ def delete_kg_resource_description_node(id):
 def find_xnet_name(spec_base, attribute):
   xnet_name = None
   xnet_namespace = None
+  xnet_external = None
   xnet_entry = spec_base.get(attribute)
   if xnet_entry is not None:
     xnet_name = xnet_entry.get('name')
     xnet_namespace = xnet_entry.get('namespace')
-  return xnet_name, xnet_namespace
+    xnet_external = xnet_entry.get('external')
+  return xnet_name, xnet_namespace, xnet_external
 
 # Find the reference network of of K8s resource
 # given its spec (or part of its spec) as a parameter
 async def find_network_reference(namespace, spec_base):
   # Try finding a subnet resource first
-  subnet_name, subnet_namespace = find_xnet_name(spec_base, 'subnetworkRef')
+  subnet_name, subnet_namespace, subnet_external = find_xnet_name(spec_base, 'subnetworkRef')
   if not subnet_namespace:
     subnet_namespace = namespace
+  subnet = None
   if subnet_name is not None:
-      subnet = await get_subnetwork(subnet_namespace, subnet_name)
-      if subnet is not None:
-        logger.debug("Found subnet %s in ns %s", subnet_name, subnet_namespace)
-        return subnet
+    subnet = await get_subnetwork(subnet_namespace, subnet_name)
+  elif subnet_external is not None:
+    # We must find the K8S resource from the external link
+    subnet = await get_subnetwork_from_external_link(subnet_external)
+  if subnet is not None:
+    logger.debug("Found subnet %s in ns %s", subnet.get('metadata').get('name'),
+                subnet.get('metadata').get('namespace'))
+    return subnet
       
   # Try finding a net resource second
-  net_name,net_namespace = find_xnet_name(spec_base, 'networkRef')
+  net_name, net_namespace, net_external = find_xnet_name(spec_base, 'networkRef')
   if not net_namespace:
     net_namespace = namespace
+  net = None
   if net_name is not None:
-      try:
-        net = await get_network(net_namespace, net_name)
-        if net is not None:
-          logger.info("Found net %s in ns %s", net_name, net_namespace)
-          return net
-      except kubernetes.client.rest.ApiException as e:
-        if e.status == 404:
-          logger.error("%s in namespace %s not found", net_name, net_namespace)
-        else:
-          logger.error(e)    
-  # At that stage we haven't found any net or subnet resource
-  return None
+    net = await get_network(net_namespace, net_name)
+  elif net_external is not None:
+    # We must find the K8S resource from the external link
+    net = await get_network_from_external_link(net_external)    
+    if net is not None:
+      logger.debug("Found net %s in ns %s", net.get('metadata').get('name'),
+                 net.get('metadata').get('namespace'))
+  return net
 
 # Find the routes which nextHopIP matches the given destination
 # range
@@ -584,7 +585,7 @@ async def find_destination_subnets(dest_range):
   for r in subnets:
     if r['spec']['ipCidrRange'] == dest_range:
       matching_subnets.append(r)
-      logger.info(f"Matching Subnet {r['metadata']['name']} found for route destination range {dest_range}")
+      logger.debug(f"Matching Subnet {r['metadata']['name']} found for route destination range {dest_range}")
 
   return matching_subnets
 
@@ -607,9 +608,8 @@ async def create_or_update_network_connections(body, spec, meta, uid, namespace,
     xnet = await find_network_reference(namespace, s)
     if xnet:
       xnet_uid = xnet['metadata']['uid']
-      if not exist_network_connection(uid, xnet_uid):
-        success &= create_network_connection(uid,xnet_uid)
-
+      if not await exist_network_connection(uid, xnet_uid):
+        success = success & await create_network_connection(uid,xnet_uid)
 
     # Special case for Routes. Find its peer destination route
     # in addition to its network ref (see above)
@@ -617,6 +617,6 @@ async def create_or_update_network_connections(body, spec, meta, uid, namespace,
       dest_subnets = await find_destination_subnets(spec['destRange'])
       for ds in dest_subnets:
         dest_subnet_uid = ds['metadata']['uid']
-        if not exist_network_connection(uid, dest_subnet_uid):
-          success |= create_network_connection(uid, dest_subnet_uid)
+        if not await exist_network_connection(uid, dest_subnet_uid):
+          success = success | await create_network_connection(uid, dest_subnet_uid)
   return success

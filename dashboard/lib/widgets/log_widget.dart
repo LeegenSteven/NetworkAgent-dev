@@ -1,0 +1,188 @@
+import 'package:flutter/material.dart';
+import 'package:socket_io_client/socket_io_client.dart' as io;
+import '../models/log_entry.dart';
+
+class LogWidget extends StatelessWidget {
+  final List<LogEntry> logs;
+  final io.Socket socket;
+  final bool isLoading;
+
+  const LogWidget({
+    super.key,
+    required this.socket,
+    required this.logs,
+    this.isLoading = false,
+  });
+
+  void _resetLogs() {
+    socket.emit('reset_logs');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          height: 40, // Reduced height from 56 to 40
+          padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 16.0), // Reduced vertical padding
+          margin: const EdgeInsets.all(8.0),
+          decoration: const BoxDecoration(
+            color: Color(0xFFE3F2FD), // Light blue background
+            borderRadius: BorderRadius.all(Radius.circular(8.0)),
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Centered Title
+              Center(
+                child: Text(
+                  'System Logs (${logs.length})',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0D47A1), // Dark blue text
+                  ),
+                ),
+              ),
+ 
+              // Reset logs button (positioned on the right)
+              Positioned(
+                right: 0,
+                child:
+                  IconButton(
+                    icon: const Icon(Icons.delete_forever, color: Color(0xFF0D47A1)),
+                    tooltip: 'Delete logs',
+                    onPressed: () {
+                      _resetLogs();
+                    },
+                  ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : logs.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No logs available',
+                        style: TextStyle(
+                          color: Colors.grey[700],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    )
+                  : _buildLogTable(context),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLogTable(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.vertical,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          headingRowColor: WidgetStateProperty.all(const Color(0xFFE3F2FD)),
+          headingRowHeight: 36, // Added reduced heading row height
+          dataRowMinHeight: 32, // Reduced from 48 to 32
+          dataRowMaxHeight: 48, // Reduced from 64 to 48
+          columns: const [
+            DataColumn(
+              label: Text(
+                'Timestamp',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'Level',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'Source',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'Message',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+          rows: logs.map((log) {
+            return DataRow(
+              cells: [
+                DataCell(Text(_formatTimestamp(log.timestamp))),
+                DataCell(_buildLevelIndicator(log.level)),
+                DataCell(Text(log.source)),
+                DataCell(
+                  Container(
+                    //LJ constraints: const BoxConstraints(maxWidth: 500),
+                    child: Text(
+                      log.message,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  String _formatTimestamp(String timestamp) {
+    try {
+      final dateTime = DateTime.parse(timestamp);
+      return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}:${dateTime.second.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return timestamp;
+    }
+  }
+
+  Widget _buildLevelIndicator(String level) {
+    Color color;
+    switch (level.toUpperCase()) {
+      case 'ERROR':
+        color = Colors.red;
+        break;
+      case 'WARNING':
+        color = Colors.orange;
+        break;
+      case 'INFO':
+        color = Colors.green;
+        break;
+      case 'DEBUG':
+        color = Colors.blue;
+        break;
+      default:
+        color = Colors.grey;
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: color,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(level.toUpperCase()),
+      ],
+    );
+  }
+
+}
+

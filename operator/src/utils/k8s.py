@@ -16,6 +16,12 @@ import logging
 import json
 import kubernetes
 import kopf
+from google.cloud.container_v1 import ClusterManagerClient
+import google.auth
+from ruamel.yaml import YAML
+from pathlib import Path
+import os
+
 logger = logging.getLogger(__name__)
 from utils.compute import get_resource_api
 
@@ -140,3 +146,59 @@ async def getClusterFeatureDetails(namespace, name):
     else:
       logger.debug(e)
   return None
+
+
+#################################################
+# Get client for the network automation cluster
+#################################################
+async def getExternalCluster():
+    credentials =google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/tools/networkagent.json"))[0]
+    cluster_manager_client = ClusterManagerClient(credentials=credentials)
+
+    GOOGLE_PROJECT = os.getenv("GOOGLE_PROJECT")
+    GOOGLE_REGION = os.getenv("GOOGLE_REGION")
+    GOOGLE_ZONE = os.getenv("GOOGLE_ZONE")
+
+    name=f"projects/{GOOGLE_PROJECT}/locations/{GOOGLE_ZONE}/clusters/networkautomation"
+    cluster = cluster_manager_client.get_cluster(name=name)
+
+    SERVER = cluster.endpoint
+    CERT = cluster.master_auth.cluster_ca_certificate
+
+    NAME=f"gke_{GOOGLE_PROJECT}_{GOOGLE_ZONE}_networkautomation" # arbitrary
+    CONFIG=f"""
+    apiVersion: v1
+    kind: Config
+    clusters:
+    - name: {NAME}
+      cluster:
+        certificate-authority-data: {CERT}
+        server: https://{SERVER}
+    contexts:
+    - name: {NAME}
+      context:
+        cluster: {NAME}
+        namespace: automation
+        user: {NAME}
+    current-context: {NAME}
+    users:
+    - name: {NAME}
+      user:
+        auth-provider:
+          name: gcp
+          config:
+            scopes: https://www.googleapis.com/auth/cloud-platform
+    """
+
+    logger.debug(CONFIG)
+    yaml = YAML(typ='safe', pure=True)
+    KUBECONFIG = yaml.load(CONFIG)
+
+    configuration = kubernetes.client.Configuration()
+    loader = kubernetes.config.kube_config.KubeConfigLoader(KUBECONFIG)
+    loader.load_and_set(configuration)
+    apiclient = kubernetes.client.ApiClient(configuration=configuration)
+
+    return apiclient
+
+

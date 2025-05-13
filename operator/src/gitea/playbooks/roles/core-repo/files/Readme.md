@@ -1,3 +1,3 @@
-# Core Location
+# London site
 
-VPN service connecting mobile core sites. 
+Core network site

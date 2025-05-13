@@ -14,13 +14,21 @@
 
 - hosts: all
   become: True
-  gather_facts: False
+  gather_facts: True
   tasks:
 
     - name: install docker etc
       import_role:
         name: install
 
+    - name: install and run metrics collector
+      import_role:
+        name: metricscollector
+
     - name: run UERANSIM
       import_role:
         name: run
+
+    - name: run UE
+      import_role:
+        name: startue

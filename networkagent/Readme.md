@@ -1,29 +1,24 @@
-# Network Agent
+# Network Agent Backend
 
-Follow to deploy the gemini network agent. 
+Follow the instructions below to deploy and run the network agent backend.
 
-## Deploy the Agent
+## Deploy the Network Agent to GCP
 
-TBD - running locally for now
-
-## Running the Agent from the command line
-
-Install python dependencies
+The agent backend and dashboard are deployed by running the following command.
 
 ```
-pip install -r requirements.txt
-streamlit run src/main.py
+install.sh -n
 ```
 
-## Running the Agent locally from VSCode
+## Running the Network Agent locally from VSCode
 
-Install python dependencies
+To run the network agent on your local machine, you must first install its python dependencies, i.e.
 
 ```
-pip install -r requirements.txt
+pip install -r networkagent/requirements.txt
 ```
 
-To run the agent in VSCode you can setup a __launch.json__ file as below. 
+To run the network agent in VSCode you can setup a __launch.json__ file as below. 
 
 ```
 {
@@ -33,16 +28,15 @@ To run the agent in VSCode you can setup a __launch.json__ file as below.
             "name": "Python Debugger: Current File",
             "type": "debugpy",
             "request": "launch",
-            "module": "streamlit",
-            "console": "integratedTerminal",
-            "args": [
-                "run",
-                "${file}"
-            ],
+            "program": "${file}",
             "env": {
-                "GOOGLE_PROJECT": "bt-demo-999",
-                "GOOGLE_REGION": "europe-west2",
-                "GOOGLE_ZONE": "europe-west2-a",
+                "BASEDIR": "<YOUR LOCAL DIR>/NetworkAgent/operator/src",
+                "GOOGLE_PROJECT": "<YOUR PROJECT>",
+                "GOOGLE_REGION": "<YOUR REGION>",
+                "GOOGLE_ZONE": "<YOUR ZONE>",
+                "ROOT_DIR" : "networkagent/src/",
+                "WEBAPPS_LOGIN": "networkagent",
+                "WEBAPPS_PWD":"<YOUR PASSWORD>",
                 "NETWORK_AGENT_FILE": "./networkagent.json"
             }
         }

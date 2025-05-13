@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # Create a Wireguard virtual network appliance
 #########################################################################
 @kopf.on.create('google.dev','v1','wireguardappliance')
-async def wireguard(body,spec, name, namespace, uid, logger, **kwargs):
+async def wireguardappliance(body,spec, name, namespace, uid, logger, **kwargs):
     logger.debug(f"A wireguard handler is called with spec: {spec}")
 
     servicename = body['metadata']['ownerReferences'][0]['name']
@@ -41,7 +41,9 @@ async def wireguard(body,spec, name, namespace, uid, logger, **kwargs):
                         os.getenv("GOOGLE_PROJECT"),
                         os.getenv("GOOGLE_REGION"),
                         os.getenv("GOOGLE_ZONE"), 
-                        vpn=True)
+                        vpn=True,
+                        monitor=True, # set to false so this VM is not scraped by prometheus
+                        graph=True)
 
     # Get mgmt and dataplane address for the VM created above
     mgmt_ip_address = await get_ip(namespace, name)
@@ -49,7 +51,8 @@ async def wireguard(body,spec, name, namespace, uid, logger, **kwargs):
     if mgmt_ip_address is None or data_ip_address is None:
         raise kopf.TemporaryError("No ip address found on VM yet, temporary error - waiting")
 
-    logger.info("found mgmt ip address %s (%s, %s, %s)", mgmt_ip_address, kind, name, uid )
+    logger.debug("found mgmt ip address %s (%s, %s, %s)", mgmt_ip_address, kind, name, uid )
+    logger.debug("found dataplane ip address %s (%s, %s, %s)", data_ip_address, kind, name, uid )
 
     # find the allowed interface cidr and VM ip address for each of the peers
     peersInfo=[]
@@ -82,7 +85,7 @@ async def wireguard(body,spec, name, namespace, uid, logger, **kwargs):
     # once the vpn is running create the route from source to allowed interface
     # loop over all allowed interfaces and create routes from source interface
     for peer in peersInfo:
-        logger.info("Creating route from %s to %s",spec.get('sourceInterface'), peer['allowedInterface'])
+        logger.debug("Creating route from %s to %s",spec.get('sourceInterface'), peer['allowedInterface'])
         await create_route(namespace, name, spec.get('sourceInterface'), peer['allowedInterface'])
 
     return {

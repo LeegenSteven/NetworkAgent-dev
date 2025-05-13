@@ -21,6 +21,10 @@
       import_role:
         name: install
 
+    - name: install and run metrics collector
+      import_role:
+        name: metricscollector
+
     - name: run the upf
       import_role:
         name: run

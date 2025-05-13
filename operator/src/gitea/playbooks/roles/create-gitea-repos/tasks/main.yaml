@@ -16,7 +16,7 @@
 # Get API token
 ########################################################
 - name: authenticate with gitea
-  command: "curl -H 'Content-Type: application/json' -d '{\"name\":\"root-repo\", \"scopes\":[\"write:repository\", \"write:user\", \"write:admin\"]}' -u {{ lookup('env', 'WEBAPPS_LOGIN') }}:{{ lookup('env', 'WEBAPPS_PWD') }} https://{{ansible_host}}:3000/api/v1/users/networkagent/tokens --insecure"
+  command: "curl -H 'Content-Type: application/json' -d '{\"name\":\"root-repo\", \"scopes\":[\"write:repository\", \"write:user\", \"write:admin\"]}' -u {{ lookup('env', 'WEBAPPS_LOGIN') }}:{{ lookup('env', 'WEBAPPS_PWD') }} https://{{external_ip_address}}:3000/api/v1/users/networkagent/tokens --insecure"
   register: result
 
 - set_fact:
@@ -29,33 +29,29 @@
 # Create Repos
 ########################################################
 - name: create root-repo
-  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"root-repo\"}' --insecure"
-  when: token_result.sha1 is defined
-
-- name: create london repo
-  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"london\"}' --insecure"
-  when: token_result.sha1 is defined
-
-- name: create dublin repo
-  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"dublin\"}' --insecure"
-  when: token_result.sha1 is defined
-
-- name: create newyork repo
-  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"newyork\"}' --insecure"
+  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{external_ip_address}}:3000/api/v1/user/repos -d '{\"name\": \"root-repo\"}' --insecure"
   when: token_result.sha1 is defined
 
 - name: create core repo
-  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"core\"}' --insecure"
+  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{external_ip_address}}:3000/api/v1/user/repos -d '{\"name\": \"core\"}' --insecure"
   when: token_result.sha1 is defined
 
-- name: create london cluster repo
-  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/repos -d '{\"name\": \"london-cluster\"}' --insecure"
+- name: create cellsite1 repo
+  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{external_ip_address}}:3000/api/v1/user/repos -d '{\"name\": \"cellsite1\"}' --insecure"
+  when: token_result.sha1 is defined
+
+- name: create cellsite2 repo
+  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{external_ip_address}}:3000/api/v1/user/repos -d '{\"name\": \"cellsite2\"}' --insecure"
+  when: token_result.sha1 is defined
+
+- name: create vpn repo
+  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{external_ip_address}}:3000/api/v1/user/repos -d '{\"name\": \"vpn\"}' --insecure"
   when: token_result.sha1 is defined
 
 ########################################################
 # NetworkAgent SSH Key
 ########################################################
 - name: create ssh key for networkagent user
-  command: "curl -k -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{ansible_host}}:3000/api/v1/user/keys -d '{\"title\": \"NetworkAgent key\", \"key\": \"{{ GOOGLE_SSH_KEY }}\"}' --insecure"
+  command: "curl -k -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{external_ip_address}}:3000/api/v1/user/keys -d '{\"title\": \"NetworkAgent key\", \"key\": \"{{ GOOGLE_SSH_KEY }}\"}' --insecure"
   register: out
   when: token_result.sha1 is defined

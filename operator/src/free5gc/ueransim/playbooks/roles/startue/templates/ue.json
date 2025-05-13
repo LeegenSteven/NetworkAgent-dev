@@ -1,5 +1,5 @@
 {
-    "plmnID": "{{ plmnid }}",
+    "plmnID": "{{ plmnId }}",
     "ueId": "imsi-{{ imsi }}",
     "AuthenticationSubscription": {
         "authenticationManagementField": "8000",

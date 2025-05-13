@@ -14,13 +14,15 @@
 
 import logging
 import kubernetes
+import kopf
 import googleapiclient.discovery
 from tempfile import NamedTemporaryFile
 import base64
+from ruamel.yaml import YAML
 import google.auth
 from google.cloud.container_v1 import ClusterManagerClient
 import os
-
+from utils.compute import get_resource_api
 
 logger = logging.getLogger(__name__)
 
@@ -69,15 +71,156 @@ async def getClusterIP(name):
     cluster = cluster_manager_client.get_cluster(name=clustername)
     return cluster.endpoint
 
+################################################################
+# get the external ip address of the networkautomation cluster
+################################################################
+async def getAutomationClusterIP():
+    logger.debug("get cluster external ip for networkautomation")
+    credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/operator/networkagent.json"))[0]
+    cluster_manager_client = ClusterManagerClient(credentials=credentials)
+    GOOGLE_PROJECT = os.getenv("GOOGLE_PROJECT")
+    GOOGLE_ZONE = os.getenv("GOOGLE_ZONE")
+    clustername=f"projects/{GOOGLE_PROJECT}/locations/{GOOGLE_ZONE}/clusters/networkautomation"
+    cluster = cluster_manager_client.get_cluster(name=clustername)
+    return cluster.endpoint
+
 ##########################################################
-# Get all cluster details
+# Get all cluster details for CNRM created cluster
 ##########################################################
 async def getClusterDetails(clustername):
   logger.debug("get cluster details for %s", clustername)
   credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/operator/networkagent.json"))[0]
   cluster_manager_client = ClusterManagerClient(credentials=credentials)
   GOOGLE_PROJECT = os.getenv("GOOGLE_PROJECT")
-  GOOGLE_ZONE = os.getenv("GOOGLE_ZONE")
-  name=f"projects/{GOOGLE_PROJECT}/locations/{GOOGLE_ZONE}/clusters/{clustername}"
+  GOOGLE_REGION = os.getenv("GOOGLE_REGION")
+  name=f"projects/{GOOGLE_PROJECT}/locations/{GOOGLE_REGION}/clusters/{clustername}"
   cluster = cluster_manager_client.get_cluster(name=name)
   return cluster
+
+##########################################################
+# Get all cluster details for networkautomation
+##########################################################
+async def getAutomationClusterDetails():
+  logger.debug("get cluster details for networkautomation")
+  credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/operator/networkagent.json"))[0]
+  cluster_manager_client = ClusterManagerClient(credentials=credentials)
+  GOOGLE_PROJECT = os.getenv("GOOGLE_PROJECT")
+  GOOGLE_ZONE = os.getenv("GOOGLE_ZONE")
+  name=f"projects/{GOOGLE_PROJECT}/locations/{GOOGLE_ZONE}/clusters/networkautomation"
+  cluster = cluster_manager_client.get_cluster(name=name)
+  return cluster
+
+##########################################################
+# Get node ip addresses
+##########################################################
+async def getNodeAddresses():
+    logger.debug("get node address")
+    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+    api = client.resources.get(api_version="v1", kind="Node")
+    try:
+
+        result = api.get()
+        logging.debug(result)
+        addresses = []
+        for node in result.items:
+            addresses.append(node.get('status')['addresses'][0]['address'])
+
+        return addresses
+
+    except kubernetes.client.rest.ApiException as e:
+        if e.status == 404:
+            logger.debug("%s Not found")
+        else:
+            logger.error(e)
+
+##########################################################
+# Get pod multi network addresses
+##########################################################
+async def getPodAddress(labels):
+    logger.debug("getting pod address with labels %s", labels)
+
+    yaml = YAML(typ='safe', pure=True)
+
+    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+    api = client.resources.get(api_version="v1", kind="Pod")
+
+    try:
+        result = api.get(label_selector=labels)
+        logger.debug(result)
+
+        if result is not None:     
+            for pod in result.items:
+                logger.debug(pod)
+                if pod.get('metadata')['annotations']['networking.gke.io/pod-ips'] is not None:
+                    logger.debug("getting ip address")
+                    addressString = pod.get('metadata')['annotations']['networking.gke.io/pod-ips']
+                    logger.debug(addressString)
+                    address = yaml.load(addressString)
+                    logger.debug(address)
+                    return address[0]['ip']
+                else:
+                    raise kopf.TemporaryError(f"Waiting for pod address with labels {labels}", 10)
+        else:
+            raise kopf.TemporaryError(f"Pod with labels {labels} not found, waiting", 20)
+
+        return None
+
+    except kubernetes.client.rest.ApiException as e:
+        if e.status == 404:
+            logger.debug("Pod with labels %s not found", labels)
+            raise kopf.TemporaryError(f"Pod with labels {labels} not found", 10)
+        else:
+            logger.error(e)
+
+
+##########################################################
+# Return the ip address of the DNN named
+##########################################################
+async def getDNNAddress(namespace, name):
+    logger.debug("get DNN address for %s %s", name, namespace)
+
+    network_api = get_resource_api("google.dev/v1", "DataNetwork")
+
+    address=None
+    try:
+        result = network_api.get(name=name, namespace=namespace)
+        logger.debug(result)
+        if result.get('status').get('datanetwork') is None:
+            raise kopf.TemporaryError("Waiting for dnn to come up")
+        address=result.get('status').get('datanetwork').get('address')
+        logger.debug("DNN ADDRESS = %s", address)
+
+    except kubernetes.client.rest.ApiException as e: 
+        logger.debug(e.status)
+        if e.status == 404:
+            raise kopf.TemporaryError(f"No DNN {name} found yet. Waiting...")
+
+    return address
+
+##########################################################
+# Return the ip address of the UPF named
+##########################################################
+async def getUPFAddress(upfnamespace, upfname):
+    logger.debug("get upf address for %s %s", upfname, upfnamespace)
+
+    network_api = get_resource_api("google.dev/v1", "UserPlaneFunction")
+    logger.debug("looking for upf %s %s", upfname, upfnamespace)
+
+    upfaddress=None
+    try:
+        result = network_api.get(name=upfname, namespace=upfnamespace)
+        logger.debug(result)
+        if result.get('status') is not None:
+            if result.get('status').get('userplanefunction') is None:
+                raise kopf.TemporaryError("Waiting for upf to come up")
+            upfaddress=result.get('status').get('userplanefunction').get('ingressAddress')
+            logger.debug("UPF ADDRESS = %s", upfaddress)
+        else:
+            raise kopf.TemporaryError("No status yet")
+
+    except kubernetes.client.rest.ApiException as e: 
+        logger.debug(e.status)
+        if e.status == 404:
+            raise kopf.TemporaryError(f"No UPF {upfname} found yet. Waiting...")
+
+    return upfaddress

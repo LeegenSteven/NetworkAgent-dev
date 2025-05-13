@@ -31,8 +31,8 @@ MASTER_BRANCH = 'master'
 # return True if commit went well, None otherwise
 def commit_git_file(file_path, message, content):
   url = get_gitea_url()
-  logger.debug(f"Gitea server at: {url}")
-  gitea = Gitea(get_gitea_url(), auth=(USER, PWD), verify=False)
+  logger.info(f"Gitea server at: {url} {USER} {PWD}")
+  gitea = Gitea(url, auth=(USER, PWD), verify=False)
   repo = Repository.request(gitea, USER, SERVICE_REPO)
 
   # Base64 encode file content before calling create / change file

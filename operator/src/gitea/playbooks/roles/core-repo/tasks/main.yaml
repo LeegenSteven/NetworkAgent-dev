@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-- name: Create core directory
+- name: Create core repo directory
   file:
     path: /opt/core-repo
     state: directory
@@ -36,76 +36,131 @@
     chdir: /opt/core-repo
 
 ###############################################
-# Skeleton Master Branch
+# Master Branch
 ###############################################
 - name: checkout master branch
   command: sudo -u git git checkout -B master
   args:
     chdir: /opt/core-repo
 
-- name: push readme.md to master branch
+- name: push files to master branch
   ansible.builtin.copy:
-    src: Readme.md
-    dest: /opt/core-repo/Readme.md
+    src: "{{ item }}"
+    dest: "/opt/core-repo/{{item}}"
     owner: git
     group: git
     mode: '0644'
+  loop:
+    - Readme.md
 
-- name: add readme to master branch in core-repo
+- name: add readme to master network-services-repo
   command: sudo -u git git add .
   args:
     chdir: /opt/core-repo
 
-- name: initial commit to master
+- name: initial commit 
   command: sudo -u git git commit -m "initial commit"
   args:
     chdir: /opt/core-repo
 
 - name: add remote repo
-  command: sudo -u git git remote add origin https://networkagent:{{ lookup('env', 'WEBAPPS_PWD') }}@{{ansible_host}}:3000/networkagent/core.git
+  command: sudo -u git git remote add origin https://networkagent:{{ lookup('env', 'WEBAPPS_PWD') }}@{{external_ip_address}}:3000/networkagent/core.git
   args:
     chdir: /opt/core-repo
 
-- name: push to repo
+- name: push to master branch in repo
   command: sudo -u git git -c http.sslVerify=false push -u origin master
   args:
     chdir: /opt/core-repo
 
 ###############################################
-# NetworkFunction branch
+# location Branch
+###############################################
+- name: checkout location branch
+  command: sudo -u git git checkout -B location
+  args:
+    chdir: /opt/core-repo
+
+- name: push files to location branch
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/core-repo/{{item}}"
+    owner: git
+    group: git
+    mode: '0644'
+  loop:
+    - Readme.md
+
+- name: push templated files
+  ansible.builtin.template:
+    src: "{{ item }}"
+    dest: "/opt/core-repo/{{item}}"
+    owner: git
+    group: git
+    mode: '0644'
+  loop:
+    - core.yaml
+
+- name: add files to core branch 
+  command: sudo -u git git add .
+  args:
+    chdir: /opt/core-repo
+
+- name: location files commit
+  command: sudo -u git git commit -m "add location files"
+  args:
+    chdir: /opt/core-repo
+
+- name: push to location branch in repo
+  command: sudo -u git git -c http.sslVerify=false push -u origin location
+  args:
+    chdir: /opt/core-repo
+
+###############################################
+# Network Function Branch
 ###############################################
 - name: checkout networkfunction branch
   command: sudo -u git git checkout -B networkfunction
   args:
     chdir: /opt/core-repo
 
-- name: push readme.md to vpn branch
+- name: push files
   ansible.builtin.copy:
-    src: Readme.md
-    dest: /opt/core-repo/Readme.md
+    src: "{{ item }}"
+    dest: "/opt/core-repo/{{item}}"
     owner: git
     group: git
     mode: '0644'
+  loop:
+    - upf.yaml
+    - controlplane.yaml
+    # - ueransim.yaml
+    - dnn.yaml
+    - Readme.md
 
-- name: push mesh
-  ansible.builtin.copy:
-    src: meshservice1.yaml
-    dest: /opt/core-repo/meshservice1.yaml
+- name: push templated files
+  ansible.builtin.template:
+    src: "{{ item }}"
+    dest: "/opt/core-repo/{{item}}"
     owner: git
     group: git
     mode: '0644'
+  loop:
+    # - core-cluster.yaml
+    - core.yaml
+    - internet.yaml
 
-- name: add mesh to vpn core-repo
+- name: add files to network function branch 
   command: sudo -u git git add .
   args:
     chdir: /opt/core-repo
 
-- name: mesh commit to vpn
-  command: sudo -u git git commit -m "add mesh"
+- name: nf files commit
+  command: sudo -u git git commit -m "add network function files"
   args:
     chdir: /opt/core-repo
 
-- name: push vpn to repo
+- name: push to network function branch in repo
   command: sudo -u git git -c http.sslVerify=false push -u origin networkfunction
   args:
     chdir: /opt/core-repo

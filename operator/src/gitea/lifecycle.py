@@ -15,17 +15,27 @@
 import kopf
 import logging
 from utils.compute import *
+from utils.resources import get_boolean_label
 from gitea.lifecycle_tasks import *
 
 logger = logging.getLogger(__name__)
 
 @kopf.on.create('google.dev','v1','gitea')
-async def create_gitea(spec, name, namespace, logger, **kwargs):
-    logger.debug("Create gitea repo")
+async def create_gitea(spec, meta, name, namespace, logger, **kwargs):
+    """
+    On gitea resource creation, create the supporting VM, install the gitea
+    app, run the playbooks to create the various git repos and create the
+    root sync object in K8s config sync
+    """
+    logger.info("Create gitea repo")
 
     # Create external IP address
     await create_external_ip(namespace, "gitea", os.getenv("GOOGLE_REGION"), graph=False)
     external_ip_address = await get_ip_address(namespace, "gitea")
+
+    # get monitor and graph labels from the metadata / labels.
+    monitor = get_boolean_label(meta, 'monitor')
+    graph = get_boolean_label(meta, 'graph')
 
     # Create VM and attach IP address
     await create_compute(namespace, 
@@ -36,8 +46,8 @@ async def create_gitea(spec, name, namespace, logger, **kwargs):
                          os.getenv("GOOGLE_PROJECT"),
                          os.getenv("GOOGLE_REGION"),
                          os.getenv("GOOGLE_ZONE"), 
-                         monitor=False, # set to false so this VM is not scraped by prometheus
-                         graph=False) # set to false so this VM is not showing on topology graph
+                         monitor='False', # set to false so this VM is not scraped by prometheus
+                         graph='False') # set to false so this VM is not showing on topology graph
 
     # Install Gitea
     await run_gitea_install(namespace, external_ip_address)
@@ -45,7 +55,7 @@ async def create_gitea(spec, name, namespace, logger, **kwargs):
     # Create the private key
     # await create_root_sync_private_key()
 
-    # # Create root sync object
+    # Create root sync object
     await create_root_sync(external_ip_address)
 
     return {"status": "Running", "external_ip_address": external_ip_address}

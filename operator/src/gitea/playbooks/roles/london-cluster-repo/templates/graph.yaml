@@ -70,6 +70,8 @@ spec:
           value: {{GOOGLE_ZONE}}
         - name: GOOGLE_VM_USER
           value: {{GOOGLE_VM_USER}}
+        - name: NETWORK_AGENT_FILE
+          value: "/operator/networkagent.json"
         - name: GRAPH
           value: "yes"
         - name: FREE5GC

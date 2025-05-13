@@ -23,7 +23,21 @@ logger = logging.getLogger(__name__)
 # Catch create events
 # TODO: see if you can be more specific in the Kopf resource
 # specification without loosing genericity too much
-@kopf.on.create(kopf.EVERYTHING, labels = {'graph': 'true'})
+@kopf.on.create('google.dev', 'v1', 'wireguardappliance', labels = {'graph': 'true'})
+@kopf.on.create('google.dev', 'v1', 'meshservice', labels = {'graph': 'true'})
+@kopf.on.create('google.dev', 'v1', 'pointtopointservice', labels = {'graph': 'true'})
+@kopf.on.create('google.dev', 'v1', 'connectivitytest', labels = {'graph': 'true'})
+@kopf.on.create('google.dev', 'v1', 'datanetwork', labels = {'graph': 'true'})
+@kopf.on.create('google.dev', 'v1', 'controlplane', labels = {'graph': 'true'})
+@kopf.on.create('google.dev', 'v1', 'userplanefunction', labels = {'graph': 'true'})
+@kopf.on.create('google.dev', 'v1', 'ueransim', labels = {'graph': 'true'})
+@kopf.on.create('google.dev', 'v1', 'uetest', labels = {'graph': 'true'})
+@kopf.on.create('compute.cnrm.cloud.google.com', 'v1beta1', 'computenetwork', labels = {'graph': 'true'})
+@kopf.on.create('compute.cnrm.cloud.google.com', 'v1beta1', 'computesubnetwork', labels = {'graph': 'true'})
+@kopf.on.create('compute.cnrm.cloud.google.com', 'v1beta1', 'computefirewall', labels = {'graph': 'true'})
+@kopf.on.create('compute.cnrm.cloud.google.com', 'v1beta1', 'computeaddress', labels = {'graph': 'true'})
+@kopf.on.create('compute.cnrm.cloud.google.com', 'v1beta1', 'computeinstance', labels = {'graph': 'true'})
+@kopf.on.create('compute.cnrm.cloud.google.com', 'v1beta1', 'computeroute', labels = {'graph': 'true'})
 async def create_node(body, spec, meta, uid, namespace, name, logger, **kwargs):
   logger.debug("Create graph network node")
   success = True
@@ -36,7 +50,7 @@ async def create_node(body, spec, meta, uid, namespace, name, logger, **kwargs):
   else:
     logger.debug("Graph node %s of kind %s detected", name, kind)
   
-  success &= create_network_node(body, spec, namespace, name, kind, uid)
+  success = success & await create_network_node(body, spec, namespace, name, kind, uid)
 
   # --- Build K8s resource connections (management connections)
   #
@@ -49,10 +63,10 @@ async def create_node(body, spec, meta, uid, namespace, name, logger, **kwargs):
       raise kopf.PermanentError(f"Graph child node without parent UID ({kind}, {name}, {uid})")
     
     logger.debug("Creating resource connection from parent node %s to node %s", parent_uid, uid)
-    success &= create_resource_connection(parent_uid, uid)
+    success = success & await create_resource_connection(parent_uid, uid)
 
   # --- Build network connections (traffic connections)
-  success &= await create_or_update_network_connections(body, spec, meta, uid, namespace, name)
+  success = success & await create_or_update_network_connections(body, spec, meta, uid, namespace, name)
   if not success:
     raise kopf.TemporaryError(f"Create node error ({kind}, {name}, {uid})", delay=15)
   else:
@@ -60,7 +74,21 @@ async def create_node(body, spec, meta, uid, namespace, name, logger, **kwargs):
 
 
 # Catch update events
-@kopf.on.update(kopf.EVERYTHING, labels = {'graph': 'true'})
+@kopf.on.update('google.dev', 'v1', 'wireguardappliance', labels = {'graph': 'true'})
+@kopf.on.update('google.dev', 'v1', 'meshservice', labels = {'graph': 'true'})
+@kopf.on.update('google.dev', 'v1', 'pointtopointservice', labels = {'graph': 'true'})
+@kopf.on.update('google.dev', 'v1', 'connectivitytest', labels = {'graph': 'true'})
+@kopf.on.update('google.dev', 'v1', 'datanetwork', labels = {'graph': 'true'})
+@kopf.on.update('google.dev', 'v1', 'controlplane', labels = {'graph': 'true'})
+@kopf.on.update('google.dev', 'v1', 'userplanefunction', labels = {'graph': 'true'})
+@kopf.on.update('google.dev', 'v1', 'ueransim', labels = {'graph': 'true'})
+@kopf.on.update('google.dev', 'v1', 'uetest', labels = {'graph': 'true'})
+@kopf.on.update('compute.cnrm.cloud.google.com', 'v1beta1', 'computenetwork', labels = {'graph': 'true'})
+@kopf.on.update('compute.cnrm.cloud.google.com', 'v1beta1', 'computesubnetwork', labels = {'graph': 'true'})
+@kopf.on.update('compute.cnrm.cloud.google.com', 'v1beta1', 'computefirewall', labels = {'graph': 'true'})
+@kopf.on.update('compute.cnrm.cloud.google.com', 'v1beta1', 'computeaddress', labels = {'graph': 'true'})
+@kopf.on.update('compute.cnrm.cloud.google.com', 'v1beta1', 'computeinstance', labels = {'graph': 'true'})
+@kopf.on.update('compute.cnrm.cloud.google.com', 'v1beta1', 'computeroute', labels = {'graph': 'true'})
 async def update_node(body, spec, meta, uid, namespace, name, logger, **kwargs):
   logger.debug("Update graph network node")
   success = True
@@ -73,10 +101,10 @@ async def update_node(body, spec, meta, uid, namespace, name, logger, **kwargs):
 
   # Update node attributes 
   logger.debug("Updating node attributes for uid %s (%s:%s)", uid, kind, name)
-  success &= update_network_node(body, spec, namespace, name, kind, uid)
+  success = success & await update_network_node(body, spec, namespace, name, kind, uid)
 
   # Update network connections
-  success &= await create_or_update_network_connections(body, spec, meta, uid, namespace, name)
+  success = success & await create_or_update_network_connections(body, spec, meta, uid, namespace, name)
 
   if not success:
     raise kopf.TemporaryError(f"Update node error ({kind}, {name}, {uid})", delay=15)
@@ -84,7 +112,21 @@ async def update_node(body, spec, meta, uid, namespace, name, logger, **kwargs):
     logger.debug("Updated node '%s' (success: %s) (%s, %s, %s)", name, success, kind, name, uid)
 
 # Catch delete events
-@kopf.on.delete(kopf.EVERYTHING, labels = {'graph': 'true'})
+@kopf.on.delete('google.dev', 'v1', 'wireguardappliance', labels = {'graph': 'true'})
+@kopf.on.delete('google.dev', 'v1', 'meshservice', labels = {'graph': 'true'})
+@kopf.on.delete('google.dev', 'v1', 'pointtopointservice', labels = {'graph': 'true'})
+@kopf.on.delete('google.dev', 'v1', 'connectivitytest', labels = {'graph': 'true'})
+@kopf.on.delete('google.dev', 'v1', 'datanetwork', labels = {'graph': 'true'})
+@kopf.on.delete('google.dev', 'v1', 'controlplane', labels = {'graph': 'true'})
+@kopf.on.delete('google.dev', 'v1', 'userplanefunction', labels = {'graph': 'true'})
+@kopf.on.delete('google.dev', 'v1', 'ueransim', labels = {'graph': 'true'})
+@kopf.on.delete('google.dev', 'v1', 'uetest', labels = {'graph': 'true'})
+@kopf.on.delete('compute.cnrm.cloud.google.com', 'v1beta1', 'computenetwork', labels = {'graph': 'true'})
+@kopf.on.delete('compute.cnrm.cloud.google.com', 'v1beta1', 'computesubnetwork', labels = {'graph': 'true'})
+@kopf.on.delete('compute.cnrm.cloud.google.com', 'v1beta1', 'computefirewall', labels = {'graph': 'true'})
+@kopf.on.delete('compute.cnrm.cloud.google.com', 'v1beta1', 'computeaddress', labels = {'graph': 'true'})
+@kopf.on.delete('compute.cnrm.cloud.google.com', 'v1beta1', 'computeinstance', labels = {'graph': 'true'})
+@kopf.on.delete('compute.cnrm.cloud.google.com', 'v1beta1', 'computeroute', labels = {'graph': 'true'})
 async def delete_node(body, spec, uid, name, logger, **kwargs):
   logger.debug("Delete graph network node")
   success = True
@@ -99,12 +141,12 @@ async def delete_node(body, spec, uid, name, logger, **kwargs):
   # First delete all the network connections involving this node 
   # because of database consistency foreign key rule
   logger.debug("Deleting resource connections for uid %s (%s:%s)", uid, kind, name)
-  success &= delete_node_resource_connections(uid, kind, name)
+  success = success & await delete_node_resource_connections(uid, kind, name)
   logger.debug("Deleting network connections for uid %s (%s:%s)", uid, kind, name)
-  success &= delete_node_network_connections(uid, kind, name)
+  success = success & await delete_node_network_connections(uid, kind, name)
   if success:
     logger.debug("Deleting network nodes for uid %s \n", uid)
-    success &= delete_network_node(uid, kind, name)
+    success = success & await delete_network_node(uid, kind, name)
 
   logger.debug("Deleted node '%s' (success: %s)", name, success)
   if not success:

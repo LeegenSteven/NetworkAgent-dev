@@ -1,0 +1,130 @@
+# Copyright 2024-2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Create vpn directory
+  file:
+    path: /opt/vpn-repo
+    state: directory
+    owner: git
+    group: git
+    mode: 0775
+
+- name: init git repo
+  command: sudo -u git git init
+  args:
+    chdir: /opt/vpn-repo
+
+- name: configure git user name
+  command: "sudo -u git git config --global user.name 'Network Agent'"
+  args:
+    chdir: /opt/vpn-repo
+
+- name: configure git email
+  command: "sudo -u git git config --global user.email 'networkagent@example.com'"
+  args:
+    chdir: /opt/vpn-repo
+
+###############################################
+# Skeleton Master Branch
+###############################################
+- name: checkout master branch
+  command: sudo -u git git checkout -B master
+  args:
+    chdir: /opt/vpn-repo
+
+- name: push readme.md to master branch
+  ansible.builtin.copy:
+    src: Readme.md
+    dest: /opt/vpn-repo/Readme.md
+    owner: git
+    group: git
+    mode: '0644'
+
+- name: add readme to master branch in vpn-repo
+  command: sudo -u git git add .
+  args:
+    chdir: /opt/vpn-repo
+
+- name: initial commit to master
+  command: sudo -u git git commit -m "initial commit"
+  args:
+    chdir: /opt/vpn-repo
+
+- name: add remote repo
+  command: sudo -u git git remote add origin https://networkagent:{{ lookup('env', 'WEBAPPS_PWD') }}@{{external_ip_address}}:3000/networkagent/vpn.git
+  args:
+    chdir: /opt/vpn-repo
+
+- name: push to repo
+  command: sudo -u git git -c http.sslVerify=false push -u origin master
+  args:
+    chdir: /opt/vpn-repo
+
+###############################################
+# NetworkFunction branch
+###############################################
+- name: checkout networkfunction branch
+  command: sudo -u git git checkout -B networkfunction
+  args:
+    chdir: /opt/vpn-repo
+
+- name: push readme.md to vpn branch
+  ansible.builtin.copy:
+    src: Readme.md
+    dest: /opt/vpn-repo/Readme.md
+    owner: git
+    group: git
+    mode: '0644'
+
+- name: push mesh
+  ansible.builtin.copy:
+    src: meshservice1.yaml
+    dest: /opt/vpn-repo/meshservice1.yaml
+    owner: git
+    group: git
+    mode: '0644'
+
+- name: add mesh to vpn vpn-repo
+  command: sudo -u git git add .
+  args:
+    chdir: /opt/vpn-repo
+
+- name: mesh commit to vpn
+  command: sudo -u git git commit -m "add mesh"
+  args:
+    chdir: /opt/vpn-repo
+
+- name: push ptp
+  ansible.builtin.copy:
+    src: ptp1.yaml
+    dest: /opt/vpn-repo/ptp1.yaml
+    owner: git
+    group: git
+    mode: '0644'
+
+- name: add ptp to vpn vpn-repo
+  command: sudo -u git git add .
+  args:
+    chdir: /opt/vpn-repo
+
+- name: ptp commit to vpn
+  command: sudo -u git git commit -m "add ptp"
+  args:
+    chdir: /opt/vpn-repo
+
+- name: push vpn to repo
+  command: sudo -u git git -c http.sslVerify=false push -u origin networkfunction
+  args:
+    chdir: /opt/vpn-repo
+

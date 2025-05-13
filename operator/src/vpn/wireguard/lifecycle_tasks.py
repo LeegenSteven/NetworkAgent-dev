@@ -18,6 +18,7 @@ import kopf
 import ansible_runner
 import utils.constants as constants
 import os
+from utils.ansible import event_handler
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 # Install VPN software on VM
 #####################################################################
 async def install_vpn(servicename, vmname, mgmt_ip_address, data_ip_address, tunnel_address, tunnel_cidr, keys, peers):
-    logger.info("Install VPN")
+    logger.debug(f"Install VPN on VM {vmname}")
 
     extravars = {
         'servicename': servicename,
@@ -54,9 +55,11 @@ async def install_vpn(servicename, vmname, mgmt_ip_address, data_ip_address, tun
     }
     logger.info(hosts)
     logger.info(extravars)
+
     r = ansible_runner.run(private_data_dir=constants.basedir+"/vpn/wireguard/playbooks", 
                            inventory={'all': hosts},
                            playbook='install.yaml',
+                           event_handler=event_handler,
                            extravars=extravars)
 
     if r.status != 'successful':

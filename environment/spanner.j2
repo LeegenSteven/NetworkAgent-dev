@@ -72,6 +72,13 @@ spec:
        content STRING(MAX),
        embedding ARRAY<FLOAT64>
     ) PRIMARY KEY (id)"
+  - "CREATE TABLE NetworkMetrics (
+        id STRING(MAX) NOT NULL,
+        kind STRING(MAX) NOT NULL,
+        name STRING(MAX) NOT NULL,
+        timestamp INT64 NOT NULL,
+        metrics JSON
+    ) PRIMARY KEY (id, timestamp)"
   - "CREATE OR REPLACE PROPERTY GRAPH networkGraph
        NODE TABLES (NetworkNode)
        EDGE TABLES (

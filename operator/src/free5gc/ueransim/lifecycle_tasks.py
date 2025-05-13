@@ -17,14 +17,38 @@ import os
 import kopf
 from utils.compute import *
 import ansible_runner
+from utils.ansible import event_handler
 
 logger = logging.getLogger(__name__)
 
+########################################################
+# Get the ip and port for control plane
+########################################################
+async def get_controlplane_addresses(namespace, name):
+    logger.debug("get controlplane address %s", name)
+    api = get_resource_api(api_version="v1", kind="ControlPlane")
+    try:
+        result = api.get(name=name, namespace=namespace)
+        addresses=None
+
+        # get the ip and port on the status field
+        if result.get('status'):
+            addresses = result.get('status')['controlplane']
+        else:
+            raise kopf.PermanentError("No Control Plane status")
+
+        logger.debug("controlplane address = %s", addresses)
+        return addresses
+    except kubernetes.client.rest.ApiException as e:
+        if e.status == 404:
+            logger.debug("%s Not found", name)
+        else:
+            logger.error(e)
 
 ########################################################
 # Install UERANSIM to VM
 ########################################################
-async def run_install(namespace, upf_vm_name):
+async def run_install(namespace, upf_vm_name, amfAddress, amfPort, webAddress, cellid, ue):
     logger.debug("Installing ueransim")
 
     ip_address = await get_ip(namespace, upf_vm_name)
@@ -37,7 +61,13 @@ async def run_install(namespace, upf_vm_name):
         'GOOGLE_REGION': os.getenv("GOOGLE_REGION"),
         'GOOGLE_ZONE': os.getenv("GOOGLE_ZONE"),
         'BASEDIR': constants.basedir, 
-        'amfAddress': '10.0.0.0:1234'
+        'VMNAME': upf_vm_name,
+        'amfAddress': amfAddress,
+        'amfPort': amfPort,
+        'webAddress': webAddress,
+        'imsi': ue['imsi'],
+        'plmnId': ue['plmnId'] ,
+        'cellid': cellid
     }
     hosts = {
         'hosts': {
@@ -52,9 +82,11 @@ async def run_install(namespace, upf_vm_name):
     }
     logger.debug(hosts)
     logger.debug(extravars)
+
     r = ansible_runner.run(private_data_dir=constants.basedir+"/free5gc/ueransim/playbooks", 
                            inventory={'all': hosts},
                            playbook='install.yaml',
+                           event_handler=event_handler,
                            extravars=extravars)
 
     logger.info("status = %s", r.status)

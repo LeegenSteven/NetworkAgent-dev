@@ -20,27 +20,6 @@ from utils.compute import *
 
 logger = logging.getLogger(__name__)
 
-async def get_not_mgmt_ip(namespace, name):
-    logger.info("getting mgmt ip address")
-
-    vm = await get_compute(namespace, name)
-    if vm is None or vm.get('spec') is None:
-        logger.info("No VM or VM spec")
-        return None
-
-    interfaces = vm.spec.get('networkInterface')
-    ip_address=None
-    for int in interfaces:
-        if int.get('networkRef') is not None:
-            if int.get('networkRef').get('external') is not None:
-                if "mgmt" not in int['networkRef']['external']:
-                    ip_address = int['networkIpRef']['external']
-    if ip_address is None:
-        raise kopf.TemporaryError("could not find ip address", 15)
-    else:
-        logger.debug("found mgmt ip address %s", ip_address)
-    return ip_address
-
 @kopf.on.create('connectivitytest')
 async def createtest(spec, name, namespace, logger, **kwargs):
     # build the a and b end variables
@@ -54,8 +33,8 @@ async def createtest(spec, name, namespace, logger, **kwargs):
 
     if client_mgmt_ip is None or server_mgmt_ip is None:
         raise kopf.PermanentError("waiting for IP addresses")
-    client_data_ip=await get_not_mgmt_ip(namespace, client)
-    server_data_ip=await get_not_mgmt_ip(namespace, server)
+    client_data_ip=await get_ip(namespace, client, 'dataplane')
+    server_data_ip=await get_ip(namespace, server, 'dataplane')
     hosts = {
         'hosts': {
             'client': {

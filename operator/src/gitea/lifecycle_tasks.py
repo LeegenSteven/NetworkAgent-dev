@@ -27,11 +27,12 @@ logger = logging.getLogger(__name__)
 # Install and configure gitea software
 ########################################################
 async def run_gitea_install(namespace, external_ip_address):
-    logger.debug("installing prometheus monitor")
+    logger.info("installing gitea server with external ip %s", external_ip_address)
 
     ip_address = await get_ip(namespace, "gitea")
+    logger.info("gitea mgmt ip address is %s", ip_address)
     if ip_address is None:
-        raise kopf.TemporaryError("waiting for gitea IP address")
+        raise kopf.TemporaryError("waiting for gitea mgmt IP address")
 
     # Retrieve the public ssh key
     key=None
@@ -50,12 +51,13 @@ async def run_gitea_install(namespace, external_ip_address):
         'WEBAPPS_PWD': os.getenv("WEBAPPS_PWD"),
         'BASEDIR': constants.basedir,
         'external_ip_address': external_ip_address,
+        'mgmt_ip_address': ip_address,
         'GOOGLE_SSH_KEY': key
     }
     hosts = {
         'hosts': {
             "monitor": {
-                'ansible_host': ip_address,
+                'ansible_host': external_ip_address,
                 'ansible_user': os.getenv("GOOGLE_VM_USER"),
                 'ansible_connection': 'ssh',
                 'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
@@ -90,7 +92,7 @@ async def create_root_sync_private_key():
     logger.debug("ssh key = %s", key)
 
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
+  resource_api = client.resources.get(
       api_version="v1", 
       kind="Secret",
   )
@@ -108,7 +110,7 @@ async def create_root_sync_private_key():
   }
 
   try:
-    result = network_api.create(body=crd_manifest, namespace="config-management-system")
+    result = resource_api.create(body=crd_manifest, namespace="config-management-system")
     return result
   except kubernetes.client.rest.ApiException as e: 
     logger.debug(e.status)
@@ -121,10 +123,13 @@ async def create_root_sync_private_key():
 # Create root sync in network automation cluster
 ########################################################
 async def create_root_sync(ip_address):
-  logger.debug(f"create root sync to repo {ip_address}")
+
+  root_repo_url = f"https://{os.environ['WEBAPPS_LOGIN']}:{os.environ['WEBAPPS_PWD']}@{ip_address}:3000/networkagent/root-repo"
+
+  logger.info(f"Create root sync to repo {root_repo_url}")
 
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-  network_api = client.resources.get(
+  resource_api = client.resources.get(
       api_version="configsync.gke.io/v1beta1", 
       kind="RootSync",
   )
@@ -140,7 +145,7 @@ async def create_root_sync(ip_address):
       "sourceType": "git",
       "sourceFormat": "unstructured",
       "git": {
-        "repo": f"https://{os.environ['WEBAPPS_LOGIN']}:{os.environ['WEBAPPS_PWD']}@{ip_address}:3000/networkagent/root-repo",
+        "repo": root_repo_url,
         "auth": "none",
         "revision": "HEAD",
         "branch": "master",
@@ -151,11 +156,11 @@ async def create_root_sync(ip_address):
   }
 
   try:
-    result = network_api.create(crd_manifest)
+    result = resource_api.create(crd_manifest)
     return result
   except kubernetes.client.rest.ApiException as e: 
     logger.debug(e.status)
     if e.status == 409:
-      logger.debug("Already exists - skipping")
+      logger.error("RootSync object already exists - skipping")
     else:
-      logger.debug(e)
+      logger.error(e)

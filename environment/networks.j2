@@ -18,7 +18,7 @@ kind: ComputeNetwork
 metadata:
   name: dataplane
   labels:
-    graph: "false"
+    graph: "true"
 spec:
   routingMode: REGIONAL
   autoCreateSubnetworks: false
@@ -28,7 +28,7 @@ kind: ComputeSubnetwork
 metadata:
   name: dataplane
   labels:
-    graph: "false"
+    graph: "true"
 spec:
   ipCidrRange: 192.168.10.0/24
   region: "{{GOOGLE_REGION}}"
@@ -41,7 +41,7 @@ kind: ComputeFirewall
 metadata:
   name: dataplane
   labels:
-    graph: "false"
+    graph: "true"
 spec:
   allow:
     - protocol: udp

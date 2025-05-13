@@ -36,7 +36,8 @@ async def free5gcbuild(spec, status, namespace, name, logger, **kwargs):
                         os.getenv("GOOGLE_REGION"),
                         os.getenv("GOOGLE_ZONE"), 
                         release="ubuntu-2004-lts",
-                        monitor=False) # set to false so this VM is not scraped by prometheus
+                        monitor=True, # set to false so this VM is not scraped by prometheus
+                        graph=True)
 
   # install free5gc builder to VM 
   await run_install(namespace, name)

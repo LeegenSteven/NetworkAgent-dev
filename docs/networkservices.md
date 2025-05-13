@@ -1,25 +1,48 @@
 # Network Services
 
-The demo supports the deployment of virtual network functions in a number of service topologies, e.g. 
+The demo manages an end to end 5G virtual mobile network, The 5G network service topology shown below can be automated into an operational state within a single GCP project.
 
-* __Site to site__: connecting 2 sites together with a VPN tunnel
-* __Mesh__: connecting 3 or more sites in a full mesh
-* __Muti hop__: connecting 2 or more sites across a series of locations
+![virtual mobile network](/drawings/free5gc/mobile.drawio.svg)
 
-The Network Agent is trained on the information needed to deploy each of these servies and also how to monitor their performance from the metrics captured. The sections below describe the network services and virtual network function in more detail.
+The following virtual infrastructure can be deployed to instantiate the 5G network service. 
 
-## Site to Site
+* __Core Network Site:__ Based on [Free5gc 5G Core network functions](/docs/free5gcservices.md)
+    * GCP networks are deployed to attach DNN mimicking the Internet and a Core network attaches control plane and upf network functions
+    * Free5gc Control Plane CNFs are deployed in a virtual machine attached to the core network. 
+    * Free5gc UPF VNF is deployed attached to core and internet networks, routing between the two. 
+* __Radio Sites:__ [Running Radio simulators](https://github.com/aligungr/UERANSIM)
+    * GCP network per radio "site"
+    * UERANSIM gNB Radio Network Simulator VNF is attached to the cellsite network. UE simulators can establish sessions and test traffic routed through the 5G network to the internet services above. 
+* __VPN Services:__ [Connecting all sites](/docs/connectivityservices.md)
+    * Wireguard VNFs creat a set of tunnels in a mesh or point to point configuration between GCP networks.
 
-This service connects two private VPCs over a wireguard tunnel. A pair of virtual network functions (VNFs) are connected to the two provided private VPCs. A wireguard tunnel is configured between the VNFs and static routes added to the private VPCs to route traffic over the VPN tunnel.
+Once deployed test traffic can be run from the simulated UEs across the network to the Internet. 
 
-![Simple VPN Tunnel](/drawings/services/ptpflow..drawio.svg)
+## Network Service Model
 
-## Mesh
+All the components of network services are modelled in the Spanner topology database. The diagram below shows the main components of the network service model.
 
-This service connects three or more VPCs over a set of wireguard tunnels. All VPCs can route traffic to/from the other VPCs in the Mesh.
+![network service model](/drawings/graph/model.drawio.svg)
 
-![Mesh VPN Tunnel](/drawings/services/meshflow.drawio.svg)
+Each component is described in the table below. 
 
-## Multi Hop (To be done)
+| Component | Description | 
+|-----------|-------------|
+| Network Service | Top level customer facing service  |
+| Resource Facing Service | Specific instantiation for a particular customer, capturing the logical design of how the service is delivered. Resource facing service      | 
+| Logical Resource | Logical network elements (software constructs) and their configurations, can be specialised to Virtual or Phyiscal Resources |  
+| Virtual Resources | Virtual devices and their components, e.g. compute instance, compute route, compute subnetwork, compute firewall and compute address | 
+| Physical Resources | Physical devices with ports and links | 
 
-https://www.procustodibus.com/blog/2022/06/multi-hop-wireguard/
+
+### Simple Example
+
+The figure below shows a simple network service topology example. 
+
+![simple example](/drawings/graph/simple_example.drawio.svg)
+
+## Spanner Schema
+
+This section describes the schema in spanner to capture the network service topology. 
+
+![schema](/drawings/graph/spanner.drawio.svg)

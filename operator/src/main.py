@@ -23,9 +23,9 @@ import utils.constants as constants
 # (see https://cloud.google.com/logging/docs/setup/python)
 import google.cloud.logging
 logging_client = google.cloud.logging.Client()
-logging_client.setup_logging()
-
 import logging
+logging_client.setup_logging(log_level=logging.INFO)
+
 logger = logging.getLogger(__name__)
 
 # After importing the Python standard logging library we end up with 2 log
@@ -59,19 +59,13 @@ if os.getenv("FREE5GC") is not None:
     from free5gc.build.lifecycle import *
     from free5gc.ueransim.lifecycle import *
     from free5gc.upf.lifecycle import *
-    from free5gc.smf.lifecycle import *
-    from free5gc.amf.lifecycle import *
-    from free5gc.nginx.lifecycle import *
-    from free5gc.certificate.lifecycle import *
-
-if os.getenv("MONITOR") is not None:
-    logger.info("MONITOR Lifecycle")
-    from monitor.lifecycle import *
+    from free5gc.controlplane.lifecycle import *
+    from free5gc.dnn.lifecycle import *
+    from free5gc.uetest.lifecycle import *
 
 if os.getenv("GITEA") is not None:
     logger.info("GITEA Lifecycle")
     from gitea.lifecycle import *
-    from netbox.lifecycle import *
 
 if os.getenv("GRAPH") is not None:
     from graph.lifecycle import *

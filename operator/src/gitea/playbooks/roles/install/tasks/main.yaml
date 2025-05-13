@@ -89,6 +89,7 @@
 - name: Start gitea service
   ansible.builtin.systemd_service:
     state: started
+    enabled: true
     name: gitea
 
 - name: check if user exists

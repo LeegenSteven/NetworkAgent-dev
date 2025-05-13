@@ -150,7 +150,26 @@ def capture_log(cloud_event: CloudEvent) -> None:
 
   insert_id = nwop_logging_json["insertId"]
   severity = nwop_logging_json["severity"] or "DEFAULT"
-  message = nwop_logging_json["textPayload"]
+
+  # The log message can either be in textPayload or in a jsonPayLoad
+  message = ''
+  try:
+    if "jsonPayload" in nwop_logging_json:
+      if "message" in nwop_logging_json["jsonPayload"]:
+        message = nwop_logging_json["jsonPayload"]["message"]
+      elif "msg" in nwop_logging_json["jsonPayload"]:
+        message = nwop_logging_json["jsonPayload"]["msg"]
+        if "error" in nwop_logging_json["jsonPayload"]:
+          message += ': ' + nwop_logging_json["jsonPayload"]["error"]
+    elif "textPayload" in nwop_logging_json:
+      message = nwop_logging_json["textPayload"]
+  except Exception as e:
+    logger.error(f"Log processing error: {e}")
+
+  if message == '': 
+    logger.error(f"Log processing error. No msg payload found: {nwop_logging_json_string}")
+    return
+  
   timestamp = nwop_logging_json["timestamp"]
   content = nwop_logging_json_string
   embedding = get_embedding(content, TASK_TYPE, EMBEDDING_MODEL)

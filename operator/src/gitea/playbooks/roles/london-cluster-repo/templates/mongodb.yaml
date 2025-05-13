@@ -28,7 +28,6 @@ metadata:
   name: mongodb
   labels:
     app.kubernetes.io/name: mongodb
-    graph: "true"
 spec:
   serviceName: mongodb
   updateStrategy:

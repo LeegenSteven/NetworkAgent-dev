@@ -12,12 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-- name: Install aptitude
-  apt:
-    name: aptitude
-    state: latest
-    update_cache: true
-
 - name: install base apt packages
   ansible.builtin.apt:
     pkg:
@@ -25,16 +19,22 @@
       - apt-transport-https 
       - software-properties-common
       - iproute2
+      - python3
+      - python3-pip
     state: latest
     update_cache: true
 
-- name: HACK create make route to London GKE work. this needs to be made generic for any VPC later
-  command: ip route 10.4.0.0/24 via 10.0.50.1
-
-- name: install pip dependencies
+- name: install pip dependencies for docker
   ansible.builtin.pip:
     name:
-      - docker 
+      - docker
+
+- name: install pip dependencies for metrics collector
+  ansible.builtin.pip:
+    name:
+      - psutil
+      - google-cloud-spanner
+      - google-cloud-logging
 
 - name: update the version of requests
   command: pip install requests==2.28.1
@@ -57,6 +57,28 @@
       - containerd.io
     state: latest
     update_cache: true
+
+- name: create drop in docker distributed dir
+  ansible.builtin.file:
+    path: /etc/systemd/system/docker.service.d
+    state: directory
+    mode: '0755'
+
+- name: copy environment
+  ansible.builtin.copy: 
+    src: service.conf
+    dest: /etc/systemd/system/docker.service.d/docker-service-override.conf
+
+- name: copy logging options to docker
+  ansible.builtin.template: 
+    src: daemon.json
+    dest: /etc/docker/daemon.json
+
+- name: restart docker
+  ansible.builtin.systemd_service:
+    state: restarted
+    daemon_reload: true
+    name: docker
 
 - name: install headers matching kernel
   apt:

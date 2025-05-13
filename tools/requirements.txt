@@ -1,6 +1,0 @@
-kubernetes
-google-cloud-bigquery
-google-cloud-container
-google-api-python-client
-connexion[swagger-ui, flask, uvicorn]
-ruamel.yaml

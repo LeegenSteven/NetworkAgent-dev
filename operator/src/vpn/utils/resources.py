@@ -34,7 +34,8 @@ async def create_vpn_edge(namespace, parent_name, parent_namespace, parent_kind,
       "name": vpn_name,
       "namespace": namespace,
       "labels": {
-        "graph": "true"
+        "graph": "true",
+        "monitor": "true"
       },
     },
     "spec": {
@@ -59,7 +60,7 @@ async def create_vpn_edge(namespace, parent_name, parent_namespace, parent_kind,
     logger.debug("created wireguard-----------------------+====")
     logger.debug(result)
     uid = result['metadata']['uid']
-    logger.info(f"Edge VPN {vpn_name} created successfully ({kind}, {uid})")
+    logger.debug(f"Edge VPN {vpn_name} created successfully ({kind}, {uid})")
   except kubernetes.client.rest.ApiException as e: 
     logger.debug(e.status)
     if e.status == 409:

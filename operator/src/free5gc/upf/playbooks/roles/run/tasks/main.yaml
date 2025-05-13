@@ -16,17 +16,18 @@
   ansible.builtin.template: 
     src: "{{item}}"
     dest: "/opt/{{item}}"
+    mode: '0777'
   loop:
   - upfcfg.yaml
   - upf-iptables.sh
+  - docker-compose.yaml
 
-# docker run -d --name upf --network host -v $(pwd)/upfcfg.yaml:/free5gc/config/upfcfg.yaml -v $(pwd)/upf-iptables.sh:/free5gc/upf-iptables.sh --cap-add NET_ADMIN 
-# docker run -ti --name upf --network host -v $(pwd)/upfcfg.yaml:/free5gc/config/upfcfg.yaml -v $(pwd)/upf-iptables.sh:/free5gc/upf-iptables.sh --cap-add NET_ADMIN europe-west2-docker.pkg.dev/mobie-core-999/networkagent/upf /bin/bash
+# run the iptables script
+- name: run the iptables script
+  become: True
+  raw: "/opt/upf-iptables.sh"
 
-# run upf image with config above, docker with host networking
-# - name: Container present
-#   docker_container:
-#     name: upf
-#     state: present
-#     image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/networkagent/upf:latest
-#     network_mode: host
+- name: start free5gc upf
+  community.docker.docker_compose_v2:
+    project_src: /opt/
+    state: present

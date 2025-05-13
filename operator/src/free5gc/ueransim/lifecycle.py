@@ -16,6 +16,10 @@ import logging
 import kopf
 from utils.compute import *
 from free5gc.ueransim.lifecycle_tasks import *
+from utils.k8s import getClusterDetails
+from utils.resources import get_boolean_label
+
+from free5gc.utils.k8s import get_api_client
 
 logger = logging.getLogger(__name__)
 
@@ -23,31 +27,65 @@ logger = logging.getLogger(__name__)
 # Create a new ueransim
 ##########################################
 @kopf.on.create('google.dev', 'v1', 'ueransim')
-async def ueransim(spec, status, namespace, name, logger, **kwargs):
+async def ueransim(spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Create ueransim {name} with spec: {spec}")
 
-  # get the VPC name to bind UPF to
+  # get the cell id
+  cellid = spec.get('cellid')
+  if cellid is None:
+    raise kopf.PermanentError("no cell id provided. cant continue")
+
+  # get the VPC name to bind UERANSIM to
   network_interface = spec.get('interface')
   logger.debug("Network %s found", network_interface)
   if network_interface is None:
     raise kopf.PermanentError("No interface found")
 
-  # create UERANSIM VM on target network 
-  await create_compute( namespace, 
-                        name, # parent name
-                        name, # vm name
-                        None, # external IP
-                        [network_interface], # set this to the target network name to bind to
-                        os.getenv("GOOGLE_PROJECT"),
-                        os.getenv("GOOGLE_REGION"),
-                        os.getenv("GOOGLE_ZONE"), 
-                        release="ubuntu-2004-lts",
-                        monitor=False) # set to false so this VM is not scraped by prometheus
+  controlplane_spec = spec.get('controlplane')
+  if controlplane_spec is None:
+    raise kopf.PermanentError("No control plane details found")
 
-  # install UERANSIM to VM 
-  await run_install(namespace, name)
+  ue_spec = spec.get('ue')
+  if ue_spec is None:
+    raise kopf.PermanentError("No ue details found")
 
-  return {
-      "status":"Running", 
-  }
+  # get the controlplane instance named and grab its ip addresses and port
+  controlplaneName = controlplane_spec.get('name')
+  controlplaneNamespace = controlplane_spec.get('namespace')
+  logger.debug("AMF %s found in %s", controlplaneName, controlplaneNamespace)
+  if controlplaneName is None or controlplaneName is None or controlplaneNamespace is None:
+    raise kopf.PermanentError("controlplane and namespace need to be specified")  
+  
+  # get monitor and graph labels from the metadata / labels.
+  monitor = get_boolean_label(meta, 'monitor')
+  graph = get_boolean_label(meta, 'graph')
+
+  try:
+    controlplaneAddresses = await get_controlplane_addresses(controlplaneNamespace, controlplaneName)
+    if controlplaneAddresses is None:
+      raise kopf.TemporaryError("Waiting for control plane...", 20)
+
+    # create UERANSIM VM on target network 
+    await create_compute( namespace, 
+                          name, # parent name
+                          name, # vm name
+                          None, # external IP
+                          [network_interface], # set this to the target network name to bind to
+                          os.getenv("GOOGLE_PROJECT"),
+                          os.getenv("GOOGLE_REGION"),
+                          os.getenv("GOOGLE_ZONE"), 
+                          release="ubuntu-2004-lts",
+                          monitor=monitor, # set to false so this VM is not scraped by prometheus
+                          graph=graph)
+
+    # install UERANSIM to VM 
+    await run_install(namespace, name, controlplaneAddresses['dataAddress'], controlplaneAddresses['amfPort'], controlplaneAddresses['webuiAddress'], cellid, ue_spec)
+
+    return {
+        "status":"Running", 
+    }
+
+  except kubernetes.dynamic.exceptions.ResourceNotFoundError as e:
+    raise kopf.TemporaryError("Amf not running yet", 30)
+
 

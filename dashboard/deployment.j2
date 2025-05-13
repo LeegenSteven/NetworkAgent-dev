@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashboard
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      application: dashboard
+  template:
+    metadata:
+      labels:
+        application: dashboard
+    spec:
+      containers:
+      - name: dashboard
+        image: {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/dashboard:latest
+        imagePullPolicy: Always
+        env:
+        - name: GOOGLE_ORG_NAME
+          value: "{{GOOGLE_ORG_NAME}}"
+        - name: GOOGLE_PROJECT
+          value: {{GOOGLE_PROJECT}}
+        - name: GOOGLE_REGION
+          value: {{GOOGLE_REGION}}
+        - name: GOOGLE_ZONE
+          value: {{GOOGLE_ZONE}}
+        - name: GOOGLE_VM_USER
+          value: {{GOOGLE_VM_USER}}
+        - name: NETWORK_AGENT_FILE
+          value: "/agent/networkagent.json"
+        - name: WEBAPPS_PWD
+          value: {{WEBAPPS_PWD}}
+        - name: WEBAPPS_LOGIN
+          value: {{WEBAPPS_LOGIN}}

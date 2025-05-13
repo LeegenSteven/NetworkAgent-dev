@@ -52,7 +52,24 @@
     mode: '0644'
   loop:
     - Readme.md
-    - smf-crd.yaml
+    - controlplanenetwork.yaml
+    # - cpaddresses.yaml
+
+- name: Create london cluster crd directory
+  file:
+    path: /opt/london-cluster-repo/crds
+    state: directory
+    owner: git
+    group: git
+    mode: 0775
+
+- name: push crd files
+  ansible.builtin.copy:
+    src: "crds/"
+    dest: "/opt/london-cluster-repo/crds/"
+    owner: git
+    group: git
+    mode: '0644'
 
 - name: push templated files
   ansible.builtin.template:
@@ -75,7 +92,7 @@
     chdir: /opt/london-cluster-repo
 
 - name: add remote repo
-  command: sudo -u git git remote add origin https://{{ lookup('env', 'WEBAPPS_LOGIN') }}:{{ lookup('env', 'WEBAPPS_PWD') }}@{{ansible_host}}:3000/networkagent/london-cluster.git
+  command: sudo -u git git remote add origin https://{{ lookup('env', 'WEBAPPS_LOGIN') }}:{{ lookup('env', 'WEBAPPS_PWD') }}@{{external_ip_address}}:3000/networkagent/london-cluster.git
   args:
     chdir: /opt/london-cluster-repo
 
@@ -100,7 +117,14 @@
     group: git
     mode: '0644'
   loop:
+    - amf.yaml
+    - ausf.yaml
+    - nrf.yaml
+    - pcf.yaml
     - smf.yaml
+    - udm.yaml
+    - udr.yaml
+    - webui.yaml
 
 - name: push templated files
   ansible.builtin.template:
@@ -110,15 +134,7 @@
     group: git
     mode: '0644'
   loop:
-    - ausf.yaml
-    - amf.yaml
     - mongodb.yaml
-    - nrf.yaml
-    - nssf.yaml
-    - pcf.yaml
-    - udm.yaml
-    - udr.yaml
-    - webui.yaml
 
 - name: add files to network function branch 
   command: sudo -u git git add .

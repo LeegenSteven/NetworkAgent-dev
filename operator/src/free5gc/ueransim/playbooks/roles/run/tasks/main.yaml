@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+- name: Test reachability to AMF
+  ansible.builtin.command: ping -c 4 "{{amfAddress}}"
+  register: ping_result
+  failed_when: ping_result.rc != 0
+
 - name: copy UERANSIM config
   ansible.builtin.template: 
     src: "{{item}}"
@@ -19,6 +24,9 @@
   loop:
   - gnbcfg.yaml
   - uecfg.yaml
+  - docker-compose.yaml
 
-# run UERANSIM with config above, docker run with host network
-
+- name: start UERANSIM
+  community.docker.docker_compose_v2:
+    project_src: /opt/
+    state: present

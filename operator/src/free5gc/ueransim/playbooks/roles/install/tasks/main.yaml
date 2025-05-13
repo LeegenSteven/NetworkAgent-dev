@@ -12,12 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-- name: Install aptitude
-  apt:
-    name: aptitude
-    state: latest
-    update_cache: true
-
 - name: install base apt packages
   ansible.builtin.apt:
     pkg:
@@ -25,6 +19,8 @@
       - gnupg-agent
       - apt-transport-https 
       - software-properties-common
+      - python3
+      - python3-pip
     state: latest
     update_cache: true
 
@@ -55,6 +51,28 @@
     state: latest
     update_cache: true
 
+- name: create drop in docker distributed dir
+  ansible.builtin.file:
+    path: /etc/systemd/system/docker.service.d
+    state: directory
+    mode: '0755'
+
+- name: copy environment
+  ansible.builtin.copy: 
+    src: service.conf
+    dest: /etc/systemd/system/docker.service.d/docker-service-override.conf
+
+- name: copy logging options to docker
+  ansible.builtin.template: 
+    src: daemon.json
+    dest: /etc/docker/daemon.json
+
+- name: restart docker
+  ansible.builtin.systemd_service:
+    state: restarted
+    daemon_reload: true
+    name: docker
+
 - name: download networkagent.json
   ansible.builtin.copy: 
     src: /operator/networkagent.json
@@ -63,5 +81,28 @@
 - name: authenticate with the artefact repo
   raw: "cat /opt/networkagent.json | docker login -u _json_key --password-stdin https://{{GOOGLE_REGION}}-docker.pkg.dev"
 
-# - name: pull ueransim
-#   command: "docker pull {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/networkagent/ueransim:latest"
+- name: pull ueransim
+  command: "docker pull {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/networkagent/ueransim:latest"
+
+# - name: Set AMF CIDR if not defined
+#   set_fact:
+#     amfCidr: "{{ amfAddress | regex_replace('(\\d+\\.\\d+\\.\\d+)\\.\\d+', '\\1.0/24') }}"
+#   when: 
+#     - amfAddress is defined
+#     - amfCidr is not defined
+
+# - name: Check if route to AMF CIDR exists
+#   shell: ip route | grep "{{ amfCidr | regex_replace('/.*', '') }}"
+#   register: route_check
+#   failed_when: false
+#   changed_when: false
+#   when: 
+#     - amfAddress is defined
+#     - amfCidr is defined or amfCidr is not defined
+
+# - name: Add route to AMF CIDR through ens5 if needed
+#   command: ip route add {{ amfCidr }} dev ens5
+#   when: 
+#     - amfAddress is defined
+#     - (amfCidr is defined or amfCidr is not defined)
+#     - route_check.rc != 0

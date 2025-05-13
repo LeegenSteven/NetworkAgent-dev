@@ -36,17 +36,17 @@ async def servicestatus(event, meta, namespace, status, name, uid, **_):
     logger.debug("Wireguard name = %s", name)
 
     try:
-      updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, event, name, uid)
+      await updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, event, name, uid)
     except kubernetes.client.rest.ApiException as e:
       if e.status == 404:
         logger.debug("No VPN Service Found")
       elif e.status == 409:
         logger.debug("Conflict - manifest is out of date - reload and  try again!!!!!!!!!!!!")
-        updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, event, name, uid)
+        await updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, event, name, uid)
       else:
         logger.error(e)
 
-def updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, event, name, uid):
+async def updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, event, name, uid):
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
     kind = None
     if parent_kind=="pointtopointservice":
@@ -65,7 +65,7 @@ def updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, 
 
     if parent_kind in newservice['status']:
       if event.get('type')=="MODIFIED":
-        if "wireguard" in status and status['wireguard']['status']=="Running":
+        if "wireguardappliance" in status and status['wireguardappliance']['status']=="Running":
           for edge in newservice['status'][parent_kind]['edges']:
             if edge['name'] == name:
               previous_status = edge['status']
@@ -104,4 +104,4 @@ def updateStatus(namespace, parent_kind, parent_name, parent_namespace, status, 
 
       # Update the K8s resource and graph node properties
       network_api.patch(body=newservice, name=parent_name, namespace=parent_namespace, content_type='application/merge-patch+json')
-      update_network_node(newservice, newservice['spec'], parent_namespace, parent_name, kind, newservice['metadata']['uid'])
+      await update_network_node(newservice, newservice['spec'], parent_namespace, parent_name, kind, newservice['metadata']['uid'])

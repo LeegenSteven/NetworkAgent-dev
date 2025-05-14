@@ -665,7 +665,6 @@ Kill()
       kubectl patch computenetworks dataplane --patch '{"metadata":{"finalizers":[]}}'  --type=merge
     fi
 
-    gcloud run services delete network-agent-api --region=$GOOGLE_REGION --quiet
     gcloud run services delete network-agent --region=$GOOGLE_REGION --quiet
     gcloud run services delete network-dashboard --region=$GOOGLE_REGION --quiet
 

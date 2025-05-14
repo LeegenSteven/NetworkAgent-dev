@@ -72,21 +72,46 @@ def external_service_account():
 
     return apiclient
 
+# global credentials
+credentials = None
 def get_credentials():
-    return google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/tools/networkagent.json"))[0]
+    """
+    Get a cached credentials object. Used to auth with spanner
+    Returns:
+      google auth object
+    """
+    global credentials
+    if credentials == None:
+      credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/agent/networkagent.json"))[0]
+    return credentials
+
+
+# cached k8s client
+k8s_client = None
 
 def get_client():
-    # check if kubeconfig path exists
-    if os.path.exists(Path.home()/".kube"):
-        logger.info("loading kube config")
-        config.load_kube_config()
-        return client.ApiClient()
-    else:
-        logger.info("loading config from service account")
-        try:
-          logger.info("trying k8s service account")
-          config.load_incluster_config()
-          return client.ApiClient()
-        except Exception as e:
-          logger.info("falling back to GCP service account")
-          return external_service_account()    
+    """
+    Retrieve a cached k8s client
+    Returns:
+      kubernetes client object
+    """
+    global k8s_client
+
+    # init client if not already
+    if k8s_client == None:
+      # check if kubeconfig path exists
+      if os.path.exists(Path.home()/".kube"):
+          logger.info("loading kube config")
+          config.load_kube_config()
+          k8s_client = client.ApiClient()
+      else:
+          logger.info("loading config from service account")
+          try:
+            logger.info("trying k8s service account")
+            config.load_incluster_config()
+            k8s_client = client.ApiClient()
+          except Exception as e:
+            logger.info("falling back to GCP service account")
+            k8s_client = external_service_account()
+
+    return k8s_client

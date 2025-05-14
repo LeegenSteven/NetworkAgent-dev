@@ -25,6 +25,7 @@ from langgraph.types import Command
 from agent.subagents import NetworkEngineerAgent, IncidentAgent
 from agent.tools.engineering import getLocations, getServiceDefinitions, getServices, runTest, getRunningTests
 import agent.prompts.main as main_prompts
+from utils.k8s import get_credentials
 import os
 import datetime
 import logging
@@ -61,7 +62,7 @@ class MainAgent():
         self.current_agent = "main_agent"
 
         memory = MemorySaver()
-        self.credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE", "/networkagent.json"))[0]
+        self.credentials = get_credentials()
 
         self.incident_agent=IncidentAgent.get_instance()
         self.network_engineer_agent=NetworkEngineerAgent.get_instance()

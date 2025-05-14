@@ -13,8 +13,7 @@
 # limitations under the License.
 
 import logging
-import google.auth
-import os
+from utils.k8s import get_credentials
 import json
 from google.cloud import spanner
 from langchain_core.tools import tool
@@ -26,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Connect to Spanner database
 def spanner_connect():
-  credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/agent/networkagent.json"))[0]
+  credentials = get_credentials()
   logger.debug(credentials)
   spanner_client = spanner.Client(credentials=credentials)
   instance = spanner_client.instance(SPANNER_INSTANCE)

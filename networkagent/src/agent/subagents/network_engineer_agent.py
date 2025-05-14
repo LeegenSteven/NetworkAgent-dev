@@ -25,6 +25,7 @@ from langgraph.graph import StateGraph, END, START
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import AnyMessage, HumanMessage, ToolMessage
 from langgraph.types import interrupt
+from utils.k8s import get_credentials
 from agent.tools.engineering import *
 import agent.prompts.network_engineer as network_engineer_prompts
 
@@ -60,7 +61,7 @@ class NetworkEngineerAgent:
     def __init__(self):
         logger.debug("loading networkagent credentials from path = %s", os.getcwd())
 
-        self.credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE", "/networkagent.json"))[0]
+        self.credentials = get_credentials()
 
         self.safe_tools=[getLocations, getServiceDefinitions, getServices]
         self.safe_tools_by_name = {tool.name: tool for tool in self.safe_tools}

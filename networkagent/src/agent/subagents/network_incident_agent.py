@@ -23,6 +23,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import AnyMessage, HumanMessage, ToolMessage, AIMessage
 from agent.tools.engineering import getRunningTests, runTest, deleteTest
 import agent.prompts.incident as incident_prompts
+from utils.k8s import get_credentials
 import json
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ class IncidentAgent:
     def __init__(self):
         logger.debug("loading networkagent credentials from path = %s", os.getcwd())
 
-        self.credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE", "/networkagent.json"))[0]
+        self.credentials = get_credentials()
 
         self.tools=[getRunningTests, runTest, deleteTest]
         self.tools_by_name = {tool.name: tool for tool in self.tools}

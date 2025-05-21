@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:socket_io_client/socket_io_client.dart' as io;
+import 'package:provider/provider.dart';
+import '../appstate.dart';
 import '../models/log_entry.dart';
 
 class LogWidget extends StatelessWidget {
   final List<LogEntry> logs;
-  final io.Socket socket;
+  final socket;
   final bool isLoading;
 
   const LogWidget({
@@ -14,8 +15,9 @@ class LogWidget extends StatelessWidget {
     this.isLoading = false,
   });
 
-  void _resetLogs() {
-    socket.emit('reset_logs');
+  void _resetLogs(BuildContext context) {
+    final appState = Provider.of<Appstate>(context, listen: false);
+    appState.resetLogs();
   }
 
   @override
@@ -53,7 +55,7 @@ class LogWidget extends StatelessWidget {
                     icon: const Icon(Icons.delete_forever, color: Color(0xFF0D47A1)),
                     tooltip: 'Delete logs',
                     onPressed: () {
-                      _resetLogs();
+                      _resetLogs(context);
                     },
                   ),
               ),
@@ -185,4 +187,3 @@ class LogWidget extends StatelessWidget {
   }
 
 }
-

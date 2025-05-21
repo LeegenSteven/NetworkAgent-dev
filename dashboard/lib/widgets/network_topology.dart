@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:graphview/GraphView.dart';
+import 'package:provider/provider.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
+import '../appstate.dart';
 import '../models/network_node.dart';
 import 'node_details_dialog.dart';
 
@@ -480,13 +482,15 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
 
   // Update topology graph view
   void _getTopologyView(String view) {
-    // Emit event to get new topology view
-    widget.socket.emit('get_topology', {'view': view});
+    // Use appstate to get topology view
+    final appState = Provider.of<Appstate>(context, listen: false);
+    appState.getTopologyView(view);
   }
 
   void _showNodeDetails(NetworkNode node) {
-    // Emit event to get detailed node information
-    widget.socket.emit('get_node_details', {'id': node.id});
+    // Use appstate to get node details
+    final appState = Provider.of<Appstate>(context, listen: false);
+    appState.getNodeDetails(node.id);
     
     // Show dialog with loading state
     showDialog(

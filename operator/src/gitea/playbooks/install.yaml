@@ -44,3 +44,7 @@
     - name: root-repo
       import_role:
         name: rootrepo
+
+    - name: networkdesign-repo
+      import_role:
+        name: networkdesign

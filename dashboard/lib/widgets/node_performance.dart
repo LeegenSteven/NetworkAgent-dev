@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../appstate.dart';
 import '../models/metric_entry.dart';
 import '../models/network_node.dart';
 import 'node_details_dialog.dart';
@@ -285,8 +287,9 @@ class NodePerformanceWidget extends StatelessWidget {
       },
     );
     
-    // Emit event to get detailed node information
-    socket.emit('get_node_details', {'id': nodeId});
+    // Use appstate to get node details
+    final appState = Provider.of<Appstate>(context, listen: false);
+    appState.getNodeDetails(nodeId);
     
     // Show dialog with loading state
     showDialog(

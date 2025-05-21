@@ -15,14 +15,10 @@ launch.json
 **/environment/bigquery.yaml
 **/environment/spanner.yaml
 **/environment/logsink.yaml
-**/environment/uetest/cloudbuild.yaml
-**/operator/deployment.yaml
-**/operator/cloudbuild.yaml
 **/tools/deployment.yaml
 **/tools/cloudbuild.yaml
-**/networkagent/deployment.yaml
-**/networkagent/cloudbuild.yaml
-**/dashboard/cloudbuild.yaml
+**/deployment.yaml
+**/cloudbuild.yaml
 **/sample-services/locations/*.yaml
 **/sample-services/clusters/*.yaml
 

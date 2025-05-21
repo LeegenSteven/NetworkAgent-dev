@@ -71,10 +71,6 @@ class ChatPanel extends StatelessWidget {
     // Get the AppState
     final appState = Provider.of<Appstate>(context, listen: false);
     
-    // Set the socket in the AppState if it's not already set
-    if (appState.socket == null) {
-      appState.setSocket(socket);
-    }
     
     return ChangeNotifierProvider(
       create: (context) {
@@ -152,9 +148,16 @@ class _ChatPanelContentState extends State<_ChatPanelContent> with WidgetsBindin
   }
   
   void _onFocusChange() {
-    // If focus is lost and the widget is initialized, try to regain it
-    if (!_textFieldFocus.hasFocus && _isInitialized) {
-      Future.delayed(const Duration(milliseconds: 100), _forceFocus);
+    // If focus is lost and the widget is initialized and visible, try to regain it
+    // We only want to force focus when the chat panel is actively being used
+    if (!_textFieldFocus.hasFocus && _isInitialized && mounted && context.findRenderObject() != null) {
+      // Check if we're currently in a dialog by looking at the ModalRoute
+      final isInDialog = ModalRoute.of(context)?.isCurrent != true;
+      
+      // Only force focus if we're not in a dialog
+      if (!isInDialog) {
+        Future.delayed(const Duration(milliseconds: 100), _forceFocus);
+      }
     }
   }
 
@@ -175,6 +178,15 @@ class _ChatPanelContentState extends State<_ChatPanelContent> with WidgetsBindin
   
   // Method to force focus on the text field
   void _forceFocus() {
+    // Only proceed if the widget is still mounted and visible
+    if (!mounted || context.findRenderObject() == null) return;
+    
+    // Check if we're currently in a dialog by looking at the ModalRoute
+    final isInDialog = ModalRoute.of(context)?.isCurrent != true;
+    
+    // Don't force focus if we're in a dialog
+    if (isInDialog) return;
+    
     // Use FocusScope to ensure focus is properly managed
     FocusScope.of(context).unfocus();
     
@@ -191,10 +203,19 @@ class _ChatPanelContentState extends State<_ChatPanelContent> with WidgetsBindin
   
   // Method to explicitly refocus the text field
   void _refocusTextField() {
+    // Only proceed if the widget is still mounted and visible
+    if (!mounted || context.findRenderObject() == null) return;
+    
+    // Check if we're currently in a dialog by looking at the ModalRoute
+    final isInDialog = ModalRoute.of(context)?.isCurrent != true;
+    
+    // Don't force focus if we're in a dialog
+    if (isInDialog) return;
+    
     // Force focus immediately
     _forceFocus();
     
-    // And also try with delays to ensure it works
+    // And also try with delays to ensure it works, but only if not in a dialog
     Future.delayed(const Duration(milliseconds: 200), _forceFocus);
     Future.delayed(const Duration(milliseconds: 500), _forceFocus);
     Future.delayed(const Duration(milliseconds: 1000), _forceFocus);

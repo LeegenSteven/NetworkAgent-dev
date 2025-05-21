@@ -309,7 +309,11 @@ Create()
         echo "copying networkagent.json"
         echo "#########################"
         cp networkagent.json operator/src
-        cp networkagent.json networkagent/src
+        cp networkagent.json tools/src
+        cp networkagent.json networkagents/supervisor/src
+        cp networkagent.json networkagents/engineer/src
+        cp networkagent.json networkagents/operations/src
+        cp networkagent.json networkagents/tester/src
     else
         echo "#############################################################"
         echo "networkagent.json is empty, check your project is allowed to "
@@ -334,7 +338,11 @@ Create()
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO -E WEBAPPS_LOGIN \
           -E WEBAPPS_PWD -E NETWORK_OPERATOR -E GIT_OPERATOR -E GOOGLE_ORG_NAME operator/deployment.j2 > operator/deployment.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO operator/cloudbuild.j2 > operator/cloudbuild.yaml
-    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagent/cloudbuild.j2 > networkagent/cloudbuild.yaml
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO tools/cloudbuild.j2 > tools/cloudbuild.yaml
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/engineer/cloudbuild.j2 > networkagents/engineer/cloudbuild.yaml
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/tester/cloudbuild.j2 > networkagents/tester/cloudbuild.yaml
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/operations/cloudbuild.j2 > networkagents/operations/cloudbuild.yaml
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/supervisor/cloudbuild.j2 > networkagents/supervisor/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO dashboard/cloudbuild.j2 > dashboard/cloudbuild.yaml
 
 }
@@ -593,9 +601,16 @@ Delete()
     rm operator/src/google-compute*
     rm operator/src/networkagent.json
 
-    rm networkagent/src/networkagent.json
-    rm networkagent/cloudbuild.yaml
-
+    rm tools/src/networkagent.json
+    rm tools/cloudbuild.yaml
+    rm networkagents/supervisor/src/networkagent.json
+    rm networkagents/supervisor/cloudbuild.yaml
+    rm networkagents/engineer/src/networkagent.json
+    rm networkagents/engineer/cloudbuild.yaml
+    rm networkagents/operations/src/networkagent.json
+    rm networkagents/operations/cloudbuild.yaml
+    rm networkagents/tester/src/networkagent.json
+    rm networkagents/tester/cloudbuild.yaml
     rm dashboard/cloudbuild.yaml
 
     rm -f environment/bigquery.yaml
@@ -634,9 +649,6 @@ Kill()
     echo "##############################################"
     kubectl config set-context --current --namespace $GOOGLE_NAMESPACE
     
-    # kubectl delete -f sample-services/connectivity-services
-    # kubectl delete -f sample-services/locations
-    # kubectl delete -f environment/prometheus.yaml
     kubectl delete -f environment/git.yaml
     kubectl delete -f environment/free5gc-build.yaml
     # kubectl delete -f environment/bigquery.yaml
@@ -665,7 +677,11 @@ Kill()
       kubectl patch computenetworks dataplane --patch '{"metadata":{"finalizers":[]}}'  --type=merge
     fi
 
-    gcloud run services delete network-agent --region=$GOOGLE_REGION --quiet
+    gcloud run services delete networktools --region=$GOOGLE_REGION --quiet
+    gcloud run services delete engineeragent --region=$GOOGLE_REGION --quiet
+    gcloud run services delete operationsagent --region=$GOOGLE_REGION --quiet
+    gcloud run services delete testagent --region=$GOOGLE_REGION --quiet
+    gcloud run services delete network-agent-supervisor --region=$GOOGLE_REGION --quiet
     gcloud run services delete network-dashboard --region=$GOOGLE_REGION --quiet
 
     echo "#####################"
@@ -821,14 +837,15 @@ Networkagent()
         echo "flutter could not be found in your path, you must install it"
         exit 1
     fi
-
-    cd networkagent
     export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter="networkagent@${GOOGLE_PROJECT}."`
-    gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
 
-    gcloud run deploy network-agent \
-       --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networkagent:latest \
-       --region $GOOGLE_REGION --service-account $GOOGLE_SERVICE_ACCOUNT \
+    # deploy the mcp tools 
+    cd tools
+    gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+    gcloud run deploy networktools \
+       --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networktools:latest \
+       --region $GOOGLE_REGION \
+       --service-account $GOOGLE_SERVICE_ACCOUNT \
        --min 1 \
        --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
        --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
@@ -836,32 +853,113 @@ Networkagent()
        --update-env-vars WEBAPPS_PWD=${WEBAPPS_PWD} \
        --update-env-vars WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
        --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
-       --allow-unauthenticated    
+       --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
+       --allow-unauthenticated 
+    cd ..
+
+    TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
+    echo "MCP Tools URL is ${TOOLS_URL}"
+    sleep 5
+
+    # deploy the engineer agent
+    cd networkagents/engineer
+    gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+    gcloud run deploy engineeragent \
+       --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/engineeragent:latest \
+       --region $GOOGLE_REGION \
+       --service-account $GOOGLE_SERVICE_ACCOUNT \
+       --min 1 \
+       --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
+       --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
+       --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
+       --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL \
+       --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
+       --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
+       --allow-unauthenticated 
+    cd ../..
+
+    ENGINEER_URL=$(gcloud run services describe engineeragent --region=$GOOGLE_REGION --format="value(status.url)")
+    echo "Engineer Agent URL is ${ENGINEER_URL}"
+
+    # deploy the tester agent
+    cd networkagents/tester
+    gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+    gcloud run deploy testagent \
+       --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/testagent:latest \
+       --region $GOOGLE_REGION \
+       --service-account $GOOGLE_SERVICE_ACCOUNT \
+       --min 1 \
+       --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
+       --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
+       --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
+       --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL \
+       --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
+       --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
+       --allow-unauthenticated 
+    cd ../..
+
+    TESTER_URL=$(gcloud run services describe testagent --region=$GOOGLE_REGION --format="value(status.url)")
+    echo "Tester Agent URL is ${TESTER_URL}"
+
+    # deploy the operations agent
+    cd networkagents/operations
+    gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+    gcloud run deploy operationsagent \
+       --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/operationsagent:latest \
+       --region $GOOGLE_REGION \
+       --service-account $GOOGLE_SERVICE_ACCOUNT \
+       --min 1 \
+       --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
+       --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
+       --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
+       --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL \
+       --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
+       --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
+       --allow-unauthenticated 
+    cd ../..
+
+    OPERATIONS_URL=$(gcloud run services describe operationsagent --region=$GOOGLE_REGION --format="value(status.url)")
+    echo "Operations Agent URL is ${OPERATIONS_URL}"
+
+    cd networkagents/supervisor
+    gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+    gcloud run deploy network-agent-supervisor \
+       --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networksupervisor:latest \
+       --region $GOOGLE_REGION \
+       --service-account $GOOGLE_SERVICE_ACCOUNT \
+       --min 1 \
+       --update-env-vars GOOGLE_GENAI_USE_VERTEXAI=TRUE \
+       --update-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_PROJECT \
+       --update-env-vars GOOGLE_CLOUD_LOCATION=$GOOGLE_REGION \
+       --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
+       --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
+       --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL \
+       --allow-unauthenticated 
 
     # Check if allUsers access is already granted. 
     # If not Allow allUsers to invoke the Cloud Run service
-    gcloud run services get-iam-policy network-agent --region=$GOOGLE_REGION --project=$GOOGLE_PROJECT \
+    gcloud run services get-iam-policy network-agent-supervisor --region=$GOOGLE_REGION --project=$GOOGLE_PROJECT \
            --format="value(bindings.members)" 2>&1 | fgrep -q allUsers
     if [ $? -ne 0 ]; then
-      gcloud run services add-iam-policy-binding network-agent --member='allUsers' --role='roles/run.invoker' \
+      gcloud run services add-iam-policy-binding network-agent-supervisor --member='allUsers' --role='roles/run.invoker' \
             --region=$GOOGLE_REGION --project=$GOOGLE_PROJECT >/dev/null 2>&1
       if [ $? -eq 1 ]; then
-        echo "ERROR : could not setup access for all Users on the Cloud Run service network-agent"
+        echo "ERROR : could not setup access for all Users on the Cloud Run service network-agent-supervisor"
         echo "You must probably disable the Domain Restricted Sharing policy of your domain."
         echo "Then run this command again and re-enable the DRS policy"
         exit 1
       fi
     fi
 
-    cd ..
+    cd ../..
 
     # build and deploy the network dashboard
     cd dashboard
-    gitea_host=$(kubectl get gitea gitea -o 'jsonpath={..status.create_gitea.external_ip_address}')
-    echo "Git IP address is ${gitea_host}"
+    GITEA_HOST=$(kubectl get gitea gitea -o 'jsonpath={..status.create_gitea.external_ip_address}')
+    echo "Git IP address is ${GITEA_HOST}"
 
-    agent_url=$(gcloud run services describe network-agent --region=$GOOGLE_REGION --format="value(status.url)")
-    echo "Agent URL is ${agent_url}"
+    SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
+    echo "Supervisor Agent URL is ${SUPERVISOR_URL}"
 
     echo "Cleaning flutter environment"
     flutter clean
@@ -871,21 +969,35 @@ Networkagent()
             --dart-define=WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
             --dart-define=WEBAPPS_PWD=${WEBAPPS_PWD} \
             --dart-define=GCP_PROJECT=${GOOGLE_PROJECT}\
-            --dart-define=GITEA_URL=https://${gitea_host}:3000 \
-            --dart-define=NETWORKAGENT_URL=${agent_url}
+            --dart-define=GITEA_URL=https://${GITEA_HOST}:3000 \
+            --dart-define=NETWORKAGENT_URL=${SUPERVISOR_URL}
 
     gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
 
     gcloud run deploy network-dashboard --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/dashboard:latest \
-       --region $GOOGLE_REGION --service-account $GOOGLE_SERVICE_ACCOUNT \
+       --region $GOOGLE_REGION \
+       --service-account $GOOGLE_SERVICE_ACCOUNT \
        --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
-       --update-env-vars NETWORKAGENT_URL=${agent_url} \
-       --update-env-vars GITEA_URL=https://${gitea_host}:3000 \
+       --update-env-vars NETWORKAGENT_URL=${SUPERVISOR_URL} \
+       --update-env-vars GITEA_URL=https://${GITEA_HOST}:3000 \
        --update-env-vars WEBAPPS_PWD=${WEBAPPS_PWD} \
        --update-env-vars WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
-       --allow-unauthenticated
+       --allow-unauthenticated 
 
     cd ..
+
+    DASHBOARD_URL=$(gcloud run services describe network-dashboard --region=$GOOGLE_REGION --format="value(status.url)")
+    echo "Agent Dashboard URL is ${DASHBOARD_URL}"
+
+
+    echo "Demo Summary"
+    echo "============"
+    echo "GITEA Host is https://${GITEA_HOST}:3000"
+    echo "Dashboard is ${DASHBOARD_URL}"
+    echo "Operations Agent is ${OPERATIONS_URL}"
+    echo "Engineer Agent is ${ENGINEER_URL}"
+    echo "Test Agent is ${TESTER_URL}"
+    echo "MCP Tools Host is ${TOOLS_URL}"
 
 }
 

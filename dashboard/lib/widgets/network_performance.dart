@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
+import '../appstate.dart';
 import '../models/metrics.dart';
 import '../models/metric_entry.dart';
 import 'node_performance.dart';
@@ -148,8 +150,9 @@ class _NetworkPerformanceWidgetState extends State<NetworkPerformanceWidget> {
                                   TextButton(
                                     child: Text('Clear'),
                                     onPressed: () {
-                                      // Send socket event to clear metrics
-                                      widget.socket.emit('reset_metrics');
+                                      // Use appstate to reset metrics
+                                      final appState = Provider.of<Appstate>(context, listen: false);
+                                      appState.resetMetrics();
                                       Navigator.of(context).pop();
                                       
                                       // Show snackbar to confirm action

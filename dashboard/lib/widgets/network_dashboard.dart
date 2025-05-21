@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:socket_io_client/socket_io_client.dart' as io;
+import 'package:provider/provider.dart';
+import '../appstate.dart';
 import '../models/network_node.dart';
-import '../models/log_entry.dart';
-import '../models/metrics.dart';
 import '../utils/environment_config.dart';
 import 'chat_panel.dart';
 import 'network_topology.dart';
 import 'network_performance.dart';
 import 'markdown_drawer.dart';
 import 'log_widget.dart';
+import 'settings_screen.dart';
 
 class NetworkDashboard extends StatefulWidget {
   const NetworkDashboard({super.key});
@@ -21,24 +21,10 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
   // Global key for the scaffold to access the drawer
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   
-  // Network topology - start with empty topology, will be populated from socket
-  NetworkTopology _topology = NetworkTopology.empty();
-  
-  // Socket.IO client
-  late io.Socket socket;
-  bool _isConnected = false;
-  bool _hasReceivedTopology = false;
-  
-  // Log widget state
-  bool _showLogs = false;
-  List<LogEntry> _logs = [];
-  bool _isLoadingLogs = false;
-  Metrics _metrics = Metrics({});
-  bool _isLoadingMetrics = false;
-
   // Widget display state
   bool _showChat = false; // Chat is hidden by default
   bool _showPerformanceView = false; // Toggle between topology and performance view
+  bool _showLogs = false;
   
   // Control the horizontal split view ratio (chat vs. topology+logs)
   double _horizontalSplitRatio = 0.3; // 30% for chat, 70% for network topology + logs
@@ -53,237 +39,20 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
   @override
   void initState() {
     super.initState();
-    _connectToServer();
   }
   
-  @override
-  void dispose() {
-    socket.disconnect();
-    super.dispose();
-  }
-  
-  void _connectToServer() {
-    // Connect to the NetworkAgent socket server
-    socket = io.io(EnvironmentConfig.agentUrl, <String, dynamic>{
-      'transports': ['websocket'],
-      'autoConnect': true,
-    });
-    
-    socket.onConnect((_) {
-      print('Connected to NetworkAgent server');
-      setState(() {
-        _isConnected = true;
-      });
-      
-      // Request initial topology data when connected
-      socket.emit('get_topology', {'view': NetworkTopologyWidget.defaultView});
-    });
-    
-    socket.onDisconnect((_) {
-      print('Disconnected from NetworkAgent server');
-      setState(() {
-        _isConnected = false;
-        // Keep the topology when disconnected
-      });
-    });
-    
-    // Listen for topology updates
-    socket.on('topology_update', (data) {
-      if (data != null && data['elements'] != null) {
-        print('Received topology update with ${data['elements'].length} elements');
-        _updateTopology(data['elements']);
-      }
-      
-      // If logs are enabled and logs data is included, update logs
-      if (_showLogs && data != null && data['logs'] != null) {
-        _updateLogs(data['logs']);
-      }
-    });
-    
-    // Listen for log updates
-    socket.on('logs_update', (data) {
-      if (data != null) {
-        _updateLogs(data);
-      }
-    });
-
-  // listen for metrics updates
-    socket.on('all_last_metrics_update', (data) {
-      if (data != null) {
-        _updateMetrics(data);        
-      }
-    });
-    
-    
-    socket.connect();
-  }
-  
-  void _updateLogs(dynamic logsData) {
-    try {
-      List<LogEntry> newLogs = [];
-      
-      if (logsData is List) {
-        // Convert each log entry from JSON to LogEntry object
-        newLogs = logsData.map((logData) => 
-          logData is Map<String, dynamic> 
-            ? LogEntry.fromJson(logData)
-            : LogEntry(
-                timestamp: DateTime.now().toIso8601String(),
-                level: 'INFO',
-                message: logData.toString(),
-                source: 'unknown',
-              )
-        ).toList();
-      } else if (logsData != null) {
-        // Handle any unexpected format
-        print('Unexpected log data format: ${logsData.runtimeType}');
-        newLogs.add(LogEntry(
-          timestamp: DateTime.now().toIso8601String(),
-          level: 'WARNING',
-          message: 'Received logs in unexpected format: ${logsData.runtimeType}',
-          source: 'dashboard',
-        ));
-      }
-      
-      setState(() {
-        _logs = newLogs;
-        _isLoadingLogs = false;
-      });
-    } catch (e) {
-      print('Error updating logs: $e');
-      setState(() {
-        _isLoadingLogs = false;
-      });
-    }
-  }
-
-   void _toggleLogs() {
+  void _toggleLogs() {
+    final appState = Provider.of<Appstate>(context, listen: false);
     setState(() {
       _showLogs = !_showLogs;
-      if (_showLogs) {
-        _isLoadingLogs = true;
-        // Request logs from server
-        socket.emit('get_logs', {'enabled': true});
-      } else {
-        // Notify server to stop sending logs
-        socket.emit('get_logs', {'enabled': false});
-      }
+      appState.toggleLogs(_showLogs);
     });
-  }
-  
-  // the _updateMetrics function receives its data as structured
-  // in networkagent/metrics.py function fetch_all_last_metrics. 
-  // Read the data and build a similar data structure here
-  void _updateMetrics(dynamic metricsData) {
-    try {
-      // Use the Metrics class to parse the metrics data
-      final metrics = Metrics.fromJson(metricsData);
-      
-      setState(() {
-        _metrics = metrics;
-        _isLoadingMetrics = false;
-      });
-    } catch (e) {
-      print('Error updating metrics: $e');
-      setState(() {
-        _isLoadingMetrics = false;
-      });
-    }
   }
   
   void _toggleChat() {
     setState(() {
       _showChat = !_showChat;
     });
-  }
-  
-  void _updateTopology(List<dynamic> elements) {
-    try {
-      // Process the elements from the server and convert to NetworkTopology
-      final nodes = <NetworkNode>[];
-      final connections = <NetworkConnection>[];
-      final nodeIds = <String>{};
-      
-      // First pass: collect all nodes
-      for (var element in elements) {
-        if (element['group'] == 'nodes') {
-          final data = element['data'];
-          if (data == null || data['id'] == null) {
-            print('Warning: Skipping node with missing data or ID');
-            continue;
-          }
-          
-          final id = data['id'];
-          final name = data['name'] ?? 'Unknown';
-          final kind = data['kind'] ?? '';
-          final status = data['status'] ?? '';
-          
-          // Map the kind to a NodeType
-          NodeType type = NetworkNode.mapKindToNodeType(kind);
-          
-          nodes.add(NetworkNode(
-            id: id,
-            name: name,
-            type: type,
-            properties: {
-              'kind': kind,
-              'status': status,
-              'ip': data['ip'] ?? '',
-            },
-          ));
-          
-          // Keep track of valid node IDs
-          nodeIds.add(id);
-        }
-      }
-      
-      // Second pass: collect all edges - only for nodes that exist
-      int connectionId = 1;
-      for (var element in elements) {
-        if (element['group'] == 'edges') {
-          final data = element['data'];
-          if (data == null || data['source'] == null || data['target'] == null) {
-            print('Warning: Skipping edge with missing data, source, or target');
-            continue;
-          }
-          
-          final sourceId = data['source'];
-          final targetId = data['target'];
-          
-          // Skip edges where either source or target node doesn't exist
-          if (!nodeIds.contains(sourceId) || !nodeIds.contains(targetId)) {
-            print('Warning: Skipping edge with non-existent source or target: $sourceId -> $targetId');
-            continue;
-          }
-          
-          final label = data['label'] ?? '';
-          
-          connections.add(NetworkConnection(
-            id: 'c${connectionId++}',
-            sourceId: sourceId,
-            targetId: targetId,
-            label: label,
-            properties: {
-              'src_kind': data['src_kind'] ?? '',
-              'tgt_kind': data['tgt_kind'] ?? '',
-            },
-          ));
-        }
-      }
-      
-      // Update the state with the new topology
-      setState(() {
-        _topology = NetworkTopology(nodes: nodes, connections: connections);
-        _hasReceivedTopology = true;
-      });
-    } catch (e) {
-      print('Error updating topology: $e');
-      // If there's an error, create an empty topology to avoid crashes
-      setState(() {
-        _topology = NetworkTopology.empty();
-        _hasReceivedTopology = true;
-      });
-    }
   }
   
   // Markdown content for the drawer
@@ -299,6 +68,8 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
 
   @override
   Widget build(BuildContext context) {
+    final appState = Provider.of<Appstate>(context);
+    
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
@@ -321,7 +92,7 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
               height: 12,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: _isConnected ? Colors.green : Colors.red,
+                color: appState.isConnected ? Colors.green : Colors.red,
               ),
             ),
           ],
@@ -332,10 +103,10 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
             child: Padding(
               padding: const EdgeInsets.only(right: 8.0),
               child: Text(
-                _isConnected ? 'Connected' : 'Disconnected',
+                appState.isConnected ? 'Connected' : 'Disconnected',
                 style: TextStyle(
                   fontSize: 12,
-                  color: _isConnected ? Colors.green[100] : Colors.red[100],
+                  color: appState.isConnected ? Colors.green[100] : Colors.red[100],
                 ),
               ),
             ),
@@ -382,9 +153,9 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
-              // In the future, this will open settings
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Settings will be implemented in the future')),
+              // Navigate to the settings screen
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
               );
             },
             tooltip: 'Settings',
@@ -402,7 +173,7 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
           if (_showChat) ...[
             SizedBox(
               width: MediaQuery.of(context).size.width * _horizontalSplitRatio,
-              child: ChatPanel(socket: socket),
+              child: ChatPanel(socket: appState.socket!),
             ),
             
             // Horizontal resizable divider
@@ -440,13 +211,13 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                   flex: (_verticalSplitRatio * 100).round(), // Convert ratio to flex units
                   child: _showPerformanceView
                     ? NetworkPerformanceWidget(
-                        metrics: _metrics,
-                        socket: socket,
+                        metrics: appState.metrics,
+                        socket: appState.socket!,
                       )
-                    : _hasReceivedTopology 
+                    : appState.hasReceivedTopology 
                       ? NetworkTopologyWidget(
-                          topology: _topology, 
-                          socket: socket,
+                          topology: appState.topology, 
+                          socket: appState.socket!,
                         )
                       : Center(
                             child: Column(
@@ -499,9 +270,9 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                   Expanded(
                     flex: ((1 - _verticalSplitRatio) * 100).round(), // Convert ratio to flex units
                     child: LogWidget(
-                      logs: _logs,
-                      socket: socket,
-                      isLoading: _isLoadingLogs,
+                      logs: appState.logs,
+                      socket: appState.socket!,
+                      isLoading: appState.isLoadingLogs,
                     ),
                   ),
                 ],

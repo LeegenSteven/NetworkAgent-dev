@@ -23,7 +23,7 @@ The following links detail the main aspects of the network agent demo system.
 * [Network Services](docs/networkservices.md)
 * [GCP Environment](docs/gcp.md)
 * [CICD](docs/cicd.md)
-* [Network Agent](docs/agent.md)
+* [Network Agents](docs/agent.md)
 
 ## Create the network agent environment
 
@@ -33,6 +33,10 @@ Following the steps below to create a network agent environment.
 * [Build and deploy the network operator](/operator/Readme.md)
 * [Build and deploy the network agent](/networkagent/Readme.md)
 * [Log into GitOps environment](/docs/git.md)
+
+## Demo Scenarios
+
+* [Build a 5G Network](/docs/5gbuilddemo.md)
 
 # LICENSES
 

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
+import '../appstate.dart';
 import '../models/network_node.dart';
 
 class NodeDetailsDialog extends StatefulWidget {

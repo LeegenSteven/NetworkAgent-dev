@@ -1,0 +1,10 @@
+mcp==1.9.0
+kubernetes
+google-cloud-spanner
+google-cloud-container
+google-api-python-client
+ruamel.yaml
+scikit-learn
+pandas
+numpy
+py-gitea

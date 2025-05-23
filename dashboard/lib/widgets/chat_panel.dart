@@ -47,14 +47,14 @@ class ChatProvider extends ChangeNotifier {
   }
 
   void resetChat(Appstate appState) {
-    // Use the AppState to reset the chat
-    appState.resetChat();
-    
-    // Also hide the loading indicator if it's showing
+    // Hide the loading indicator if it's showing
     if (_isLoading) {
       _isLoading = false;
       notifyListeners();
     }
+    
+    // Use the AppState to reset the chat with socket disconnect/reconnect
+    appState.resetChatWithSocketReset();
   }
 }
 

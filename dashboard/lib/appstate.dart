@@ -7,12 +7,16 @@ import 'models/network_node.dart';
 import 'models/log_entry.dart';
 import 'models/metrics.dart';
 import 'utils/environment_config.dart';
+import 'utils/APIService.dart';
 import 'widgets/network_topology.dart';
 
 class Appstate extends ChangeNotifier {
   // Chat state
   final List<ChatMessage> _chatMessages = [];
   io.Socket? _socket;
+  
+  // API Service
+  final APIService _apiService = APIService();
   
   // Agents state
   final List<Agent> _agents = [];
@@ -54,12 +58,24 @@ class Appstate extends ChangeNotifier {
       'autoConnect': true,
     });
     
-    _socket!.onConnect((_) {
+    _socket!.onConnect((_) async {
       print('Connected to NetworkAgent server');
       _isConnected = true;
       
       // Request initial topology data when connected
       _socket!.emit('get_topology', {'view': NetworkTopologyWidget.defaultView});
+      
+      // Initialize the list of remote agents from REST API
+      try {
+        final agents = await _apiService.listAgents();
+        if (agents.isNotEmpty) {
+          _agents.clear();
+          _agents.addAll(agents);
+          print('Initialized ${agents.length} remote agents from REST API');
+        }
+      } catch (e) {
+        print('Error initializing remote agents: $e');
+      }
       
       notifyListeners();
     });
@@ -92,32 +108,7 @@ class Appstate extends ChangeNotifier {
       }
     });
 
-    // Listen for remote agent updates
-    _socket!.on('update_remote_agents', (data) {
-      print("update remote agents caught");
-      if (data != null) {
-        // Clear current agents list
-        _agents.clear();
-        
-        // Parse the data as a list of agents
-        final List<dynamic> agentsList = data is List ? data : [data];
-        
-        // Add each agent to the list
-        for (var agentData in agentsList) {
-          if (agentData is Map<String, dynamic>) {
-            try {
-              final agent = Agent.fromJson(agentData);
-              _agents.add(agent);
-            } catch (e) {
-              print('Error parsing agent data: $e');
-            }
-          }
-        }
-        
-        // Notify listeners about the state change
-        notifyListeners();
-      }
-    });
+    // Agent management has been moved to REST endpoints
     
     // Listen for topology updates
     _socket!.on('topology_update', (data) {
@@ -197,20 +188,77 @@ class Appstate extends ChangeNotifier {
     notifyListeners();
   }
   
+  // Reset chat history with socket disconnect and reconnect
+  void resetChatWithSocketReset() {
+    // Clear chat messages
+    _chatMessages.clear();
+    
+    // Disconnect and reconnect the socket if it exists
+    if (_socket != null) {
+      print('Resetting connection: disconnecting socket');
+      
+      // Disconnect the socket
+      _socket!.disconnect();
+      
+      // Reconnect after a short delay
+      Future.delayed(const Duration(milliseconds: 500), () {
+        print('Resetting connection: reconnecting socket');
+        _socket!.connect();
+      });
+    }
+    
+    notifyListeners();
+  }
+  
   // Agent management methods
   Future<void> addAgent(String url) async {
-    // Send add_remote_agent message to the server
-    if (_socket != null && _socket!.connected) {
-      _socket!.emit('add_remote_agent', {'url': url});
+    try {
+      print('Adding agent with URL: $url');
+      
+      // Call the REST API to add the agent
+      final agent = await _apiService.addAgent(url);
+      
+      if (agent != null) {
+        // Add the new agent to the list
+        _agents.add(agent);
+        print('Successfully added agent: ${agent.name}');
+        
+        // Refresh the full list to ensure consistency
+        final agents = await _apiService.listAgents();
+        if (agents.isNotEmpty) {
+          _agents.clear();
+          _agents.addAll(agents);
+          print('Updated agents list with ${agents.length} agents');
+        }
+        
+        // Notify listeners about the state change
+        notifyListeners();
+      } else {
+        print('Failed to add agent with URL: $url');
+      }
+    } catch (e) {
+      print('Error adding agent: $e');
     }
   }
   
   Future<void> removeAgent(String id) async {
-    // Find the agent to get its URL
-    Agent? agentToRemove;
-    agentToRemove = _agents.firstWhere((a) => a.id == id);
-    if (_socket != null && _socket!.connected) {
-      _socket!.emit('delete_remote_agent', {'url': agentToRemove.url});
+    try {
+      // Find the agent to get its URL
+      Agent? agentToRemove = _agents.firstWhere((a) => a.id == id);
+      print('Removing agent with ID: $id, URL: ${agentToRemove.url}');
+      
+      // Call the REST API to delete the agent
+      final updatedAgents = await _apiService.deleteAgent(agentToRemove.url);
+      
+      // Update the local agents list
+      _agents.clear();
+      _agents.addAll(updatedAgents);
+      print('Updated agents list with ${updatedAgents.length} agents');
+      
+      // Notify listeners about the state change
+      notifyListeners();
+    } catch (e) {
+      print('Error removing agent: $e');
     }
   }
   
@@ -406,7 +454,7 @@ class Appstate extends ChangeNotifier {
     // Remove event listeners to prevent memory leaks
     if (_socket != null) {
       _socket!.off('chat_message');
-      _socket!.off('update_remote_agents');
+      // Agent management has been moved to REST endpoints
       _socket!.off('topology_update');
       _socket!.off('logs_update');
       _socket!.off('all_last_metrics_update');

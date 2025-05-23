@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 # Create an MCP server
 networkagent_mcp = FastMCP(
     name="Network Agent MCP",
-    description="Provides network agent tools",
+    instructions="Provides network agent tools",
     host="0.0.0.0",
     port=8080
 )

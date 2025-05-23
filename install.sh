@@ -396,7 +396,7 @@ Start()
     (gcloud container clusters describe networkautomation --zone=$GOOGLE_ZONE > /dev/null 2>&1) || \
     gcloud container clusters create networkautomation \
         --no-enable-autoupgrade \
-        --cluster-version="1.30.10-gke.1070000" \
+        --cluster-version="1.30.11-gke.1217000" \
         --addons ConfigConnector \
         --enable-ip-alias \
         --service-account $GOOGLE_SERVICE_ACCOUNT\

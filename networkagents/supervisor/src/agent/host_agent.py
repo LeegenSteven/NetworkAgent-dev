@@ -17,6 +17,7 @@ from uuid import uuid4
 import json
 from typing import Any
 import logging
+import os
 import agent.prompts.supervisor as prompts
 from utils.k8s import get_credentials
 import datetime
@@ -77,6 +78,11 @@ class HostAgent:
         self.app_name = "host_network_agent"
 
         self.remote_agent_addresses = []
+        # Check if AGENTS_URL environment variable exists and parse it
+        agents_url = os.environ.get('AGENTS_URL')
+        if agents_url:
+            self.remote_agent_addresses = [url.strip() for url in agents_url.split(',')]
+
         self.cards = {}
 
         self.session_service = InMemorySessionService()

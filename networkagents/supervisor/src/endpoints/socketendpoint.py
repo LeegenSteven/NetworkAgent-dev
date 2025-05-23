@@ -54,6 +54,8 @@ class SocketEndpoint:
             agent=await HostAgent.get_instance()
             await agent.run(data['text'], self.sio, sid)
 
+        # Agent management has been moved to REST endpoints
+
         @self.sio.event
         async def add_remote_agent(sid, data):
             logger.info(f"add remote agent {sid}: {data}")

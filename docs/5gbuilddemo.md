@@ -1,4 +1,4 @@
-# Demo Scenario
+# 5G Service Demo
 
 ## Demo setup
 
@@ -20,7 +20,7 @@ cd NetworkAgent
 kubectl apply -f environment/free5gc-build.yaml
 ```
 
-This also takes a long time, but is a one time build. A virtual machine is created that builds the various containers and pushes to networkagent artifact registry. When you see a ueransim image appear in the registry the build is complete. 
+This also takes a long time, but is a one time build. A virtual machine is created that builds the various containers and pushes to __networkagent__ artifact registry. When you see a ueransim image appear in the registry the build is complete. 
 
 You can delete the virtual machine by running the following
 
@@ -62,6 +62,23 @@ The demo starts with a partially setup 5G network, i.e. the Core network compone
   * "what can you do for me?"
   * "what agents are there?"
   * You can see there is nothing right now. 
+
+## Show gitops & tools(Extended Version)
+
+To show gitops approach to making network intent changes, open gitea and login.
+
+* Select the core repo and show the CRs that are responsible for whats on the UI
+* Select the cellsite2 repo and create a pull request to merge the location branch into master. This will cause a new VPC to be created called cellsite2 and will show on the UI screen. You should also be able to see logs in action as this happens
+
+## Show the tools
+
+Run the MCP inspector tool, as follows:
+
+```
+npx @modelcontextprotocol/inspector
+```
+
+Enter the cloud run __networktools__ url in MCP inspector and connect. Show the available tools the network agents have access to. 
 
 
 ## Add Operations Agents

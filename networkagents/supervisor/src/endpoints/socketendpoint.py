@@ -57,56 +57,6 @@ class SocketEndpoint:
         # Agent management has been moved to REST endpoints
 
         @self.sio.event
-        async def add_remote_agent(sid, data):
-            logger.info(f"add remote agent {sid}: {data}")
-            
-            try:
-                # Validate the data
-                if not data or 'url' not in data:
-                    logger.error(f"Invalid data received for add_remote_agent: {data}")
-                    error = SupervisorAgentError(
-                        message="Invalid data: URL is required",
-                        severity=ErrorSeverity.ERROR
-                    )
-                    await send_error_message(self.sio, sid, error)
-                    return
-                    
-                agent = await HostAgent.get_instance()
-                
-                try:
-                    response = await agent.add_remote_agent(data.get('url'))
-                    if response:
-                        logger.info(f"Successfully added agent: {response}")
-                        remote_agents = agent.list_remote_agents()
-                        await self.sio.emit('update_remote_agents', remote_agents, room=sid)
-                        logger.info(f"Sent list_remote_agents to {sid}")
-                except SupervisorAgentError as e:
-                    # SupervisorAgentError instances are already handled by the host_agent
-                    # Just log that we caught it here
-                    logger.error(f"Error adding remote agent: {e.message}")
-                    await send_error_message(self.sio, sid, e)
-            except Exception as e:
-                logger.error(f"Unexpected error in add_remote_agent: {str(e)}", exc_info=True)
-                error = SupervisorAgentError(
-                    message=f"Unexpected error adding remote agent: {str(e)}",
-                    severity=ErrorSeverity.ERROR,
-                    original_exception=e
-                )
-                await send_error_message(self.sio, sid, error)
-
-        @self.sio.event
-        async def delete_remote_agent(sid, data):
-            logger.info(f"delete remote agent for {sid}: {data}")
-            agent = await HostAgent.get_instance()
-            
-            # Get the URL of the agent to delete
-            url = data.get('url')
-            success = await agent.delete_remote_agent(url)
-            remote_agents = agent.list_remote_agents()
-            await self.sio.emit('update_remote_agents', remote_agents, room=sid)
-            logger.info(f"Sent list_remote_agents to {sid}")
-
-        @self.sio.event
         async def get_node_details(sid, data):
             logger.info("get node details for %s %s", sid, data)          
             try:

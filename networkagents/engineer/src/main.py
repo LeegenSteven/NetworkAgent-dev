@@ -25,7 +25,7 @@ from a2a.types import (
     AgentSkill,
 )
 import uvicorn
-import agent.prompts.network_engineer as prompts
+import descriptions
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
@@ -36,22 +36,32 @@ BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 def get_agent_card(host: str, port: int):
     """Returns the Agent Card for the Engineering Agent."""
     capabilities = AgentCapabilities(streaming=True, pushNotifications=True)
-    skill = AgentSkill(
-        id='network_engineer_agent',
-        name='Network Engineering Agent',
-        description=prompts.description,
-        tags=prompts.tags,
-        examples=prompts.examples
+
+    chat_skill = AgentSkill(
+        id='network_engineer_agent_chat',
+        name='Chat Engineer Support',
+        description=descriptions.chat_description,
+        tags=descriptions.chat_tags,
+        examples=descriptions.chat_examples
     )
+
+    background_skill = AgentSkill(
+        id='network_engineer_agent_background',
+        name='Remote Agent Engineer Support',
+        description=descriptions.background_description,
+        tags=descriptions.background_tags,
+        examples=descriptions.background_examples
+    )
+
     return AgentCard(
         name='Network Engineer Agent',
-        description=prompts.description,
+        description=descriptions.description,
         url=f'http://{host}:{port}/',
         version='1.0.0',
         defaultInputModes=NetworkEngineerAgent.SUPPORTED_CONTENT_TYPES,
         defaultOutputModes=NetworkEngineerAgent.SUPPORTED_CONTENT_TYPES,
         capabilities=capabilities,
-        skills=[skill],
+        skills=[chat_skill, background_skill],
     )
 
 

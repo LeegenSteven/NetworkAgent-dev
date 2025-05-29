@@ -25,7 +25,7 @@ from a2a.types import (
     AgentSkill,
 )
 import uvicorn
-import agent.prompts as prompts
+import descriptions
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
@@ -39,13 +39,13 @@ def get_agent_card(host: str, port: int):
     skill = AgentSkill(
         id='operations_agent',
         name='Operations Agent',
-        description=prompts.description,
-        tags=prompts.tags,
-        examples=prompts.examples
+        description=descriptions.description,
+        tags=descriptions.tags,
+        examples=descriptions.examples
     )
     return AgentCard(
         name='Operations Agent',
-        description=prompts.description,
+        description=descriptions.description,
         url=f'http://{host}:{port}/',
         version='1.0.0',
         defaultInputModes=OperationsAgent.SUPPORTED_CONTENT_TYPES,

@@ -16,26 +16,6 @@
 # Prompt to generate planned steps
 ######################################################################
 
-description="""
-A network engineer agent. The network engineer agent's job is to communicate with the user to help them create and delete 
-network services and/or network locations. The engineer agents takes and objective andcreates a plan of changes needed to deliver it.
-
-The network engineer agent can help the user with network create and delete tasks such as:
-- create and delete network locations
-- create and delete network services
-"""
-
-tags = ['create network locations', 'create network services', 'delete network locations','delete network services']
-
-examples = [
-"""
-Create a plan for a network location called brian with cidr 10.0.50.0/24
-""",
-"""
-Create a plan to create a fully working 5g network service
-""",
-]
-
 planner_prompt = """
 You are a networking engineer specialist helper bot. You job is to communicate with the user to help them 
 make changes to their 5G Network Services and network locations. Network Service is a synonym. 

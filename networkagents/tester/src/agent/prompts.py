@@ -12,20 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-description="""
-A test agent. The test agent job is to help the user to run and delete network tests. 
-
-The test agent can help the user fulfill tasks such as:
-- create network test
-- delete running network tests
-"""
-
-tags=['test']
-
-examples=[
-    "Create a network test between UERanSim cellsite 1 and dnn internet?",
-]
-
 operations_prompt="""
 You are a network test agent. Your job is to communicate with the user to help them manage network tests. 
 

@@ -53,8 +53,7 @@ class ChatProvider extends ChangeNotifier {
       notifyListeners();
     }
     
-    // Use the AppState to reset the chat with socket disconnect/reconnect
-    appState.resetChatWithSocketReset();
+    appState.resetChat();
   }
 }
 

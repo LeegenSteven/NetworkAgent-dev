@@ -131,6 +131,7 @@ class HostAgent:
                             await remote_connection.create_client()
                             self.remote_agent_connections[card.name] = remote_connection
                             self.cards[card.name] = card
+
                         except httpx.HTTPError as e:
                             logger.error(f"HTTP error loading remote agent at {address}: {str(e)}", exc_info=True)
                             # Continue to the next address
@@ -284,7 +285,7 @@ class HostAgent:
 
     def list_remote_agents(self):
         """
-        List the available remote agents you can use to delegate the task.
+        List the available remote agents with chat skills you can use to delegate chat tasks.
 
         Returns:
             list of dicts
@@ -294,11 +295,14 @@ class HostAgent:
 
         remote_agent_info = []
         for card in self.cards.values():
-            # Generate a unique ID for each agent if not already present
-            agent_id = str(uuid4())
-            remote_agent_info.append(
-                {'id': agent_id, 'name': card.name, 'description': card.description, 'url': card.url}
-            )
+            for skill in card.skills:
+                if 'chat' in skill.tags:
+                    # Generate a unique ID for each agent if not already present
+                    agent_id = str(uuid4())
+                    remote_agent_info.append(
+                        {'id': agent_id, 'name': card.name, 'description': card.description, 'url': card.url}
+                    )
+                break
         return remote_agent_info
 
     def create_send_message_payload(self, text: str, task_id: str | None = None, context_id: str | None = None) -> dict[str, Any]:

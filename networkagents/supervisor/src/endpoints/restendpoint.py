@@ -12,16 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
+import json
 from aiohttp_cors.cors_config import CorsConfig
 import aiohttp_cors
 from aiohttp import web
 from agent.host_agent import HostAgent
+from endpoints.socketendpoint import SocketEndpoint
 
 logger = logging.getLogger(__name__)
 
 class RestEndpoint:
+
+    _instance = None
+
     def __init__(self, app: web.Application, cors: CorsConfig):
         logger.info("RestEndpoint init")
+
+        RestEndpoint._instance = self
 
         self.app = app
         self.cors = cors
@@ -43,7 +50,8 @@ class RestEndpoint:
         deleteAgentRoute = self.app.router.add_post("/deleteagent", self.deleteAgent)
         self.cors.add(deleteAgentRoute, corsConfig)
 
-        agentNotificationRoute = self.app.router.add_post("/agentnotification", self.agentNotification)
+        pushNotificationRoute = self.app.router.add_post("/pushnotification", self.pushNotification)
+        self.cors.add(pushNotificationRoute, corsConfig)
 
     #################################################################
     # Add a remote agent
@@ -156,6 +164,74 @@ class RestEndpoint:
     #################################################################
     # Callback for agent notifications
     #################################################################
-    async def agentNotification(self, request):
-        logger.info("received agent notification")
-        pass
+    async def pushNotification(self, request):
+        """
+        Handle push notification requests from agents.
+        
+        Notification request has the following structure:
+        {
+            "state": "input_required",
+            "task_id": "",
+            "context_id": "",
+            "content": "",
+        }
+        
+        Args:
+            request: The HTTP request object
+            
+        Returns:
+            aiohttp.web.Response: JSON response indicating success or failure
+        """
+        logger.info("Received agent task update")
+        logger.info("TODO: Make this A2A compliant")
+
+        try:
+            # Validate request has JSON content
+            if not request.can_read_body:
+                logger.error("Request has no body")
+                return web.json_response(
+                    {"error": "Request body is required"},
+                    status=400
+                )
+                
+            # Get the request data
+            try:
+                data = await request.json()
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid JSON in request: {str(e)}")
+                return web.json_response(
+                    {"error": f"Invalid JSON in request: {str(e)}"},
+                    status=400
+                )
+                
+            # Validate required fields
+            required_fields = ["name", "state", "task_id", "context_id", "content"]
+            missing_fields = [field for field in required_fields if field not in data]
+            if missing_fields:
+                logger.error(f"Missing required fields: {missing_fields}")
+                return web.json_response(
+                    {"error": f"Missing required fields: {missing_fields}"},
+                    status=400
+                )
+
+            # Send notification to all connected sockets
+            success = await SocketEndpoint._instance.sendPushNotification(data)
+            
+            if success:
+                logger.info("Successfully sent notification to all connected clients")
+                return web.json_response({"status": "success"})
+            else:
+                logger.error("Failed to send notification to all connected clients")
+                return web.json_response(
+                    {"error": "Failed to send notification to all connected clients"},
+                    status=500
+                )
+
+        except Exception as e:
+            logger.error(f"Error processing push notification: {str(e)}", exc_info=True)
+            
+            # Return error response
+            return web.json_response(
+                {"error": f"Error processing push notification: {str(e)}"},
+                status=500
+            )

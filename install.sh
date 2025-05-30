@@ -861,6 +861,41 @@ Networkagent()
     echo "MCP Tools URL is ${TOOLS_URL}"
     sleep 5
 
+    # deploy supervisor
+    cd networkagents/supervisor
+    gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+    gcloud run deploy network-agent-supervisor \
+       --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networksupervisor:latest \
+       --region $GOOGLE_REGION \
+       --service-account $GOOGLE_SERVICE_ACCOUNT \
+       --min 1 \
+       --update-env-vars GOOGLE_GENAI_USE_VERTEXAI=TRUE \
+       --update-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_PROJECT \
+       --update-env-vars GOOGLE_CLOUD_LOCATION=$GOOGLE_REGION \
+       --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
+       --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
+       --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL \
+       --allow-unauthenticated 
+
+    # Check if allUsers access is already granted. 
+    # If not Allow allUsers to invoke the Cloud Run service
+    gcloud run services get-iam-policy network-agent-supervisor --region=$GOOGLE_REGION --project=$GOOGLE_PROJECT \
+           --format="value(bindings.members)" 2>&1 | fgrep -q allUsers
+    if [ $? -ne 0 ]; then
+      gcloud run services add-iam-policy-binding network-agent-supervisor --member='allUsers' --role='roles/run.invoker' \
+            --region=$GOOGLE_REGION --project=$GOOGLE_PROJECT >/dev/null 2>&1
+      if [ $? -eq 1 ]; then
+        echo "ERROR : could not setup access for all Users on the Cloud Run service network-agent-supervisor"
+        echo "You must probably disable the Domain Restricted Sharing policy of your domain."
+        echo "Then run this command again and re-enable the DRS policy"
+        exit 1
+      fi
+    fi
+
+    SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
+    echo "Supervisor URL is ${SUPERVISOR_URL}"
+    cd ../..
+
     # deploy the engineer agent
     cd networkagents/engineer
     gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
@@ -872,6 +907,7 @@ Networkagent()
        --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
        --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
        --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
+       --update-env-vars SUPERVISOR_URL=$SUPERVISOR_URL \
        --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL \
        --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
        --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
@@ -921,37 +957,6 @@ Networkagent()
     OPERATIONS_URL=$(gcloud run services describe operationsagent --region=$GOOGLE_REGION --format="value(status.url)")
     echo "Operations Agent URL is ${OPERATIONS_URL}"
 
-    cd networkagents/supervisor
-    gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
-    gcloud run deploy network-agent-supervisor \
-       --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networksupervisor:latest \
-       --region $GOOGLE_REGION \
-       --service-account $GOOGLE_SERVICE_ACCOUNT \
-       --min 1 \
-       --update-env-vars GOOGLE_GENAI_USE_VERTEXAI=TRUE \
-       --update-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_PROJECT \
-       --update-env-vars GOOGLE_CLOUD_LOCATION=$GOOGLE_REGION \
-       --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
-       --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
-       --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL \
-       --allow-unauthenticated 
-
-    # Check if allUsers access is already granted. 
-    # If not Allow allUsers to invoke the Cloud Run service
-    gcloud run services get-iam-policy network-agent-supervisor --region=$GOOGLE_REGION --project=$GOOGLE_PROJECT \
-           --format="value(bindings.members)" 2>&1 | fgrep -q allUsers
-    if [ $? -ne 0 ]; then
-      gcloud run services add-iam-policy-binding network-agent-supervisor --member='allUsers' --role='roles/run.invoker' \
-            --region=$GOOGLE_REGION --project=$GOOGLE_PROJECT >/dev/null 2>&1
-      if [ $? -eq 1 ]; then
-        echo "ERROR : could not setup access for all Users on the Cloud Run service network-agent-supervisor"
-        echo "You must probably disable the Domain Restricted Sharing policy of your domain."
-        echo "Then run this command again and re-enable the DRS policy"
-        exit 1
-      fi
-    fi
-
-    cd ../..
 
     # build and deploy the network dashboard
     cd dashboard
@@ -988,8 +993,7 @@ Networkagent()
 
     DASHBOARD_URL=$(gcloud run services describe network-dashboard --region=$GOOGLE_REGION --format="value(status.url)")
     echo "Agent Dashboard URL is ${DASHBOARD_URL}"
-
-
+    echo " "
     echo "Demo Summary"
     echo "============"
     echo "GITEA Host is https://${GITEA_HOST}:3000"

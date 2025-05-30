@@ -37,10 +37,36 @@ class SocketEndpoint:
     """
     Socket.IO endpoint for handling client connections.    
     """
+
+    _instance = None
+
     def __init__(self, sio):
         logger.info("SocketEndpoint init")
+
+        SocketEndpoint._instance = self
+
         self.sio = sio
         self.callbacks()
+
+    async def sendPushNotification(self, data):
+        """
+        Send data to all connected clients
+        
+        Args:
+            data: The data to send to all connected clients
+            
+        Returns:
+            bool: True if the data was sent successfully, False otherwise
+        """
+        try:
+            logger.info("Sending %s to all connected clients", data)
+            # Emit a 'push_notification' event to all connected clients
+            await self.sio.emit('push_notification', data)
+            return True
+        except Exception as e:
+            logger.error(f"Error sending data to all clients: {str(e)}", exc_info=True)
+            return False
+
 
     def callbacks(self):
         @self.sio.event

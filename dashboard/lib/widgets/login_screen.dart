@@ -82,17 +82,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         // Logo or App Icon
-                        Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.primary,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.lan,
-                            size: 48,
-                            color: Colors.white,
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(40),
+                          child: Image.asset(
+                            'assets/images/google.png',
+                            width: 80,
+                            height: 80,
+                            fit: BoxFit.cover,
                           ),
                         ),
                         const SizedBox(height: 24),

@@ -9,6 +9,7 @@ import 'network_performance.dart';
 import 'markdown_drawer.dart';
 import 'log_widget.dart';
 import 'settings_screen.dart';
+import 'notification_screen.dart';
 
 class NetworkDashboard extends StatefulWidget {
   const NetworkDashboard({super.key});
@@ -76,9 +77,68 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
         backgroundColor: const Color(0xFF0D47A1), // Dark blue
         foregroundColor: Colors.white,
         centerTitle: true, // Center the title
+        leading: Consumer<Appstate>(
+          builder: (context, appState, child) {
+            final notificationCount = appState.pushNotifications.length;
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    Icons.notifications,
+                    color: notificationCount > 0 ? Colors.amber : Colors.white,
+                  ),
+                  onPressed: () {
+                    // Navigate to the notification screen
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => const NotificationScreen()),
+                    );
+                  },
+                  tooltip: 'Notifications',
+                ),
+                Positioned(
+                  top: 5,
+                  right: 5,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: notificationCount > 0 ? Colors.red : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      border: notificationCount > 0 ? null : Border.all(color: Colors.white, width: 1),
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 18,
+                      minHeight: 18,
+                    ),
+                    child: Text(
+                      notificationCount > 99 ? '99+' : '$notificationCount',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Google logo
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.asset(
+                'assets/images/google.png',
+                width: 24,
+                height: 24,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(width: 12),
             const Text(
               'Network Agent Dashboard',
               style: TextStyle(

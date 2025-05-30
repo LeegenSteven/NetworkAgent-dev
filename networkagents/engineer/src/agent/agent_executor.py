@@ -13,23 +13,22 @@
 # limitations under the License.
 
 import logging
-import traceback
+import os
+import requests
 from agent.network_engineer_agent import NetworkEngineerAgent
 from typing_extensions import override
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events.event_queue import EventQueue
 from a2a.types import (
-    TaskArtifactUpdateEvent,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils import new_task, new_text_artifact, new_agent_text_message
+from a2a.utils import new_task, new_agent_text_message
 from utils.error_handler import (
     EngineerAgentError,
     ErrorSeverity,
     create_error_status_event,
-    handle_exception
 )
 
 logger = logging.getLogger(__name__)
@@ -86,7 +85,7 @@ class EngineerAgentExecutor(AgentExecutor):
                         status=TaskStatus(
                             state=TaskState.completed,
                             message=new_agent_text_message(
-                                query_data,
+                                query_text,
                                 task.contextId,
                                 task.id,
                             ),
@@ -135,7 +134,35 @@ class EngineerAgentExecutor(AgentExecutor):
                             )
                         elif event['require_user_input']:
                             if background_task:
-                                logger.info("TODO: NEED TO SEND TO PUSHNOTIFICATION")
+                                logger.info("Sending notification to supervisor for user input")
+                                supervisor_url = os.getenv("SUPERVISOR_URL")
+                                if not supervisor_url:
+                                    logger.error("SUPERVISOR_URL environment variable not set")
+                                else:
+                                    notification_url = f"{supervisor_url}/pushnotification"
+                                    
+                                    # Create the payload
+                                    payload = {
+                                        "agent": "Network Engineer Agent",
+                                        "state": "input_required",
+                                        "task_id": task.id,
+                                        "context_id": task.contextId,
+                                        "content": event['content'],
+                                    }
+                                    
+                                    try:
+                                        # Send the POST request
+                                        logger.info(f"Sending notification to {notification_url}")
+                                        response = requests.post(notification_url, json=payload)
+                                        
+                                        # Check if the request was successful
+                                        if response.status_code == 200:
+                                            logger.info("Notification sent successfully")
+                                        else:
+                                            logger.error(f"Failed to send notification. Status code: {response.status_code}")
+                                            logger.error(f"Response: {response.text}")
+                                    except Exception as e:
+                                        logger.error(f"Error sending notification: {str(e)}", exc_info=True)
                             else:
                                 # send back to user chat
                                 event_queue.enqueue_event(
@@ -152,11 +179,9 @@ class EngineerAgentExecutor(AgentExecutor):
                                         contextId=task.contextId,
                                         taskId=task.id,
                                     )
-                            )
+                                )
                         else:
-                            if background_task:
-                                logger.info("TODO: NEED TO SEND TO PUSHNOTIFICATION")
-                            else:
+                            if not background_task:
                                 # send back to user chat
                                 event_queue.enqueue_event(
                                     TaskStatusUpdateEvent(

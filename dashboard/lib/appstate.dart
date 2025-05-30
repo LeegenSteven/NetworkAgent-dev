@@ -6,6 +6,7 @@ import 'models/agent.dart';
 import 'models/network_node.dart';
 import 'models/log_entry.dart';
 import 'models/metrics.dart';
+import 'models/push_notification.dart';
 import 'utils/environment_config.dart';
 import 'utils/APIService.dart';
 import 'widgets/network_topology.dart';
@@ -34,6 +35,9 @@ class Appstate extends ChangeNotifier {
   Metrics _metrics = Metrics({});
   bool _isLoadingMetrics = false;
   
+  // Push notifications state
+  final List<PushNotification> _pushNotifications = [];
+  
   // Getters
   List<ChatMessage> get chatMessages => _chatMessages;
   io.Socket? get socket => _socket;
@@ -45,6 +49,7 @@ class Appstate extends ChangeNotifier {
   bool get isLoadingLogs => _isLoadingLogs;
   Metrics get metrics => _metrics;
   bool get isLoadingMetrics => _isLoadingMetrics;
+  List<PushNotification> get pushNotifications => List.unmodifiable(_pushNotifications);
   
   Appstate() {
     _connectToServer();
@@ -134,6 +139,13 @@ class Appstate extends ChangeNotifier {
     _socket!.on('all_last_metrics_update', (data) {
       if (data != null) {
         _updateMetrics(data);        
+      }
+    });
+    
+    // Listen for push notifications from supervisor agent
+    _socket!.on('push_notification', (data) {
+      if (data != null) {
+        _addPushNotification(data);
       }
     });
     
@@ -449,6 +461,34 @@ class Appstate extends ChangeNotifier {
     }
   }
   
+  // Add a push notification
+  void _addPushNotification(dynamic data) {
+    try {
+      final notification = PushNotification.fromJson(data);
+      _pushNotifications.add(notification);
+      notifyListeners();
+    } catch (e) {
+      print('Error adding push notification: $e');
+    }
+  }
+  
+  // Mark a push notification as read
+  void markNotificationAsRead(String id) {
+    final index = _pushNotifications.indexWhere((notification) => notification.id == id);
+    if (index != -1) {
+      final notification = _pushNotifications[index];
+      final updatedNotification = notification.copyWith(isRead: true);
+      _pushNotifications[index] = updatedNotification;
+      notifyListeners();
+    }
+  }
+  
+  // Clear all push notifications
+  void clearAllNotifications() {
+    _pushNotifications.clear();
+    notifyListeners();
+  }
+  
   @override
   void dispose() {
     // Remove event listeners to prevent memory leaks
@@ -458,6 +498,7 @@ class Appstate extends ChangeNotifier {
       _socket!.off('topology_update');
       _socket!.off('logs_update');
       _socket!.off('all_last_metrics_update');
+      _socket!.off('push_notification');
       _socket!.disconnect();
     }
     super.dispose();

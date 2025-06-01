@@ -26,7 +26,8 @@ from a2a.types import (
     AgentCard,
     SendStreamingMessageRequest,
     TaskState,
-    MessageSendParams
+    MessageSendParams,
+    SendMessageRequest
 )
 from google.adk import Agent
 from google.adk.agents.readonly_context import ReadonlyContext
@@ -352,6 +353,51 @@ class HostAgent:
         session = self.session_service.get_session(app_name=self.app_name, user_id="agent", session_id=session_id)
         self.session_service.append_event(session, system_event)
 
+
+    async def sendApproval(self, agent_name: str, approval: str, task_id: str, context_id: str):
+        """
+        Send non-streaming approval to background agents from thumbs up/down in UI.
+
+        Args:
+            approval: approve/reject
+            task_id: id of the task to provide input
+            context_id: context id of the session with the remote agent
+        """
+        logger.info(f"send approval {approval} to {agent_name}")
+        try:
+            # find the remote agent with name
+            if agent_name not in self.remote_agent_connections:
+                logger.error(f"Agent {agent_name} not found")
+                return
+
+            # build a send request with the approval text
+            payload: dict[str, Any] = {
+                'message': {
+                    'role': 'user',
+                    'parts': [{'type': 'text', 'text': approval }],
+                    'messageId': uuid4().hex,
+                },
+            }
+            payload['message']['taskId'] = task_id
+            payload['message']['contextId'] = context_id
+
+            logger.info(payload)
+
+            params = MessageSendParams(**payload)
+            request = SendMessageRequest(params=params)
+
+            client = self.remote_agent_connections[agent_name]
+            if not client:
+                logger.error(f"no client for agent {agent_name}")
+                return 
+
+            taskStatus = await client.send_task(request)
+            logger.info(taskStatus)
+
+        except Exception as e:
+            logger.error(f"Unexpected error in send_task: {str(e)}", exc_info=True)
+
+
     async def send_task(self, agent_name: str, message: str, tool_context: ToolContext):
         """
         Sends a task either streaming (if supported) or non-streaming.
@@ -429,7 +475,7 @@ class HostAgent:
             )
 
             try:
-                taskStatus = await client.send_task(request, session_id, self.sio_sessions[session_id])
+                taskStatus = await client.send_streaming_task(request, session_id, self.sio_sessions[session_id])
                 logger.info("TASK STATUS FROM CLIENT SEND")
                 logger.info(taskStatus)
 

@@ -489,6 +489,15 @@ class Appstate extends ChangeNotifier {
     notifyListeners();
   }
   
+  // Remove a specific notification by ID
+  void removeNotification(String id) {
+    final index = _pushNotifications.indexWhere((notification) => notification.id == id);
+    if (index != -1) {
+      _pushNotifications.removeAt(index);
+      notifyListeners();
+    }
+  }
+  
   @override
   void dispose() {
     // Remove event listeners to prevent memory leaks

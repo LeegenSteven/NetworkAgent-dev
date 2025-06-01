@@ -60,6 +60,11 @@ if [ -n "$UERANSIM_NAMES" ]; then
   done
 fi
 
+# delete cellsite1 network
 kubectl delete computefirewall cellsite1 -n cellsite1
 kubectl delete computesubnetwork cellsite1 -n cellsite1
 kubectl delete computenetwork cellsite1 -n cellsite1
+
+# bounce the operator in case of config connector issues
+kubectl delete -f operator/deployment.yaml
+kubectl apply -f operator/deployment.yaml

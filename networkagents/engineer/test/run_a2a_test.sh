@@ -15,8 +15,7 @@
 
 # Default values
 ENGINEER_ADDRESS="http://localhost:8081"
-TASK="Create a network service for connecting two locations"
-USE_DATA_PART=false
+TASK="Create a plan to deploy a new network location called cellsite1 with CIDR  10.0.40.0/24"
 
 # Help message
 function show_help {
@@ -24,12 +23,10 @@ function show_help {
     echo "Options:"
     echo "  -a, --address ADDRESS  Address of the Engineer Agent server (default: $ENGINEER_ADDRESS)"
     echo "  -t, --task TASK        Task to send to the Engineer Agent (default: '$TASK')"
-    echo "  -d, --data-part        Send the task as a data part with {'objective': task_text}"
     echo "  -h, --help             Show this help message"
     echo ""
     echo "Example:"
     echo "  $0 --address http://localhost:8081 --task \"Create a mesh network\""
-    echo "  $0 --address http://localhost:8081 --task \"Create a mesh network\" --data-part"
 }
 
 # Parse command line arguments
@@ -44,10 +41,6 @@ while [[ $# -gt 0 ]]; do
         -t|--task)
             TASK="$2"
             shift
-            shift
-            ;;
-        -d|--data-part)
-            USE_DATA_PART=true
             shift
             ;;
         -h|--help)
@@ -75,12 +68,8 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Run the test
 echo "Running A2A client test with task: '$TASK'"
-if [ "$USE_DATA_PART" = true ]; then
-    echo "Using data part with {'objective': '$TASK'}"
-    python3 "$SCRIPT_DIR/test_a2a_client.py" --address "$ENGINEER_ADDRESS" --task "$TASK" --use-data-part
-else
-    python3 "$SCRIPT_DIR/test_a2a_client.py" --address "$ENGINEER_ADDRESS" --task "$TASK"
-fi
+echo "Using data part with {'objective': '$TASK'}"
+python3 "$SCRIPT_DIR/test_a2a_client.py" --address "$ENGINEER_ADDRESS" --task "$TASK"
 
 # Check the exit code
 if [ $? -eq 0 ]; then

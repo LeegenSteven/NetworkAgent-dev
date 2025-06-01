@@ -38,8 +38,7 @@ from utils.error_handler import (
     ToolError,
     PlanningError,
     ExecutionError,
-    ErrorSeverity,
-    handle_exception
+    ErrorSeverity
 )
 import agent.prompts.network_engineer as network_engineer_prompts
 
@@ -50,10 +49,17 @@ if logger.getEffectiveLevel() == logging.DEBUG:
   set_debug(True)
   set_verbose(False)
 
+
 class Plan(BaseModel):
     """Plan to follow in future"""
     steps: List[str] = Field(
         description="different steps to follow, should be in sorted order"
+    )
+
+class PlanConfirmationResponse(BaseModel):
+    """Whether the user has confirmed the plan proposed by the agent or not"""
+    decision: str = Field(
+        description="The user's decision to execute the proposed build plan, to cancel the plan or if they provided suggestions on how to update the plan: 'confirmed', 'cancelled', or 'amend'."
     )
 
 class NetworkEngineerAgentState(TypedDict):
@@ -349,16 +355,35 @@ class NetworkEngineerAgent:
         logger.info("decide to re-plan or not based on human feed back")
 
         if 'steps' in state:
-
             last_message = state['context'][-1].content
+            try:
+                model = ChatVertexAI(
+                    model_name="gemini-2.0-flash-001",
+                    temperature=0,
+                    credentials=self.credentials,
+                    project=os.getenv("GOOGLE_PROJECT"),
+                    location=os.getenv("GOOGLE_REGION")
+                )
+                model = model.with_structured_output(PlanConfirmationResponse)
+                plan_decision = await model.ainvoke(last_message)
+                logger.info(f"Planning decision from the user is {plan_decision}.")
 
-            if last_message.lower() == 'yes' or last_message.lower() == 'y':
-                return "execute_step"
-            elif last_message.lower() == 'no' or last_message.lower() == 'n':
-                return "response_summary"
-            else:
-                return "build_plan"
+                if plan_decision.decision == 'confirmed':
+                    return 'execute_step'
+                elif plan_decision.decision == 'cancelled':
+                    return 'response_summary'
+                elif plan_decision.decision == 'amend':
+                    return 'build_plan'
 
+                return 'response_summary'            
+            except Exception as e:
+                logger.error(f"Error in LLM planning: {str(e)}")
+                raise PlanningError(
+                    message="Failed to get users decision",
+                    severity=ErrorSeverity.ERROR,
+                    details={"objective": state.get('objective', 'Unknown')},
+                    original_exception=e
+                )
         else:
             return "response_summary"
 

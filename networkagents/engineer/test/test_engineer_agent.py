@@ -97,9 +97,9 @@ class TestEngineerAgent(unittest.TestCase):
         self.assertIsNotNone(task_status)
         
     async def async_test_send_task_with_data_part(self):
-        """Test sending a task to the Engineer Agent using a data part."""
+        """Test sending a task to the Engineer Agent."""
         task_text = "Create a network service for connecting two locations"
-        task_status = await self.client.send_task(task_text, use_data_part=True)
+        task_status = await self.client.send_task(task_text)
         
         # Check if we got a response
         self.assertIsNotNone(task_status, "No task status received")
@@ -127,9 +127,9 @@ class TestEngineerAgent(unittest.TestCase):
         self.assertIsNotNone(task_status)
         
     async def async_test_send_complex_task_with_data_part(self):
-        """Test sending a more complex task to the Engineer Agent using a data part."""
+        """Test sending a more complex task to the Engineer Agent."""
         task_text = "Create a mesh network between three locations: New York, London, and Tokyo"
-        task_status = await self.client.send_task(task_text, use_data_part=True)
+        task_status = await self.client.send_task(task_text)
         
         # Check if we got a response
         self.assertIsNotNone(task_status, "No task status received")

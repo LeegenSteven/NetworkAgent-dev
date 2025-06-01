@@ -1,10 +1,18 @@
 # Network Agent Architecture
 
-The networkagent demo provides a set of agents can interact with and manage network services using natural language. These agents can work in the background triggered by external network events. 
+The networkagent demo includes a set of agents that a user can interact with using natural language to manage and monitor network services. Investigative agents can work in the background triggered by external network events and request network changes to resolve issues or optimise the performance of the network. 
+
+The figure below shows the high level network agent architecture. 
+
+![agent architecture](/drawings/agent/agent_architecture.drawio.svg)
+
+Network automation and observability capabilities are provided with GKE and Spanner. These capabilities are exposed to the Agents through a set of MCP Tools. 
+
+The User can interact with the agents through a Dashboard User Interface and Agents can communicate with each other using the A2A prototol. 
 
 ## Chatting with Agents
 
-A general supervisor agent takes user input, sends tasks to an agent of its choice and updates the chat when task status changes are received from other agents. The supervisor will hand over control to a specialist agent until that task is complete (unless the conversation is reset by the user). 
+A supervisor agent takes user input, sends tasks to an agent of its choice and updates the chat when task status changes are received from other agents. The supervisor will hand over control to a specialist agent until that task is complete (unless the conversation is reset by the user). 
 
 The following agents are available for chat interaction:
 
@@ -48,11 +56,18 @@ Agents can also be triggered by external events or from MCP tool server, e.g. ne
 
 The figure above shows the background agent interaction pattern.
 
-* The Supervisor agent exposes an A2A PushNotification endpoint that can be used as a callback by the remote agents. 
-* Remote Agents publish all task status update events to the supervisor Push Notification endpoint.
+* The Supervisor agent exposes a PushNotification endpoint that can be used as a callback by the remote agents. 
 * The Supervisor agent sends these events to the dashboard UI over the socket interface so they can be viewed by the user. In this way any remote agent background tasks that need user input can be alerted to the user. 
-* External events can trigger a new Agent task that in turn may request another remote agent to perform an additional task after it has completed. 
-* Any user input needed by any of the agents is sent from the supervisor to that remote agent to allow its flow to progress. 
+* External events can trigger a new background Agent task that in turn can request another remote agent to perform an additional task after it has completed.
+* Remote Agents publish status update events to the supervisor Push Notification endpoint when they need addition input to proceed.
+
+The interaction chart below shows the sequence of events. 
+
+![agent interaction](/drawings/agent/background-sequence.drawio.svg)
+
+Calls from one agent to another are expected to be non-streaming and include a data payload, chat interactions are expected to be streaming with text payload. 
+
+When agents create a task to another agent, the client agent is expected to poll for the task status to complete by sending GetTask requests and looking for completing status, e.g. __completed__, __failed__, __cancelled__. 
 
 ## Agents
 

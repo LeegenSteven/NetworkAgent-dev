@@ -21,8 +21,6 @@ from tools.logs import fetch_log_entries, delete_logs
 from tools.metrics import *
 from utils.error_handler import (
     SupervisorAgentError,
-    RemoteAgentError,
-    ToolError,
     ErrorSeverity,
     send_error_message
 )
@@ -322,3 +320,28 @@ class SocketEndpoint:
             except Exception as e:
                 logger.error(f"Error handling reset_metrics: {e}")
                 await self.sio.emit('all_metrics_update', {'error': f"Error resetting metrics: {str(e)}"}, room=sid)
+                
+        @self.sio.event
+        async def notification_feedback(sid, data):
+            """
+            Handle notification feedback from the dashboard UI (thumbs up/down)
+            
+            Args:
+                sid: The session ID of the client
+                data: The feedback data containing notification details and feedback type
+            """
+            try:
+                notification_id = data.get('notification_id')
+                feedback = data.get('feedback')  # 'approve' or 'reject'
+                notification_details = data.get('notification_details', {})
+                
+                # Log the feedback event
+                logger.info(f"Received notification feedback from {sid}: {feedback} for notification {notification_id}")
+                logger.info(f"Notification details: {notification_details}")
+                
+                agent = await HostAgent.get_instance()
+                # send the approval
+                await agent.sendApproval(notification_details['name'],feedback, notification_details['task_id'], notification_details['context_id'])
+
+            except Exception as e:
+                logger.error(f"Error handling notification feedback: {e}")

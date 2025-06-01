@@ -36,6 +36,37 @@ logger = logging.getLogger(__name__)
 class EngineerAgentExecutor(AgentExecutor):
     """Engineer AgentExecutor Example."""
 
+    async def send_notification(self, task, event):
+        logger.info("Sending notification to supervisor for user input")
+        supervisor_url = os.getenv("SUPERVISOR_URL", "http://127.0.0.1:9000")
+        if not supervisor_url:
+            logger.error("SUPERVISOR_URL environment variable not set")
+        else:
+            notification_url = f"{supervisor_url}/pushnotification"
+            # Create the payload
+            payload = {
+                "name": "Network Engineer Agent",
+                "state": "input_required",
+                "task_id": task.id,
+                "context_id": task.contextId,
+                "content": event['content'],
+            }
+            
+            try:
+                # Send the POST request
+                logger.info(f"Sending notification to {notification_url}")
+                response = requests.post(notification_url, json=payload)
+                
+                # Check if the request was successful
+                if response.status_code == 200:
+                    logger.info("Notification sent successfully")
+                else:
+                    logger.error(f"Failed to send notification. Status code: {response.status_code}")
+                    logger.error(f"Response: {response.text}")
+            except Exception as e:
+                logger.error(f"Error sending notification: {str(e)}", exc_info=True)
+
+
     @override
     async def execute(
         self,
@@ -46,6 +77,13 @@ class EngineerAgentExecutor(AgentExecutor):
         Handler for 'message/stream' requests.
         """
         logger.info("on execute")
+
+        config = context.configuration
+        is_streaming = False            
+        if config and hasattr(config, 'streaming'):
+            is_streaming = bool(config.streaming)
+        logger.info(f"is streaming = {is_streaming}")
+        
         try:
             agent = await NetworkEngineerAgent().get_instance()
             task = context.current_task
@@ -60,7 +98,6 @@ class EngineerAgentExecutor(AgentExecutor):
                 logger.info("Creating new task!!")
                 task = new_task(context.message)
                 event_queue.enqueue_event(task)
-
 
             # check if this is a background task or chat based
             # if message part has text message its chat, if data its background received from another agent
@@ -77,142 +114,79 @@ class EngineerAgentExecutor(AgentExecutor):
                 query_data = root_message.data
                 query_text = query_data['objective']
 
-            # temp hack to get zw unblocked
-            # remove when push notification is there
-            if background_task:
-                event_queue.enqueue_event(
-                    TaskStatusUpdateEvent(
-                        status=TaskStatus(
-                            state=TaskState.completed,
-                            message=new_agent_text_message(
-                                query_text,
-                                task.contextId,
-                                task.id,
-                            ),
-                        ),
-                        final=True,
-                        contextId=task.contextId,
-                        taskId=task.id,
-                    )
-                )
-            else:
-                logger.info("start stream %s, with id %s", query_text, task.contextId)
-                try:
-                    async for event in agent.stream(query_text, task.contextId):
-                        logger.info("in main event stream")
-                        logger.info(event)
+            logger.info("Processing continuation for task %s, with id %s", query_text, task.contextId)
+            async for event in agent.stream(query_text, task.contextId):
+                logger.info("in main event stream")
+                logger.info(event)
 
-                        # Check if the event contains an error
-                        if 'error' in event:
-                            error = event['error']
-                            error_event = create_error_status_event(
-                                error=error,
-                                context_id=task.contextId,
-                                task_id=task.id,
-                                final=event.get('is_task_complete', False)
-                            )
-                            event_queue.enqueue_event(error_event)
-                            
-                            # If this is a critical error that should end the task
-                            if error.severity in [ErrorSeverity.ERROR, ErrorSeverity.CRITICAL] and event.get('is_task_complete', False):
-                                return
-                        elif event['is_task_complete']:
-                            event_queue.enqueue_event(
-                                TaskStatusUpdateEvent(
-                                    status=TaskStatus(
-                                        state=TaskState.completed,
-                                        message=new_agent_text_message(
-                                            event['content'],
-                                            task.contextId,
-                                            task.id,
-                                        ),
-                                    ),
-                                    final=True,
-                                    contextId=task.contextId,
-                                    taskId=task.id,
-                                )
-                            )
-                        elif event['require_user_input']:
-                            if background_task:
-                                logger.info("Sending notification to supervisor for user input")
-                                supervisor_url = os.getenv("SUPERVISOR_URL")
-                                if not supervisor_url:
-                                    logger.error("SUPERVISOR_URL environment variable not set")
-                                else:
-                                    notification_url = f"{supervisor_url}/pushnotification"
-                                    
-                                    # Create the payload
-                                    payload = {
-                                        "agent": "Network Engineer Agent",
-                                        "state": "input_required",
-                                        "task_id": task.id,
-                                        "context_id": task.contextId,
-                                        "content": event['content'],
-                                    }
-                                    
-                                    try:
-                                        # Send the POST request
-                                        logger.info(f"Sending notification to {notification_url}")
-                                        response = requests.post(notification_url, json=payload)
-                                        
-                                        # Check if the request was successful
-                                        if response.status_code == 200:
-                                            logger.info("Notification sent successfully")
-                                        else:
-                                            logger.error(f"Failed to send notification. Status code: {response.status_code}")
-                                            logger.error(f"Response: {response.text}")
-                                    except Exception as e:
-                                        logger.error(f"Error sending notification: {str(e)}", exc_info=True)
-                            else:
-                                # send back to user chat
-                                event_queue.enqueue_event(
-                                    TaskStatusUpdateEvent(
-                                        status=TaskStatus(
-                                            state=TaskState.input_required,
-                                            message=new_agent_text_message(
-                                                event['content'],
-                                                task.contextId,
-                                                task.id,
-                                            ),
-                                        ),
-                                        final=True,
-                                        contextId=task.contextId,
-                                        taskId=task.id,
-                                    )
-                                )
-                        else:
-                            if not background_task:
-                                # send back to user chat
-                                event_queue.enqueue_event(
-                                    TaskStatusUpdateEvent(
-                                        status=TaskStatus(
-                                            state=TaskState.working,
-                                            message=new_agent_text_message(
-                                                event['content'],
-                                                task.contextId,
-                                                task.id,
-                                            ),
-                                        ),
-                                        final=False,
-                                        contextId=task.contextId,
-                                        taskId=task.id,
-                                    )
-                                )
-                except Exception as e:
-                    # Handle any exceptions that occur during streaming
-                    error = EngineerAgentError(
-                        message=f"Error during agent streaming: {str(e)}",
-                        severity=ErrorSeverity.ERROR,
-                        original_exception=e
-                    )
+                # Check if the event contains an error
+                if 'error' in event:
+                    error = event['error']
                     error_event = create_error_status_event(
                         error=error,
                         context_id=task.contextId,
                         task_id=task.id,
-                        final=True
+                        final=event.get('is_task_complete', False)
                     )
                     event_queue.enqueue_event(error_event)
-                    logger.error(f"Error during agent streaming: {str(e)}", exc_info=True)
+                    
+                    # If this is a critical error that should end the task
+                    if error.severity in [ErrorSeverity.ERROR, ErrorSeverity.CRITICAL] and event.get('is_task_complete', False):
+                        return
+                elif event['is_task_complete']:
+                    event_queue.enqueue_event(
+                        TaskStatusUpdateEvent(
+                            status=TaskStatus(
+                                state=TaskState.completed,
+                                message=new_agent_text_message(
+                                    event['content'],
+                                    task.contextId,
+                                    task.id,
+                                ),
+                            ),
+                            final=True,
+                            contextId=task.contextId,
+                            taskId=task.id,
+                        )
+                    )
+                elif event['require_user_input']:
+
+                    # if background send event to supervisor
+                    if background_task:
+                        await self.send_notification(task, event)
+
+                    # send back to user chat
+                    event_queue.enqueue_event(
+                        TaskStatusUpdateEvent(
+                            status=TaskStatus(
+                                state=TaskState.input_required,
+                                message=new_agent_text_message(
+                                    event['content'],
+                                    task.contextId,
+                                    task.id,
+                                ),
+                            ),
+                            final=True,
+                            contextId=task.contextId,
+                            taskId=task.id,
+                        )
+                    )
+                else:
+                    event_queue.enqueue_event(
+                        TaskStatusUpdateEvent(
+                            status=TaskStatus(
+                                state=TaskState.working,
+                                message=new_agent_text_message(
+                                    event['content'],
+                                    task.contextId,
+                                    task.id,
+                                ),
+                            ),
+                            final=False,
+                            contextId=task.contextId,
+                            taskId=task.id,
+                        )
+                    )
         except EngineerAgentError as e:
             # If we have a task, report the error through the event queue
             if task:
@@ -228,7 +202,7 @@ class EngineerAgentExecutor(AgentExecutor):
         except Exception as e:
             # Convert generic exceptions to EngineerAgentError and handle
             error = EngineerAgentError(
-                message=f"Unexpected error in execute: {str(e)}",
+                message=f"Error during agent streaming: {str(e)}",
                 severity=ErrorSeverity.ERROR,
                 original_exception=e
             )
@@ -240,7 +214,7 @@ class EngineerAgentExecutor(AgentExecutor):
                     final=True
                 )
                 event_queue.enqueue_event(error_event)
-            logger.error(f"Unexpected error in execute: {str(e)}", exc_info=True)
+            logger.error(f"Error during agent streaming: {str(e)}", exc_info=True)
             # Re-raise for the decorator to handle
             raise error
 

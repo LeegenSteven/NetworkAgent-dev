@@ -20,6 +20,7 @@ from a2a.types import (
     AgentCard,
     SendStreamingMessageRequest,
     SendStreamingMessageSuccessResponse,
+    SendMessageRequest,
     TaskArtifactUpdateEvent,
     TaskState,
     TaskStatusUpdateEvent,
@@ -72,14 +73,34 @@ class RemoteAgentConnections:
             }
             await sio.emit('chat_message', response, room=sid)
 
-    async def send_task(
+    async def send_task(self, request: SendMessageRequest):
+        """
+        Send a request/response request to the agent - driven by background agent to agent interaction
+        """
+        logger.info("REMOTE AGENT SEND TASK")
+        logger.info(request)
+        logger.info(self.agent_client.url)
+
+        try:
+
+            result = await self.agent_client.send_message(request)
+            return result
+
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error communicating with remote agent: {str(e)}", exc_info=True)
+        except Exception as e:
+            logger.error(f"Error communicating with remote agent: {str(e)}", exc_info=True)
+
+    async def send_streaming_task(
         self,
         request: SendStreamingMessageRequest,
         sid,
         sio
     ) -> Task | None:
-
-        logger.info("REMOTE AGENT SEND TASK")
+        """
+        Send a streaming request to the agent - driven by chat interaction
+        """
+        logger.info("REMOTE AGENT SEND STREAMING TASK")
         logger.info(request)
         logger.info(self.agent_client.url)
 

@@ -14,10 +14,11 @@
 
 import logging
 import os
+import httpx
 from agent.agent_executor import EngineerAgentExecutor
 from agent.network_engineer_agent import NetworkEngineerAgent
 from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.tasks import InMemoryTaskStore
+from a2a.server.tasks import InMemoryTaskStore, InMemoryPushNotifier
 from a2a.server.apps import A2AStarletteApplication
 from a2a.types import (
     AgentCapabilities,
@@ -71,7 +72,8 @@ if __name__ == "__main__":
     # init the agent class
     request_handler = DefaultRequestHandler(
         agent_executor=EngineerAgentExecutor(),
-        task_store=InMemoryTaskStore()
+        task_store=InMemoryTaskStore(),
+        push_notifier=InMemoryPushNotifier(httpx_client=httpx.AsyncClient())
     )
 
     host = "0.0.0.0"

@@ -17,6 +17,7 @@ import os
 import kopf
 from utils.compute import *
 import ansible_runner
+from utils.ansible import event_handler
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ async def run_test(namespace, vm_name, test_url):
     r = ansible_runner.run(private_data_dir=constants.basedir+"/free5gc/uetest/playbooks", 
                            inventory={'all': hosts},
                            playbook='run.yaml',
+                           event_handler=event_handler,
                            extravars=extravars)
 
     logger.debug("status = %s", r.status)
@@ -95,6 +97,7 @@ async def stop_test(namespace, vm_name):
     r = ansible_runner.run(private_data_dir=constants.basedir+"/free5gc/uetest/playbooks", 
                            inventory={'all': hosts},
                            playbook='stop.yaml',
+                           event_handler=event_handler,
                            extravars=extravars)
 
     logger.debug("status = %s", r.status)

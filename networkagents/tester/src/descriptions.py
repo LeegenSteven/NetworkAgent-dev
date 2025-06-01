@@ -13,7 +13,7 @@
 # limitations under the License.
 
 description="""
-A test agent. The test agent job is to help the user to run and delete network tests. 
+A test agent. The test agent helps the user to run and delete network tests. 
 
 The test agent can help the user fulfill tasks such as:
 - create network test

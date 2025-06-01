@@ -35,7 +35,5 @@ Then execute the appropriate test tool request to complete the users objective.
 If the user has not directly passed all the information you need, you should infer the exact data needed by trying to identify network service data 
 that could fill in the missing data. 
 
-If you still do not have enough information, you should tell the user and ask them to add more context. 
-
-  
+If you still do not have enough information, you should tell the user and ask them to add more context.
 """

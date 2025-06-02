@@ -769,13 +769,8 @@ Log()
         gcloud logging sinks create $SINK_NAME pubsub.googleapis.com/projects/${GOOGLE_PROJECT}/topics/${TOPIC_NAME} \
             --description="Network operator logs sink" \
             --log-filter="resource.labels.project_id=${GOOGLE_PROJECT} AND 
-                 (resource.labels.container_name=${NETWORK_OPERATOR} AND labels.python_logger!=kopf._cogs.clients.watching)"
-            # capture docker CNF logs also
-            # --log-filter="resource.labels.project_id=${GOOGLE_PROJECT} AND 
-            #     (
-            #      (resource.labels.container_name=${NETWORK_OPERATOR} AND labels.python_logger!=kopf._cogs.clients.watching)
-            #       OR jsonPayload.container.metadata.free5gc_name=("amf" OR "upf" OR "udm" OR "udr" OR "smf" OR "pcf" OR "nrf" OR "ueransim")
-            #     )" \
+                 ((resource.labels.container_name=${NETWORK_OPERATOR} AND labels.python_logger!=kopf._cogs.clients.watching) OR
+                 jsonPayload.container.metadata.free5gc_name=(\"amf\" OR \"upf\" OR \"udm\" OR \"udr\" OR \"smf\" OR \"pcf\" OR \"nrf\" OR \"ueransim\"))"
     else
         echo "Logging sink '${SINK_NAME}' already exists..."
     fi

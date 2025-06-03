@@ -59,7 +59,7 @@ class RemoteAgentConnections:
     def get_agent(self) -> AgentCard:
         return self.card
 
-    async def send_message(self, sio, sid, text):
+    async def send_message(self, sio_list, text):
         """
         Utility function to send a socketio message back to the dashboard ui
         """
@@ -71,7 +71,9 @@ class RemoteAgentConnections:
                 'isUser': False,
                 'timestamp': datetime.datetime.now().isoformat()
             }
-            await sio.emit('chat_message', response, room=sid)
+            # send message to all registered sessions
+            for sid, sio in sio_list.items():
+                await sio.emit('chat_message', response, room=sid)
 
     async def send_task(self, request: SendMessageRequest):
         """
@@ -94,8 +96,8 @@ class RemoteAgentConnections:
     async def send_streaming_task(
         self,
         request: SendStreamingMessageRequest,
-        sid,
-        sio
+        session_id, 
+        sio_list
     ) -> Task | None:
         """
         Send a streaming request to the agent - driven by chat interaction
@@ -113,13 +115,13 @@ class RemoteAgentConnections:
 
                         if isinstance(chunk.root, SendStreamingMessageSuccessResponse) and isinstance(chunk.root.result, Task):
                             task: Task = chunk.root.result
-                            await self.host_agent.updateState(sid, task_id=task.id)
+                            await self.host_agent.updateState(session_id, task_id=task.id)
                             logger.info("updated task with id %s", task.id)
 
                         if isinstance(chunk.root, SendStreamingMessageSuccessResponse) and isinstance(chunk.root.result, TaskArtifactUpdateEvent):
                             taskEvent: TaskArtifactUpdateEvent = chunk.root.result.artifact
                             logger.info(taskEvent)
-                            await self.send_message(sio, sid, taskEvent.parts[0].root.text)
+                            await self.send_message(sio_list, taskEvent.parts[0].root.text)
 
                         if isinstance(chunk.root, SendStreamingMessageSuccessResponse) and isinstance(chunk.root.result, TaskStatusUpdateEvent):
                             taskStatus: TaskStatusUpdateEvent = chunk.root.result.status
@@ -135,7 +137,7 @@ class RemoteAgentConnections:
                                     agent_name=self.card.name,
                                     severity=ErrorSeverity.ERROR
                                 )
-                                await send_error_message(sio, sid, error)
+                                await send_error_message(sio_list, error)
                                 return taskStatus
 
                             # if input is required then return the task status message
@@ -146,7 +148,7 @@ class RemoteAgentConnections:
                             if taskStatus.state == TaskState.working:
                                 logger.info('working through steps.')
                                 # don't return to the model - just send update to socket so user see'sd progress in chat
-                                await self.send_message(sio, sid, taskStatus.message.parts[0].root.text)
+                                await self.send_message(sio_list, taskStatus.message.parts[0].root.text)
 
                             if taskStatus.state == TaskState.completed:
                                 # task is finished so get supervisor agent to summarise
@@ -160,7 +162,7 @@ class RemoteAgentConnections:
                         severity=ErrorSeverity.ERROR,
                         original_exception=e
                     )
-                    await send_error_message(sio, sid, error)
+                    await send_error_message(sio_list, error)
                     logger.error(f"HTTP error communicating with remote agent: {str(e)}", exc_info=True)
                     raise error
                 except Exception as e:
@@ -170,7 +172,7 @@ class RemoteAgentConnections:
                         severity=ErrorSeverity.ERROR,
                         original_exception=e
                     )
-                    await send_error_message(sio, sid, error)
+                    await send_error_message(sio_list, error)
                     logger.error(f"Error communicating with remote agent: {str(e)}", exc_info=True)
                     raise error
             else:
@@ -179,7 +181,7 @@ class RemoteAgentConnections:
                     agent_name=self.card.name,
                     severity=ErrorSeverity.ERROR
                 )
-                await send_error_message(sio, sid, error)
+                await send_error_message(sio_list, error)
                 logger.error(f"Remote agent {self.card.name} does not support streaming")
                 raise error
         except Exception as e:
@@ -190,7 +192,7 @@ class RemoteAgentConnections:
                     severity=ErrorSeverity.ERROR,
                     original_exception=e
                 )
-                await send_error_message(sio, sid, error)
+                await send_error_message(sio_list, error)
                 logger.error(f"Unexpected error in send_task: {str(e)}", exc_info=True)
                 raise error
             else:

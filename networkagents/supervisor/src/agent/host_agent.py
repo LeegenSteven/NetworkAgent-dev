@@ -43,8 +43,6 @@ from google.adk.sessions import Session
 from utils.error_handler import (
     SupervisorAgentError,
     RemoteAgentError,
-    ToolError,
-    AuthenticationError,
     ErrorSeverity,
     send_error_message
 )
@@ -61,12 +59,17 @@ class HostAgent:
     tasks to and coordinate their work.
     """
 
+    # static agent instance
     _instance = None
+
+    # current session id
+    _session_id = None
 
     @classmethod
     async def get_instance(cls):
         if HostAgent._instance is None:
             HostAgent._instance = cls()
+            HostAgent._session_id = uuid4().hex
             await HostAgent._instance.load_remote_agents()
         return HostAgent._instance
 
@@ -89,7 +92,7 @@ class HostAgent:
         self.session_service = InMemorySessionService()
         self.artifact_service = InMemoryArtifactService()
 
-        # sid->sio coroutine for sending messages back to dashboard
+        # dict with sid->sio for sending messages back to dashboard socket session
         self.sio_sessions = {}
 
         self.runner = Runner(
@@ -416,6 +419,10 @@ class HostAgent:
         logger.info("send task %s to %s",message, agent_name)
 
         try:
+            state = tool_context.state
+            state['agent'] = agent_name
+            session_id = state.get('session_id')
+
             if agent_name not in self.remote_agent_connections:
                 error = RemoteAgentError(
                     message=f"Agent {agent_name} not found",
@@ -423,20 +430,14 @@ class HostAgent:
                     severity=ErrorSeverity.ERROR
                 )
                 
-                # Get the session ID to send the error message
-                state = tool_context.state
-                session_id = state.get('session_id')
-                
                 if session_id and session_id in self.sio_sessions:
-                    await send_error_message(self.sio_sessions[session_id], session_id, error)
+                    await send_error_message(self.sio_sessions, error)
                 
                 return {
                         "status" : "Task Error",
                         "text": f'Agent {agent_name} not found'
                 }
 
-            state = tool_context.state
-            state['agent'] = agent_name
 
             client = self.remote_agent_connections[agent_name]
             if not client:
@@ -446,16 +447,13 @@ class HostAgent:
                     severity=ErrorSeverity.ERROR
                 )
                 
-                session_id = state.get('session_id')
                 if session_id and session_id in self.sio_sessions:
-                    await send_error_message(self.sio_sessions[session_id], session_id, error)
+                    await send_error_message(self.sio_sessions, error)
                 
                 return {
                         "status" : "Task Error",
                         "text": f'Client not available for {agent_name}'
                 }
-
-            session_id = state['session_id']
 
             task_id = None
             if state['task_id'] != 'None':
@@ -463,7 +461,7 @@ class HostAgent:
 
             state['task_status'] = "running"
 
-            # check if this is existing task that is still running and add task_id to send message
+            # create message payload with ids
             send_payload = self.create_send_message_payload(
                 text=message,
                 context_id=session_id,
@@ -475,7 +473,7 @@ class HostAgent:
             )
 
             try:
-                taskStatus = await client.send_streaming_task(request, session_id, self.sio_sessions[session_id])
+                taskStatus = await client.send_streaming_task(request, session_id, self.sio_sessions)
                 logger.info("TASK STATUS FROM CLIENT SEND")
                 logger.info(taskStatus)
 
@@ -536,7 +534,7 @@ class HostAgent:
                 session_id = state.get('session_id')
                 
                 if session_id and session_id in self.sio_sessions:
-                    await send_error_message(self.sio_sessions[session_id], session_id, error)
+                    await send_error_message(self.sio_sessions, error)
             except:
                 # If we can't get the session ID, just log the error
                 pass
@@ -546,27 +544,30 @@ class HostAgent:
                     "text": f"Unexpected error: {str(e)}"
             }
 
-    async def reset_conversation(self, sid):
+    async def reset_conversation(self):
         """
         Remove any agent state and add a new conversation to in memory session
         """
         logger.info("Reset conversation")
-        self.session_service.delete_session(app_name=self.app_name, user_id="agent", session_id=sid)
-        await self.create_session(sid)
+        self.session_service.delete_session(app_name=self.app_name, user_id="agent", session_id=HostAgent._session_id)
+        await self.create_session()
 
-    async def create_session(self, sid):
+    async def create_session(self):
         """
         Create a new session using the socket id as the session id
         """
+        # regenerate the session id
+        HostAgent._session_id = uuid4().hex
+
         # create new session
         session = self.session_service.create_session(
             app_name=self.app_name, 
             user_id="agent",
-            session_id=sid,
+            session_id=HostAgent._session_id,
             state={"agent": "Supervisor", 
                    "task_status": "None", 
                    "task_id": "None", 
-                   "session_id": sid}
+                   "session_id": HostAgent._session_id}
         )
         return session
 
@@ -595,16 +596,15 @@ class HostAgent:
                 role='user', parts=[types.Part.from_text(text=input)]
             )
 
-            # TODO - pull the SIO logic out into a separate class so we can clean up when socketio sessions are closed
-            self.sio_sessions[sid]=sio
-
-            session = self.session_service.get_session(app_name=self.app_name, user_id="agent", session_id=sid)
+            # get the current conversation session
+            session = self.session_service.get_session(app_name=self.app_name, user_id="agent", session_id=HostAgent._session_id)
             if session is None:
-                session = await self.create_session(sid)
+                session = await self.create_session()
 
             logger.info('** User says:', content.model_dump(exclude_none=True))
 
             try:
+
                 async for event in self.runner.run_async(user_id="agent", session_id=session.id, new_message=content):
                     logger.info("ADK RUNNER EVENT")
                     logger.info(event)
@@ -612,6 +612,7 @@ class HostAgent:
                     if event.content.parts and event.content.parts[0].text:
                         logger.info(f'** {event.author}: {event.content.parts[0].text}')  
                         await self.send_message(sio, sid, event.content.parts[0].text)
+
             except Exception as e:
                 logger.error(f"Error in ADK runner: {str(e)}", exc_info=True)
                 error = SupervisorAgentError(
@@ -619,7 +620,7 @@ class HostAgent:
                     severity=ErrorSeverity.ERROR,
                     original_exception=e
                 )
-                await send_error_message(sio, sid, error)
+                await send_error_message(self.sio_sessions, error)
         except Exception as e:
             logger.error(f"Unexpected error in run: {str(e)}", exc_info=True)
             error = SupervisorAgentError(
@@ -627,4 +628,4 @@ class HostAgent:
                 severity=ErrorSeverity.ERROR,
                 original_exception=e
             )
-            await send_error_message(sio, sid, error)
+            await send_error_message(self.sio_sessions, error)

@@ -88,7 +88,7 @@ class AuthenticationError(SupervisorAgentError):
     """Exception raised for authentication errors."""
     pass
 
-async def send_error_message(sio, sid, error: SupervisorAgentError):
+async def send_error_message(sio_sessions, error: SupervisorAgentError):
     """
     Send an error message to the user through the socket.
     
@@ -119,10 +119,12 @@ async def send_error_message(sio, sid, error: SupervisorAgentError):
         'isUser': False,
         'timestamp': datetime.datetime.now().isoformat()
     }
-    
-    # Send the message
-    await sio.emit('chat_message', response, room=sid)
-    logger.info(f"Sent error message to {sid}: {error_message}")
+
+    # loop over the sessions and send the error
+    for sid, sio in sio_sessions.items():
+        # Send the message
+        await sio.emit('chat_message', response, room=sid)
+        logger.info(f"Sent error message to {sid}: {error_message}")
 
 def with_error_handling(error_handler: Callable):
     """

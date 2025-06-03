@@ -71,14 +71,17 @@ class SocketEndpoint:
         async def connect(sid, environ, auth):
             logger.info("connected client %s", sid)
 
+            # add sio to the agent
+            agent=await HostAgent.get_instance()
+            agent.sio_sessions[sid]=self.sio
+            logger.info(agent.sio_sessions)
+
         @self.sio.event
         async def chat_message(sid, data):
             logger.info("chat message from %s: %s", sid, data.get('text', ''))
 
             agent=await HostAgent.get_instance()
             await agent.run(data['text'], self.sio, sid)
-
-        # Agent management has been moved to REST endpoints
 
         @self.sio.event
         async def get_node_details(sid, data):
@@ -233,7 +236,7 @@ class SocketEndpoint:
             try:
                 # Get the NetworkAgent instance and reset its conversation history
                 agent = await HostAgent.get_instance()
-                await agent.reset_conversation(sid)
+                await agent.reset_conversation()
                 
                 # Send a confirmation message to the client
                 welcome_msg = {
@@ -256,10 +259,16 @@ class SocketEndpoint:
         @self.sio.event
         async def disconnect(sid):
             logger.info("disconnected from %s", sid)
-            
+
             # Remove client from logs tracking
             if sid in clients_state:
                 del clients_state[sid]
+
+            # remove the sid/sio from the agent session
+            agent=await HostAgent.get_instance()
+            if sid in agent.sio_sessions:
+                del agent.sio_sessions[sid]
+            logger.info(agent.sio_sessions)
 
         @self.sio.event
         async def get_all_last_metrics(sid):

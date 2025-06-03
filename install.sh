@@ -864,6 +864,7 @@ Networkagent()
        --region $GOOGLE_REGION \
        --service-account $GOOGLE_SERVICE_ACCOUNT \
        --min 1 \
+       --timeout=3600 \
        --update-env-vars GOOGLE_GENAI_USE_VERTEXAI=TRUE \
        --update-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_PROJECT \
        --update-env-vars GOOGLE_CLOUD_LOCATION=$GOOGLE_REGION \

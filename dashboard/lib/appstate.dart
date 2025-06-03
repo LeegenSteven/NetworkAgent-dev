@@ -27,6 +27,10 @@ class Appstate extends ChangeNotifier {
   bool _isConnected = false;
   bool _hasReceivedTopology = false;
   
+  // Topology filtering state
+  bool _filterByNodeType = false;
+  Set<NodeType> _selectedNodeTypes = Set<NodeType>.from(NodeType.values);
+  
   // Log widget state
   List<LogEntry> _logs = [];
   bool _isLoadingLogs = false;
@@ -45,6 +49,8 @@ class Appstate extends ChangeNotifier {
   NetworkTopology get topology => _topology;
   bool get isConnected => _isConnected;
   bool get hasReceivedTopology => _hasReceivedTopology;
+  bool get filterByNodeType => _filterByNodeType;
+  Set<NodeType> get selectedNodeTypes => Set<NodeType>.from(_selectedNodeTypes);
   List<LogEntry> get logs => _logs;
   bool get isLoadingLogs => _isLoadingLogs;
   Metrics get metrics => _metrics;
@@ -272,6 +278,16 @@ class Appstate extends ChangeNotifier {
     } catch (e) {
       print('Error removing agent: $e');
     }
+  }
+  
+  // Update topology filtering
+  void updateTopologyFiltering({
+    required bool filterByNodeType,
+    required Set<NodeType> selectedNodeTypes,
+  }) {
+    _filterByNodeType = filterByNodeType;
+    _selectedNodeTypes = Set<NodeType>.from(selectedNodeTypes);
+    notifyListeners();
   }
   
   // Update topology from server data

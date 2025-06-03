@@ -27,11 +27,6 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
   late Algorithm algorithm;
   final Map<String, Node> nodeMap = {};
   
-  // Node kind filter options
-  Set<String> _availableNodeKinds = {};
-  Set<String> _selectedNodeKinds = {};
-  bool _filterByNodeKind = false;
-  
   // View options
   final List<String> _viewOptions = ['network', 'resources', 'both'];
   String _selectedView = NetworkTopologyWidget.defaultView;
@@ -63,30 +58,21 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
 
   void _initializeGraph() {
     try {
+      // Get the appstate for filtering
+      final appState = Provider.of<Appstate>(context, listen: false);
+      
       // Create a new graph instance to ensure clean state
       graph = Graph()..isTree = false;
       
       // Clear the node map to avoid stale references
       nodeMap.clear();
-      
-      // Update available node kinds
-      _updateAvailableNodeKinds();
             
       // Create a filtered list of nodes
       final List<NetworkNode> filteredNodes = [];
       for (final node in widget.topology.nodes) {
-        // Safe check for node kind
-        String? nodeKind;
-        if (node.properties.containsKey('kind')) {
-          final dynamic kindValue = node.properties['kind'];
-          if (kindValue is String) {
-            nodeKind = kindValue;
-          }
-        }
-        
-        // Skip nodes that don't match the kind filter if filtering is enabled
-        if (_filterByNodeKind && nodeKind != null) {
-          final bool shouldInclude = _selectedNodeKinds.contains(nodeKind);          
+        // Skip nodes that don't match the node type filter if filtering is enabled
+        if (appState.filterByNodeType) {
+          final bool shouldInclude = appState.selectedNodeTypes.contains(node.type);          
           if (!shouldInclude) {
             continue;
           }
@@ -156,6 +142,9 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // Get the appstate for filtering
+    final appState = Provider.of<Appstate>(context);
+    
     return Column(
       children: [
         Container(
@@ -211,19 +200,19 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
                       height: 32,
                       width: 32,
                       decoration: BoxDecoration(
-                        color: _filterByNodeKind ? Color(0xFF1976D2) : Colors.white,
+                        color: appState.filterByNodeType ? Color(0xFF1976D2) : Colors.white,
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(color: Color(0xFF1976D2)),
                       ),
                       child: IconButton(
                         icon: Icon(
                           Icons.filter_list,
-                          color: _filterByNodeKind ? Colors.white : Color(0xFF1976D2),
+                          color: appState.filterByNodeType ? Colors.white : Color(0xFF1976D2),
                           size: 18,
                         ),
                         padding: EdgeInsets.zero,
-                        tooltip: 'Filter by node kind',
-                        onPressed: _showNodeKindFilterDialog,
+                        tooltip: 'Filter by node type',
+                        onPressed: _showNodeTypeFilterDialog,
                       ),
                     ),
 
@@ -501,54 +490,14 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
       ),
     );
   }
-
   
-  // Update the list of available node kinds from the current topology
-  void _updateAvailableNodeKinds() {
-    try {
-      final Set<String> kinds = {};
-      
-      for (final node in widget.topology.nodes) {
-        if (node.properties.containsKey('kind')) {
-          final dynamic kindValue = node.properties['kind'];
-          
-          if (kindValue is String && kindValue.isNotEmpty) {
-            kinds.add(kindValue);
-          }
-        }
-      }
-      
-      // Update the available kinds
-      _availableNodeKinds = Set<String>.from(kinds);
-      
-      // If this is the first time we're getting kinds, select all by default
-      if (_selectedNodeKinds.isEmpty && kinds.isNotEmpty) {
-        _selectedNodeKinds = Set<String>.from(kinds);
-      } else {
-        // Ensure _selectedNodeKinds only contains valid kinds
-        final Set<String> validSelectedKinds = Set<String>.from(_selectedNodeKinds.intersection(_availableNodeKinds));
-        _selectedNodeKinds = validSelectedKinds;
-      }
-    } catch (e, stackTrace) {
-      print('Stack trace: $stackTrace');
-    }
-  }
-  
-  // Simple dialog to filter nodes by kind
-  void _showNodeKindFilterDialog() {
-    // If no kinds available, show a message
-    if (_availableNodeKinds.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No node kinds available to filter'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
+  // Simple dialog to filter nodes by type
+  void _showNodeTypeFilterDialog() {
+    // Get the appstate for filtering
+    final appState = Provider.of<Appstate>(context, listen: false);
     
     // Create a temporary set for the dialog
-    Set<String> tempSelection = Set<String>.from(_selectedNodeKinds);
+    Set<NodeType> tempSelection = Set<NodeType>.from(appState.selectedNodeTypes);
     
     // Show a simple dialog
     showDialog(
@@ -556,31 +505,31 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
       builder: (BuildContext context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            // Get sorted list of kinds
-            List<String> sortedKinds = _availableNodeKinds.toList()..sort();
+            // Get sorted list of node types
+            List<NodeType> sortedNodeTypes = NodeType.values.toList();
             
             return AlertDialog(
-              title: Text('Filter Nodes by Kind'),
+              title: Text('Filter Nodes by Type'),
               content: SizedBox(
                 width: 300,
                 height: 300,
                 child: Column(
                   children: [
-                    Text('Select which node kinds to display:'),
+                    Text('Select which node types to display:'),
                     SizedBox(height: 8),
                     Expanded(
                       child: ListView(
-                        children: sortedKinds.map((kind) {
-                          bool isSelected = tempSelection.contains(kind);
+                        children: sortedNodeTypes.map((nodeType) {
+                          bool isSelected = tempSelection.contains(nodeType);
                           return CheckboxListTile(
-                            title: Text(kind),
+                            title: Text(nodeType.toString().split('.').last),
                             value: isSelected,
                             onChanged: (bool? value) {
                               setDialogState(() {
                                 if (value == true) {
-                                  tempSelection.add(kind);
+                                  tempSelection.add(nodeType);
                                 } else {
-                                  tempSelection.remove(kind);
+                                  tempSelection.remove(nodeType);
                                 }
                               });
                             },
@@ -602,7 +551,7 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
                   child: Text('Select All'),
                   onPressed: () {
                     setDialogState(() {
-                      tempSelection = Set<String>.from(_availableNodeKinds);
+                      tempSelection = Set<NodeType>.from(NodeType.values);
                     });
                   },
                 ),
@@ -622,13 +571,13 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
                       Navigator.of(context).pop();
                       
                       // Create a new set to avoid reference issues
-                      Set<String> newSelection = Set<String>.from(tempSelection);
+                      Set<NodeType> newSelection = Set<NodeType>.from(tempSelection);
                       
-                      // Update the filter state
-                      setState(() {
-                        _selectedNodeKinds = newSelection;
-                        _filterByNodeKind = newSelection.length < _availableNodeKinds.length;
-                      });
+                      // Update the filter state in appstate
+                      appState.updateTopologyFiltering(
+                        filterByNodeType: newSelection.length < NodeType.values.length,
+                        selectedNodeTypes: newSelection,
+                      );
                       
                       // Reinitialize the graph with the new filter
                       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -639,9 +588,9 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
-                            _filterByNodeKind 
-                                ? 'Showing ${newSelection.length} of ${_availableNodeKinds.length} node kinds' 
-                                : 'Showing all node kinds'
+                            appState.filterByNodeType 
+                                ? 'Showing ${newSelection.length} of ${NodeType.values.length} node types' 
+                                : 'Showing all node types'
                           ),
                           duration: Duration(seconds: 2),
                         ),

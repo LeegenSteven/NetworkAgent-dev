@@ -394,9 +394,12 @@ Start()
     echo "Creating GKE cluster - this will take a few minutes"
     echo "###################################################"
 
+    # NOTE: release channel to None is the only way to prevent GKE control plane 
+    # auto upgrade
     (gcloud container clusters describe networkautomation --zone=$GOOGLE_ZONE > /dev/null 2>&1) || \
     gcloud container clusters create networkautomation \
         --no-enable-autoupgrade \
+        --release-channel=None \
         --cluster-version="1.30.11-gke.1217000" \
         --addons ConfigConnector \
         --enable-ip-alias \

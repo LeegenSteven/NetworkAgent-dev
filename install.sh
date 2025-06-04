@@ -21,6 +21,7 @@
 ############################################################
 DisplayGCPEnv()
 {
+    echo "Gathering active GCP environment information..."
     echo "  - GCP user: $(gcloud config list account --format="value(core.account)")"
     echo "  - GCP project: $(gcloud config get-value project 2>/dev/null)"
     echo "  - Active configuration: $(gcloud config configurations list --filter="IS_ACTIVE=True" --format="value(NAME)")"
@@ -987,18 +988,35 @@ Networkagent()
 
     cd ..
 
+    # Display demo information summary
+    DisplayDemoInfo
+
+}
+
+############################################################
+# Demo information                                         #
+############################################################
+DisplayDemoInfo()
+{
+    echo "Gathering demo information..."
     DASHBOARD_URL=$(gcloud run services describe network-dashboard --region=$GOOGLE_REGION --format="value(status.url)")
-    echo "Agent Dashboard URL is ${DASHBOARD_URL}"
-    echo " "
-    echo "Demo Summary"
-    echo "============"
+    GITEA_HOST=$(kubectl get gitea gitea -o 'jsonpath={..status.create_gitea.external_ip_address}')
+    OPERATIONS_URL=$(gcloud run services describe operationsagent --region=$GOOGLE_REGION --format="value(status.url)")
+    ENGINEER_URL=$(gcloud run services describe engineeragent --region=$GOOGLE_REGION --format="value(status.url)")
+    TESTER_URL=$(gcloud run services describe testagent --region=$GOOGLE_REGION --format="value(status.url)")
+    TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
+
+    echo "============================================================"
+    echo "=                Demo information Summary                  ="
+    echo "============================================================"
+    echo ""
     echo "GITEA Host is https://${GITEA_HOST}:3000"
     echo "Dashboard is ${DASHBOARD_URL}"
     echo "Operations Agent is ${OPERATIONS_URL}"
     echo "Engineer Agent is ${ENGINEER_URL}"
     echo "Test Agent is ${TESTER_URL}"
     echo "MCP Tools Host is ${TOOLS_URL}"
-
+    echo ""
 }
 
 ############################################################
@@ -1009,7 +1027,7 @@ Help()
    # Display Help
    echo "Network Agent environment manager."
    echo
-   echo "Syntax: install.sh [-c|-s|-o|-l|-r|-n|-k|-d|-p]"
+   echo "Syntax: install.sh [-c|-s|-o|-l|-r|-n|-k|-d|-p|-g|-i]"
    echo "options:"
    echo "  -c     create network agent environment (keys, manifests,..)"
    echo "  -s     build and start network agent runtime (incl. the operator)"
@@ -1019,6 +1037,10 @@ Help()
    echo "  -k     stop and delete the network agent runtime (GKE cluster, VMS, DB, etc..)"
    echo "  -d     delete the network agent environment (keys, manifests...)."
    echo "  -p     deploy porch tools"
+   echo "  -i     display demo information"
+   echo "  -g     display active GCP environment (user, project, GKE cluster,...)"
+   echo "  -i     display demo information"
+
    echo 
    echo "Some typical use cases:"
    echo " - To create and run a network agent environment including the operator: ./install.sh -c; ./install.sh -s"
@@ -1032,7 +1054,7 @@ Help()
 # Process the input options. Add options as needed.        #
 ############################################################
 # Get the options
-while getopts ":hcsoltnkdpi" option; do
+while getopts ":hcsoltnkdpgi" option; do
    case $option in
       h) 
         Help
@@ -1077,8 +1099,11 @@ while getopts ":hcsoltnkdpi" option; do
         SetDemoEnv
         Porch
         exit;;
-      i)
+      g)
         DisplayGCPEnv
+        exit;;
+      i)
+        DisplayDemoInfo
         exit;;
      \?) # Invalid option
         echo "Error: Invalid option"

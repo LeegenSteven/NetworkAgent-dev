@@ -231,10 +231,11 @@ class _ChatPanelContentState extends State<_ChatPanelContent> with WidgetsBindin
     // Listen for changes in the message list and scroll to bottom when new messages arrive
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (appState.chatMessages.isNotEmpty) {
-        _scrollToBottom();
         
         // Check if a new message has been added
         if (appState.chatMessages.length > _lastMessageCount) {
+          _scrollToBottom();
+          
           // Get the latest message
           final latestMessage = appState.chatMessages.last;
           

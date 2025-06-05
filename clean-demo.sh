@@ -60,10 +60,14 @@ if [ -n "$UERANSIM_NAMES" ]; then
   done
 fi
 
-# delete cellsite1 network
-kubectl delete computefirewall cellsite1 -n cellsite1
-kubectl delete computesubnetwork cellsite1 -n cellsite1
-kubectl delete computenetwork cellsite1 -n cellsite1
+# Delete all cnrm resources in cellsite namespaces
+for namespace in cellsite1 cellsite2; do
+  for kind in ComputeFirewall ComputeRoute ComputeSubnetwork ComputeInstance ComputeNetwork; do
+    for resource in $(kubectl get $kind -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
+      kubectl delete $kind $resource -n $namespace
+    done
+  done
+done
 
 # bounce the operator in case of config connector issues
 kubectl delete -f operator/deployment.yaml

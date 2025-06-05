@@ -856,14 +856,12 @@ Networkagent()
         --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
         --allow-unauthenticated 
         cd ..
-
-        TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
-        echo "MCP Tools URL is ${TOOLS_URL}"
         sleep 5
     fi
 
     # deploy supervisor
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"supervisor"* ]]; then
+        TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
         cd networkagents/supervisor
         gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
         gcloud run deploy network-agent-supervisor \
@@ -885,23 +883,22 @@ Networkagent()
         gcloud run services get-iam-policy network-agent-supervisor --region=$GOOGLE_REGION --project=$GOOGLE_PROJECT \
             --format="value(bindings.members)" 2>&1 | fgrep -q allUsers
         if [ $? -ne 0 ]; then
-        gcloud run services add-iam-policy-binding network-agent-supervisor --member='allUsers' --role='roles/run.invoker' \
+            gcloud run services add-iam-policy-binding network-agent-supervisor --member='allUsers' --role='roles/run.invoker' \
                 --region=$GOOGLE_REGION --project=$GOOGLE_PROJECT >/dev/null 2>&1
-        if [ $? -eq 1 ]; then
-            echo "ERROR : could not setup access for all Users on the Cloud Run service network-agent-supervisor"
-            echo "You must probably disable the Domain Restricted Sharing policy of your domain."
-            echo "Then run this command again and re-enable the DRS policy"
-            exit 1
+            if [ $? -eq 1 ]; then
+                echo "ERROR : could not setup access for all Users on the Cloud Run service network-agent-supervisor"
+                echo "You must probably disable the Domain Restricted Sharing policy of your domain."
+                echo "Then run this command again and re-enable the DRS policy"
+                exit 1
+            fi
         fi
-        fi
-
-        SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
-        echo "Supervisor URL is ${SUPERVISOR_URL}"
         cd ../..
     fi
 
     # deploy the engineer agent
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"engineer"* ]]; then
+        TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
+        SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
         cd networkagents/engineer
         gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
         gcloud run deploy engineeragent \
@@ -918,13 +915,11 @@ Networkagent()
         --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
         --allow-unauthenticated 
         cd ../..
-
-        ENGINEER_URL=$(gcloud run services describe engineeragent --region=$GOOGLE_REGION --format="value(status.url)")
-        echo "Engineer Agent URL is ${ENGINEER_URL}"
     fi
 
     # deploy the tester agent
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"test"* ]]; then 
+        TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
         cd networkagents/tester
         gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
         gcloud run deploy testagent \
@@ -940,13 +935,11 @@ Networkagent()
         --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
         --allow-unauthenticated 
         cd ../..
-
-        TESTER_URL=$(gcloud run services describe testagent --region=$GOOGLE_REGION --format="value(status.url)")
-        echo "Tester Agent URL is ${TESTER_URL}"
     fi
 
     # deploy the operations agent
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"operations"* ]]; then
+        TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
         cd networkagents/operations
         gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
         gcloud run deploy operationsagent \
@@ -962,18 +955,13 @@ Networkagent()
         --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
         --allow-unauthenticated 
         cd ../..
-
-        OPERATIONS_URL=$(gcloud run services describe operationsagent --region=$GOOGLE_REGION --format="value(status.url)")
-        echo "Operations Agent URL is ${OPERATIONS_URL}"
     fi
 
     # build and deploy the network dashboard
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"dashboard"* ]]; then
-        cd dashboard
         GITEA_HOST=$(kubectl get gitea gitea -o 'jsonpath={..status.create_gitea.external_ip_address}')
-        echo "Git IP address is ${GITEA_HOST}"
-
         SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
+        cd dashboard
         echo "Supervisor Agent URL is ${SUPERVISOR_URL}"
         echo "Cleaning flutter environment"
         flutter clean

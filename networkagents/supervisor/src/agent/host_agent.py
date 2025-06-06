@@ -560,7 +560,7 @@ class HostAgent:
         HostAgent._session_id = uuid4().hex
 
         # create new session
-        session = self.session_service.create_session(
+        session = await self.session_service.create_session(
             app_name=self.app_name, 
             user_id="agent",
             session_id=HostAgent._session_id,
@@ -597,7 +597,7 @@ class HostAgent:
             )
 
             # get the current conversation session
-            session = self.session_service.get_session(app_name=self.app_name, user_id="agent", session_id=HostAgent._session_id)
+            session = await self.session_service.get_session(app_name=self.app_name, user_id="agent", session_id=HostAgent._session_id)
             if session is None:
                 session = await self.create_session()
 

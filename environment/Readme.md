@@ -54,18 +54,31 @@ The script options are as follows:
 
 ```shell
 ./install.sh
-Syntax: install.sh [-c|-s|-o|-l|-r|-n|-k|-d|-p]
+Network Agent environment manager.
+
+Syntax: install.sh [-c|-s|-o|-l|-r|-n|-k|-d|-p|-g|-i]
 options:
   -c     create network agent environment (keys, manifests,..)
   -s     build and start network agent runtime (incl. the operator)
   -o     build and deploy the network operator
   -l     build and deploy the logs capture function
-  -t     build and deploy the rest tools
-  -n     build and deploy the networkagent
+  -n     build and deploy the network dashboard and network agents
+         can be followed by a comma-separated list of agent names to (re)deploy selectively
+         valid agent names: all, networktools, supervisor, engineer, dashboard, operations, test
+         example: -n dashboard,operations or -n all (to deploy all agents)
   -k     stop and delete the network agent runtime (GKE cluster, VMS, DB, etc..)
   -d     delete the network agent environment (keys, manifests...).
   -p     deploy porch tools
+  -i     display demo information
+  -g     display active GCP environment (user, project, GKE cluster,...)
+  -i     display demo information
 
+Some typical use cases:
+ - To create and run a network agent environment including the operator: ./install.sh -c; ./install.sh -s
+ - To redeploy the operator alone : ./install.sh -o
+ - To (re)deploy the network agent Web UI alone : ./install.sh -n
+ - To regenerate the network agent runtime with the same environment setup: ./install.sh -k; ./install.sh -s
+ - To recreate a complete environment and runtime from scratch: ./install.sh -k; ./install.sh -d; ./install.sh -c; ./install.sh -s
 ```
 
 The first step is to generate keys and deployment descriptors for each of the network agent GCP components by running the following command. 

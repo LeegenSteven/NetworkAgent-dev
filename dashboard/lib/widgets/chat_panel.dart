@@ -440,6 +440,7 @@ class _ChatMessageWidget extends StatelessWidget {
             // Use Markdown widget to render the message text
             MarkdownBody(
               data: message.text,
+              selectable: true, // Allow text selection
               styleSheet: MarkdownStyleSheet(
                 p: TextStyle(
                   color: message.isUser ? Colors.white : const Color(0xFF0D47A1),

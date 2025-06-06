@@ -83,60 +83,66 @@ class LogWidget extends StatelessWidget {
 
   Widget _buildLogTable(BuildContext context) {
     return SingleChildScrollView(
+      // Handles vertical scrolling for the entire table structure
       scrollDirection: Axis.vertical,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          headingRowColor: WidgetStateProperty.all(const Color(0xFFE3F2FD)),
-          headingRowHeight: 36, // Added reduced heading row height
-          dataRowMinHeight: 32, // Reduced from 48 to 32
-          dataRowMaxHeight: 48, // Reduced from 64 to 48
-          columns: const [
-            DataColumn(
-              label: Text(
-                'Timestamp',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'Level',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'Source',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'Message',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-          rows: logs.map((log) {
-            return DataRow(
-              cells: [
-                DataCell(Text(_formatTimestamp(log.timestamp))),
-                DataCell(_buildLevelIndicator(log.level)),
-                DataCell(Text(log.source)),
-                DataCell(
-                  Container(
-                    //LJ constraints: const BoxConstraints(maxWidth: 500),
-                    child: Text(
-                      log.message,
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 2,
+      child: LayoutBuilder( // Gets the available width from the parent
+        builder: (context, constraints) {
+          return SingleChildScrollView( // Handles horizontal scrolling if DataTable content is wider than constraints.maxWidth
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox( // Ensures the DataTable is rendered in an area at least as wide as constraints.maxWidth
+              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+              child: DataTable(
+                headingRowColor: WidgetStateProperty.all(const Color(0xFFE3F2FD)),
+                headingRowHeight: 36, // Added reduced heading row height
+                dataRowMinHeight: 32, // Reduced from 48 to 32
+                dataRowMaxHeight: 48, // Reduced from 64 to 48
+                columns: const [
+                  DataColumn(
+                    label: Text(
+                      'Timestamp',
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
-                ),
-              ],
-            );
-          }).toList(),
-        ),
+                  DataColumn(
+                    label: Text(
+                      'Level',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'Source',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  DataColumn(
+                    label: Text(
+                      'Message',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+                rows: logs.map((log) {
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(_formatTimestamp(log.timestamp))),
+                      DataCell(_buildLevelIndicator(log.level)),
+                      DataCell(Text(log.source)),
+                      DataCell(
+                        Container(
+                          alignment: Alignment.centerLeft, // Align text to the left within the cell
+                          child: SelectableText(
+                            log.message,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

@@ -433,13 +433,8 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
         networkAddress = await create_internal_ip(namespace, address_name, region, externalsubnet=subnet, graph=graph)
         networkNamespace = namespace
       else:
-        networkAddress = await create_internal_ip(interface['namespace'], address_name, region, externalsubnet=subnet, graph=graph)
-        networkNamespace = interface['namespace']
-
-      #if not await get_compute_address(interface['namespace'], address_name):
-      # networkAddress = await create_internal_ip(interface['namespace'], address_name, region, externalsubnet=subnet, graph=True)
-      #else:
-      #  logger.info(f"ComputeAddress {address_name} in ns {namespace} already exists. Skipping creation.")
+        networkAddress = await create_internal_ip(namespace, address_name, region, externalsubnet=subnet, graph=graph)
+        networkNamespace = namespace
 
       networkInterfaces.append(
         {
@@ -460,7 +455,7 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
       # if this is not a wireguard VPN compute instance generate the routing script
       if vpn == False:
         # check the interface is up, and wait if not
-        subnet_info=await get_subnetwork(interface['namespace'], interface['name'])
+        subnet_info=await get_subnetwork(namespace, interface['name'])
         logger.debug(subnet_info)
 
         # check if the subnet is in the route list, if so delete that route from the list
@@ -783,11 +778,11 @@ async def create_route(namespace, vm_name, source_subnetwork, peer_subnetwork):
     raise kopf.TemporaryError("Waiting for VM ip address", 20)
 
   # find the cidr associated with peer_subnetwork_name
-  destresult = await get_subnetwork(peer_subnetwork['namespace'], peer_subnetwork['name'])
+  destresult = await get_subnetwork(namespace, peer_subnetwork['name'])
   peer_cidr = destresult.spec['ipCidrRange']
 
   # find the network name from the source subnetwork
-  sourceresult = await get_subnetwork(source_subnetwork['namespace'], source_subnetwork['name'])
+  sourceresult = await get_subnetwork(namespace, source_subnetwork['name'])
   sourcenetwork = sourceresult.spec['networkRef']['name']
 
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeRoute")
@@ -809,7 +804,7 @@ async def create_route(namespace, vm_name, source_subnetwork, peer_subnetwork):
       "destRange": peer_cidr,
       "networkRef": {
         "name": sourcenetwork, 
-        "namespace": source_subnetwork['namespace']
+        "namespace": namespace
       },
       "priority": 100,
       "nextHopIp": route_ip

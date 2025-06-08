@@ -47,18 +47,12 @@ spec:
                     name:
                       description: name of the UERanSim instance
                       type: string
-                    namespace:
-                      description: name of the UERanSim instance is deployed in
-                      type: string
                 datanetwork: 
                   description: the name and namespace of the DataNetwork network service to send traffic to
                   type: object
                   properties:
                     name:
                       description: name of the DataNetwork instance
-                      type: string
-                    namespace:
-                      description: name of the DataNetwork instance is in
                       type: string
               x-kubernetes-preserve-unknown-fields: true
             status:

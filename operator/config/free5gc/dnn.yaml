@@ -47,9 +47,6 @@ spec:
                     name:
                       description: name of the GCP VPC
                       type: string
-                    namespace:
-                      description: name of the GCP vpc namespace
-                      type: string
               x-kubernetes-preserve-unknown-fields: true
             status:
               type: object

@@ -59,18 +59,9 @@
     group: git
     mode: '0644'
   loop:
-    - core-namespace.yaml
-    - core-repo-sync.yaml
-    - core-role.yaml
-    - cellsite1-namespace.yaml
-    - cellsite1-repo-sync.yaml
-    - cellsite1-role.yaml
-    - cellsite2-namespace.yaml
-    - cellsite2-repo-sync.yaml
-    - cellsite2-role.yaml
-    - vpn-namespace.yaml
-    - vpn-repo-sync.yaml
-    - vpn-role.yaml
+    - network-namespace.yaml
+    - network-repo-sync.yaml
+    - network-role.yaml
 
 - name: add to root-repo
   command: sudo -u git git add .

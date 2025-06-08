@@ -24,7 +24,7 @@ from utils.gitea_extension import *
 # generated at Gitea server creation time 
 USER = os.environ['WEBAPPS_LOGIN']
 PWD = os.environ['WEBAPPS_PWD']
-SERVICE_REPO = 'core'
+SERVICE_REPO = 'network'
 MASTER_BRANCH = 'master'
 
 # Commit service at file_path with commit message

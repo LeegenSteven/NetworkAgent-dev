@@ -569,10 +569,7 @@ Start()
     gitea_host=$(kubectl get gitea gitea -o 'jsonpath={..status.create_gitea.external_ip_address}')
     echo -e "\nGitea server is available at:\n\thttps://$gitea_host:3000/explore/repos\n"
     echo "You can clone the git repos as follows (username/password = ${WEBAPPS_LOGIN}/${WEBAPPS_PWD})"
-    echo "  git clone https://$gitea_host:3000/networkagent/core -c http.sslVerify=false"
-    echo "  git clone https://$gitea_host:3000/networkagent/vpn -c http.sslVerify=false"
-    echo "  git clone https://$gitea_host:3000/networkagent/cellsite1 -c http.sslVerify=false"
-    echo "  git clone https://$gitea_host:3000/networkagent/cellsite2 -c http.sslVerify=false"
+    echo "  git clone https://$gitea_host:3000/networkagent/network -c http.sslVerify=false"
 }
 
 ############################################################

@@ -32,13 +32,13 @@ async def controlplane(spec, status, namespace, name, logger, **kwargs):
 
   # get UPF address
   upf = spec.get("upf")
-  upfAddress = await getUPFAddress(upf['namespace'], upf['name'])
+  upfAddress = await getUPFAddress(namespace, upf['name'])
   if upfAddress is None:
     raise kopf.PermanentError("no UPF address")
 
   # get the DNN VM address and wait until it comes up
   dnn = spec.get("dnn")
-  dnnAddress = await getDNNAddress(dnn['namespace'], dnn['name'])
+  dnnAddress = await getDNNAddress(namespace, dnn['name'])
   if dnnAddress is None:
     raise kopf.PermanentError("no DNN address")
 

@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # if GITOPS true then the service deletion / creation
 # is performed through the Gitea repository + Config Sync
 # Otherwise it is executed directly through K8s apply/delete
-GITOPS = False
+GITOPS = True
 
 ######################################################################
 # Get existing network locations tool
@@ -59,7 +59,6 @@ def getLocations()-> str:
             logger.debug(item)
             location = f"""
 __Network Name:__ {item['metadata']['name']}
-* _Namespace_ :  {item['metadata']['namespace']}
 * _Description_: {item['spec']['description']}
 * _CIDR_: {item['spec']['ipCidrRange']}
             """
@@ -79,7 +78,6 @@ __Network Name:__ {item['metadata']['name']}
 @globals.networkagent_mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
 def createLocation(
     name: Annotated[str, "the name of the new GCP VPC network, this must be unique amonst all other locations"],
-    namespace: Annotated[str, "the namespace of the new GCP VPC network"],
     cidr: Annotated[str, "the IP Range for the location subnetwork, this must be unique amongst all the other location and must be a valid CIDR IP range."]
 ):
     """
@@ -88,14 +86,16 @@ def createLocation(
     Returns:
         result of the request
     """
-    logger.info("Creating new VPC")
+    logger.info("Creating new VPC %s %s", name, cidr)
+
+    # build up the network manifest in one file
+    gitops_manifest=None
 
     network_crd_manifest={
         "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
         "kind": "ComputeNetwork",
         "metadata": {
             "name": name,
-            "namespace": namespace,
             "labels": {
                 "graph": "true"
             },
@@ -106,27 +106,29 @@ def createLocation(
         }
     }
 
-    client = kubernetes.dynamic.DynamicClient(get_client())
-    try:
-        network_api = client.resources.get(
-            api_version="compute.cnrm.cloud.google.com/v1beta1",
-            kind="ComputeNetwork",
-        )
-        result = network_api.create(network_crd_manifest)
-    except kubernetes.client.rest.ApiException as e: 
-        logger.info(e.status)
-        logger.debug(e)
-        if e.status == 409:
-            return f"network location {name} already exists"
-        else:
-            logger.info(e)
+    if GITOPS:
+        gitops_manifest = yaml.dump(network_crd_manifest, indent=2)
+    else:
+        client = kubernetes.dynamic.DynamicClient(get_client())
+        try:
+            network_api = client.resources.get(
+                api_version="compute.cnrm.cloud.google.com/v1beta1",
+                kind="ComputeNetwork",
+            )
+            result = network_api.create(network_crd_manifest)
+        except kubernetes.client.rest.ApiException as e: 
+            logger.info(e.status)
+            logger.debug(e)
+            if e.status == 409:
+                return f"network location {name} already exists"
+            else:
+                logger.info(e)
 
     subnet_crd_manifest= { 
         "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
         "kind": "ComputeSubnetwork",
         "metadata": {
             "name": name,
-            "namespace": namespace,
             "labels": {
                 "graph": "true"
             }
@@ -141,27 +143,29 @@ def createLocation(
         }
     }
 
-    client = kubernetes.dynamic.DynamicClient(get_client())
-    try:
-        network_api = client.resources.get(
-            api_version="compute.cnrm.cloud.google.com/v1beta1",
-            kind="ComputeSubnetwork",
-        )
-        result = network_api.create(subnet_crd_manifest)
-    except kubernetes.client.rest.ApiException as e: 
-        logger.info(e.status)
-        logger.debug(e)
-        if e.status == 409:
-            return f"network subnet {name} already exists"
-        else:
-            logger.info(e)
+    if GITOPS:
+        gitops_manifest=gitops_manifest+"\n---\n"+yaml.dump(subnet_crd_manifest, indent=2)
+    else:
+        client = kubernetes.dynamic.DynamicClient(get_client())
+        try:
+            network_api = client.resources.get(
+                api_version="compute.cnrm.cloud.google.com/v1beta1",
+                kind="ComputeSubnetwork",
+            )
+            result = network_api.create(subnet_crd_manifest)
+        except kubernetes.client.rest.ApiException as e: 
+            logger.info(e.status)
+            logger.debug(e)
+            if e.status == 409:
+                return f"network subnet {name} already exists"
+            else:
+                logger.info(e)
 
     firewall_crd_manifest= { 
         "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
         "kind": "ComputeFirewall",
         "metadata": {
             "name": name,
-            "namespace": namespace,
             "labels": {
                 "graph": "true"
             }
@@ -174,26 +178,37 @@ def createLocation(
             ],
             "networkRef": {
                 "name": name,
-                "namespace": namespace
             },
             "priority": 500,
         }
     }
 
-    client = kubernetes.dynamic.DynamicClient(get_client())
-    try:
-        network_api = client.resources.get(
-            api_version="compute.cnrm.cloud.google.com/v1beta1",
-            kind="ComputeFirewall",
-        )
-        result = network_api.create(firewall_crd_manifest)
-    except kubernetes.client.rest.ApiException as e: 
-        logger.info(e.status)
-        logger.debug(e)
-        if e.status == 409:
-            return f"network firewall {name} already exists"
+    if GITOPS:
+        gitops_manifest=gitops_manifest+"\n---\n"+yaml.dump(firewall_crd_manifest, indent=2)
+
+        filename = name+"-network-location.yaml"
+        result = commit_git_file(filename,
+                                 f"Deployment of {name} network location",
+                                 gitops_manifest)
+        if result:
+            logger.info(f"service {filename} manifest successfully submitted for deployment")
         else:
-            logger.info(e)
+            logger.error(f"service {filename} manifest errpr deploying:\n```yaml\n{gitops_manifest}\n```")
+    else:
+        client = kubernetes.dynamic.DynamicClient(get_client())
+        try:
+            network_api = client.resources.get(
+                api_version="compute.cnrm.cloud.google.com/v1beta1",
+                kind="ComputeFirewall",
+            )
+            result = network_api.create(firewall_crd_manifest)
+        except kubernetes.client.rest.ApiException as e: 
+            logger.info(e.status)
+            logger.debug(e)
+            if e.status == 409:
+                return f"network firewall {name} already exists"
+            else:
+                logger.info(e)
 
     return "network created successfully"
 
@@ -214,33 +229,56 @@ def deleteLocation(
     """
     logger.info("Deleting VPC %s", name)
 
-    client = kubernetes.dynamic.DynamicClient(get_client())
-    try:
-        network_api = client.resources.get(
-            api_version="compute.cnrm.cloud.google.com/v1beta1",
-            kind="ComputeNetwork",
-        )
-        network_api.delete(namespace=namespace, name=name)
-
-        network_api = client.resources.get(
-            api_version="compute.cnrm.cloud.google.com/v1beta1",
-            kind="ComputeSubnetwork",
-        )
-        network_api.delete(namespace=namespace, name=name)
-
-        network_api = client.resources.get(
-            api_version="compute.cnrm.cloud.google.com/v1beta1",
-            kind="ComputeFirewall",
-        )
-        network_api.delete(namespace=namespace, name=name)
-
-    except kubernetes.client.rest.ApiException as e: 
-        logger.info(e.status)
-        logger.debug(e)
-        if e.status == 409:
-            return f"network location {name} already exists"
+    if GITOPS:
+        filename = name+"-firewall.yaml"
+        result = delete_git_file(filename, f"{name} firewall deletion")
+        if result:
+            logger.error (f"service {filename} successfully submitted for deletion")
         else:
-            logger.info(e)
+            logger.error(f"service {filename} could not be deleted")
+
+        filename = name+"-subnet.yaml"
+        result = delete_git_file(filename, f"{name} subnetwork deletion")
+        if result:
+            logger.error (f"service {filename} successfully submitted for deletion")
+        else:
+            logger.error(f"service {filename} could not be deleted")
+
+        filename = name+"-network.yaml"
+        result = delete_git_file(filename, f"{name} network deletion")
+        if result:
+            logger.error (f"service {filename} successfully submitted for deletion")
+        else:
+            logger.error(f"service {filename} could not be deleted")
+
+    else:
+        client = kubernetes.dynamic.DynamicClient(get_client())
+        try:
+            network_api = client.resources.get(
+                api_version="compute.cnrm.cloud.google.com/v1beta1",
+                kind="ComputeNetwork",
+            )
+            network_api.delete(namespace=namespace, name=name)
+
+            network_api = client.resources.get(
+                api_version="compute.cnrm.cloud.google.com/v1beta1",
+                kind="ComputeSubnetwork",
+            )
+            network_api.delete(namespace=namespace, name=name)
+
+            network_api = client.resources.get(
+                api_version="compute.cnrm.cloud.google.com/v1beta1",
+                kind="ComputeFirewall",
+            )
+            network_api.delete(namespace=namespace, name=name)
+
+        except kubernetes.client.rest.ApiException as e: 
+            logger.info(e.status)
+            logger.debug(e)
+            if e.status == 409:
+                return f"network location {name} already exists"
+            else:
+                logger.info(e)
 
     return "network deleted successfully"
 
@@ -338,7 +376,6 @@ def getServices()-> str:
 def createService(
     serviceKind: Annotated[str, "the kubernetes kind for this network service instance"], 
     serviceName: Annotated[str, "the kubernetes name for this network service instance"], 
-    serviceNamespace: Annotated[str, "the kubernetes namespace for this network service instance"], 
     serviceSpec: Annotated[Dict, "the kubernetes spec object for the new network service"]
     ) -> str:
     """
@@ -360,7 +397,6 @@ def createService(
         "kind": serviceKind,
         "metadata": {
             "name": serviceName,
-            "namespace": serviceNamespace,
             "labels": {
                 "graph": "true", 
                 "monitor": "true"
@@ -376,9 +412,9 @@ def createService(
                                  f"Deployment of {serviceName}",
                                  crd_manifest_yaml)
         if result:
-            return f"service {serviceName} manifest successfully submitted for deployment:\n```yaml\n{crd_manifest_yaml}\n```"
+            return f"service {serviceName} successfully submitted for deployment"
         else:
-            return f"service {serviceName} could not be deployed"
+            return f"service {serviceName} could not be deployed:\n```yaml\n{crd_manifest_yaml}\n```"
 
     else:
         client = kubernetes.dynamic.DynamicClient(get_client())
@@ -403,7 +439,6 @@ def createService(
 @globals.networkagent_mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
 def deleteService(
     name: Annotated[str, "The name of the running/deployed network service to delete"], 
-    namespace: Annotated[str, "The namespace of the network service instance to delete - usually the same as the name"], 
     kind: Annotated[str, "The kubernetes kind of the network service instance to delete"]
      ) -> str:
     """
@@ -427,7 +462,7 @@ def deleteService(
                 api_version="google.dev/v1", 
                 kind=kind,
             )
-            network_api.delete(name=name, namespace=namespace)
+            network_api.delete(name=name, namespace="network")
             return f"Service {name} deleted request submitted"
 
         except kubernetes.client.rest.ApiException as e: 
@@ -483,16 +518,14 @@ def getRunningTests()-> str:
 def runTest(
     name: Annotated[str, "The name of the test to create"], 
     ueRanSimName: Annotated[str, "The name of the UERanSim network service to deploy the test"], 
-    ueRanSimNamespace: Annotated[str, "The namespace of the UERanSim network service to deploy the test"], 
     dnnName: Annotated[str, "The name of the DataNetwork network service to send traffic to"], 
-    dnnNamespace: Annotated[str, "The namespace of the DataNetwork network service to send traffic to"], 
     )-> str:
     """
     Tool used to deploy (also called instantiate) a new test.
     Only call this tool if explicitely stated in the network agent query or question.
     Always ask for an explicit confirmation by yes or no before creating the service.
     """
-    logger.info("run a new test %s %s %s %s %s", name, ueRanSimName, ueRanSimNamespace, dnnName, dnnNamespace)
+    logger.info("run a new test %s %s %s", name, ueRanSimName, dnnName)
 
     client = kubernetes.dynamic.DynamicClient(get_client())
     try:
@@ -507,16 +540,16 @@ def runTest(
             "kind": "UETest",
             "metadata": {
                 "name": name,
-                "namespace": "automation",
+                "namespace": "network",
             },
             "spec": {
                 "ueransim": {
                     "name": ueRanSimName,
-                    "namespace": ueRanSimNamespace
+                    "namespace": "network"
                 },
                 "datanetwork": {
                     "name": dnnName,
-                    "namespace": dnnNamespace
+                    "namespace": "network"
                 },
             }
         }
@@ -551,7 +584,7 @@ def deleteTest(
             api_version="google.dev/v1", 
             kind="UETest",
         )
-        network_api.delete(name=name,namespace="automation")
+        network_api.delete(name=name,namespace="network")
         return "Test deleted"
 
     except  kubernetes.client.rest.ApiException as e:

@@ -59,7 +59,7 @@ async def wireguardappliance(body,spec, name, namespace, uid, logger, **kwargs):
     for peer in spec['peers']:
         # copy the base peer info and add to it
         peerInfo=peer
-        subnet_info = await get_subnet_info(peer['allowedInterface']['namespace'], peer['allowedInterface']['name'])
+        subnet_info = await get_subnet_info(namespace, peer['allowedInterface']['name'])
         allowed_cidr = subnet_info.get('spec')['ipCidrRange']
         logger.debug("allowed cidr %s", allowed_cidr)
         peerInfo['allowedCidr']=allowed_cidr

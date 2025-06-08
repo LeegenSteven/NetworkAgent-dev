@@ -53,18 +53,12 @@ spec:
                     name:
                       description: name of the vpc
                       type: string
-                    namespace:
-                      description: name of the vpc namespace
-                      type: string
                 controlplane:
                   description: the ControlPlane network service instance to this UERanSim instance to 
                   type: object
                   properties:
                     name: 
                       description: Name of the control plane
-                      type: string
-                    namespace: 
-                      description: Namespace of the controlplane
                       type: string
                 ue: 
                   description:  |

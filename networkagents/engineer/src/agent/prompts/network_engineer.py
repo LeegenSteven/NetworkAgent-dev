@@ -67,23 +67,17 @@ Do not add steps that explain your reasoning, i.e. steps that only describe rati
 more tool executions. Do not skip steps. Do not propose any steps that duplicate efforts or conflict with each other or conflict with existing 
 network services and locations.
 
-If you need to propose names and namespace for new network services or locations use the following guidelines:
-- new network location names and namespaces are at your discretion to propose
+If you need to propose names for new network services or locations use the following guidelines:
+- new network location names are at your discretion to propose
 - When creating new network locations the following CIDR ranges are not to be used, i.e. these CIDRs are already used by the system
   - 10.0.0.0/24
   - 10.0.100.0/24
   - 10.60.0.0/24
-- When creating new network locations check that the ip address with cidr for existing network locations
-- new network service names are at your discretion, but namespaces must be the same as the network locations they are configured with
-- new connectivity service names are at your discretion but always have the namespace 'vpn'
-- DataNetwork, ControlPlane and UserPlaneFunction network services are always deployed in the same namespace.
+- When creating new network locations check that the cidr range does not overlap with existing network locations
+- new network service names are at your discretion
+- new connectivity service names are at your discretion
 - UserPlaneFunction and UERanSim network services must not be assigned the same network locations. 
-- The network location assigned to DataNetwork network service should be the same namespace as the network location
-  assigned to the UPF network location
 - the dataplane network location is a reserved network location, you must not use it in your planned steps.
-
-Network locations and network services can be specified as "name"/"namespace", e.g. core/core, or cellsite1-radio1/cellsite1. The name is always first and namespace 
-follows the /
 
 Network locations attached to UERanSim and UserPlaneFunction network services must be attached to a connectivity service so traffic can be carried between them. 
 When connecting more than two network locations you should use a Mesh connectivity service with multiple interfaces.
@@ -107,30 +101,30 @@ User Objective: Create a new 5g network service with one virtual radio network s
 
 Planned Steps: 
 
-* Create a new network location with name core in namespace core and cidr "10.0.40.0/24"
-* Create a new network location with name internet with namespace core and cidr "10.0.50.0/24"
-* Create a new network location with name radio1 with namespace radio1 and cidr "10.0.60.0/24"
-* Create a point to point connectivity service named ptp1 in namespace vpn with interfaces core/core and radio1/radio1
-* Create a UserPlaneFunction network service named upf in namespace core with ingress core/core and egress internet/core
-* Create a DataNetwork network service named dnn in namespace core with interface internet/core
-* Create a ControlPlane network service named controlplane in namespace core with network core/core, upf upf/core and dnn dnn/core
-* Create a UERanSim network service named radio1-ueransim in namespace radio1 with interface radio1/radio1, controlplane controlplane/core
-  cellid "0x000000010" and ue imsi "208930000000001" and ue plmnId "20893"
+* Create a new network location with name core and cidr "10.0.40.0/24"
+* Create a new network location with name internet and cidr "10.0.50.0/24"
+* Create a new network location with name radio1 and cidr "10.0.60.0/24"
+* Create a point to point connectivity service named ptp1 with interfaces core and radio1
+* Create a UserPlaneFunction network service named upf with ingress core and egress internet
+* Create a DataNetwork network service named dnn with interface internet
+* Create a ControlPlane network service named controlplane with network core, upf upf and dnn dnn
+* Create a UERanSim network service named radio1-ueransim with interface radio1, controlplane named controlplane
+  cellid "0x000000010", ue imsi "208930000000001" and ue plmnId "20893"
 
 Example with existing network locations
 ---------------------------------------
 Deployed Network Locations: 
-* internet/core with cidr "10.0.40.0/24"
-* core/core with cidr "10.0.50.0/24"
+* internet with cidr "10.0.40.0/24"
+* core with cidr "10.0.50.0/24"
 
 Deployed Network Services: 
-* DataNetwork network service named dnn in namespace core with interface internet/core
+* DataNetwork network service named dnn with interface internet
 
 User Objective: Create a upf
 
 Planned Steps: 
 
-* Create a UserPlaneFunction network service named upf1 in namespace core with ingress core/core and egress internet/core
+* Create a UserPlaneFunction network service named upf1 with ingress core and egress internet
 
 Current time: {current_time}
 
@@ -163,9 +157,6 @@ execute_step_prompt="""
     {network_service_descriptors}  
 
     Make sure the spec for the network service or connectivity service you create complies with the CRDs above 
-
-    A network location or network service name and namespace is often identifed with a / between them, e.g. name/namespace,  can be specified as "name"/"namespace", e.g. core/core, or cellsite1-radio1/cellsite1. 
-    The convention is the name is always first, then the "/" and then the namespace
 
 """
 

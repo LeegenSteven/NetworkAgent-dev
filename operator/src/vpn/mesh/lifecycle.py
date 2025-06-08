@@ -72,7 +72,7 @@ async def meshservice(body, spec, status, namespace, name, uid, logger, **kwargs
   )
   try:
     for interface in interfaces:
-      network_api.get(namespace=interface.get("namespace"), name=interface.get("name"))
+      network_api.get(namespace=namespace, name=interface.get("name"))
   except:
     logger.error(f"Error creating {kind} {name}, (id: {uid}). Compute subnetwork {interface.get('name')} not found")
     raise kopf.PermanentError(f"Failed creating {kind} {name}")

@@ -52,7 +52,6 @@ if os.getenv("VPN") is not None:
     from vpn.mesh.lifecycle import *
     from vpn.utils.status import *
     from vpn.wireguard.lifecycle import *
-    from vpn.tests.lifecycle import *
 
 if os.getenv("FREE5GC") is not None:
     logger.info("FREE5GC Lifecycle")

@@ -12,28 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-- hosts: all
-  become: True
-  gather_facts: True
-  tasks:
-
-    - name: install Gitea
-      import_role:
-        name: install
-
-    - name: create gitea repos
-      import_role:
-        name: create-gitea-repos
-
-    - name: networkdesign-repo
-      import_role:
-        name: networkdesign
-
-    - name: root-repo
-      import_role:
-        name: rootrepo
-
-    - name: network-repo
-      import_role:
-        name: network-repo
-
+apiVersion: google.dev/v1
+kind: UERanSIM
+metadata:
+  name: core-cellsite
+  labels:
+    graph: "true"
+    monitor: "true"
+spec:
+  cellid: "0x000000010"
+  interface: 
+    name: core
+  controlplane:
+    name: controlplane
+  ue:     
+    imsi: "208930000000001"
+    plmnId: "20893"

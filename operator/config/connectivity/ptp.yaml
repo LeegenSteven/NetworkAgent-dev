@@ -50,9 +50,6 @@ spec:
                       name:
                         description: the name of the network interface
                         type: string
-                      namespace:
-                        description: the interface namespace - typically the same as the interface name
-                        type: string
                   oneOf:
                     - minItems: 2
                       maxItems: 2

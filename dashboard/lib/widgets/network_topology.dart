@@ -33,7 +33,6 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
 
   // Layout options
   final List<String> _layoutOptions = ['force-directed', 'layered'];
-  String _selectedLayout = 'force-directed';
 
   // Default network view
   String defaultView() {
@@ -112,25 +111,25 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
         }
       }
   
-      // Set layout algorithm based on selection
-      switch (_selectedLayout) {
-        case 'layered':
-          final configuration = SugiyamaConfiguration()
-            ..nodeSeparation = 60   // Reduced from 120 to 60 for closer horizontal spacing
-            ..levelSeparation = 80  // Reduced from 150 to 80 for closer vertical spacing
-            ..orientation = SugiyamaConfiguration.ORIENTATION_TOP_BOTTOM;  // Explicit orientation
-          algorithm = SugiyamaAlgorithm(configuration);
-          break;
-        case 'force-directed':
-        default:
-          // Increase iterations for better node distribution
-          algorithm = FruchtermanReingoldAlgorithm(
-            iterations: 1500,  // Increased from 1000 to 1500
-            // Use only the parameters supported by the package
-            // The higher iteration count will help spread nodes more evenly
-          );
-          break;
-      }
+  // Set layout algorithm based on selection
+  switch (appState.selectedTopologyLayout) {
+    case 'layered':
+      final configuration = SugiyamaConfiguration()
+        ..nodeSeparation = 60   // Reduced from 120 to 60 for closer horizontal spacing
+        ..levelSeparation = 80  // Reduced from 150 to 80 for closer vertical spacing
+        ..orientation = SugiyamaConfiguration.ORIENTATION_TOP_BOTTOM;  // Explicit orientation
+      algorithm = SugiyamaAlgorithm(configuration);
+      break;
+    case 'force-directed':
+    default:
+      // Increase iterations for better node distribution
+      algorithm = FruchtermanReingoldAlgorithm(
+        iterations: 1500,  // Increased from 1000 to 1500
+        // Use only the parameters supported by the package
+        // The higher iteration count will help spread nodes more evenly
+      );
+      break;
+  }
     } catch (e, stackTrace) {
       print('Error initializing graph: $e');
       print('Stack trace: $stackTrace');
@@ -301,7 +300,7 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
                             border: Border.all(color: Color(0xFF1976D2)),
                           ),
                           child: DropdownButton<String>(
-                            value: _selectedLayout,
+                            value: appState.selectedTopologyLayout,
                             icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF1976D2), size: 20),
                             elevation: 16,
                             isDense: true, // Make the dropdown more compact
@@ -309,12 +308,11 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
                             underline: Container(height: 0), // Remove the default underline
                             iconSize: 20, // Smaller icon
                             onChanged: (String? newValue) {
-                              if (newValue != null && newValue != _selectedLayout) {
-                                setState(() {
-                                  _selectedLayout = newValue;
-                                  // Reinitialize the graph with the new layout
-                                  _initializeGraph();
-                                });
+                              if (newValue != null && newValue != appState.selectedTopologyLayout) {
+                                // Update the layout in appstate
+                                appState.updateTopologyLayout(newValue);
+                                // Reinitialize the graph with the new layout
+                                _initializeGraph();
                               }
                             },
                             items: _layoutOptions.map<DropdownMenuItem<String>>((String value) {

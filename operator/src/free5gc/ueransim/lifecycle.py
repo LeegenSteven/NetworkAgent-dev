@@ -51,17 +51,16 @@ async def ueransim(spec, meta, status, namespace, name, logger, **kwargs):
 
   # get the controlplane instance named and grab its ip addresses and port
   controlplaneName = controlplane_spec.get('name')
-  controlplaneNamespace = controlplane_spec.get('namespace')
-  logger.debug("AMF %s found in %s", controlplaneName, controlplaneNamespace)
-  if controlplaneName is None or controlplaneName is None or controlplaneNamespace is None:
-    raise kopf.PermanentError("controlplane and namespace need to be specified")  
+  logger.debug("AMF %s found", controlplaneName)
+  if controlplaneName is None or controlplaneName is None:
+    raise kopf.PermanentError("controlplane name needs to be specified")  
   
   # get monitor and graph labels from the metadata / labels.
   monitor = get_boolean_label(meta, 'monitor')
   graph = get_boolean_label(meta, 'graph')
 
   try:
-    controlplaneAddresses = await get_controlplane_addresses(controlplaneNamespace, controlplaneName)
+    controlplaneAddresses = await get_controlplane_addresses(namespace, controlplaneName)
     if controlplaneAddresses is None:
       raise kopf.TemporaryError("Waiting for control plane...", 20)
 

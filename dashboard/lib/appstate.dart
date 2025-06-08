@@ -31,6 +31,9 @@ class Appstate extends ChangeNotifier {
   bool _filterByNodeType = false;
   Set<NodeType> _selectedNodeTypes = Set<NodeType>.from(NodeType.values);
   
+  // Topology layout state
+  String _selectedTopologyLayout = 'force-directed';
+  
   // Log widget state
   List<LogEntry> _logs = [];
   bool _isLoadingLogs = false;
@@ -51,6 +54,7 @@ class Appstate extends ChangeNotifier {
   bool get hasReceivedTopology => _hasReceivedTopology;
   bool get filterByNodeType => _filterByNodeType;
   Set<NodeType> get selectedNodeTypes => Set<NodeType>.from(_selectedNodeTypes);
+  String get selectedTopologyLayout => _selectedTopologyLayout;
   List<LogEntry> get logs => _logs;
   bool get isLoadingLogs => _isLoadingLogs;
   Metrics get metrics => _metrics;
@@ -287,6 +291,12 @@ class Appstate extends ChangeNotifier {
   }) {
     _filterByNodeType = filterByNodeType;
     _selectedNodeTypes = Set<NodeType>.from(selectedNodeTypes);
+    notifyListeners();
+  }
+  
+  // Update topology layout
+  void updateTopologyLayout(String layout) {
+    _selectedTopologyLayout = layout;
     notifyListeners();
   }
   

@@ -83,9 +83,6 @@ spec:
                           name: 
                             description: name of the interface
                             type: string
-                          namespace:
-                            description: namespace of the network interface
-                            type: string
                       keys:
                         description: the peer wireguard instance's public and private keys
                         type: object

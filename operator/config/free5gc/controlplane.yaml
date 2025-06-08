@@ -50,9 +50,6 @@ spec:
                     name: 
                       type: string
                       description: VPC network name
-                    namespace:
-                      type: string
-                      description: VPC network namespace
                 upf:
                   description: The UserPlaneFunction network service to the connect control plane to
                   type: object
@@ -60,15 +57,10 @@ spec:
                     name:
                       description: name of the upf
                       type: string
-                    namespace:
-                      description: namespace of upf
-                      type: string
                 dnn:
                   description: The DataNetwork network service to connect the ControlPlane network service to
                   type: object
                   properties:
-                    namespace:
-                      type: string
                     name:
                       type: string
               x-kubernetes-preserve-unknown-fields: true

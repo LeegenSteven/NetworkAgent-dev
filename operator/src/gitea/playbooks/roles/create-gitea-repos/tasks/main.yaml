@@ -32,20 +32,8 @@
   command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{external_ip_address}}:3000/api/v1/user/repos -d '{\"name\": \"root-repo\"}' --insecure"
   when: token_result.sha1 is defined
 
-- name: create core repo
-  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{external_ip_address}}:3000/api/v1/user/repos -d '{\"name\": \"core\"}' --insecure"
-  when: token_result.sha1 is defined
-
-- name: create cellsite1 repo
-  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{external_ip_address}}:3000/api/v1/user/repos -d '{\"name\": \"cellsite1\"}' --insecure"
-  when: token_result.sha1 is defined
-
-- name: create cellsite2 repo
-  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{external_ip_address}}:3000/api/v1/user/repos -d '{\"name\": \"cellsite2\"}' --insecure"
-  when: token_result.sha1 is defined
-
-- name: create vpn repo
-  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{external_ip_address}}:3000/api/v1/user/repos -d '{\"name\": \"vpn\"}' --insecure"
+- name: create network repo
+  command: "curl -k  -H 'Content-Type: application/json'  -H 'Authorization: token {{ token_result['sha1'] }}' https://{{external_ip_address}}:3000/api/v1/user/repos -d '{\"name\": \"network\"}' --insecure"
   when: token_result.sha1 is defined
 
 - name: create networkdesign repo

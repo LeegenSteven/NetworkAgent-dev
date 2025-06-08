@@ -34,7 +34,7 @@ class NetworkAgentApp extends StatelessWidget {
           backgroundColor: Color(0xFF0D47A1),
           foregroundColor: Colors.white,
         ),
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           color: Colors.white,
           elevation: 2,
           shape: RoundedRectangleBorder(

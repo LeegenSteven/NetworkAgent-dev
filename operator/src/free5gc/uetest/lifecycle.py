@@ -37,13 +37,13 @@ async def uetest(spec, meta, status, namespace, name, logger, **kwargs):
   if dnn is None:
     raise kopf.PermanentError("No data network found")
 
-  dnn_address = await getDNNAddress(dnn['namespace'], dnn['name'])
+  dnn_address = await getDNNAddress(namespace, dnn['name'])
   if dnn_address is None:
      raise kopf.PermanentError("No DNN address")
 
   dnn_url = f"http://{dnn_address}"
 
-  await run_test(vmname['namespace'], vmname['name'],dnn_url)
+  await run_test(namespace, vmname['name'],dnn_url)
 
   return {
       "status":"Running",
@@ -61,7 +61,7 @@ async def uetest(spec, meta, status, namespace, name, logger, **kwargs):
   if vmname is None:
     raise kopf.PermanentError("No ueransim found")
 
-  await stop_test(vmname['namespace'], vmname['name'])
+  await stop_test(namespace, vmname['name'])
 
   return {
       "status":"stopped",

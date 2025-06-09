@@ -31,6 +31,28 @@ logger = logging.getLogger(__name__)
 # Otherwise it is executed directly through K8s apply/delete
 GITOPS = True
 
+
+######################################################################
+# Resource to provide the network design doc
+######################################################################
+@globals.networkagent_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+def getNetworkDesign()-> str:
+    """
+    Fetch the current network design document
+
+    Returns:
+        network design document in markdown format
+    """
+    logger.info("Getting network design from git")
+
+    filename = "5gnetwork.md"
+    result = get_git_file(filename)
+    if result is not None:
+        return result
+    else:
+        logger.error(f"{filename} could not be found")
+        return None
+
 ######################################################################
 # Get existing network locations tool
 ######################################################################

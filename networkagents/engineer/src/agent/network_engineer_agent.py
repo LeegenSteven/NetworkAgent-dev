@@ -89,6 +89,9 @@ class NetworkEngineerAgent:
 
         self.network_service_definitions=None
 
+        # limit the tools the agent can load
+        self.allowed_tools=["getNetworkDesign", "getLocations", "createLocation", "deleteLocation", "getServiceDefinitions", "getServices", "createService", "deleteService"]
+        # loaded tools
         self.tools=[]
         self.tools_by_name = {tool.name: tool for tool in self.tools}
 
@@ -238,33 +241,16 @@ class NetworkEngineerAgent:
                     self.tools_by_name = {tool.name: tool for tool in self.tools}
                     
                     try:
+
+                        network_design = await self.tools_by_name["getNetworkDesign"].ainvoke({})
                         network_services = await self.tools_by_name["getServiceDefinitions"].ainvoke({})
-                    except Exception as e:
-                        logger.warning(f"Error getting service definitions: {str(e)}")
-                        raise ToolError(
-                            message="Failed to get service definitions",
-                            tool_name="getServiceDefinitions",
-                            severity=ErrorSeverity.ERROR,
-                            original_exception=e
-                        )
-                    
-                    try:
                         network_service_instances = await self.tools_by_name["getServices"].ainvoke({})
-                    except Exception as e:
-                        logger.warning(f"Error getting services: {str(e)}")
-                        raise ToolError(
-                            message="Failed to get services",
-                            tool_name="getServices",
-                            severity=ErrorSeverity.ERROR,
-                            original_exception=e
-                        )
-                    
-                    try:
                         network_locations = await self.tools_by_name["getLocations"].ainvoke({})
+
                     except Exception as e:
-                        logger.warning(f"Error getting locations: {str(e)}")
+                        logger.warning(f"Error running tools: {str(e)}")
                         raise ToolError(
-                            message="Failed to get locations",
+                            message="Failed to run tool",
                             tool_name="getLocations",
                             severity=ErrorSeverity.ERROR,
                             original_exception=e
@@ -279,11 +265,11 @@ class NetworkEngineerAgent:
 
                     try:
                         model = ChatVertexAI(
-                            model_name="gemini-2.0-flash-001",
+                            model_name="gemini-2.5-pro-preview-06-05",
                             temperature=0,
                             credentials=self.credentials,
                             project=os.getenv("GOOGLE_PROJECT"),
-                            location=os.getenv("GOOGLE_REGION")
+                            location="global"#os.getenv("GOOGLE_REGION")
                         )
                         model = model.bind_tools(self.tools)
                         model = model.with_structured_output(Plan)
@@ -291,6 +277,7 @@ class NetworkEngineerAgent:
                         runnable = prompt | model
                         steps = runnable.invoke({
                             "messages": [HumanMessage(content=state['objective'])] + state['context'],
+                            "network_design": network_design,
                             "network_service_instances": network_service_instances,
                             "network_service_descriptors": network_services, 
                             "network_locations": network_locations

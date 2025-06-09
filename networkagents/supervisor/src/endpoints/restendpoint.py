@@ -102,7 +102,7 @@ class RestEndpoint:
         logger.info("REST endpoint: list all remote agents")
         try:
             agent = await HostAgent.get_instance()
-            remote_agents = agent.list_remote_agents()
+            remote_agents = agent.list_all_remote_agents()
             logger.info(f"Returning {len(remote_agents)} remote agents: {remote_agents}")
             
             # Return the list of remote agents

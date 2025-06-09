@@ -24,8 +24,25 @@ from utils.gitea_extension import *
 # generated at Gitea server creation time 
 USER = os.environ['WEBAPPS_LOGIN']
 PWD = os.environ['WEBAPPS_PWD']
+DESIGN_REPO = 'networkdesign'
 SERVICE_REPO = 'network'
 MASTER_BRANCH = 'master'
+
+
+# get file from design repo
+def get_git_file(filename):
+  url = get_gitea_url()
+  logger.debug(f"Gitea server at: {url}")
+  gitea = Gitea(get_gitea_url(), auth=(USER, PWD), verify=False)
+  repo = Repository.request(gitea, USER, DESIGN_REPO)
+  try:
+    content = repo.get_git_content()
+    readmes = [c for c in content if c.name == filename]
+    file = repo.get_file_content(readmes[0])
+    return base64.b64decode(file).decode("utf-8")
+  except Exception as e:
+    logger.error(f"Unexpected Gitea error: {e}")
+    return None
 
 # Commit service at file_path with commit message
 # return True if commit went well, None otherwise

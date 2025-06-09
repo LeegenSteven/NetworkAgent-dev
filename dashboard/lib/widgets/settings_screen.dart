@@ -178,8 +178,8 @@ class AgentListItem extends StatelessWidget {
           children: [
             // Google logo image on the left side
             Image.asset(
-              'assets/images/google.png',
-              width: 40,
+              agent.name == "Anomaly Resolution Agent" ? 'assets/images/Zinkworks.png' : 'assets/images/google.png',
+              width: 80,
               height: 40,
               fit: BoxFit.contain,
             ),

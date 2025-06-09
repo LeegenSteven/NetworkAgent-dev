@@ -309,6 +309,27 @@ class HostAgent:
                 break
         return remote_agent_info
 
+    def list_all_remote_agents(self):
+        """
+        List all the available remote agents with chat skills you can use to delegate chat tasks.
+
+        Returns:
+            list of dicts
+        """
+        if not self.remote_agent_connections:
+            return []
+
+        remote_agent_info = []
+        for card in self.cards.values():
+            for skill in card.skills:
+                # Generate a unique ID for each agent if not already present
+                agent_id = str(uuid4())
+                remote_agent_info.append(
+                    {'id': agent_id, 'name': card.name, 'description': card.description, 'url': card.url}
+                )
+                break
+        return remote_agent_info
+
     def create_send_message_payload(self, text: str, task_id: str | None = None, context_id: str | None = None) -> dict[str, Any]:
         """Helper function to create the payload for sending a task."""
 
@@ -353,8 +374,8 @@ class HostAgent:
             actions=actions_with_update,
         )
 
-        session = self.session_service.get_session(app_name=self.app_name, user_id="agent", session_id=session_id)
-        self.session_service.append_event(session, system_event)
+        session = await self.session_service.get_session(app_name=self.app_name, user_id="agent", session_id=session_id)
+        await self.session_service.append_event(session, system_event)
 
 
     async def sendApproval(self, agent_name: str, approval: str, task_id: str, context_id: str):

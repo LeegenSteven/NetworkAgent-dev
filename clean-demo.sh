@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Get all PTP object names in the vpn namespace
-PTP_NAMES=$(kubectl get ptp -n vpn -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+# Get all PTP object names in the network namespace
+PTP_NAMES=$(kubectl get ptp -n network -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
 echo "Found PTP objects:"
 echo "$PTP_NAMES"
 if [ -n "$PTP_NAMES" ]; then
   for ptp_name in $PTP_NAMES; do
-    kubectl delete ptp "$ptp_name" -n vpn
+    kubectl delete ptp "$ptp_name" -n network
     if [ $? -eq 0 ]; then
       echo "Successfully deleted PTP: $ptp_name"
     else
@@ -29,13 +29,13 @@ if [ -n "$PTP_NAMES" ]; then
   done
 fi
 
-# Get all MESH object names in the vpn namespace
-MESH_NAMES=$(kubectl get mesh -n vpn -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+# Get all MESH object names in the network namespace
+MESH_NAMES=$(kubectl get mesh -n network -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
 echo "Found Mesh objects:"
 echo "$MESH_NAMES"
 if [ -n "$MESH_NAMES" ]; then
   for mesh_name in $MESH_NAMES; do
-    kubectl delete mesh "$mesh_name" -n vpn
+    kubectl delete mesh "$mesh_name" -n network
     if [ $? -eq 0 ]; then
       echo "Successfully deleted MESH: $mesh_name"
     else
@@ -44,14 +44,14 @@ if [ -n "$MESH_NAMES" ]; then
   done
 fi
 
-UERANSIM_NAMES=$(kubectl get ueransim -n cellsite1 -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
-# Get all UERANSIM object names in the cellsite1 namespace
-UERANSIM_NAMES=$(kubectl get ueransim -n cellsite1 -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+UERANSIM_NAMES=$(kubectl get ueransim -n network -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+# Get all UERANSIM object names in the network namespace
+UERANSIM_NAMES=$(kubectl get ueransim -n network -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
 echo "Found UERANSIM objects:"
 echo "$UERANSIM_NAMES"
 if [ -n "$UERANSIM_NAMES" ]; then
   for ue_name in $UERANSIM_NAMES; do
-    kubectl delete ueransim "$ue_name" -n cellsite1
+    kubectl delete ueransim "$ue_name" -n network
     if [ $? -eq 0 ]; then
       echo "Successfully deleted UERANSIM: $ue_name"
     else
@@ -60,12 +60,11 @@ if [ -n "$UERANSIM_NAMES" ]; then
   done
 fi
 
-# Delete all cnrm resources in cellsite namespaces
-for namespace in cellsite1 cellsite2; do
-  for kind in ComputeFirewall ComputeRoute ComputeSubnetwork ComputeInstance ComputeNetwork; do
-    for resource in $(kubectl get $kind -n $namespace -o jsonpath='{.items[*].metadata.name}'); do
-      kubectl delete $kind $resource -n $namespace
-    done
+# Delete all cell site locations
+for name in cellsite1 cellsite2; do
+  echo "Deleting resources of $name location... "
+  for kind in ComputeFirewall ComputeSubnetwork ComputeNetwork; do
+      kubectl delete $kind $name -n network
   done
 done
 

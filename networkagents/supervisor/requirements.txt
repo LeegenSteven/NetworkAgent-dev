@@ -10,4 +10,4 @@ ruamel.yaml
 scikit-learn
 pandas
 numpy
-a2a-sdk @ git+https://github.com/google/a2a-python.git@v0.2.1
+python-a2a

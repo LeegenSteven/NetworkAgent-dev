@@ -57,13 +57,13 @@ class EngineerAgentClient:
         """Create an A2A client to connect to the Engineer Agent."""
         logger.info(f"Creating client for Engineer Agent with address {self.address}")
 
-        async with httpx.AsyncClient() as httpx_client:
+        async with httpx.AsyncClient(timeout=60.0) as httpx_client:
             card_resolver = A2ACardResolver(httpx_client=httpx_client,base_url=self.address)
             self.agent_card = await card_resolver.get_agent_card()
-            self.agent_card.url = self.address        
+            self.agent_card.url = self.address
             logger.info(f"Connected to agent: {self.agent_card.name}")
 
-        self.agent_client = await A2AClient.get_client_from_agent_card_url(httpx_client=httpx.AsyncClient(), base_url=self.address)
+        self.agent_client = await A2AClient.get_client_from_agent_card_url(httpx_client=httpx.AsyncClient(timeout=60.0), base_url=self.address)
         # the discovered card address is the internal address of the server, make sure to update with the external address or is not reachable
         self.agent_client.url=self.address
 

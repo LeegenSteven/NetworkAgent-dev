@@ -16,11 +16,12 @@ def send_request():
     try:
         response = requests.get(url)
         response.raise_for_status() 
-        logger.info(f"Successfully accessed: {url} - Status: {response.status_code}")
+        #logger.info(f"Successfully accessed: {url} - Status: {response.status_code}")
     except requests.exceptions.RequestException as e:
         logger.error(f"Error accessing {url}: {e}")
 
 if __name__ == "__main__":
     while True:
-        send_request()
-        time.sleep(random.uniform(1, 5))
+        for i in range(2000):
+            send_request()
+        time.sleep(random.uniform(3, 5))

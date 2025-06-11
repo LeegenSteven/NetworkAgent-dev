@@ -224,6 +224,7 @@ Create()
     gcloud services enable --project=$GOOGLE_PROJECT bigquery.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT spanner.googleapis.com
     gcloud services enable --project=$GOOGLE_PROJECT logging.googleapis.com
+    gcloud services enable --project=$GOOGLE_PROJECT monitoring.googleapis.com
     # For vertex AI workbench
     gcloud services enable --project=$GOOGLE_PROJECT notebooks.googleapis.com
     # for colab enterprise in addition to compute engine api
@@ -461,7 +462,7 @@ Start()
     # in the designated namespace. This one works.
     #
     # Same to give the operator access to the Vertex AI prediction API
-    for role in "roles/spanner.databaseUser" "roles/aiplatform.user"; do
+    for role in "roles/spanner.databaseUser" "roles/aiplatform.user" "roles/monitoring.metricWriter"; do
         gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
             --member="principalSet://iam.googleapis.com/projects/${GOOGLE_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GOOGLE_PROJECT}.svc.id.goog/namespace/${GOOGLE_NAMESPACE}" \
             --role="$role" --condition=None --no-user-output-enabled

@@ -1,4 +1,4 @@
-fastmcp==2.4.0
+fastmcp==2.8.0
 kubernetes
 google-cloud-spanner
 google-cloud-container

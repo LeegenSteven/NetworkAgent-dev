@@ -9,4 +9,4 @@ scikit-learn
 pandas
 numpy
 py-gitea
-python-a2a
+a2a-sdk @ git+https://github.com/google/a2a-python.git@v0.2.1

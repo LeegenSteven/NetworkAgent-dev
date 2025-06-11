@@ -174,6 +174,7 @@ class RestEndpoint:
             "task_id": "",
             "context_id": "",
             "content": "",
+            "input_data": ""
         }
         
         Args:
@@ -183,7 +184,6 @@ class RestEndpoint:
             aiohttp.web.Response: JSON response indicating success or failure
         """
         logger.info("Received agent task update")
-        logger.info("TODO: Make this A2A compliant")
 
         try:
             # Validate request has JSON content
@@ -205,7 +205,7 @@ class RestEndpoint:
                 )
                 
             # Validate required fields
-            required_fields = ["name", "state", "task_id", "context_id", "content"]
+            required_fields = ["name", "state", "task_id", "context_id", "content", "input_data"]
             missing_fields = [field for field in required_fields if field not in data]
             if missing_fields:
                 logger.error(f"Missing required fields: {missing_fields}")

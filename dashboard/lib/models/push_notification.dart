@@ -26,6 +26,9 @@ class PushNotification {
   /// Whether the notification has been read by the user
   final bool isRead;
 
+  /// Additional data for notifications that require user input
+  final Map<String, dynamic>? inputData;
+
   /// Creates a new push notification
   const PushNotification({
     required this.id,
@@ -36,6 +39,7 @@ class PushNotification {
     required this.content,
     required this.timestamp,
     this.isRead = false,
+    this.inputData,
   });
 
   /// Creates a copy of this notification with the given fields replaced with new values
@@ -48,6 +52,7 @@ class PushNotification {
     String? content,
     DateTime? timestamp,
     bool? isRead,
+    Map<String, dynamic>? inputData,
   }) {
     return PushNotification(
       id: id ?? this.id,
@@ -58,6 +63,7 @@ class PushNotification {
       content: content ?? this.content,
       timestamp: timestamp ?? this.timestamp,
       isRead: isRead ?? this.isRead,
+      inputData: inputData ?? this.inputData,
     );
   }
 
@@ -70,10 +76,13 @@ class PushNotification {
       taskId: json['task_id'],
       contextId: json['context_id'],
       content: json['content'] ?? '',
-      timestamp: json['timestamp'] != null 
-          ? DateTime.parse(json['timestamp']) 
+      timestamp: json['timestamp'] != null
+          ? DateTime.parse(json['timestamp'])
           : DateTime.now(),
       isRead: json['isRead'] ?? false,
+      inputData: json['input_data'] != null
+          ? Map<String, dynamic>.from(json['input_data'])
+          : null,
     );
   }
 
@@ -88,6 +97,7 @@ class PushNotification {
       'content': content,
       'timestamp': timestamp.toIso8601String(),
       'isRead': isRead,
+      'input_data': inputData,
     };
   }
 
@@ -102,7 +112,8 @@ class PushNotification {
         other.contextId == contextId &&
         other.content == content &&
         other.timestamp == timestamp &&
-        other.isRead == isRead;
+        other.isRead == isRead &&
+        mapEquals(other.inputData, inputData);
   }
 
   @override
@@ -116,11 +127,12 @@ class PushNotification {
       content,
       timestamp,
       isRead,
+      inputData,
     );
   }
 
   @override
   String toString() {
-    return 'PushNotification(id: $id, name: $name, state: $state, taskId: $taskId, contextId: $contextId, content: $content, timestamp: $timestamp, isRead: $isRead)';
+    return 'PushNotification(id: $id, name: $name, state: $state, taskId: $taskId, contextId: $contextId, content: $content, timestamp: $timestamp, isRead: $isRead, inputData: $inputData)';
   }
 }

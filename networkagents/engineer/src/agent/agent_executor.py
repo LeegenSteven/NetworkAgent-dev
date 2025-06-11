@@ -50,6 +50,7 @@ class EngineerAgentExecutor(AgentExecutor):
                 "task_id": task.id,
                 "context_id": task.contextId,
                 "content": event['content'],
+                "input_data": task.metadata['input_data']
             }
             
             try:
@@ -94,11 +95,6 @@ class EngineerAgentExecutor(AgentExecutor):
                     severity=ErrorSeverity.ERROR
                 )
 
-            if not task:
-                logger.info("Creating new task!!")
-                task = new_task(context.message)
-                event_queue.enqueue_event(task)
-
             # check if this is a background task or chat based
             # if message part has text message its chat, if data its background received from another agent
             background_task=False
@@ -113,6 +109,16 @@ class EngineerAgentExecutor(AgentExecutor):
                 background_task=True
                 query_data = root_message.data
                 query_text = query_data['objective']
+
+            if not task:
+                logger.info("Creating new task!!")
+                task = new_task(context.message)
+
+                # if this is a background task then also attach the accommpanying details for the request
+                if background_task:
+                    task.metadata={"input_data": query_data}
+
+                event_queue.enqueue_event(task)
 
             logger.info("Processing continuation for task %s, with id %s", query_text, task.contextId)
             async for event in agent.stream(query_text, task.contextId):

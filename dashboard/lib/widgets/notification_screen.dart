@@ -240,44 +240,57 @@ class _NotificationTableState extends State<NotificationTable> {
                     // Expanded content
                     if (isExpanded) ...[
                       const Divider(height: 1),
-                      Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: MarkdownBody(
-                          data: notification.content,
-                          styleSheet: MarkdownStyleSheet(
-                            p: const TextStyle(fontSize: 14),
-                            h1: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                            h2: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                            h3: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                            code: const TextStyle(
-                              backgroundColor: Color(0xFFE1F5FE),
-                              color: Color(0xFF01579B),
-                              fontSize: 13,
-                            ),
-                            codeblockDecoration: BoxDecoration(
-                              color: const Color(0xFFE1F5FE),
-                              borderRadius: BorderRadius.circular(4.0),
-                            ),
-                            blockquote: const TextStyle(
-                              color: Colors.grey,
-                              fontStyle: FontStyle.italic,
-                              fontSize: 13,
-                            ),
+                      if (notification.inputData != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12.0, 12.0, 12.0, 12.0),
+                          child: InputDataWidget(
+                            inputData: notification.inputData!,
+                            content: notification.content,
                           ),
-                          onTapLink: (text, href, title) async {
-                            if (href != null) {
-                              try {
-                                final Uri url = Uri.parse(href);
-                                if (await canLaunchUrl(url)) {
-                                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                        )
+                      else
+                        Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: MarkdownBody(
+                            data: notification.content,
+                            styleSheet: MarkdownStyleSheet(
+                              p: const TextStyle(fontSize: 14),
+                              h1: const TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.bold),
+                              h2: const TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.bold),
+                              h3: const TextStyle(
+                                  fontSize: 14, fontWeight: FontWeight.bold),
+                              code: const TextStyle(
+                                backgroundColor: Color(0xFFE1F5FE),
+                                color: Color(0xFF01579B),
+                                fontSize: 13,
+                              ),
+                              codeblockDecoration: BoxDecoration(
+                                color: const Color(0xFFE1F5FE),
+                                borderRadius: BorderRadius.circular(4.0),
+                              ),
+                              blockquote: const TextStyle(
+                                color: Colors.grey,
+                                fontStyle: FontStyle.italic,
+                                fontSize: 13,
+                              ),
+                            ),
+                            onTapLink: (text, href, title) async {
+                              if (href != null) {
+                                try {
+                                  final Uri url = Uri.parse(href);
+                                  if (await canLaunchUrl(url)) {
+                                    await launchUrl(url,
+                                        mode: LaunchMode.externalApplication);
+                                  }
+                                } catch (e) {
+                                  // Ignore link errors
                                 }
-                              } catch (e) {
-                                // Ignore link errors
                               }
-                            }
-                          },
+                            },
+                          ),
                         ),
-                      ),
                       
                       // Action buttons
                       Padding(
@@ -416,5 +429,75 @@ class _NotificationTableState extends State<NotificationTable> {
   // Helper method to check if there's more content
   bool _hasMoreContent(String content) {
     return content.split('\n').length > 1;
+  }
+}
+
+/// A widget to display the input_data map in a formatted way
+class InputDataWidget extends StatelessWidget {
+  final Map<String, dynamic> inputData;
+  final String content;
+
+  const InputDataWidget(
+      {super.key, required this.inputData, required this.content});
+
+  String _convertMapToMarkdownTable(Map<String, dynamic> data) {
+    String table = '| Parameter | Value |\n|---|---|\n';
+
+    void buildRows(Map<String, dynamic> map, [String prefix = '']) {
+      map.forEach((key, value) {
+        final newKey = prefix.isEmpty ? key : '$prefix.$key';
+        if (value is Map<String, dynamic>) {
+          buildRows(value, newKey);
+        } else {
+          table += '| $newKey | `$value` |\n';
+        }
+      });
+    }
+
+    buildRows(data);
+    return table;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final markdownString = '''
+### Request to approve
+$content
+
+Please review the details below and use the buttons to approve or reject the proposed action.
+
+### Details from Agent
+${_convertMapToMarkdownTable(inputData)}
+''';
+
+    return Container(
+      padding: const EdgeInsets.all(12.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F5F5),
+        borderRadius: BorderRadius.circular(8.0),
+      ),
+      child: MarkdownBody(
+        data: markdownString,
+        styleSheet: MarkdownStyleSheet(
+          h3: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87),
+          p: const TextStyle(fontSize: 14, height: 1.5),
+          code: const TextStyle(
+            backgroundColor: Color(0xFFE0E0E0),
+            color: Colors.black87,
+            fontSize: 13,
+          ),
+          tableBorder: TableBorder.all(
+            color: const Color(0xFFE0E0E0),
+            width: 1,
+          ),
+          tableHead: const TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
   }
 }

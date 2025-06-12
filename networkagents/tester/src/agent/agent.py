@@ -73,96 +73,35 @@ class TestAgent:
         """
         Initialise the MCP tools with retry logic to ensure successful loading
         """
-        from asyncio import TimeoutError
-
         logger.info("loading tools")
         agent_mcp_tool_address = os.getenv("AGENT_MCP_TOOLS_ADDRESS", "http://127.0.0.1:8080")
         
-        max_retries = int(os.getenv("TOOL_LOAD_MAX_RETRIES", "5"))
-        base_delay = float(os.getenv("TOOL_LOAD_BASE_DELAY", "1.0"))
-        max_delay = float(os.getenv("TOOL_LOAD_MAX_DELAY", "30.0"))
-        timeout = float(os.getenv("TOOL_LOAD_TIMEOUT", "10.0"))
-        
-        retry_count = 0
-        last_exception = None
-        
-        while retry_count <= max_retries:
-            try:
-                if retry_count > 0:
-                    logger.info(f"Retry attempt {retry_count}/{max_retries} for loading tools")
-                
-                # Initialize the MCP client
-                self.mcpClient = MultiServerMCPClient(
-                    {
-                        "networkagent": {
-                            "url": f"{agent_mcp_tool_address}/sse",
-                            "transport": "sse",
-                        }
-                    }
-                )
-                
-                # Set a timeout for the get_tools operation
-                try:
-                    self.tools = await asyncio.wait_for(self.mcpClient.get_tools(), timeout)
-                    self.tools_by_name = {tool.name: tool for tool in self.tools}
-                    logger.info(f"Successfully loaded {len(self.tools)} tools")
-                    logger.debug(f"Loaded tools: {self.tools_by_name}")
-                    return  # Success, exit the retry loop
-                except TimeoutError:
-                    logger.warning(f"Timeout while loading tools (attempt {retry_count+1}/{max_retries+1})")
-                    raise ToolError(
-                        message=f"Timeout while loading tools (attempt {retry_count+1}/{max_retries+1})",
-                        tool_name="load_tools",
-                        severity=ErrorSeverity.WARNING
-                    )
-                    
-            except TestAgentError as e:
-                # If it's already a TestAgentError, just track it and potentially retry
-                last_exception = e
-                retry_count += 1
-                
-                if retry_count <= max_retries:
-                    # Calculate backoff delay with jitter to avoid thundering herd problem
-                    delay = min(max_delay, base_delay * (2 ** (retry_count - 1)))
-                    jitter = random.uniform(0, 0.1 * delay)  # 10% jitter
-                    actual_delay = delay + jitter
-                    
-                    logger.warning(f"Failed to load tools: {e.message}. Retrying in {actual_delay:.2f} seconds...")
-                    await asyncio.sleep(actual_delay)
-                else:
-                    logger.error(f"Failed to load tools after {max_retries} retries: {e.message}")
-                    raise ToolError(
-                        message=f"Failed to load tools after {max_retries} retries",
-                        tool_name="load_tools",
-                        severity=ErrorSeverity.ERROR,
-                        original_exception=last_exception
-                    )
-            except Exception as e:
-                # Convert other exceptions to ToolError
-                last_exception = ToolError(
-                    message=f"Error loading tools: {str(e)}",
-                    tool_name="load_tools",
-                    severity=ErrorSeverity.WARNING,
-                    original_exception=e
-                )
-                retry_count += 1
-                
-                if retry_count <= max_retries:
-                    # Calculate backoff delay with jitter to avoid thundering herd problem
-                    delay = min(max_delay, base_delay * (2 ** (retry_count - 1)))
-                    jitter = random.uniform(0, 0.1 * delay)  # 10% jitter
-                    actual_delay = delay + jitter
-                    
-                    logger.warning(f"Failed to load tools: {str(e)}. Retrying in {actual_delay:.2f} seconds...")
-                    await asyncio.sleep(actual_delay)
-                else:
-                    logger.error(f"Failed to load tools after {max_retries} retries: {str(e)}")
-                    raise ToolError(
-                        message=f"Failed to load tools after {max_retries} retries",
-                        tool_name="load_tools",
-                        severity=ErrorSeverity.ERROR,
-                        original_exception=last_exception
-                    )
+        # Initialize the MCP client
+        self.mcpClient = MultiServerMCPClient(
+            {
+                "networkagent": {
+                    "url": f"{agent_mcp_tool_address}/sse",
+                    "transport": "sse",
+                }
+            }
+        )
+
+        try:
+
+            self.tools = await self.mcpClient.get_tools()
+            self.tools_by_name = {tool.name: tool for tool in self.tools}
+
+            logger.info(f"Successfully loaded {len(self.tools)} tools")
+            logger.debug(f"Loaded tools: {self.tools_by_name}")                    
+
+        except Exception as e:
+            logger.error(f"Failed to load tools")
+            raise ToolError(
+                message=f"Failed to load tools",
+                tool_name="load_tools",
+                severity=ErrorSeverity.ERROR,
+                original_exception=e
+            )
 
     async def call_model(self, state: TestAgentState):
         """
@@ -219,69 +158,56 @@ class TestAgent:
 
         outputs = []
 
-        try:
-            async with self.mcpClient.session("networkagent") as session:
-                self.tools = await load_mcp_tools(session)
-                self.tools_by_name = {tool.name: tool for tool in self.tools}
-
-                for tool_call in state["messages"][-1].tool_calls:
-                    tool_name = tool_call["name"]
-                    tool_args = tool_call["args"]
+        for tool_call in state["messages"][-1].tool_calls:
+            tool_name = tool_call["name"]
+            tool_args = tool_call["args"]
+            
+            try:
+                if tool_name not in self.tools_by_name:
+                    raise ToolError(
+                        message=f"Tool '{tool_name}' not found",
+                        tool_name=tool_name,
+                        tool_args=tool_args,
+                        severity=ErrorSeverity.ERROR
+                    )
                     
-                    try:
-                        if tool_name not in self.tools_by_name:
-                            raise ToolError(
-                                message=f"Tool '{tool_name}' not found",
-                                tool_name=tool_name,
-                                tool_args=tool_args,
-                                severity=ErrorSeverity.ERROR
-                            )
-                            
-                        tool_result = await self.tools_by_name[tool_name].ainvoke(tool_args)
-                        outputs.append(
-                            ToolMessage(
-                                content=json.dumps(tool_result),
-                                name=tool_name,
-                                tool_call_id=tool_call["id"],
-                            )
-                        )
-                    except TestAgentError as e:
-                        # If it's already a TestAgentError, just log and add to outputs
-                        logger.error(f"Error executing tool {tool_name}: {e.message}")
-                        outputs.append(
-                            ToolMessage(
-                                content=json.dumps({"error": e.message, "details": e.details}),
-                                name=tool_name,
-                                tool_call_id=tool_call["id"],
-                            )
-                        )
-                    except Exception as e:
-                        # Convert other exceptions to ToolError
-                        error = ToolError(
-                            message=f"Error executing tool {tool_name}: {str(e)}",
-                            tool_name=tool_name,
-                            tool_args=tool_args,
-                            severity=ErrorSeverity.ERROR,
-                            original_exception=e
-                        )
-                        logger.error(f"Error executing tool {tool_name}: {str(e)}", exc_info=True)
-                        outputs.append(
-                            ToolMessage(
-                                content=json.dumps({"error": error.message, "details": error.details}),
-                                name=tool_name,
-                                tool_call_id=tool_call["id"],
-                            )
-                        )
+                tool_result = await self.tools_by_name[tool_name].ainvoke(tool_args)
+                outputs.append(
+                    ToolMessage(
+                        content=json.dumps(tool_result),
+                        name=tool_name,
+                        tool_call_id=tool_call["id"],
+                    )
+                )
+            except TestAgentError as e:
+                # If it's already a TestAgentError, just log and add to outputs
+                logger.error(f"Error executing tool {tool_name}: {e.message}")
+                outputs.append(
+                    ToolMessage(
+                        content=json.dumps({"error": e.message, "details": e.details}),
+                        name=tool_name,
+                        tool_call_id=tool_call["id"],
+                    )
+                )
+            except Exception as e:
+                # Convert other exceptions to ToolError
+                error = ToolError(
+                    message=f"Error executing tool {tool_name}: {str(e)}",
+                    tool_name=tool_name,
+                    tool_args=tool_args,
+                    severity=ErrorSeverity.ERROR,
+                    original_exception=e
+                )
+                logger.error(f"Error executing tool {tool_name}: {str(e)}", exc_info=True)
+                outputs.append(
+                    ToolMessage(
+                        content=json.dumps({"error": error.message, "details": error.details}),
+                        name=tool_name,
+                        tool_call_id=tool_call["id"],
+                    )
+                )
                 
             return {"messages": outputs}
-        except Exception as e:
-            logger.error(f"Unexpected error in tool_node: {str(e)}", exc_info=True)
-            raise TestAgentError(
-                message=f"Unexpected error in tool execution: {str(e)}",
-                severity=ErrorSeverity.ERROR,
-                original_exception=e
-            )
-
 
     async def stream(self, query: str, sessionId: str) -> AsyncIterable[dict[str, Any]]:
         """

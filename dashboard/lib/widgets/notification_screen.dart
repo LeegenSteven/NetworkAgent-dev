@@ -128,13 +128,16 @@ class _NotificationTableState extends State<NotificationTable> {
             child: Card(
               elevation: 2,
               margin: EdgeInsets.zero,
+              color: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
                 side: BorderSide(color: Colors.grey.shade300, width: 1),
               ),
               child: InkWell(
                 onTap: () => _toggleCardExpansion(notification.id),
-                borderRadius: BorderRadius.circular(12),
+                hoverColor: Colors.transparent,
+                splashColor: Colors.transparent,
+                highlightColor: Colors.transparent,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -262,12 +265,12 @@ class _NotificationTableState extends State<NotificationTable> {
                               h3: const TextStyle(
                                   fontSize: 14, fontWeight: FontWeight.bold),
                               code: const TextStyle(
-                                backgroundColor: Color(0xFFE1F5FE),
-                                color: Color(0xFF01579B),
+                                backgroundColor: Colors.white,
+                                color: Colors.black,
                                 fontSize: 13,
                               ),
                               codeblockDecoration: BoxDecoration(
-                                color: const Color(0xFFE1F5FE),
+                                color: Colors.white,
                                 borderRadius: BorderRadius.circular(4.0),
                               ),
                               blockquote: const TextStyle(
@@ -323,14 +326,6 @@ class _NotificationTableState extends State<NotificationTable> {
                                 // Remove the notification from the list
                                 appState.removeNotification(notification.id);
                                 
-                                // Show confirmation
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Notification approved'),
-                                    backgroundColor: Colors.green,
-                                    duration: Duration(seconds: 1),
-                                  ),
-                                );
                               },
                             ),
                             const SizedBox(width: 8),
@@ -359,14 +354,6 @@ class _NotificationTableState extends State<NotificationTable> {
                                 // Remove the notification from the list
                                 appState.removeNotification(notification.id);
                                 
-                                // Show confirmation
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Notification rejected'),
-                                    backgroundColor: Colors.red,
-                                    duration: Duration(seconds: 1),
-                                  ),
-                                );
                               },
                             ),
                           ],
@@ -473,7 +460,7 @@ ${_convertMapToMarkdownTable(inputData)}
     return Container(
       padding: const EdgeInsets.all(12.0),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F5F5),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(8.0),
       ),
       child: MarkdownBody(
@@ -485,8 +472,8 @@ ${_convertMapToMarkdownTable(inputData)}
               color: Colors.black87),
           p: const TextStyle(fontSize: 14, height: 1.5),
           code: const TextStyle(
-            backgroundColor: Color(0xFFE0E0E0),
-            color: Colors.black87,
+            backgroundColor: Colors.white,
+            color: Colors.black,
             fontSize: 13,
           ),
           tableBorder: TableBorder.all(

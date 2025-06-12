@@ -16,16 +16,13 @@ import logging
 import os
 import json
 import operator
-import asyncio
-import random
 from datetime import datetime
 from langgraph.checkpoint.memory import InMemorySaver
 from collections.abc import AsyncIterable
-from typing import TypedDict, Annotated, Tuple, List, Any, Dict, Optional
+from typing import TypedDict, Annotated, Tuple, List, Any
 from pydantic import BaseModel, Field
 from langchain_core.runnables.config import RunnableConfig
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain_mcp_adapters.tools import load_mcp_tools
 from langgraph.graph.message import add_messages
 from langchain_google_vertexai.chat_models import ChatVertexAI
 from langgraph.graph import StateGraph, END, START
@@ -119,102 +116,34 @@ class NetworkEngineerAgent:
         """
         Initialise the MCP tools with retry logic to ensure successful loading
         """
-        from asyncio import TimeoutError
-
         logger.info("loading tools")
         agent_mcp_tool_address = os.getenv("AGENT_MCP_TOOLS_ADDRESS", "http://127.0.0.1:8080")
-        
-        max_retries = int(os.getenv("TOOL_LOAD_MAX_RETRIES", "5"))
-        base_delay = float(os.getenv("TOOL_LOAD_BASE_DELAY", "1.0"))
-        max_delay = float(os.getenv("TOOL_LOAD_MAX_DELAY", "30.0"))
-        timeout = float(os.getenv("TOOL_LOAD_TIMEOUT", "10.0"))
-        
-        retry_count = 0
-        last_exception = None
-        
-        while retry_count <= max_retries:
-            try:
-                if retry_count > 0:
-                    logger.info(f"Retry attempt {retry_count}/{max_retries} for loading tools")
-                
-                # Initialize the MCP client
-                self.mcpClient = MultiServerMCPClient(
-                    {
-                        "networkagent": {
-                            "url": f"{agent_mcp_tool_address}/sse",
-                            "transport": "sse",
-                        }
-                    }
-                )
-                
-                # Set a timeout for the get_tools operation
-                try:
-                    self.tools = await asyncio.wait_for(self.mcpClient.get_tools(), timeout)
-                    self.tools_by_name = {tool.name: tool for tool in self.tools}
 
-                    # cache definitions - they dont change
-                    self.network_service_definitions = await self.tools_by_name["getServiceDefinitions"].ainvoke({})
-                    logger.info(self.network_service_definitions)
+        self.mcpClient = MultiServerMCPClient(
+            {
+                "networkagent": {
+                    "url": f"{agent_mcp_tool_address}/sse",
+                    "transport": "sse",
+                }
+            }
+        )
+        try:
+            self.tools = await self.mcpClient.get_tools()
+            self.tools_by_name = {tool.name: tool for tool in self.tools}
 
-                    logger.info(f"Successfully loaded {len(self.tools)} tools")
-                    logger.debug(f"Loaded tools: {self.tools_by_name}")
-                    return  # Success, exit the retry loop
-                except TimeoutError:
-                    logger.warning(f"Timeout while loading tools (attempt {retry_count+1}/{max_retries+1})")
-                    raise ToolError(
-                        message=f"Timeout while loading tools (attempt {retry_count+1}/{max_retries+1})",
-                        tool_name="load_tools",
-                        severity=ErrorSeverity.WARNING
-                    )
-                    
-            except EngineerAgentError as e:
-                # If it's already an EngineerAgentError, just track it and potentially retry
-                last_exception = e
-                retry_count += 1
-                
-                if retry_count <= max_retries:
-                    # Calculate backoff delay with jitter to avoid thundering herd problem
-                    delay = min(max_delay, base_delay * (2 ** (retry_count - 1)))
-                    jitter = random.uniform(0, 0.1 * delay)  # 10% jitter
-                    actual_delay = delay + jitter
-                    
-                    logger.warning(f"Failed to load tools: {e.message}. Retrying in {actual_delay:.2f} seconds...")
-                    await asyncio.sleep(actual_delay)
-                else:
-                    logger.error(f"Failed to load tools after {max_retries} retries: {e.message}")
-                    raise ToolError(
-                        message=f"Failed to load tools after {max_retries} retries",
-                        tool_name="load_tools",
-                        severity=ErrorSeverity.ERROR,
-                        original_exception=last_exception
-                    )
-            except Exception as e:
-                # Convert other exceptions to ToolError
-                last_exception = ToolError(
-                    message=f"Error loading tools: {str(e)}",
-                    tool_name="load_tools",
-                    severity=ErrorSeverity.WARNING,
-                    original_exception=e
-                )
-                retry_count += 1
-                
-                if retry_count <= max_retries:
-                    # Calculate backoff delay with jitter to avoid thundering herd problem
-                    delay = min(max_delay, base_delay * (2 ** (retry_count - 1)))
-                    jitter = random.uniform(0, 0.1 * delay)  # 10% jitter
-                    actual_delay = delay + jitter
-                    
-                    logger.warning(f"Failed to load tools: {str(e)}. Retrying in {actual_delay:.2f} seconds...")
-                    await asyncio.sleep(actual_delay)
-                else:
-                    logger.error(f"Failed to load tools after {max_retries} retries: {str(e)}")
-                    raise ToolError(
-                        message=f"Failed to load tools after {max_retries} retries",
-                        tool_name="load_tools",
-                        severity=ErrorSeverity.ERROR,
-                        original_exception=last_exception
-                    )
+            # cache definitions to speed things up - they dont change
+            self.network_service_definitions = await self.tools_by_name["getServiceDefinitions"].ainvoke({})
 
+            logger.info(f"Successfully loaded {len(self.tools)} tools")
+            logger.debug(f"Loaded tools: {self.tools_by_name}")
+
+        except Exception as e:
+            raise ToolError(
+                message=f"Error loading tools: {str(e)}",
+                tool_name="load_tools",
+                severity=ErrorSeverity.WARNING,
+                original_exception=e
+            )
 
     async def build_plan(self, state: NetworkEngineerAgentState, config):
         """
@@ -232,74 +161,58 @@ class NetworkEngineerAgent:
             logger.info("objective %s", state['objective'])
 
             # run discovery tools
+            network_design = ""
             network_services = ""
             network_service_instances = ""
             network_locations = ""
-            try:
-                async with self.mcpClient.session("networkagent") as session:
-                    self.tools = await load_mcp_tools(session)
-                    self.tools_by_name = {tool.name: tool for tool in self.tools}
                     
-                    try:
+            try:
 
-                        network_design = await self.tools_by_name["getNetworkDesign"].ainvoke({})
-                        network_services = await self.tools_by_name["getServiceDefinitions"].ainvoke({})
-                        network_service_instances = await self.tools_by_name["getServices"].ainvoke({})
-                        network_locations = await self.tools_by_name["getLocations"].ainvoke({})
+                network_design = await self.tools_by_name["getNetworkDesign"].ainvoke({})
+                # network_services = await self.tools_by_name["getServiceDefinitions"].ainvoke({})
+                network_service_instances = await self.tools_by_name["getServices"].ainvoke({})
+                network_locations = await self.tools_by_name["getLocations"].ainvoke({})
 
-                    except Exception as e:
-                        logger.warning(f"Error running tools: {str(e)}")
-                        raise ToolError(
-                            message="Failed to run tool",
-                            tool_name="getLocations",
-                            severity=ErrorSeverity.ERROR,
-                            original_exception=e
-                        )
-
-                    prompt = ChatPromptTemplate(
-                        [
-                            ("system", network_engineer_prompts.planner_prompt), 
-                            ("placeholder", "{messages}")
-                        ]
-                    ).partial(current_time=datetime.now())
-
-                    try:
-                        model = ChatVertexAI(
-                            model_name="gemini-2.0-flash-001",
-                            temperature=0,
-                            credentials=self.credentials,
-                            project=os.getenv("GOOGLE_PROJECT"),
-                            location=os.getenv("GOOGLE_REGION")
-                        )
-                        model = model.bind_tools(self.tools)
-                        model = model.with_structured_output(Plan)
-
-                        runnable = prompt | model
-                        steps = runnable.invoke({
-                            "messages": [HumanMessage(content=state['objective'])] + state['context'],
-                            "network_design": network_design,
-                            "network_service_instances": network_service_instances,
-                            "network_service_descriptors": network_services, 
-                            "network_locations": network_locations
-                        })
-                        return steps
-                    except Exception as e:
-                        logger.error(f"Error in LLM planning: {str(e)}")
-                        raise PlanningError(
-                            message="Failed to generate plan with LLM",
-                            severity=ErrorSeverity.ERROR,
-                            details={"objective": state.get('objective', 'Unknown')},
-                            original_exception=e
-                        )
-
-            except EngineerAgentError as e:
-                # Re-raise EngineerAgentError instances
-                logger.error(f"Error in build_plan: {e.message}")
-                raise
             except Exception as e:
-                logger.error(f"Unexpected error in build_plan: {str(e)}")
+                logger.warning(f"Error running tools: {str(e)}")
+                raise ToolError(
+                    message="Failed to run tool",
+                    tool_name="discover crds and locations tools",
+                    severity=ErrorSeverity.ERROR,
+                    original_exception=e
+                )
+
+            prompt = ChatPromptTemplate(
+                [
+                    ("system", network_engineer_prompts.planner_prompt), 
+                    ("placeholder", "{messages}")
+                ]
+            ).partial(current_time=datetime.now())
+
+            try:
+                model = ChatVertexAI(
+                    model_name="gemini-2.0-flash-001",
+                    temperature=0,
+                    credentials=self.credentials,
+                    project=os.getenv("GOOGLE_PROJECT"),
+                    location=os.getenv("GOOGLE_REGION")
+                )
+                model = model.bind_tools(self.tools)
+                model = model.with_structured_output(Plan)
+
+                runnable = prompt | model
+                steps = runnable.invoke({
+                    "messages": [HumanMessage(content=state['objective'])] + state['context'],
+                    "network_design": network_design,
+                    "network_service_instances": network_service_instances,
+                    "network_service_descriptors": self.network_service_definitions, 
+                    "network_locations": network_locations
+                })
+                return steps
+            except Exception as e:
+                logger.error(f"Error in LLM planning: {str(e)}")
                 raise PlanningError(
-                    message=f"Unexpected error in planning: {str(e)}",
+                    message="Failed to generate plan with LLM",
                     severity=ErrorSeverity.ERROR,
                     details={"objective": state.get('objective', 'Unknown')},
                     original_exception=e
@@ -384,69 +297,63 @@ class NetworkEngineerAgent:
         logger.info("executing step")
 
         try:
-            async with self.mcpClient.session("networkagent") as session:
-                self.tools = await load_mcp_tools(session)
-                self.tools_by_name = {tool.name: tool for tool in self.tools}
 
-                if 'steps' not in state:
-                    logger.info("no planned steps found")
-                    raise ExecutionError(
-                        message="No planned steps found for execution",
-                        severity=ErrorSeverity.ERROR
-                    )
+            if 'steps' not in state:
+                logger.info("no planned steps found")
+                raise ExecutionError(
+                    message="No planned steps found for execution",
+                    severity=ErrorSeverity.ERROR
+                )
 
-                steps = state["steps"]
-                past_steps = state['past_steps']
+            steps = state["steps"]
+            past_steps = state['past_steps']
 
-                # Determine which steps are not complete
-                completed_step_names = [step_tuple[0] for step_tuple in past_steps]
-                incomplete_steps = [step for step in steps if step not in completed_step_names]
-                
-                # If there are no incomplete steps, return None
-                if not incomplete_steps:
-                    logger.info("All steps have been completed")
-                    return {"context": AIMessage(content="All steps have been completed")}
-                
-                # Get the next step to work on
-                this_step = incomplete_steps[0]
-                logger.info(f"Next step to work on: {this_step}")
+            # Determine which steps are not complete
+            completed_step_names = [step_tuple[0] for step_tuple in past_steps]
+            incomplete_steps = [step for step in steps if step not in completed_step_names]
+            
+            # If there are no incomplete steps, return None
+            if not incomplete_steps:
+                logger.info("All steps have been completed")
+                return {"context": AIMessage(content="All steps have been completed")}
+            
+            # Get the next step to work on
+            this_step = incomplete_steps[0]
+            logger.info(f"Next step to work on: {this_step}")
 
-                try:
-                    prompt = ChatPromptTemplate(
-                        [
-                            ("system", network_engineer_prompts.execute_step_prompt), 
-                            ("placeholder", "{messages}")
-                        ]
-                    )
-                    model = ChatVertexAI(
-                        model_name="gemini-2.0-flash-001",
-                        temperature=0,
-                        credentials=self.credentials,
-                        project=os.getenv("GOOGLE_PROJECT"),
-                        location=os.getenv("GOOGLE_REGION")
-                    )
-                    model = model.bind_tools(self.tools)
+            try:
+                prompt = ChatPromptTemplate(
+                    [
+                        ("system", network_engineer_prompts.execute_step_prompt), 
+                        ("placeholder", "{messages}")
+                    ]
+                )
+                model = ChatVertexAI(
+                    model_name="gemini-2.0-flash-001",
+                    temperature=0,
+                    credentials=self.credentials,
+                    project=os.getenv("GOOGLE_PROJECT"),
+                    location=os.getenv("GOOGLE_REGION")
+                )
+                model = model.bind_tools(self.tools)
 
-                    runnable = prompt | model
-                    response = runnable.invoke({
-                        "messages": [HumanMessage(content=this_step)],
-                        "network_service_descriptors": self.network_service_definitions
-                    })
+                runnable = prompt | model
+                response = runnable.invoke({
+                    "messages": [HumanMessage(content=this_step)],
+                    "network_service_descriptors": self.network_service_definitions
+                })
 
-                    return {"context": response}
-                except Exception as e:
-                    logger.error(f"Error executing step with LLM: {str(e)}")
-                    raise ExecutionError(
-                        message=f"Failed to execute step with LLM: {str(e)}",
-                        severity=ErrorSeverity.ERROR,
-                        details={"step": this_step},
-                        original_exception=e
-                    )
+                return {"context": response}
 
-        except EngineerAgentError as e:
-            # Re-raise EngineerAgentError instances
-            logger.error(f"Error in execute_step: {e.message}")
-            raise
+            except Exception as e:
+                logger.error(f"Error executing step with LLM: {str(e)}")
+                raise ExecutionError(
+                    message=f"Failed to execute step with LLM: {str(e)}",
+                    severity=ErrorSeverity.ERROR,
+                    details={"step": this_step},
+                    original_exception=e
+                )
+
         except Exception as e:
             logger.error(f"Unexpected error in execute_step: {str(e)}")
             raise ExecutionError(
@@ -489,76 +396,55 @@ class NetworkEngineerAgent:
         tool_result = {}
         
         try:
-            async with self.mcpClient.session("networkagent") as session:
-                self.tools = await load_mcp_tools(session)
-                self.tools_by_name = {tool.name: tool for tool in self.tools}
-
-                for tool_call in state["context"][-1].tool_calls:
-                    tool_name = tool_call["name"]
-                    tool_args = tool_call["args"]
-                    
-                    logger.info(f"calling tool {tool_name}")
-                    logger.info(json.dumps(tool_args, indent=3))
-                    
-                    try:
-                        if tool_name not in self.tools_by_name:
-                            raise ToolError(
-                                message=f"Tool '{tool_name}' not found",
-                                tool_name=tool_name,
-                                tool_args=tool_args,
-                                severity=ErrorSeverity.ERROR
-                            )
-                        
-                        tool_result = await self.tools_by_name[tool_name].ainvoke(tool_args)
-                        outputs.append(
-                            ToolMessage(
-                                content=json.dumps(tool_result),
-                                name=tool_name,
-                                tool_call_id=tool_call["id"],
-                            )
-                        )
-                    except EngineerAgentError as e:
-                        # If it's already an EngineerAgentError, just log and re-raise
-                        logger.error(f"Error executing tool {tool_name}: {e.message}")
-                        outputs.append(
-                            ToolMessage(
-                                content=json.dumps({"error": e.message, "details": e.details}),
-                                name=tool_name,
-                                tool_call_id=tool_call["id"],
-                            )
-                        )
-                        raise
-                    except Exception as e:
-                        # Convert other exceptions to ToolError
-                        error = ToolError(
-                            message=f"Error executing tool {tool_name}: {str(e)}",
+            for tool_call in state["context"][-1].tool_calls:
+                tool_name = tool_call["name"]
+                tool_args = tool_call["args"]
+                
+                logger.info(f"calling tool {tool_name}")
+                logger.info(json.dumps(tool_args, indent=3))
+                
+                try:
+                    if tool_name not in self.tools_by_name:
+                        raise ToolError(
+                            message=f"Tool '{tool_name}' not found",
                             tool_name=tool_name,
                             tool_args=tool_args,
-                            severity=ErrorSeverity.ERROR,
-                            original_exception=e
+                            severity=ErrorSeverity.ERROR
                         )
-                        logger.error(f"Error executing tool {tool_name}: {str(e)}", exc_info=True)
-                        outputs.append(
-                            ToolMessage(
-                                content=json.dumps({"error": error.message, "details": error.details}),
-                                name=tool_name,
-                                tool_call_id=tool_call["id"],
-                            )
+                    
+                    tool_result = await self.tools_by_name[tool_name].ainvoke(tool_args)
+                    outputs.append(
+                        ToolMessage(
+                            content=json.dumps(tool_result),
+                            name=tool_name,
+                            tool_call_id=tool_call["id"],
                         )
-                        raise error
-        except EngineerAgentError as e:
-            # Re-raise EngineerAgentError instances, but still try to update the state
-            logger.error(f"Error in tool_node: {e.message}")
-            # We'll still try to update the state with what we have so far
+                    )
+                except Exception as e:
+                    # Convert other exceptions to ToolError
+                    error = ToolError(
+                        message=f"Error executing tool {tool_name}: {str(e)}",
+                        tool_name=tool_name,
+                        tool_args=tool_args,
+                        severity=ErrorSeverity.ERROR,
+                        original_exception=e
+                    )
+                    logger.error(f"Error executing tool {tool_name}: {str(e)}", exc_info=True)
+                    outputs.append(
+                        ToolMessage(
+                            content=json.dumps({"error": error.message, "details": error.details}),
+                            name=tool_name,
+                            tool_call_id=tool_call["id"],
+                        )
+                    )
+                    raise error
         except Exception as e:
-            # Convert unexpected exceptions to ExecutionError
             logger.error(f"Unexpected error in tool_node: {str(e)}")
             error = ExecutionError(
                 message=f"Unexpected error in tool execution: {str(e)}",
                 severity=ErrorSeverity.ERROR,
                 original_exception=e
             )
-            # We'll still try to update the state with what we have so far
             
         # Determine which steps are not complete
         steps = state.get("steps", [])
@@ -618,29 +504,39 @@ class NetworkEngineerAgent:
         """
         logger.info("summarise plan execution")
 
-        prompt = ChatPromptTemplate(
-            [
-                ("system", network_engineer_prompts.summary_prompt), 
-                ("placeholder", "{messages}")
-            ]
-        )
-        model = ChatVertexAI(model_name="gemini-2.0-flash-001",temperature=0,credentials=self.credentials,project=os.getenv("GOOGLE_PROJECT"),location=os.getenv("GOOGLE_REGION"))
-        runnable = prompt | model
+        try:
+            prompt = ChatPromptTemplate(
+                [
+                    ("system", network_engineer_prompts.summary_prompt), 
+                    ("placeholder", "{messages}")
+                ]
+            )
+            model = ChatVertexAI(model_name="gemini-2.0-flash-001",temperature=0,credentials=self.credentials,project=os.getenv("GOOGLE_PROJECT"),location=os.getenv("GOOGLE_REGION"))
+            runnable = prompt | model
 
-        # if no objective was given for some reason, there will be no steps
-        steps = None
-        if 'steps' in state:
-            steps = state['steps']
+            # if no objective was given for some reason, there will be no steps
+            steps = None
+            if 'steps' in state:
+                steps = state['steps']
 
-        # past_steps may be None if the user said no
-        past_steps = None
-        if 'past_steps' in state:
-            past_steps = state['past_steps']
+            # past_steps may be None if the user said no
+            past_steps = None
+            if 'past_steps' in state:
+                past_steps = state['past_steps']
 
-        response = await runnable.ainvoke({"messages": [HumanMessage(content="keep the response concise")], 
-                                  "steps": steps, 
-                                  "past_steps": past_steps})
-        return {'response': response.content}
+            response = await runnable.ainvoke({"messages": [HumanMessage(content="keep the response concise")], 
+                                      "steps": steps, 
+                                      "past_steps": past_steps})
+
+
+            return {'response': response.content}
+        except Exception as e:
+            logger.error(f"Error in response summary: {str(e)}")
+            raise ExecutionError(
+                message="Failed to generate response summary",
+                severity=ErrorSeverity.ERROR,
+                original_exception=e
+            )
 
     async def format_plan_confirmation_interrupt(self, confirmation, steps):
         """

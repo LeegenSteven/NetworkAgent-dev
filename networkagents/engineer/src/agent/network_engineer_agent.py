@@ -321,6 +321,13 @@ class NetworkEngineerAgent:
             this_step = incomplete_steps[0]
             logger.info(f"Next step to work on: {this_step}")
 
+            # check if step is white space only
+            if this_step.isspace():
+                raise ExecutionError(
+                    message="Step only contains white space",
+                    severity=ErrorSeverity.ERROR
+                )
+
             try:
                 prompt = ChatPromptTemplate(
                     [

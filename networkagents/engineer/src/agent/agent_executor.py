@@ -77,13 +77,13 @@ class EngineerAgentExecutor(AgentExecutor):
         """
         Handler for 'message/stream' requests.
         """
-        logger.info("on execute")
+        logger.info("A2A EXECUTE")
+        logger.info(context)
 
         config = context.configuration
         is_streaming = False            
         if config and hasattr(config, 'streaming'):
             is_streaming = bool(config.streaming)
-        logger.info(f"is streaming = {is_streaming}")
         
         try:
             agent = await NetworkEngineerAgent().get_instance()
@@ -108,6 +108,11 @@ class EngineerAgentExecutor(AgentExecutor):
             elif root_message.kind == 'data':
                 background_task=True
                 query_data = root_message.data
+                if 'objective' not in query_data or isinstance(query_data['objective'],str)==False: 
+                    logger.error("no objective or non-string objective found")
+                    # TODO cancel the task
+                    return
+
                 query_text = query_data['objective']
 
             if not task:

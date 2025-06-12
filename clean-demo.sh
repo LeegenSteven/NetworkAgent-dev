@@ -14,6 +14,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Delete all running traffic test
+# Get all PTP object names in the network namespace
+UETEST_NAMES=$(kubectl get uetest -n network -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+echo "Found UE Test objects:"
+echo "$UETEST_NAMES"
+if [ -n "$UETEST_NAMES" ]; then
+  for uetest_name in $UETEST_NAMES; do
+    kubectl delete uetest "$uetest_name" -n network &
+    job_id=$!
+    timeout 1m sh -c "while kill -0 $job_id 2>/dev/null; do sleep 1; done"
+    if [ $? -eq 124 ]; then
+      kubectl patch uetest $uetest_name -n network --patch '{"metadata":{"finalizers":[]}}'  --type=merge
+    fi
+    if [ $? -eq 0 ]; then
+      echo "Successfully deleted UE test: $uetest_name"
+    else
+      echo "Failed to delete UE test: $uetest_name"
+    fi
+  done
+fi
+
 # Get all PTP object names in the network namespace
 PTP_NAMES=$(kubectl get ptp -n network -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
 echo "Found PTP objects:"

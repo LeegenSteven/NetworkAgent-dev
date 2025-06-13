@@ -330,7 +330,7 @@ async def create_nat(namespace, network_name, region):
 ########################################################################
 # Create ComputeInstance
 ########################################################################
-async def create_compute(namespace, parent_name, vm_name, external_ip, interfaces, project, region, zone, vpn=False, monitor=True,release="ubuntu-2204-lts",graph=True):
+async def create_compute(namespace, parent_name, vm_name, external_ip, interfaces, project, region, zone, vpn=False, monitor=True,family="ubuntu-os-cloud", release="ubuntu-2204-lts",graph=True):
   logger.debug(f"Create compute vm {vm_name} in ns {namespace}")
   compute_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeInstance")
 
@@ -511,7 +511,7 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
           "size": 200,
           "type": "pd-ssd",
           "sourceImageRef": {
-            "external": f"ubuntu-os-pro-cloud/{release}"
+            "external": f"{family}/{release}"
           },
         },
       },

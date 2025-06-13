@@ -44,6 +44,7 @@ async def userplanefunction(meta, spec, status, namespace, name, logger, **kwarg
                         os.getenv("GOOGLE_PROJECT"),
                         os.getenv("GOOGLE_REGION"),
                         os.getenv("GOOGLE_ZONE"), 
+                        family="ubuntu-os-pro-cloud",
                         release="ubuntu-minimal-pro-2004-lts",
                         monitor=monitor, # set to false so this VM is not scraped by prometheus
                         graph=graph)

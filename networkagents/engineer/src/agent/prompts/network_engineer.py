@@ -63,9 +63,10 @@ and locations already deployed and add missing network services and locations to
 there are some network service deployments rules prohibiting this, if so then you should create new network locations. 
 
 Your planned tasks should include enough detail to satisfy tools input schema for createService/deleteService or createLocation/deleteLocation, e.g. 
-- Include the name and namespaces of the network service or connectivity service to be created
+- Include the name of the network service or connectivity service to be created or deleted
 - Provide detailed configuration required by the network service or connectivity service kubernetes spec, as per the CRDs above.
-- All values required to create a network service or connectivity service kubernetes spec must be provided.
+- All values required to create or delete a network service or connectivity service kubernetes spec must be provided.
+- There is no need to specify a namespace as all resources live in a default namespace called "network"
 
 Do not add any superfluous steps or steps that do not result in the execution of tools that create network service or network locations.  
 Do not add steps that explain your reasoning, i.e. steps that only describe rationale for what you are doing. All steps should result in one or 
@@ -77,7 +78,7 @@ exist. If they do not exist, then exclude those from the planned steps. Also che
 break any of the rules in the network service CRDs or 
 
 Do not create network locations or network services that already exist. And do not create unnecessary network service and locations. Do create network locations if they
-are needed to achieve the user objective. 
+are needed to achieve the user objective. When asked to delete network services or locations, simply delete them without creating any additional resources.
 
 Format each planned step as a markdown bullet. 
 
@@ -131,8 +132,8 @@ execute_step_prompt="""
     You can use your tools to 
     - create new network services
     - create new network locations
-    - delete existing network service
-    - delete existing network location
+    - delete existing network services
+    - delete existing network locations
 
     The lifecycle of Network Services is managed by creating and deleting custom resources described by the kubernetes network service CRDs below.
 

@@ -83,9 +83,15 @@ class OperationsAgent:
             }
         )
         try:
-
+            # names of the tools this agent can use
+            allowed_tools_names=["getNetworkDesign","getLocations","getServiceDefinitions","getServices"]
+            # load all tools
             self.tools = await self.mcpClient.get_tools()
-            self.tools_by_name = {tool.name: tool for tool in self.tools}
+            self.allowed_tools=[]
+            for t in self.tools:
+                if t.name in allowed_tools_names:
+                    self.allowed_tools.append(t)
+            self.tools_by_name = {tool.name: tool for tool in self.allowed_tools}
             logger.info(f"Successfully loaded {len(self.tools)} tools")
             logger.debug(f"Loaded tools: {self.tools_by_name}")
                 
@@ -118,7 +124,7 @@ class OperationsAgent:
                 project=os.getenv("GOOGLE_PROJECT"),
                 location=os.getenv("GOOGLE_REGION")
             )
-            model = model.bind_tools(self.tools)
+            model = model.bind_tools(self.allowed_tools)
 
             runnable = prompt | model
             response = await runnable.ainvoke({"messages": state['messages']})

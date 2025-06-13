@@ -595,13 +595,13 @@ Delete()
         gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
     fi
 
-    gcloud artifacts files delete networkoperator --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
-    gcloud artifacts files delete networktools --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
-    gcloud artifacts files delete engineeragent --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
-    gcloud artifacts files delete operationsagent --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
-    gcloud artifacts files delete networksupervisor --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
-    gcloud artifacts files delete testagent --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
-    gcloud artifacts files delete dashboard --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+    gcloud artifacts packages delete networkoperator --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+    gcloud artifacts packages delete networktools --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+    gcloud artifacts packages delete engineeragent --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+    gcloud artifacts packages delete operationsagent --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+    gcloud artifacts packages delete networksupervisor --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+    gcloud artifacts packages delete testagent --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+    gcloud artifacts packages delete dashboard --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
 
     echo "#######################################"
     echo "Deleting environment manifests and keys"

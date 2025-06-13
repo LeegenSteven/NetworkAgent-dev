@@ -101,13 +101,13 @@ class NetworkNode {
     
     switch (status.toLowerCase()) {
       case 'error':
-      case 'updatefailed':
         return Colors.red;
       case 'initializing':
       case 'starting':
       case 'starting up':
         return Colors.brown;
       case 'running':
+      case 'updatefailed':
       case 'uptodate':
       case 'updating':
         return Colors.green; // Green for UpToDate nodes

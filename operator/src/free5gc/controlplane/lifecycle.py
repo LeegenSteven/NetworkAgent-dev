@@ -50,7 +50,7 @@ async def controlplane(spec, status, namespace, name, logger, **kwargs):
                         os.getenv("GOOGLE_PROJECT"),
                         os.getenv("GOOGLE_REGION"),
                         os.getenv("GOOGLE_ZONE"), 
-                        release="ubuntu-2004-lts",
+                        release="ubuntu-minimal-pro-2004-lts",
                         graph=True,
                         monitor=True) 
 

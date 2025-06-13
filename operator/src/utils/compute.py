@@ -511,7 +511,7 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
           "size": 200,
           "type": "pd-ssd",
           "sourceImageRef": {
-            "external": f"ubuntu-os-cloud/{release}"
+            "external": f"ubuntu-os-pro-cloud/{release}"
           },
         },
       },

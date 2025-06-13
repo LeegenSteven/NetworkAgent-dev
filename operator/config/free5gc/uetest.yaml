@@ -41,14 +41,14 @@ spec:
               type: object
               properties:
                 ueransim: 
-                  description: the name and namespace of the UERanSim network service virtual machine to log into and run traffic
+                  description: the name of the UERanSim network service virtual machine to log into and run traffic
                   type: object
                   properties:
                     name:
                       description: name of the UERanSim instance
                       type: string
                 datanetwork: 
-                  description: the name and namespace of the DataNetwork network service to send traffic to
+                  description: the name of the DataNetwork network service to send traffic to
                   type: object
                   properties:
                     name:

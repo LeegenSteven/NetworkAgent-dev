@@ -401,7 +401,7 @@ Start()
     gcloud container clusters create networkautomation \
         --no-enable-autoupgrade \
         --release-channel=None \
-        --cluster-version="1.30.11-gke.1217000" \
+        --cluster-version="1.30.12-gke.1151000" \
         --addons ConfigConnector \
         --enable-ip-alias \
         --service-account $GOOGLE_SERVICE_ACCOUNT\
@@ -714,7 +714,16 @@ Operator()
     fi
 
     cd operator
-    gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+    IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/operator:latest"
+    if gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1; then
+        read -p "Operator image already exists. Rebuild? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+        fi
+    else
+        gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+    fi
     kubectl delete -f deployment.yaml
     kubectl apply -f deployment.yaml
     echo "Waiting for deployment to be ready..."
@@ -839,7 +848,16 @@ Networkagent()
     # deploy the mcp tools
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"networktools"* ]]; then
         cd tools
-        gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+        IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networktools:latest"
+        if gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1; then
+            read -p "Networktools image already exists. Rebuild? (y/n) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+            fi
+        else
+            gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+        fi
         gcloud run deploy networktools \
         --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networktools:latest \
         --region $GOOGLE_REGION \
@@ -861,7 +879,16 @@ Networkagent()
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"supervisor"* ]]; then
         TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
         cd networkagents/supervisor
-        gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+        IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networksupervisor:latest"
+        if gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1; then
+            read -p "Supervisor image already exists. Rebuild? (y/n) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+            fi
+        else
+            gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+        fi
         gcloud run deploy network-agent-supervisor \
         --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networksupervisor:latest \
         --region $GOOGLE_REGION \
@@ -898,7 +925,16 @@ Networkagent()
         TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
         SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
         cd networkagents/engineer
-        gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+        IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/engineeragent:latest"
+        if gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1; then
+            read -p "Engineer image already exists. Rebuild? (y/n) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+            fi
+        else
+            gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+        fi
         gcloud run deploy engineeragent \
         --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/engineeragent:latest \
         --region $GOOGLE_REGION \
@@ -919,7 +955,16 @@ Networkagent()
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"test"* ]]; then 
         TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
         cd networkagents/tester
-        gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+        IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/testagent:latest"
+        if gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1; then
+            read -p "Tester image already exists. Rebuild? (y/n) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+            fi
+        else
+            gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+        fi
         gcloud run deploy testagent \
         --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/testagent:latest \
         --region $GOOGLE_REGION \
@@ -939,7 +984,16 @@ Networkagent()
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"operations"* ]]; then
         TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
         cd networkagents/operations
-        gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+        IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/operationsagent:latest"
+        if gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1; then
+            read -p "Operations image already exists. Rebuild? (y/n) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+            fi
+        else
+            gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+        fi
         gcloud run deploy operationsagent \
         --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/operationsagent:latest \
         --region $GOOGLE_REGION \
@@ -972,7 +1026,16 @@ Networkagent()
                 --dart-define=GITEA_URL=https://${GITEA_HOST}:3000 \
                 --dart-define=NETWORKAGENT_URL=${SUPERVISOR_URL}
 
-        gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+        IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/dashboard:latest"
+        if gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1; then
+            read -p "Dashboard image already exists. Rebuild? (y/n) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+            fi
+        else
+            gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+        fi
 
         gcloud run deploy network-dashboard --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/dashboard:latest \
         --region $GOOGLE_REGION \

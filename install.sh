@@ -595,6 +595,14 @@ Delete()
         gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
     fi
 
+    gcloud artifacts files delete networkoperator --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+    gcloud artifacts files delete networktools --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+    gcloud artifacts files delete engineeragent --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+    gcloud artifacts files delete operationsagent --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+    gcloud artifacts files delete networksupervisor --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+    gcloud artifacts files delete testagent --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+    gcloud artifacts files delete dashboard --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+
     echo "#######################################"
     echo "Deleting environment manifests and keys"
     echo "#######################################"
@@ -714,7 +722,7 @@ Operator()
     fi
 
     cd operator
-    IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/operator:latest"
+    IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networkoperator:latest"
     if gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1; then
         read -p "Operator image already exists. Rebuild? (y/n) " -n 1 -r
         echo

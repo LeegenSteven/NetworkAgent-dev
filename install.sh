@@ -594,41 +594,39 @@ Delete()
         (gcloud artifacts repositories describe $GOOGLE_REPO --location=$GOOGLE_REGION > /dev/null 2>&1) && \
         gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
     fi
-    gcloud artifacts packages delete networkoperator --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
-    gcloud artifacts packages delete networktools --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
-    gcloud artifacts packages delete engineeragent --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
-    gcloud artifacts packages delete operationsagent --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
-    gcloud artifacts packages delete networksupervisor --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
-    gcloud artifacts packages delete testagent --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
-    gcloud artifacts packages delete dashboard --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+
+    for pkg in networkoperator networktools engineeragent operationsagent testagent dashboard; do
+        (gcloud artifacts packages describe $pkg --repository=$GOOGLE_REPO --location=$GOOGLE_REGION > /dev/null 2>&1) && \
+        gcloud artifacts delete $pkg --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+    done
 
     echo "#######################################"
     echo "Deleting environment manifests and keys"
     echo "#######################################"
-    rm operator/deployment.yaml
-    rm operator/cloudbuild.yaml
-    rm operator/src/google-compute*
-    rm operator/src/networkagent.json
-
-    rm tools/src/networkagent.json
-    rm tools/cloudbuild.yaml
-    rm networkagents/supervisor/src/networkagent.json
-    rm networkagents/supervisor/cloudbuild.yaml
-    rm networkagents/engineer/src/networkagent.json
-    rm networkagents/engineer/cloudbuild.yaml
-    rm networkagents/operations/src/networkagent.json
-    rm networkagents/operations/cloudbuild.yaml
-    rm networkagents/tester/src/networkagent.json
-    rm networkagents/tester/cloudbuild.yaml
-    rm dashboard/cloudbuild.yaml
-
-    rm -f environment/bigquery.yaml
-    rm -f environment/spanner.yaml
-    rm -f environment/configconnector.yaml
-    rm -f environment/networks.yaml
-
-    rm -f networkagent.json
-    rm -f google-compute*
+    rm -f operator/deployment.yaml \
+        operator/cloudbuild.yaml \
+        operator/src/google-compute* \
+        operator/src/networkagent.json \
+        \
+        tools/src/networkagent.json \
+        tools/cloudbuild.yaml \
+        networkagents/supervisor/src/networkagent.json \
+        networkagents/supervisor/cloudbuild.yaml \
+        networkagents/engineer/src/networkagent.json \
+        networkagents/engineer/cloudbuild.yaml \
+        networkagents/operations/src/networkagent.json \
+        networkagents/operations/cloudbuild.yaml \
+        networkagents/tester/src/networkagent.json \
+        networkagents/tester/cloudbuild.yaml \
+        dashboard/cloudbuild.yaml \
+        \
+        environment/bigquery.yaml \
+        environment/spanner.yaml \
+        environment/configconnector.yaml \
+        environment/networks.yaml \
+        \
+        networkagent.json \
+        google-compute*
 
 }
 

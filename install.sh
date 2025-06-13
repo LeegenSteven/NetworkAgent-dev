@@ -594,7 +594,6 @@ Delete()
         (gcloud artifacts repositories describe $GOOGLE_REPO --location=$GOOGLE_REGION > /dev/null 2>&1) && \
         gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
     fi
-
     gcloud artifacts packages delete networkoperator --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
     gcloud artifacts packages delete networktools --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
     gcloud artifacts packages delete engineeragent --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet

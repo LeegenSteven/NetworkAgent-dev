@@ -8,12 +8,10 @@ import 'node_details_dialog.dart';
 
 class NetworkTopologyWidget extends StatefulWidget {
   final NetworkTopology topology;
-  final io.Socket socket;
 
   const NetworkTopologyWidget({
     super.key,
     required this.topology,
-    required this.socket,
   });
 
   static const defaultView = 'network';
@@ -484,7 +482,6 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
       context: context,
       builder: (BuildContext context) => NodeDetailsDialog(
         node: node,
-        socket: widget.socket,
       ),
     );
   }

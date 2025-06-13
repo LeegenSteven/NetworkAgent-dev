@@ -272,12 +272,10 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                   child: _showPerformanceView
                     ? NetworkPerformanceWidget(
                         metrics: appState.metrics,
-                        socket: appState.socket!,
                       )
                     : appState.hasReceivedTopology 
                       ? NetworkTopologyWidget(
-                          topology: appState.topology, 
-                          socket: appState.socket!,
+                          topology: appState.topology,
                         )
                       : Center(
                             child: Column(

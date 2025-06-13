@@ -18,7 +18,7 @@ import aiohttp_cors
 from aiohttp import web
 from agent.host_agent import HostAgent
 from endpoints.socketendpoint import SocketEndpoint
-
+from tools.topology import fetch_db_node
 logger = logging.getLogger(__name__)
 
 class RestEndpoint:
@@ -52,6 +52,65 @@ class RestEndpoint:
 
         pushNotificationRoute = self.app.router.add_post("/pushnotification", self.pushNotification)
         self.cors.add(pushNotificationRoute, corsConfig)
+
+        getNodeDetailsRoute = self.app.router.add_get("/node/{node_id}", self.getNodeDetails)
+        self.cors.add(getNodeDetailsRoute, corsConfig)
+
+    def _parse_node_details_to_markdown(self, node_details):
+        markdown = f"# {node_details['name']} ({node_details['kind']})\n\n"
+        
+        spec = node_details.get('spec', {})
+        if isinstance(spec, dict):
+            for key, value in spec.items():
+                if isinstance(value, dict):
+                    markdown += f"- **{key.replace('_', ' ').title()}**:\n"
+                    for sub_key, sub_value in value.items():
+                        markdown += f"  - **{sub_key.replace('_', ' ').title()}**: {sub_value}\n"
+                elif isinstance(value, list):
+                    markdown += f"- **{key.replace('_', ' ').title()}**:\n"
+                    for item in value:
+                        markdown += f"  - {item}\n"
+                else:
+                    markdown += f"- **{key.replace('_', ' ').title()}**: {value}\n"
+        else:
+            markdown += f"- {spec}\n"
+
+        return markdown
+
+    #################################################################
+    # Get node details
+    #################################################################
+    async def getNodeDetails(self, request):
+        logger.info("REST endpoint: get node details")
+        try:
+            node_id = request.match_info.get('node_id')
+            if not node_id:
+                return web.json_response({"error": "No node ID provided"}), 400
+
+            node_data = fetch_db_node(node_id)
+            if node_data:
+                id, kind, name, display_name, status, properties = node_data
+                
+                try:
+                    properties_dict = json.loads(properties)
+                except json.JSONDecodeError:
+                    properties_dict = {}
+                
+                node_details = {
+                    'kind': kind,
+                    'name': name,
+                    'status': status,
+                    'spec': properties_dict
+                }
+
+                markdown_summary = self._parse_node_details_to_markdown(node_details)
+                return web.json_response({"summary": markdown_summary})
+            else:
+                logger.error(f"Node with ID {node_id} not found")
+                return web.json_response({"error": f"Node with ID {node_id} not found"}), 404
+        except Exception as e:
+            logger.error(f"Error fetching node details: {e}")
+            return web.json_response({"error": f"Error fetching node details: {str(e)}"}), 500
 
     #################################################################
     # Add a remote agent

@@ -180,4 +180,30 @@ class APIService{
     print('Returning ${agents.length} agents after deletion');
     return agents;
   }
+
+  Future<String> getNodeDetails(String nodeId) async {
+    try {
+      var node_url = Uri.parse('${config.EnvironmentConfig.agentUrl}/node/$nodeId');
+      print('Fetching node details from: $node_url');
+      
+      final http.Response response = await http.get(node_url, headers: getRequestHeaders);
+      
+      if (response.statusCode == 200) {
+        final dynamic decodedData = jsonDecode(response.body);
+        if (decodedData is Map<String, dynamic> && decodedData.containsKey('summary')) {
+          return decodedData['summary'];
+        } else if (decodedData is String) {
+          return decodedData;
+        }
+        else {
+          throw Exception('Failed to parse node details summary');
+        }
+      } else {
+        throw Exception('Failed to load node details');
+      }
+    } catch (e) {
+      print('Error fetching node details: $e');
+      rethrow;
+    }
+  }
 }

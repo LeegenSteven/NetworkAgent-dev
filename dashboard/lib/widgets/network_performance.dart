@@ -8,12 +8,10 @@ import 'node_performance.dart';
 
 class NetworkPerformanceWidget extends StatefulWidget {
   final Metrics metrics;
-  final io.Socket socket;
 
   const NetworkPerformanceWidget({
     super.key,
     required this.metrics,
-    required this.socket,
   });
 
   @override
@@ -274,7 +272,6 @@ class _NetworkPerformanceWidgetState extends State<NetworkPerformanceWidget> {
                     metrics: nodeMetrics,
                     showCpuMetrics: _showCpuMetrics,
                     showNetworkMetrics: _showNetworkMetrics,
-                    socket: widget.socket,
                   );
                 },
               );

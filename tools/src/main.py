@@ -14,6 +14,7 @@
 
 import logging
 import os
+import time
 import utils.globals as globals
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
@@ -30,7 +31,9 @@ if __name__ == "__main__":
     logger.info("starting network agent tools server...")
 
     # run the mcp server
-    try:
-        globals.networkagent_mcp.run(transport="sse")
-    except Exception as e:
-        logger.error(f"An unexpected error occurred: {e}", exc_info=True)
+    while True:
+        try:
+            globals.networkagent_mcp.run(transport="sse")
+        except Exception as e:
+            logger.error(f"An unexpected error occurred: {e}", exc_info=True)
+            time.sleep(5)

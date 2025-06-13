@@ -10,7 +10,6 @@ class NodePerformanceWidget extends StatelessWidget {
   final List<MetricEntry> metrics;
   final bool showCpuMetrics;
   final bool showNetworkMetrics;
-  final socket;
 
   const NodePerformanceWidget({
     super.key,
@@ -18,7 +17,6 @@ class NodePerformanceWidget extends StatelessWidget {
     required this.metrics,
     required this.showCpuMetrics,
     required this.showNetworkMetrics,
-    required this.socket,
   });
 
   @override
@@ -296,7 +294,6 @@ class NodePerformanceWidget extends StatelessWidget {
       context: context,
       builder: (BuildContext context) => NodeDetailsDialog(
         node: node,
-        socket: socket,
       ),
     );
   }

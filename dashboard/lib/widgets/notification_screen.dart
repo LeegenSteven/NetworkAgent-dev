@@ -310,22 +310,11 @@ class _NotificationTableState extends State<NotificationTable> {
                               ),
                               label: const Text('Approve'),
                               onPressed: () {
-                                // Get app state
-                                final appState = Provider.of<Appstate>(context, listen: false);
-                                
-                                // Send notification feedback to supervisor
-                                if (appState.socket != null && appState.socket!.connected) {
-                                  appState.socket!.emit('notification_feedback', {
-                                    'notification_id': notification.id,
-                                    'feedback': 'approve',
-                                    'notification_details': notification.toJson(),
-                                  });
-                                  print('Sent approval feedback to supervisor for notification: ${notification.id}');
-                                }
-                                
-                                // Remove the notification from the list
-                                appState.removeNotification(notification.id);
-                                
+                                _showConfirmationDialog(
+                                  context,
+                                  notification,
+                                  'approve',
+                                );
                               },
                             ),
                             const SizedBox(width: 8),
@@ -338,22 +327,11 @@ class _NotificationTableState extends State<NotificationTable> {
                               ),
                               label: const Text('Reject'),
                               onPressed: () {
-                                // Get app state
-                                final appState = Provider.of<Appstate>(context, listen: false);
-                                
-                                // Send notification feedback to supervisor
-                                if (appState.socket != null && appState.socket!.connected) {
-                                  appState.socket!.emit('notification_feedback', {
-                                    'notification_id': notification.id,
-                                    'feedback': 'reject',
-                                    'notification_details': notification.toJson(),
-                                  });
-                                  print('Sent rejection feedback to supervisor for notification: ${notification.id}');
-                                }
-                                
-                                // Remove the notification from the list
-                                appState.removeNotification(notification.id);
-                                
+                                _showConfirmationDialog(
+                                  context,
+                                  notification,
+                                  'reject',
+                                );
                               },
                             ),
                           ],
@@ -367,6 +345,59 @@ class _NotificationTableState extends State<NotificationTable> {
           );
         },
       ),
+    );
+  }
+
+  // Helper method to show a confirmation dialog
+  void _showConfirmationDialog(
+    BuildContext context,
+    PushNotification notification,
+    String feedback,
+  ) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Text('Confirm ${feedback == 'approve' ? 'Approval' : 'Rejection'}'),
+          content: Text('Are you sure you want to ${feedback == 'approve' ? 'approve' : 'reject'} this notification?'),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('No'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop(); // Close the dialog
+              },
+            ),
+            TextButton(
+              child: const Text('Yes'),
+              onPressed: () {
+                final appState = Provider.of<Appstate>(context, listen: false);
+
+                // Send notification feedback
+                if (appState.socket != null && appState.socket!.connected) {
+                  appState.socket!.emit('notification_feedback', {
+                    'notification_id': notification.id,
+                    'feedback': feedback,
+                    'notification_details': notification.toJson(),
+                  });
+                  print('Sent $feedback feedback for notification: ${notification.id}');
+                }
+
+                // Remove the notification
+                appState.removeNotification(notification.id);
+
+                // Show a confirmation snackbar
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Notification ${feedback == 'approve' ? 'approved' : 'rejected'}'),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+                Navigator.of(dialogContext).pop(); // Close the dialog
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 

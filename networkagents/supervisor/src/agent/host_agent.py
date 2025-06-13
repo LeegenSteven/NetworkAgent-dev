@@ -36,10 +36,7 @@ from google.genai import types
 from google.adk import Runner
 from google.adk.artifacts import InMemoryArtifactService
 from google.adk.events import Event, EventActions
-from google.genai.types import Part, Content
-from google.adk.cli.utils import logs
 from google.adk.sessions import InMemorySessionService
-from google.adk.sessions import Session
 from utils.error_handler import (
     SupervisorAgentError,
     RemoteAgentError,

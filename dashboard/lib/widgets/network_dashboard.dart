@@ -64,7 +64,7 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
 * [Spanner Graph database](https://console.cloud.google.com/spanner/instances/networktopology-instance/databases/networktopology-db/details/tables?invt=Abiyrw&project=${EnvironmentConfig.gcpProject})
 * [Cluster Config status](https://console.cloud.google.com/kubernetes/config_management/packages?project=${EnvironmentConfig.gcpProject})
 * [GitOps repository](${EnvironmentConfig.giteaUrl}/networkagent)
-* [Demo Scenario](https://docs.google.com/document/d/1gwCnLlgDaRWUv7I_hqd8aRv4B0ICsC7tj3pU7C8MRw0/edit?usp=sharing)
+* [Demo Scenario](https://docs.google.com/document/d/1Cq-5Ns4aIPec7MiJSOb4ECnEc0qrDgJfuvoLhsNMoN8/edit?usp=sharing&resourcekey=0-FqKStuCPLuhee9IkbDNFcQ)
 ''';
 
   @override

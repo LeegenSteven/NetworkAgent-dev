@@ -105,7 +105,6 @@ class NetworkNode {
       case 'initializing':
       case 'starting':
       case 'starting up':
-        return Colors.brown;
       case 'running':
       case 'updatefailed':
       case 'uptodate':

@@ -42,12 +42,13 @@
     repo: deb https://download.docker.com/linux/ubuntu focal stable
     state: present
 
-- name: Install docker-ce
+- name: Install base packages
   apt:
     pkg:
       - docker-ce 
       - docker-ce-cli 
       - containerd.io
+      - iputils-ping
     state: latest
     update_cache: true
 
@@ -84,25 +85,4 @@
 - name: pull ueransim
   command: "docker pull {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/networkagent/ueransim:latest"
 
-# - name: Set AMF CIDR if not defined
-#   set_fact:
-#     amfCidr: "{{ amfAddress | regex_replace('(\\d+\\.\\d+\\.\\d+)\\.\\d+', '\\1.0/24') }}"
-#   when: 
-#     - amfAddress is defined
-#     - amfCidr is not defined
 
-# - name: Check if route to AMF CIDR exists
-#   shell: ip route | grep "{{ amfCidr | regex_replace('/.*', '') }}"
-#   register: route_check
-#   failed_when: false
-#   changed_when: false
-#   when: 
-#     - amfAddress is defined
-#     - amfCidr is defined or amfCidr is not defined
-
-# - name: Add route to AMF CIDR through ens5 if needed
-#   command: ip route add {{ amfCidr }} dev ens5
-#   when: 
-#     - amfAddress is defined
-#     - (amfCidr is defined or amfCidr is not defined)
-#     - route_check.rc != 0

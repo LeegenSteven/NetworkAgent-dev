@@ -125,52 +125,50 @@
 ###############################################
 # 5g branch
 ###############################################
-# - name: checkout 5g branch
-#   command: sudo -u git git checkout -B 5g
-#   args:
-#     chdir: /opt/network-repo
+- name: checkout 5g branch
+  command: sudo -u git git checkout -B 5g
+  args:
+    chdir: /opt/network-repo
 
-# - name: push network files
-#   ansible.builtin.copy:
-#     src: "{{item}}"
-#     dest: "/opt/network-repo/{{item}}"
-#     owner: git
-#     group: git
-#     mode: '0644'
-#   loop:
-#    - Readme.md
-#    - upf.yaml
-#    - dnn.yaml
-#    - controlplane.yaml
-#    - meshservice1.yaml
-#    - ueransim1.yaml
-#    - ueransim2.yaml
+- name: push network files
+  ansible.builtin.copy:
+    src: "{{item}}"
+    dest: "/opt/network-repo/{{item}}"
+    owner: git
+    group: git
+    mode: '0644'
+  loop:
+   - Readme.md
+   - upf.yaml
+   - dnn.yaml
+   - controlplane.yaml
+   - ptp1.yaml
+   - ueransim1.yaml
 
-# - name: push templated network files
-#   ansible.builtin.template:
-#     src: "{{item}}"
-#     dest: "/opt/network-repo/{{item}}"
-#     owner: git
-#     group: git
-#     mode: '0644'
-#   loop: 
-#    - core.yaml
-#    - internet.yaml
-#    - cellsite1.yaml
-#    - cellsite2.yaml
+- name: push templated network files
+  ansible.builtin.template:
+    src: "{{item}}"
+    dest: "/opt/network-repo/{{item}}"
+    owner: git
+    group: git
+    mode: '0644'
+  loop: 
+   - core.yaml
+   - internet.yaml
+   - cellsite1.yaml
 
-# - name: add to 5g branch in network repo
-#   command: sudo -u git git add .
-#   args:
-#     chdir: /opt/network-repo
+- name: add to 5g branch in network repo
+  command: sudo -u git git add .
+  args:
+    chdir: /opt/network-repo
 
-# - name: network files commit 
-#   command: sudo -u git git commit -m "add all 5g files"
-#   args:
-#     chdir: /opt/network-repo
+- name: network files commit 
+  command: sudo -u git git commit -m "add all 5g files"
+  args:
+    chdir: /opt/network-repo
 
-# - name: push to repo
-#   command: sudo -u git git -c http.sslVerify=false push -u origin 5g
-#   args:
-#     chdir: /opt/network-repo
+- name: push to repo
+  command: sudo -u git git -c http.sslVerify=false push -u origin 5g
+  args:
+    chdir: /opt/network-repo
 

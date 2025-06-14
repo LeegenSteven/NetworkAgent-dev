@@ -595,6 +595,7 @@ Delete()
         gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
     fi
 
+    # Delete all agents artifacts
     for pkg in networkoperator networktools engineeragent operationsagent testagent dashboard; do
         (gcloud artifacts packages describe $pkg --repository=$GOOGLE_REPO --location=$GOOGLE_REGION > /dev/null 2>&1) && \
         gcloud artifacts delete $pkg --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet

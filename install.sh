@@ -316,6 +316,7 @@ Create()
         cp networkagent.json networkagents/engineer/src
         cp networkagent.json networkagents/operations/src
         cp networkagent.json networkagents/tester/src
+        cp networkagent.json networkagents/incident/src
     else
         echo "#############################################################"
         echo "networkagent.json is empty, check your project is allowed to "
@@ -343,6 +344,7 @@ Create()
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO tools/cloudbuild.j2 > tools/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/engineer/cloudbuild.j2 > networkagents/engineer/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/tester/cloudbuild.j2 > networkagents/tester/cloudbuild.yaml
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/incident/cloudbuild.j2 > networkagents/incident/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/operations/cloudbuild.j2 > networkagents/operations/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/supervisor/cloudbuild.j2 > networkagents/supervisor/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO dashboard/cloudbuild.j2 > dashboard/cloudbuild.yaml
@@ -596,7 +598,7 @@ Delete()
     fi
 
     # Delete all agents artifacts
-    for pkg in networkoperator networktools engineeragent operationsagent testagent dashboard; do
+    for pkg in networkoperator networktools engineeragent operationsagent testagent incidentagent dashboard; do
         (gcloud artifacts packages describe $pkg --repository=$GOOGLE_REPO --location=$GOOGLE_REGION > /dev/null 2>&1) && \
         gcloud artifacts delete $pkg --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
     done
@@ -619,6 +621,8 @@ Delete()
         networkagents/operations/cloudbuild.yaml \
         networkagents/tester/src/networkagent.json \
         networkagents/tester/cloudbuild.yaml \
+        networkagents/incident/src/networkagent.json \
+        networkagents/incident/cloudbuild.yaml \
         dashboard/cloudbuild.yaml \
         \
         environment/bigquery.yaml \
@@ -689,6 +693,7 @@ Kill()
     gcloud run services delete engineeragent --region=$GOOGLE_REGION --quiet
     gcloud run services delete operationsagent --region=$GOOGLE_REGION --quiet
     gcloud run services delete testagent --region=$GOOGLE_REGION --quiet
+    gcloud run services delete incidentagent --region=$GOOGLE_REGION --quiet
     gcloud run services delete network-agent-supervisor --region=$GOOGLE_REGION --quiet
     gcloud run services delete network-dashboard --region=$GOOGLE_REGION --quiet
 
@@ -986,6 +991,39 @@ Networkagent()
         cd ../..
     fi
 
+    # deploy the incident agent
+    if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"incident"* ]]; then 
+        TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
+        SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
+        cd networkagents/incident
+        IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/incidentagent:latest"
+        if gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1; then
+            read -p "Incident image already exists. Rebuild? (y/n) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+            fi
+        else
+            gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+        fi
+        gcloud run deploy incidentagent \
+        --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/incidentagent:latest \
+        --region $GOOGLE_REGION \
+        --service-account $GOOGLE_SERVICE_ACCOUNT \
+        --min 1 \
+        --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
+        --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
+        --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
+        --update-env-vars SUPERVISOR_URL=$SUPERVISOR_URL \
+        --update-env-vars WEBAPPS_PWD=${WEBAPPS_PWD} \
+        --update-env-vars WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
+        --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL \
+        --update-env-vars NETWORK_AGENT_FILE="/agent/src/networkagent.json" \
+        --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
+        --allow-unauthenticated 
+        cd ../..
+    fi
+
     # deploy the operations agent
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"operations"* ]]; then
         TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
@@ -1075,6 +1113,7 @@ DisplayDemoInfo()
     OPERATIONS_URL=$(gcloud run services describe operationsagent --region=$GOOGLE_REGION --format="value(status.url)")
     ENGINEER_URL=$(gcloud run services describe engineeragent --region=$GOOGLE_REGION --format="value(status.url)")
     TESTER_URL=$(gcloud run services describe testagent --region=$GOOGLE_REGION --format="value(status.url)")
+    INCIDENT_URL=$(gcloud run services describe incidentagent --region=$GOOGLE_REGION --format="value(status.url)")
     TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
 
     echo "============================================================"
@@ -1086,6 +1125,7 @@ DisplayDemoInfo()
     echo "Operations Agent is ${OPERATIONS_URL}"
     echo "Engineer Agent is ${ENGINEER_URL}"
     echo "Test Agent is ${TESTER_URL}"
+    echo "Incident Agent is ${INCIDENT_URL}"
     echo "MCP Tools Host is ${TOOLS_URL}"
     echo ""
 }

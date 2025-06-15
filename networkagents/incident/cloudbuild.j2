@@ -11,24 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-import logging
-import os
-import time
-import utils.globals as globals
-
-log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
-             "%(filename)s::%(lineno)d::%(message)s"
-logging.basicConfig(level=logging.INFO, format=log_format)
-logger = logging.getLogger(__name__)
-BASE_DIR = os.path.dirname(os.path.realpath(__file__))
-
-import tools.engineering
-import tools.logs
-import tools.metrics
-
-if __name__ == "__main__":
-    logger.info("starting network agent tools server...")
-
-    # run the mcp server
-    globals.networkagent_mcp.run(transport="sse")
+#
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  script: |
+    docker build -t {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/incidentagent:latest .
+  automapSubstitutions: true
+images:
+- '{{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/incidentagent:latest'

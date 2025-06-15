@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_core.runnables.config import RunnableConfig
 from collections.abc import AsyncIterable
@@ -95,6 +96,14 @@ class OperationsAgent:
             logger.info(f"Successfully loaded {len(self.tools)} tools")
             logger.debug(f"Loaded tools: {self.tools_by_name}")
                 
+        except asyncio.exceptions.CancelledError as e:
+            logger.warning(f"Error running tools: {str(e)}")
+            raise ToolError(
+                message="Failed to run tool",
+                tool_name="discover crds and locations tools",
+                severity=ErrorSeverity.ERROR,
+                original_exception=e
+            )
         except Exception as e:
             raise ToolError(
                 message=f"Error loading tools: {str(e)}",
@@ -178,6 +187,14 @@ class OperationsAgent:
                         name=tool_name,
                         tool_call_id=tool_call["id"],
                     )
+                )
+            except asyncio.exceptions.CancelledError as e:
+                logger.warning(f"Error running tools: {str(e)}")
+                raise ToolError(
+                    message="Failed to run tool",
+                    tool_name="discover crds and locations tools",
+                    severity=ErrorSeverity.ERROR,
+                    original_exception=e
                 )
             except Exception as e:
                 error = ToolError(

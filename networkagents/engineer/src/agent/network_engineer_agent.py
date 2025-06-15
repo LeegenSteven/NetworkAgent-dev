@@ -14,6 +14,7 @@
 
 import logging
 import os
+import asyncio
 import json
 import operator
 from datetime import datetime
@@ -137,6 +138,14 @@ class NetworkEngineerAgent:
             logger.info(f"Successfully loaded {len(self.tools)} tools")
             logger.debug(f"Loaded tools: {self.tools_by_name}")
 
+        except asyncio.exceptions.CancelledError as e:
+            logger.warning(f"Error running tools: {str(e)}")
+            raise ToolError(
+                message="Failed to run tool",
+                tool_name="discover crds and locations tools",
+                severity=ErrorSeverity.ERROR,
+                original_exception=e
+            )
         except Exception as e:
             raise ToolError(
                 message=f"Error loading tools: {str(e)}",
@@ -173,6 +182,14 @@ class NetworkEngineerAgent:
                 network_service_instances = await self.tools_by_name["getServices"].ainvoke({})
                 network_locations = await self.tools_by_name["getLocations"].ainvoke({})
 
+            except asyncio.exceptions.CancelledError as e:
+                logger.warning(f"Error running tools: {str(e)}")
+                raise ToolError(
+                    message="Failed to run tool",
+                    tool_name="discover crds and locations tools",
+                    severity=ErrorSeverity.ERROR,
+                    original_exception=e
+                )
             except Exception as e:
                 logger.warning(f"Error running tools: {str(e)}")
                 raise ToolError(
@@ -426,6 +443,14 @@ class NetworkEngineerAgent:
                             name=tool_name,
                             tool_call_id=tool_call["id"],
                         )
+                    )
+                except asyncio.exceptions.CancelledError as e:
+                    logger.warning(f"Error running tools: {str(e)}")
+                    raise ToolError(
+                        message="Failed to run tool",
+                        tool_name="discover crds and locations tools",
+                        severity=ErrorSeverity.ERROR,
+                        original_exception=e
                     )
                 except Exception as e:
                     # Convert other exceptions to ToolError

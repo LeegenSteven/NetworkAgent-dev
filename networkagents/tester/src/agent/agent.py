@@ -34,7 +34,6 @@ import logging
 import os
 import json
 import asyncio
-import random
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +99,14 @@ class TestAgent:
             logger.info(f"Successfully loaded {len(self.tools)} tools")
             logger.debug(f"Loaded tools: {self.tools_by_name}")                    
 
+        except asyncio.exceptions.CancelledError as e:
+            logger.warning(f"Error running tools: {str(e)}")
+            raise ToolError(
+                message="Failed to run tool",
+                tool_name="discover crds and locations tools",
+                severity=ErrorSeverity.ERROR,
+                original_exception=e
+            )
         except Exception as e:
             logger.error(f"Failed to load tools")
             raise ToolError(
@@ -185,15 +192,13 @@ class TestAgent:
                         tool_call_id=tool_call["id"],
                     )
                 )
-            except TestAgentError as e:
-                # If it's already a TestAgentError, just log and add to outputs
-                logger.error(f"Error executing tool {tool_name}: {e.message}")
-                outputs.append(
-                    ToolMessage(
-                        content=json.dumps({"error": e.message, "details": e.details}),
-                        name=tool_name,
-                        tool_call_id=tool_call["id"],
-                    )
+            except asyncio.exceptions.CancelledError as e:
+                logger.warning(f"Error running tools: {str(e)}")
+                raise ToolError(
+                    message="Failed to run tool",
+                    tool_name="discover crds and locations tools",
+                    severity=ErrorSeverity.ERROR,
+                    original_exception=e
                 )
             except Exception as e:
                 # Convert other exceptions to ToolError

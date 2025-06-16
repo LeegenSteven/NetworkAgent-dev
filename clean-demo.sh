@@ -23,8 +23,10 @@ if [ -n "$UETEST_NAMES" ]; then
   for uetest_name in $UETEST_NAMES; do
     kubectl delete uetest "$uetest_name" -n network &
     job_id=$!
+    echo "Waiting 1 min for deletion to complete"
     timeout 1m sh -c "while kill -0 $job_id 2>/dev/null; do sleep 1; done"
     if [ $? -eq 124 ]; then
+      echo "Patching $uetest_name finalizers to force deletion..."
       kubectl patch uetest $uetest_name -n network --patch '{"metadata":{"finalizers":[]}}'  --type=merge
     fi
     if [ $? -eq 0 ]; then
@@ -41,7 +43,14 @@ echo "Found PTP objects:"
 echo "$PTP_NAMES"
 if [ -n "$PTP_NAMES" ]; then
   for ptp_name in $PTP_NAMES; do
-    kubectl delete ptp "$ptp_name" -n network
+    kubectl delete ptp "$ptp_name" -n network &
+    job_id=$!
+    echo "Waiting up to 1 min for deletion to complete"
+    timeout 1m sh -c "while kill -0 $job_id 2>/dev/null; do sleep 1; done"
+    if [ $? -eq 124 ]; then
+      echo "Patching $ptp_name finalizers to force deletion..."
+      kubectl patch mesh $ptp_name -n network --patch '{"metadata":{"finalizers":[]}}'  --type=merge
+    fi
     if [ $? -eq 0 ]; then
       echo "Successfully deleted PTP: $ptp_name"
     else
@@ -56,7 +65,14 @@ echo "Found Mesh objects:"
 echo "$MESH_NAMES"
 if [ -n "$MESH_NAMES" ]; then
   for mesh_name in $MESH_NAMES; do
-    kubectl delete mesh "$mesh_name" -n network
+    kubectl delete mesh "$mesh_name" -n network &
+    job_id=$!
+    echo "Waiting up to 1 min for deletion to complete"
+    timeout 1m sh -c "while kill -0 $job_id 2>/dev/null; do sleep 1; done"
+    if [ $? -eq 124 ]; then
+      echo "Patching $mesh_name finalizers to force deletion..."
+      kubectl patch mesh $mesh_name -n network --patch '{"metadata":{"finalizers":[]}}'  --type=merge
+    fi
     if [ $? -eq 0 ]; then
       echo "Successfully deleted MESH: $mesh_name"
     else
@@ -72,7 +88,14 @@ echo "Found UERANSIM objects:"
 echo "$UERANSIM_NAMES"
 if [ -n "$UERANSIM_NAMES" ]; then
   for ue_name in $UERANSIM_NAMES; do
-    kubectl delete ueransim "$ue_name" -n network
+    kubectl delete ueransim "$ue_name" -n network &
+    job_id=$!
+    echo "Waiting up to 1 min for deletion to complete"
+    timeout 1m sh -c "while kill -0 $job_id 2>/dev/null; do sleep 1; done"
+    if [ $? -eq 124 ]; then
+      echo "Patching $ue_name finalizers to force deletion..."
+      kubectl patch ueransim $ue_name -n network --patch '{"metadata":{"finalizers":[]}}'  --type=merge
+    fi
     if [ $? -eq 0 ]; then
       echo "Successfully deleted UERANSIM: $ue_name"
     else
@@ -85,7 +108,17 @@ fi
 for name in cellsite1 cellsite2; do
   echo "Deleting resources of $name location... "
   for kind in ComputeFirewall ComputeSubnetwork ComputeNetwork; do
-      kubectl delete $kind $name -n network
+    kubectl get $kind $name -n network 2>/dev/null || continue
+    # Resource still exists. Proceed with deletion
+    echo "Deleting $kind $name..."
+    kubectl delete $kind $name -n network 2>/dev/null &
+    job_id=$!
+    echo "Waiting up to 1 min for deletion to complete"
+    timeout 1m sh -c "while kill -0 $job_id 2>/dev/null; do sleep 1; done"
+    if [ $? -eq 124 ]; then
+      echo "Patching $name finalizers to force deletion..."
+      kubectl patch $kind $name -n network --patch '{"metadata":{"finalizers":[]}}'  --type=merge
+    fi
   done
 done
 

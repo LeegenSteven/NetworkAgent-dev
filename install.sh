@@ -726,7 +726,7 @@ Operator()
 
     cd operator
     IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networkoperator:latest"
-    if gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1; then
+    if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
         read -p "Operator image already exists. Rebuild? (y/n) " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -752,7 +752,7 @@ Operator()
 ############################################################
 # Build and deploy the log capture                         #
 ############################################################
-Log()
+LogCapture()
 {
     # Create a  network log sink to bigquery and collect
     # logs from the network operator
@@ -860,7 +860,7 @@ Networkagent()
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"networktools"* ]]; then
         cd tools
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networktools:latest"
-        if gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1; then
+        if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
             read -p "Networktools image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -891,7 +891,7 @@ Networkagent()
         TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
         cd networkagents/supervisor
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networksupervisor:latest"
-        if gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1; then
+        if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
             read -p "Supervisor image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -937,7 +937,7 @@ Networkagent()
         SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
         cd networkagents/engineer
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/engineeragent:latest"
-        if gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1; then
+        if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
             read -p "Engineer image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -967,7 +967,7 @@ Networkagent()
         TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
         cd networkagents/tester
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/testagent:latest"
-        if gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1; then
+        if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
             read -p "Tester image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -997,7 +997,7 @@ Networkagent()
         SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
         cd networkagents/incident
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/incidentagent:latest"
-        if gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1; then
+        if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
             read -p "Incident image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -1029,7 +1029,7 @@ Networkagent()
         TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
         cd networkagents/operations
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/operationsagent:latest"
-        if gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1; then
+        if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
             read -p "Operations image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -1071,7 +1071,7 @@ Networkagent()
                 --dart-define=NETWORKAGENT_URL=${SUPERVISOR_URL}
 
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/dashboard:latest"
-        if gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1; then
+        if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
             read -p "Dashboard image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -1154,6 +1154,7 @@ Help()
    echo "  -i     display demo information"
    echo "  -g     display active GCP environment (user, project, GKE cluster,...)"
    echo "  -i     display demo information"
+   echo "  -y     answer 'yes' to all questions (no ask for confirmation)"
 
    echo 
    echo "Some typical use cases:"
@@ -1170,63 +1171,64 @@ Help()
 # Get the options
 # Global variable to store agent names
 AGENT_NAMES=""
+YES_FLAG="n"
+func_calls=""
 
-while getopts ":hcsolt:n:kdpgi" option; do
+while getopts "hcsoln:kdpgiy" option; do
    case $option in
       h) 
-        Help
-        exit;;
+        func_calls="Help"
+        ;;
       c) 
-        CheckGCPEnv
-        SetDemoEnv
-        Create
-        exit;;
+        func_calls="CheckGCPEnv SetDemoEnv Create"
+        ;;
       s) 
-        CheckGCPEnv
-        SetDemoEnv
-        Start
-        exit;;
+        func_calls="CheckGCPEnv SetDemoEnv Start"
+        ;;
       o) 
-        CheckGCPEnv
-        SetDemoEnv
-        Operator
-        exit;;
+        func_calls="CheckGCPEnv SetDemoEnv Operator"
+        ;;
       l) 
-        CheckGCPEnv
-        SetDemoEnv
-        Log
-        exit;;
+        func_calls="CheckGCPEnv SetDemoEnv LogCapture"
+        ;;
       n) 
         AGENT_NAMES=$OPTARG
-        CheckGCPEnv
-        SetDemoEnv
-        Networkagent
-        exit;;
+        func_calls="CheckGCPEnv SetDemoEnv Networkagent"
+        ;;
       k) 
-        CheckGCPEnv
-        SetDemoEnv
-        Kill
-        exit;;
+        func_calls="CheckGCPEnv SetDemoEnv Kill"
+        ;;
       d)
-        CheckGCPEnv
-        SetDemoEnv
-        Delete
-        exit;;
+        func_calls="CheckGCPEnv SetDemoEnv Delete"
+        ;;
       p)
-        CheckGCPEnv
-        SetDemoEnv
-        Porch
-        exit;;
+        func_calls="CheckGCPEnv SetDemoEnv Porch"
+        ;;
       g)
-        DisplayGCPEnv
-        exit;;
+        func_calls="CheckGCPEnv SetDemoEnv DisplayGCPEnv"
+        ;;
       i)
-        DisplayDemoInfo
-        exit;;
+        func_calls="CheckGCPEnv SetDemoEnv DisplayDemoInfo"
+        ;;
+      y)
+        # Say yes to all questions (no ask for confirmation)
+        YES_FLAG="y"
+        ;;
      \?) # Invalid option
         echo "Error: Invalid option"
+        func_calls="Help"
         exit;;
    esac
 done
 
-Help
+if [[ -z $func_calls ]]; then
+    Help
+    exit 1
+else
+   # Execute the chosen functions
+   for f in $func_calls; do
+     $f
+   done
+   exit 0
+fi
+

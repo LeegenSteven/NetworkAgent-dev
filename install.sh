@@ -1214,10 +1214,13 @@ while getopts "hcsoln:kdpgiy" option; do
         # Say yes to all questions (no ask for confirmation)
         YES_FLAG="y"
         ;;
-     \?) # Invalid option
+      \?) # Invalid option
         echo "Error: Invalid option"
         func_calls="Help"
         exit;;
+      :)
+        echo "Option -$OPTARG requires an argument."
+        ;;
    esac
 done
 

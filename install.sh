@@ -1217,7 +1217,7 @@ while getopts "hcsoln:kdpgiy" option; do
       \?) # Invalid option
         echo "Error: Invalid option"
         func_calls="Help"
-        exit;;
+        ;;
       :)
         echo "Option -$OPTARG requires an argument."
         ;;

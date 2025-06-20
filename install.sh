@@ -540,7 +540,7 @@ Start()
     echo "#####################################"
     echo "Create Operator Log Sink and capture"
     echo "#####################################"
-    Log
+    LogCapture
 
     # echo "#####################################"
     # echo "Create the Agent"
@@ -600,7 +600,7 @@ Delete()
     # Delete all agents artifacts
     for pkg in networkoperator networktools engineeragent operationsagent testagent incidentagent dashboard; do
         (gcloud artifacts packages describe $pkg --repository=$GOOGLE_REPO --location=$GOOGLE_REGION > /dev/null 2>&1) && \
-        gcloud artifacts delete $pkg --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
+        gcloud artifacts packages delete $pkg --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
     done
 
     echo "#######################################"

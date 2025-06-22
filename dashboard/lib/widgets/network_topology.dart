@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../appstate.dart';
 import '../models/network_node.dart';
+import 'NoArrowEdgeRenderer.dart';
 import 'node_details_dialog.dart';
 
 class NetworkTopologyWidget extends StatefulWidget {
@@ -27,19 +28,25 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
   
   // View options
   final List<String> _viewOptions = ['network', 'resources', 'both'];
-  String _selectedView = NetworkTopologyWidget.defaultView;
+  late String _selectedView;
 
   // Layout options
   final List<String> _layoutOptions = ['force-directed', 'layered'];
+  
+  // Zoom control
+  final TransformationController _transformationController = TransformationController();
 
-  // Default network view
-  String defaultView() {
-    return(_selectedView);
+  // Get current view
+  String getCurrentView() {
+    return _selectedView;
   }
 
   @override
   void initState() {
     super.initState();
+    // Initialize _selectedView from appstate
+    final appState = Provider.of<Appstate>(context, listen: false);
+    _selectedView = appState.selectedTopologyView;
     _initializeGraph();
   }
   
@@ -47,10 +54,9 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
   void didUpdateWidget(NetworkTopologyWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     
-    final topologyChanged = widget.topology != oldWidget.topology;    
-    if (topologyChanged) {
-      _initializeGraph();
-    }
+    // Always reinitialize the graph when the widget is updated
+    // This ensures proper handling of both topology and filter/layout changes
+    _initializeGraph();
   }
 
   void _initializeGraph() {
@@ -103,9 +109,59 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
         final targetNode = nodeMap[connection.targetId];
         
         if (sourceNode != null && targetNode != null) {
-          graph.addEdge(sourceNode, targetNode, paint: Paint()
-            ..color = const Color(0xFF1976D2) // Medium blue for edges
-            ..strokeWidth = 2);
+          // Find the corresponding network nodes to check their kind
+          final sourceNetworkNode = widget.topology.nodes.firstWhere(
+            (n) => n.id == connection.sourceId,
+            orElse: () => NetworkNode(
+              id: connection.sourceId,
+              name: 'Unknown',
+              type: NodeType.compute,
+            ),
+          );
+          
+          final targetNetworkNode = widget.topology.nodes.firstWhere(
+            (n) => n.id == connection.targetId,
+            orElse: () => NetworkNode(
+              id: connection.targetId,
+              name: 'Unknown',
+              type: NodeType.compute,
+            ),
+          );
+          
+          // Get the kinds of both nodes
+          final sourceKind = sourceNetworkNode.properties['kind'] as String?;
+          final targetKind = targetNetworkNode.properties['kind'] as String?;
+          
+          // Remove debug print to avoid potential issues
+          // print('Connection: $sourceKind -> $targetKind');
+          
+          // Create a paint object based on the node types
+          final paint = Paint()
+            ..style = PaintingStyle.stroke;
+          
+          // Check if this is a connection between ComputeSubnetwork and ComputeInstance
+          final isComputeSubnetworkToInstance = 
+              (sourceKind == 'ComputeSubnetwork' && targetKind == 'ComputeInstance') ||
+              (sourceKind == 'ComputeInstance' && targetKind == 'ComputeSubnetwork');
+          
+          // IMPORTANT: We're using a completely different approach now
+          // Instead of trying to store data in the edge, we'll use a global map to track edge types
+          
+          if (isComputeSubnetworkToInstance) {
+            // Use a very specific blue color that won't be used elsewhere
+            paint.color = const Color.fromARGB(255, 0, 0, 255); // Pure blue RGB(0,0,255)
+            paint.strokeWidth = 3; // Thicker line
+            
+            // print('Setting BLUE line for $sourceKind -> $targetKind');
+          } else {
+            // Use a very specific black color that won't be used elsewhere
+            paint.color = const Color.fromARGB(255, 0, 0, 0); // Pure black RGB(0,0,0)
+            paint.strokeWidth = 2;
+            
+            // print('Setting BLACK line for $sourceKind -> $targetKind');
+          }
+          
+          graph.addEdge(sourceNode, targetNode, paint: paint);
         }
       }
   
@@ -117,6 +173,7 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
         ..levelSeparation = 80  // Reduced from 150 to 80 for closer vertical spacing
         ..orientation = SugiyamaConfiguration.ORIENTATION_TOP_BOTTOM;  // Explicit orientation
       algorithm = SugiyamaAlgorithm(configuration);
+      algorithm.renderer = NoArrowEdgeRenderer();
       break;
     case 'force-directed':
     default:
@@ -126,6 +183,7 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
         // Use only the parameters supported by the package
         // The higher iteration count will help spread nodes more evenly
       );
+      algorithm.renderer = NoArrowEdgeRenderer();
       break;
   }
     } catch (e, stackTrace) {
@@ -134,13 +192,15 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
       // If there's an error, create an empty graph to avoid crashes
       graph = Graph()..isTree = false;
       algorithm = FruchtermanReingoldAlgorithm(iterations: 1000);
+      algorithm.renderer = NoArrowEdgeRenderer();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Get the appstate for filtering
-    final appState = Provider.of<Appstate>(context);
+    // Get the appstate for filtering, but don't listen to changes
+    // This prevents the widget from rebuilding on every appstate change
+    final appState = Provider.of<Appstate>(context, listen: false);
     
     return Column(
       children: [
@@ -248,16 +308,15 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
                               if (newValue != null && newValue != _selectedView) {
                                 setState(() {
                                   _selectedView = newValue;
-                                  // Reinitialize the graph with the new view
-                                  _getTopologyView(_selectedView);
                                 });
+                                // Request the new view from the server
+                                _getTopologyView(_selectedView);
+                                // The graph will be reinitialized when the new topology data is received
                               }
                             },
                             items: _viewOptions.map<DropdownMenuItem<String>>((String value) {
-                              // Convert view option to display text
-                              String displayText = value.split('-').map((word) => 
-                                word[0].toUpperCase() + word.substring(1)
-                              ).join(' ');
+                              // Convert view option to display text - capitalize first letter
+                              String displayText = value[0].toUpperCase() + value.substring(1);
                               
                               return DropdownMenuItem<String>(
                                 value: value,
@@ -309,8 +368,8 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
                               if (newValue != null && newValue != appState.selectedTopologyLayout) {
                                 // Update the layout in appstate
                                 appState.updateTopologyLayout(newValue);
-                                // Reinitialize the graph with the new layout
-                                _initializeGraph();
+                                // No need to call _initializeGraph() here as the widget will be rebuilt
+                                // due to the ValueKey change in network_dashboard.dart
                               }
                             },
                             items: _layoutOptions.map<DropdownMenuItem<String>>((String value) {
@@ -363,47 +422,103 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
                       ),
                     ),
                   )
-                : InteractiveViewer(
-                    constrained: false,
-                    boundaryMargin: const EdgeInsets.all(100),
-                    minScale: 0.01,
-                    maxScale: 5.6,
-                    child: GraphView(
-                      key: ValueKey('graph-${nodeMap.length}-${graph.edges.length}'),
-                      graph: graph,
-                      algorithm: algorithm,
-                      paint: Paint()
-                        ..color = const Color(0xFF0D47A1) // Dark blue for graph lines
-                        ..strokeWidth = 1
-                        ..style = PaintingStyle.stroke,
-                      builder: (Node node) {
-                        try {
-                          final nodeId = node.key!.value.toString();
-                          
-                          // Check if the node exists in our node map
-                          if (!nodeMap.containsKey(nodeId)) {
-                            // If the node doesn't exist in our map, return an empty container
-                            return Container();
-                          }
-                          
-                          // Find the corresponding network node
-                          final networkNode = widget.topology.nodes.firstWhere(
-                            (n) => n.id == nodeId,
-                            orElse: () => NetworkNode(
-                              id: nodeId,
-                              name: 'Unknown',
-                              type: NodeType.compute,
+                : Stack(
+                    children: [
+                      InteractiveViewer(
+                        transformationController: _transformationController,
+                        constrained: false,
+                        boundaryMargin: const EdgeInsets.all(100),
+                        minScale: 0.01,
+                        maxScale: 5.6,
+                        child: GraphView(
+                          key: ValueKey('graph-${nodeMap.length}-${graph.edges.length}-${appState.selectedTopologyLayout}'),
+                          graph: graph,
+                          algorithm: algorithm,
+                          paint: Paint()
+                            ..color = const Color(0xFF0D47A1) // Dark blue for graph lines
+                            ..strokeWidth = 1.5 // Slightly thicker lines for better visibility
+                            ..style = PaintingStyle.stroke,
+                          builder: (Node node) {
+                            try {
+                              final nodeId = node.key!.value.toString();
+                              
+                              // Check if the node exists in our node map
+                              if (!nodeMap.containsKey(nodeId)) {
+                                // If the node doesn't exist in our map, return an empty container
+                                return Container();
+                              }
+                              
+                              // Find the corresponding network node
+                              final networkNode = widget.topology.nodes.firstWhere(
+                                (n) => n.id == nodeId,
+                                orElse: () => NetworkNode(
+                                  id: nodeId,
+                                  name: 'Unknown',
+                                  type: NodeType.compute,
+                                ),
+                              );
+                              
+                              return _buildNodeWidget(networkNode);
+                            } catch (e) {
+                              print('Error building node: $e');
+                              // Return an empty container if there's an error
+                              return Container();
+                            }
+                          },
+                        ),
+                      ),
+                      // Zoom controls positioned in the top-right corner
+                      Positioned(
+                        top: 16,
+                        right: 16,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Zoom In button
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.2),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: IconButton(
+                                icon: const Icon(Icons.zoom_in),
+                                color: const Color(0xFF1976D2),
+                                tooltip: 'Zoom In',
+                                onPressed: _zoomIn,
+                              ),
                             ),
-                          );
-                          
-                          return _buildNodeWidget(networkNode);
-                        } catch (e) {
-                          print('Error building node: $e');
-                          // Return an empty container if there's an error
-                          return Container();
-                        }
-                      },
-                    ),
+                            const SizedBox(height: 8),
+                            // Zoom Out button
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.2),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: IconButton(
+                                icon: const Icon(Icons.zoom_out),
+                                color: const Color(0xFF1976D2),
+                                tooltip: 'Zoom Out',
+                                onPressed: _zoomOut,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
         ),
       ],
@@ -414,28 +529,100 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
     final Color color = node.getColor();
     final IconData icon = node.getIcon();
     final Color statusColor = NetworkNode.getStatusColor(node.properties['status']);
+    
+    // For compute instance nodes, we'll show network traffic metrics
+    final bool isComputeInstance = node.type == NodeType.compute && 
+                                  node.properties['kind'] == 'ComputeInstance';
 
     return Tooltip(
       message: 'Click for details',
       child: InkWell(
         onTap: () => _showNodeDetails(node),
         child: Card(
-          elevation: 4,
-          shape: CircleBorder(
-            side: BorderSide(
-              color: statusColor,
-              width: 2.0,
-            ),
-          ),
+          elevation: 0,
+          shape: CircleBorder(),
           child: Container(
             padding: const EdgeInsets.all(6),
-            width: 90,  // Equal width and height for a perfect circle
+            width: 100,  // Increased width to accommodate traffic metrics
             height: 90,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, color: color, size: 20),
+                isComputeInstance
+                    ? Consumer<Appstate>(
+                        builder: (context, appState, child) {
+                          // Get metrics for this node
+                          final nodeMetrics = appState.metrics.data[node.id];
+                          final latestMetric = nodeMetrics != null && nodeMetrics.isNotEmpty 
+                              ? nodeMetrics.first 
+                              : null;
+                          
+                          // Calculate average network traffic if metrics are available
+                          String trafficText = '';
+                          if (latestMetric != null && latestMetric.interfaces.isNotEmpty) {
+                            double totalSent = 0;
+                            double totalReceived = 0;
+                            int interfaceCount = 0;
+                            
+                            latestMetric.interfaces.forEach((name, data) {
+                              final sentThroughput = data['byte_sent_throughput'] as double? ?? 0.0;
+                              final recvThroughput = data['byte_recv_throughput'] as double? ?? 0.0;
+                              totalSent += sentThroughput;
+                              totalReceived += recvThroughput;
+                              interfaceCount++;
+                            });
+                            
+                            // Calculate average and format as human-readable
+                            final avgTraffic = (totalSent + totalReceived) / 2;
+                            trafficText = _formatNetworkSpeed(avgTraffic);
+                          }
+                          
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(icon, color: color, size: 20),
+                              const SizedBox(width: 4),
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: statusColor,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              if (trafficText.isNotEmpty) ...[
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    trafficText,
+                                    style: const TextStyle(
+                                      fontSize: 8,  // Reduced font size
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          );
+                        },
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(icon, color: color, size: 20),
+                          const SizedBox(width: 4),
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: statusColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ],
+                      ),
                 const SizedBox(height: 2),
                 Text(
                   node.name,
@@ -486,7 +673,41 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
     );
   }
   
+  // Zoom methods
+  void _zoomIn() {
+    final Matrix4 currentTransform = _transformationController.value;
+    final double currentScale = currentTransform.getMaxScaleOnAxis();
+    final double newScale = (currentScale * 1.2).clamp(0.01, 5.6);
+    
+    // Create a new transformation matrix with the new scale
+    final Matrix4 newTransform = Matrix4.identity()..scale(newScale);
+    
+    _transformationController.value = newTransform;
+  }
+
+  void _zoomOut() {
+    final Matrix4 currentTransform = _transformationController.value;
+    final double currentScale = currentTransform.getMaxScaleOnAxis();
+    final double newScale = (currentScale / 1.2).clamp(0.01, 5.6);
+    
+    // Create a new transformation matrix with the new scale
+    final Matrix4 newTransform = Matrix4.identity()..scale(newScale);
+    
+    _transformationController.value = newTransform;
+  }
+
   // Simple dialog to filter nodes by type
+  // Helper method to format network speed in a human-readable format
+  String _formatNetworkSpeed(double bytesPerSecond) {
+    if (bytesPerSecond < 1024) {
+      return '${bytesPerSecond.toStringAsFixed(0)}B/s';  // More compact format
+    } else if (bytesPerSecond < 1024 * 1024) {
+      return '${(bytesPerSecond / 1024).toStringAsFixed(1)}K/s';  // More compact format
+    } else {
+      return '${(bytesPerSecond / (1024 * 1024)).toStringAsFixed(1)}M/s';  // More compact format
+    }
+  }
+  
   void _showNodeTypeFilterDialog() {
     // Get the appstate for filtering
     final appState = Provider.of<Appstate>(context, listen: false);
@@ -575,9 +796,8 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
                       );
                       
                       // Reinitialize the graph with the new filter
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        _initializeGraph();
-                      });
+                      // No need to use addPostFrameCallback as the widget will be rebuilt
+                      // due to the ValueKey change in network_dashboard.dart
                       
                       // Show feedback
                       ScaffoldMessenger.of(context).showSnackBar(

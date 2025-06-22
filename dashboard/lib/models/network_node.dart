@@ -192,47 +192,95 @@ class NetworkTopology {
     // Compare nodes and connections lengths
     if (nodes.length != other.nodes.length || 
         connections.length != other.connections.length) {
+      // print('Topology comparison: Different lengths');
       return false;
     }
     
-    // Compare each node by ID
-    for (int i = 0; i < nodes.length; i++) {
-      if (nodes[i].id != other.nodes[i].id ||
-          nodes[i].name != other.nodes[i].name ||
-          nodes[i].type != other.nodes[i].type) {
+    // Create maps of nodes by ID for more efficient comparison
+    final thisNodesMap = <String, NetworkNode>{};
+    final otherNodesMap = <String, NetworkNode>{};
+    
+    for (var node in nodes) {
+      thisNodesMap[node.id] = node;
+    }
+    
+    for (var node in other.nodes) {
+      otherNodesMap[node.id] = node;
+    }
+    
+    // Check if both topologies have the same node IDs
+    if (!thisNodesMap.keys.toSet().containsAll(otherNodesMap.keys) ||
+        !otherNodesMap.keys.toSet().containsAll(thisNodesMap.keys)) {
+      // print('Topology comparison: Different node IDs');
+      return false;
+    }
+    
+    // Compare each node by ID, name, type, and properties
+    for (final id in thisNodesMap.keys) {
+      final thisNode = thisNodesMap[id]!;
+      final otherNode = otherNodesMap[id]!;
+      
+      if (thisNode.name != otherNode.name || thisNode.type != otherNode.type) {
+        // print('Topology comparison: Node $id has different name or type');
         return false;
       }
       
       // Compare properties
-      if (nodes[i].properties.length != other.nodes[i].properties.length) {
+      if (thisNode.properties.length != otherNode.properties.length) {
+        // print('Topology comparison: Node $id has different property count');
         return false;
       }
       
-      for (final key in nodes[i].properties.keys) {
-        if (!other.nodes[i].properties.containsKey(key) ||
-            nodes[i].properties[key] != other.nodes[i].properties[key]) {
+      for (final key in thisNode.properties.keys) {
+        if (!otherNode.properties.containsKey(key) ||
+            thisNode.properties[key] != otherNode.properties[key]) {
+          // print('Topology comparison: Node $id has different property $key');
           return false;
         }
       }
     }
     
-    // Compare each connection by ID
-    for (int i = 0; i < connections.length; i++) {
-      if (connections[i].id != other.connections[i].id ||
-          connections[i].sourceId != other.connections[i].sourceId ||
-          connections[i].targetId != other.connections[i].targetId ||
-          connections[i].label != other.connections[i].label) {
+    // Create maps of connections by source and target for more efficient comparison
+    final thisConnectionsMap = <String, NetworkConnection>{};
+    final otherConnectionsMap = <String, NetworkConnection>{};
+    
+    for (var conn in connections) {
+      final key = '${conn.sourceId}-${conn.targetId}';
+      thisConnectionsMap[key] = conn;
+    }
+    
+    for (var conn in other.connections) {
+      final key = '${conn.sourceId}-${conn.targetId}';
+      otherConnectionsMap[key] = conn;
+    }
+    
+    // Check if both topologies have the same connection keys
+    if (!thisConnectionsMap.keys.toSet().containsAll(otherConnectionsMap.keys) ||
+        !otherConnectionsMap.keys.toSet().containsAll(thisConnectionsMap.keys)) {
+      // print('Topology comparison: Different connection pairs');
+      return false;
+    }
+    
+    // Compare each connection by source, target, label, and properties
+    for (final key in thisConnectionsMap.keys) {
+      final thisConn = thisConnectionsMap[key]!;
+      final otherConn = otherConnectionsMap[key]!;
+      
+      if (thisConn.label != otherConn.label) {
+        // print('Topology comparison: Connection $key has different label');
         return false;
       }
       
       // Compare properties
-      if (connections[i].properties.length != other.connections[i].properties.length) {
+      if (thisConn.properties.length != otherConn.properties.length) {
+        // print('Topology comparison: Connection $key has different property count');
         return false;
       }
       
-      for (final key in connections[i].properties.keys) {
-        if (!other.connections[i].properties.containsKey(key) ||
-            connections[i].properties[key] != other.connections[i].properties[key]) {
+      for (final propKey in thisConn.properties.keys) {
+        if (!otherConn.properties.containsKey(propKey) ||
+            thisConn.properties[propKey] != otherConn.properties[propKey]) {
+          // print('Topology comparison: Connection $key has different property $propKey');
           return false;
         }
       }
@@ -242,9 +290,12 @@ class NetworkTopology {
   }
   
   @override
-  int get hashCode => Object.hash(
-    Object.hashAll(nodes),
-    Object.hashAll(connections),
-  );
+  int get hashCode {
+    // Create a more robust hashCode that doesn't depend on the order of nodes and connections
+    final nodesHash = nodes.fold(0, (hash, node) => hash ^ node.id.hashCode);
+    final connectionsHash = connections.fold(0, (hash, conn) => 
+        hash ^ '${conn.sourceId}-${conn.targetId}'.hashCode);
+    return nodesHash ^ connectionsHash;
+  }
 
 }

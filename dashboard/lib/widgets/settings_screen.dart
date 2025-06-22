@@ -2,52 +2,79 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../appstate.dart';
 import '../models/agent.dart';
+import '../utils/APIService.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Google logo
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.asset(
-                'assets/images/google.png',
-                width: 24,
-                height: 24,
-                fit: BoxFit.cover,
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Google logo
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset(
+                  'assets/images/google.png',
+                  width: 24,
+                  height: 24,
+                  fit: BoxFit.cover,
+                ),
               ),
+              const SizedBox(width: 12),
+              const Text(
+                'Settings',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF0D47A1),
+          foregroundColor: Colors.white,
+          centerTitle: true,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () {
+                // Implementation left empty for now
+              },
+              tooltip: 'Refresh',
             ),
-            const SizedBox(width: 12),
-            const Text(
-              'Settings',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
+          ],
+          bottom: const TabBar(
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: Colors.white,
+            tabs: [
+              Tab(
+                icon: Icon(Icons.engineering),
+                text: 'Agent Settings',
               ),
+              Tab(
+                icon: Icon(Icons.storage),
+                text: 'Spanner',
+              ),
+            ],
+          ),
+        ),
+        body: const TabBarView(
+          children: [
+            Padding(
+              padding: EdgeInsets.all(16.0),
+              child: AgentSettingsSection(),
+            ),
+            Padding(
+              padding: EdgeInsets.all(16.0),
+              child: SpannerSection(),
             ),
           ],
         ),
-        backgroundColor: const Color(0xFF0D47A1),
-        foregroundColor: Colors.white,
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              // Implementation left empty for now
-            },
-            tooltip: 'Refresh',
-          ),
-        ],
-      ),
-      body: const Padding(
-        padding: EdgeInsets.all(16.0),
-        child: AgentSettingsSection(),
       ),
     );
   }
@@ -326,6 +353,309 @@ class _AddAgentDialogState extends State<AddAgentDialog> {
     );
     if (context.mounted) {
       Navigator.of(context).pop();
+    }
+  }
+}
+
+class SpannerSection extends StatefulWidget {
+  const SpannerSection({super.key});
+
+  @override
+  State<SpannerSection> createState() => _SpannerSectionState();
+}
+
+class _SpannerSectionState extends State<SpannerSection> {
+  bool _isDeleting = false;
+  bool _isDeletingLogs = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Spanner Database Management',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF0D47A1),
+              ),
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'Manage performance metrics and logs stored in Spanner database.',
+          style: TextStyle(
+            color: Colors.grey,
+            fontSize: 14,
+          ),
+        ),
+        const SizedBox(height: 32),
+        
+        // Performance Metrics Section
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.analytics,
+                      color: const Color(0xFF0D47A1),
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Performance Metrics',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Delete all performance metrics data from the Spanner database. This action cannot be undone.',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: _isDeleting ? null : () => _showDeleteMetricsDialog(context),
+                  icon: _isDeleting 
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Icon(Icons.delete),
+                  label: Text(_isDeleting ? 'Deleting...' : 'Delete Performance Metrics'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        
+        const SizedBox(height: 20),
+        
+        // Logs Section
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.description,
+                      color: const Color(0xFF0D47A1),
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'System Logs',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Remove all system logs from the Spanner database. This action cannot be undone.',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: _isDeletingLogs ? null : () => _showDeleteLogsDialog(context),
+                  icon: _isDeletingLogs 
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Icon(Icons.delete),
+                  label: Text(_isDeletingLogs ? 'Removing...' : 'Remove All Logs'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showDeleteMetricsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Delete Performance Metrics'),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to delete all performance metrics? This action cannot be undone and will permanently remove all stored performance data.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => _deleteMetrics(context),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteLogsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Remove All Logs'),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to remove all system logs? This action cannot be undone and will permanently delete all log entries.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => _deleteLogs(context),
+            child: const Text(
+              'Remove',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteMetrics(BuildContext context) async {
+    Navigator.of(context).pop(); // Close the confirmation dialog first
+    
+    // Set loading state
+    setState(() {
+      _isDeleting = true;
+    });
+
+    try {
+      print('Starting metrics deletion...');
+      final apiService = APIService();
+      final success = await apiService.resetMetrics();
+      print('Metrics deletion completed. Success: $success');
+      
+      // Clear loading state
+      if (mounted) {
+        setState(() {
+          _isDeleting = false;
+        });
+      }
+      
+      // Show the result in console for now
+      if (mounted) {
+        if (success) {
+          print('SUCCESS: Performance metrics deleted successfully');
+        } else {
+          print('ERROR: Failed to delete performance metrics');
+        }
+      }
+    } catch (e) {
+      print('Error during metrics deletion: $e');
+      
+      // Clear loading state
+      if (mounted) {
+        setState(() {
+          _isDeleting = false;
+        });
+      }
+      
+      // Show the error in console
+      if (mounted) {
+        print('ERROR: Error deleting performance metrics: ${e.toString()}');
+      }
+    }
+  }
+
+  Future<void> _deleteLogs(BuildContext context) async {
+    Navigator.of(context).pop(); // Close the confirmation dialog first
+    
+    // Set loading state
+    setState(() {
+      _isDeletingLogs = true;
+    });
+
+    try {
+      print('Starting logs deletion...');
+      final apiService = APIService();
+      final success = await apiService.deleteLogs();
+      print('Logs deletion completed. Success: $success');
+      
+      // Clear loading state
+      if (mounted) {
+        setState(() {
+          _isDeletingLogs = false;
+        });
+      }
+      
+      // Show the result in console for now
+      if (mounted) {
+        if (success) {
+          print('SUCCESS: All logs removed successfully');
+        } else {
+          print('ERROR: Failed to remove logs');
+        }
+      }
+    } catch (e) {
+      print('Error during logs deletion: $e');
+      
+      // Clear loading state
+      if (mounted) {
+        setState(() {
+          _isDeletingLogs = false;
+        });
+      }
+      
+      // Show the error in console
+      if (mounted) {
+        print('ERROR: Error removing logs: ${e.toString()}');
+      }
     }
   }
 }

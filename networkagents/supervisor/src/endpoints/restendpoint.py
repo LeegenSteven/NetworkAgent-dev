@@ -19,6 +19,14 @@ from aiohttp import web
 from agent.host_agent import HostAgent
 from endpoints.socketendpoint import SocketEndpoint
 from tools.topology import fetch_db_node
+from tools.metrics import (
+    fetch_all_last_metrics,
+    fetch_all_metrics,
+    fetch_last_metrics_for_id,
+    fetch_all_metrics_for_id,
+    clear_network_metrics
+)
+from tools.logs import delete_logs
 logger = logging.getLogger(__name__)
 
 class RestEndpoint:
@@ -55,6 +63,25 @@ class RestEndpoint:
 
         getNodeDetailsRoute = self.app.router.add_get("/node/{node_id}", self.getNodeDetails)
         self.cors.add(getNodeDetailsRoute, corsConfig)
+
+        # Add metric-related REST endpoints
+        getAllLastMetricsRoute = self.app.router.add_get("/metrics/last", self.getAllLastMetrics)
+        self.cors.add(getAllLastMetricsRoute, corsConfig)
+
+        getAllMetricsRoute = self.app.router.add_get("/metrics/all", self.getAllMetrics)
+        self.cors.add(getAllMetricsRoute, corsConfig)
+
+        getLastMetricsForIdRoute = self.app.router.add_get("/metrics/last/{node_id}", self.getLastMetricsForId)
+        self.cors.add(getLastMetricsForIdRoute, corsConfig)
+
+        getAllMetricsForIdRoute = self.app.router.add_get("/metrics/all/{node_id}", self.getAllMetricsForId)
+        self.cors.add(getAllMetricsForIdRoute, corsConfig)
+
+        resetMetricsRoute = self.app.router.add_post("/metrics/reset", self.resetMetrics)
+        self.cors.add(resetMetricsRoute, corsConfig)
+
+        deleteLogsRoute = self.app.router.add_post("/logs/delete", self.deleteLogs)
+        self.cors.add(deleteLogsRoute, corsConfig)
 
     def _parse_node_details_to_markdown(self, node_details):
         markdown = f"# {node_details['name']} ({node_details['kind']})\n\n"
@@ -292,5 +319,148 @@ class RestEndpoint:
             # Return error response
             return web.json_response(
                 {"error": f"Error processing push notification: {str(e)}"},
+                status=500
+            )
+            
+    #################################################################
+    # Metrics endpoints
+    #################################################################
+    async def getAllLastMetrics(self, request):
+        """
+        Get the last metrics for all nodes
+        
+        Returns:
+            aiohttp.web.Response: JSON response with the metrics data
+        """
+        logger.info("REST endpoint: get all last metrics")
+        try:
+            metrics = fetch_all_last_metrics()
+            return web.json_response(metrics)
+        except Exception as e:
+            logger.error(f"Error fetching all last metrics: {str(e)}", exc_info=True)
+            return web.json_response(
+                {"error": f"Error fetching all last metrics: {str(e)}"},
+                status=500
+            )
+    
+    async def getAllMetrics(self, request):
+        """
+        Get all metrics for all nodes
+        
+        Returns:
+            aiohttp.web.Response: JSON response with the metrics data
+        """
+        logger.info("REST endpoint: get all metrics")
+        try:
+            metrics = fetch_all_metrics()
+            return web.json_response(metrics)
+        except Exception as e:
+            logger.error(f"Error fetching all metrics: {str(e)}", exc_info=True)
+            return web.json_response(
+                {"error": f"Error fetching all metrics: {str(e)}"},
+                status=500
+            )
+    
+    async def getLastMetricsForId(self, request):
+        """
+        Get the last metrics for a specific node
+        
+        Args:
+            request: The HTTP request object with node_id in the URL path
+            
+        Returns:
+            aiohttp.web.Response: JSON response with the metrics data
+        """
+        logger.info("REST endpoint: get last metrics for id")
+        try:
+            node_id = request.match_info.get('node_id')
+            if not node_id:
+                return web.json_response(
+                    {"error": "No node ID provided"},
+                    status=400
+                )
+                
+            metrics = fetch_last_metrics_for_id(node_id)
+            return web.json_response(metrics)
+        except Exception as e:
+            logger.error(f"Error fetching last metrics for id: {str(e)}", exc_info=True)
+            return web.json_response(
+                {"error": f"Error fetching last metrics for id: {str(e)}"},
+                status=500
+            )
+    
+    async def getAllMetricsForId(self, request):
+        """
+        Get all metrics for a specific node
+        
+        Args:
+            request: The HTTP request object with node_id in the URL path
+            
+        Returns:
+            aiohttp.web.Response: JSON response with the metrics data
+        """
+        logger.info("REST endpoint: get all metrics for id")
+        try:
+            node_id = request.match_info.get('node_id')
+            if not node_id:
+                return web.json_response(
+                    {"error": "No node ID provided"},
+                    status=400
+                )
+                
+            metrics = fetch_all_metrics_for_id(node_id)
+            return web.json_response(metrics)
+        except Exception as e:
+            logger.error(f"Error fetching all metrics for id: {str(e)}", exc_info=True)
+            return web.json_response(
+                {"error": f"Error fetching all metrics for id: {str(e)}"},
+                status=500
+            )
+    
+    async def resetMetrics(self, request):
+        """
+        Reset all metrics
+        
+        Returns:
+            aiohttp.web.Response: JSON response indicating success or failure
+        """
+        logger.info("REST endpoint: reset metrics")
+        try:
+            success = clear_network_metrics()
+            if success:
+                return web.json_response({"status": "success"})
+            else:
+                return web.json_response(
+                    {"error": "Failed to reset metrics"},
+                    status=500
+                )
+        except Exception as e:
+            logger.error(f"Error resetting metrics: {str(e)}", exc_info=True)
+            return web.json_response(
+                {"error": f"Error resetting metrics: {str(e)}"},
+                status=500
+            )
+    
+    async def deleteLogs(self, request):
+        """
+        Delete all logs
+        
+        Returns:
+            aiohttp.web.Response: JSON response indicating success or failure
+        """
+        logger.info("REST endpoint: delete logs")
+        try:
+            success = delete_logs()
+            if success:
+                return web.json_response({"status": "success"})
+            else:
+                return web.json_response(
+                    {"error": "Failed to delete logs"},
+                    status=500
+                )
+        except Exception as e:
+            logger.error(f"Error deleting logs: {str(e)}", exc_info=True)
+            return web.json_response(
+                {"error": f"Error deleting logs: {str(e)}"},
                 status=500
             )

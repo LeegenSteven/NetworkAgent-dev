@@ -34,6 +34,9 @@ class Appstate extends ChangeNotifier {
   // Topology layout state
   String _selectedTopologyLayout = 'force-directed';
   
+  // Topology view state
+  String _selectedTopologyView = NetworkTopologyWidget.defaultView;
+  
   // Log widget state
   List<LogEntry> _logs = [];
   bool _isLoadingLogs = false;
@@ -55,6 +58,7 @@ class Appstate extends ChangeNotifier {
   bool get filterByNodeType => _filterByNodeType;
   Set<NodeType> get selectedNodeTypes => Set<NodeType>.from(_selectedNodeTypes);
   String get selectedTopologyLayout => _selectedTopologyLayout;
+  String get selectedTopologyView => _selectedTopologyView;
   List<LogEntry> get logs => _logs;
   bool get isLoadingLogs => _isLoadingLogs;
   Metrics get metrics => _metrics;
@@ -284,6 +288,14 @@ class Appstate extends ChangeNotifier {
     }
   }
   
+  // Callback for topology widget rebuild
+  VoidCallback? _topologyRebuildCallback;
+  
+  // Set the topology rebuild callback
+  void setTopologyRebuildCallback(VoidCallback callback) {
+    _topologyRebuildCallback = callback;
+  }
+  
   // Update topology filtering
   void updateTopologyFiltering({
     required bool filterByNodeType,
@@ -291,13 +303,130 @@ class Appstate extends ChangeNotifier {
   }) {
     _filterByNodeType = filterByNodeType;
     _selectedNodeTypes = Set<NodeType>.from(selectedNodeTypes);
-    notifyListeners();
+    
+    // Trigger topology widget rebuild directly instead of notifyListeners
+    if (_topologyRebuildCallback != null) {
+      _topologyRebuildCallback!();
+    }
   }
   
   // Update topology layout
   void updateTopologyLayout(String layout) {
     _selectedTopologyLayout = layout;
-    notifyListeners();
+    
+    // Trigger topology widget rebuild directly instead of notifyListeners
+    if (_topologyRebuildCallback != null) {
+      _topologyRebuildCallback!();
+    }
+  }
+  
+  // Helper method to check if two topologies are equivalent
+  bool _areTopologiesEquivalent(List<NetworkNode> nodes1, List<NetworkConnection> connections1,
+                               List<NetworkNode> nodes2, List<NetworkConnection> connections2) {
+    // Check if the number of nodes and connections are the same
+    if (nodes1.length != nodes2.length || connections1.length != connections2.length) {
+      // print('Topology comparison: Different lengths');
+      return false;
+    }
+    
+    // Create maps of nodes by ID for more efficient comparison
+    final nodesMap1 = <String, NetworkNode>{};
+    final nodesMap2 = <String, NetworkNode>{};
+    
+    for (var node in nodes1) {
+      nodesMap1[node.id] = node;
+    }
+    
+    for (var node in nodes2) {
+      nodesMap2[node.id] = node;
+    }
+    
+    // Check if both topologies have the same node IDs
+    if (!nodesMap1.keys.toSet().containsAll(nodesMap2.keys) ||
+        !nodesMap2.keys.toSet().containsAll(nodesMap1.keys)) {
+      // print('Topology comparison: Different node IDs');
+      return false;
+    }
+    
+    // Compare each node by ID, name, type, and properties
+    for (final id in nodesMap1.keys) {
+      final node1 = nodesMap1[id]!;
+      final node2 = nodesMap2[id]!;
+      
+      if (node1.name != node2.name || node1.type != node2.type) {
+        // print('Topology comparison: Node $id has different name or type');
+        return false;
+      }
+      
+      // Skip comparing status property as it might change frequently
+      // but doesn't affect the graph structure
+      final properties1 = Map<String, dynamic>.from(node1.properties);
+      final properties2 = Map<String, dynamic>.from(node2.properties);
+      
+      // Remove status property for comparison
+      properties1.remove('status');
+      properties2.remove('status');
+      
+      // Compare properties (excluding status)
+      if (properties1.length != properties2.length) {
+        // print('Topology comparison: Node $id has different property count');
+        return false;
+      }
+      
+      for (final key in properties1.keys) {
+        if (!properties2.containsKey(key) || properties1[key] != properties2[key]) {
+          // print('Topology comparison: Node $id has different property $key');
+          return false;
+        }
+      }
+    }
+    
+    // Create maps of connections by source and target for more efficient comparison
+    final connectionsMap1 = <String, NetworkConnection>{};
+    final connectionsMap2 = <String, NetworkConnection>{};
+    
+    for (var conn in connections1) {
+      final key = '${conn.sourceId}-${conn.targetId}';
+      connectionsMap1[key] = conn;
+    }
+    
+    for (var conn in connections2) {
+      final key = '${conn.sourceId}-${conn.targetId}';
+      connectionsMap2[key] = conn;
+    }
+    
+    // Check if both topologies have the same connection keys
+    if (!connectionsMap1.keys.toSet().containsAll(connectionsMap2.keys) ||
+        !connectionsMap2.keys.toSet().containsAll(connectionsMap1.keys)) {
+      // print('Topology comparison: Different connection pairs');
+      return false;
+    }
+    
+    // Compare each connection by source, target, label, and properties
+    for (final key in connectionsMap1.keys) {
+      final conn1 = connectionsMap1[key]!;
+      final conn2 = connectionsMap2[key]!;
+      
+      if (conn1.label != conn2.label) {
+        // print('Topology comparison: Connection $key has different label');
+        return false;
+      }
+      
+      // Compare properties
+      if (conn1.properties.length != conn2.properties.length) {
+        // print('Topology comparison: Connection $key has different property count');
+        return false;
+      }
+      
+      for (final propKey in conn1.properties.keys) {
+        if (!conn2.properties.containsKey(propKey) || conn1.properties[propKey] != conn2.properties[propKey]) {
+          // print('Topology comparison: Connection $key has different property $propKey');
+          return false;
+        }
+      }
+    }
+    
+    return true;
   }
   
   // Update topology from server data
@@ -375,10 +504,68 @@ class Appstate extends ChangeNotifier {
         }
       }
       
-      // Update the state with the new topology
-      _topology = NetworkTopology(nodes: nodes, connections: connections);
-      _hasReceivedTopology = true;
-      notifyListeners();
+      // Check if the topology has actually changed (ignoring status changes)
+      final hasChanged = !_hasReceivedTopology || 
+                         !_areTopologiesEquivalent(_topology.nodes, _topology.connections, nodes, connections);
+      
+      if (hasChanged) {
+        // print('Topology has changed, updating graph');
+        _topology = NetworkTopology(nodes: nodes, connections: connections);
+        _hasReceivedTopology = true;
+        notifyListeners();
+      } else {
+        // print('Topology unchanged, skipping update');
+        
+        // Even though the structure hasn't changed, we might need to update node statuses
+        // Create a new topology with the same structure but updated statuses
+        final updatedNodes = <NetworkNode>[];
+        
+        // Create a map of the new nodes by ID for quick lookup
+        final newNodesMap = <String, NetworkNode>{};
+        for (var node in nodes) {
+          newNodesMap[node.id] = node;
+        }
+        
+        // Update each existing node with new status if available
+        for (var oldNode in _topology.nodes) {
+          if (newNodesMap.containsKey(oldNode.id)) {
+            final newNode = newNodesMap[oldNode.id]!;
+            // Only update if status has changed
+            if (oldNode.properties['status'] != newNode.properties['status']) {
+              updatedNodes.add(NetworkNode(
+                id: oldNode.id,
+                name: oldNode.name,
+                type: oldNode.type,
+                properties: {
+                  ...oldNode.properties,
+                  'status': newNode.properties['status'],
+                },
+              ));
+            } else {
+              updatedNodes.add(oldNode);
+            }
+          } else {
+            updatedNodes.add(oldNode);
+          }
+        }
+        
+        // Check if any statuses have actually changed
+        bool statusChanged = false;
+        for (int i = 0; i < updatedNodes.length; i++) {
+          if (i >= _topology.nodes.length || 
+              updatedNodes[i].properties['status'] != _topology.nodes[i].properties['status']) {
+            statusChanged = true;
+            break;
+          }
+        }
+        
+        // Only update the topology if any statuses have changed
+        if (statusChanged) {
+          // print('Node statuses have changed, updating topology without redrawing graph');
+          _topology = NetworkTopology(nodes: updatedNodes, connections: _topology.connections);
+          // Don't call notifyListeners() here to avoid triggering a redraw
+        }
+      }
     } catch (e) {
       print('Error updating topology: $e');
       // If there's an error, create an empty topology to avoid crashes
@@ -482,6 +669,9 @@ class Appstate extends ChangeNotifier {
   
   // Get topology view
   void getTopologyView(String view) {
+    // Store the selected view
+    _selectedTopologyView = view;
+    
     if (_socket != null && _socket!.connected) {
       _socket!.emit('get_topology', {'view': view});
     }

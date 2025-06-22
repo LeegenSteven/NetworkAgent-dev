@@ -17,6 +17,7 @@ import kubernetes
 import kopf
 import ansible_runner
 import utils.constants as constants
+import asyncio
 import os
 from utils.ansible import event_handler
 
@@ -56,11 +57,22 @@ async def install_vpn(servicename, vmname, mgmt_ip_address, data_ip_address, tun
     logger.info(hosts)
     logger.info(extravars)
 
-    r = ansible_runner.run(private_data_dir=constants.basedir+"/vpn/wireguard/playbooks", 
-                           inventory={'all': hosts},
-                           playbook='install.yaml',
-                           event_handler=event_handler,
-                           extravars=extravars)
+    def run_ansible():
+        """Wrapper function to run ansible_runner.run_async"""
+        thread, runner = ansible_runner.run_async(
+            private_data_dir=constants.basedir+"/vpn/wireguard/playbooks", 
+            inventory={'all': hosts},
+            playbook='install.yaml',
+            event_handler=event_handler,
+            extravars=extravars
+        )
+        # Wait for the thread to complete
+        thread.join()
+        return runner
+
+    # Execute in thread pool to avoid blocking the async event loop
+    loop = asyncio.get_event_loop()
+    r = await loop.run_in_executor(None, run_ansible)
 
     if r.status != 'successful':
         logger.info(f"Waiting for Edge VPN VM {vmname} used by service {servicename} to come up.")

@@ -14,6 +14,7 @@
 
 import logging
 import os
+import asyncio
 import kopf
 from utils.compute import *
 import ansible_runner
@@ -51,10 +52,22 @@ async def run_install(namespace, upf_vm_name):
     }
     logger.debug(hosts)
     logger.debug(extravars)
-    r = ansible_runner.run(private_data_dir=constants.basedir+"/free5gc/build/playbooks", 
-                           inventory={'all': hosts},
-                           playbook='install.yaml',
-                           extravars=extravars)
+
+    def run_ansible():
+        """Wrapper function to run ansible_runner.run_async"""
+        thread, runner = ansible_runner.run_async(
+            private_data_dir=constants.basedir+"/free5gc/build/playbooks", 
+            inventory={'all': hosts},
+            playbook='install.yaml',
+            extravars=extravars
+        )
+        # Wait for the thread to complete
+        thread.join()
+        return runner
+
+    # Execute in thread pool to avoid blocking the async event loop
+    loop = asyncio.get_event_loop()
+    r = await loop.run_in_executor(None, run_ansible)
 
     logger.info("status = %s", r.status)
     if r.status != 'successful':

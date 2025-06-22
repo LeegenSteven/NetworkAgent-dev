@@ -92,9 +92,12 @@ class NodePerformanceWidget extends StatelessWidget {
             Divider(height: 12),
             
             // Scrollable content area for metrics
-            Expanded(
+            // Use Flexible with FlexFit.loose instead of Expanded to allow the column to size itself
+            Flexible(
+              fit: FlexFit.loose,
               child: SingleChildScrollView(
                 child: Column(
+                  mainAxisSize: MainAxisSize.min, // Allow the column to shrink-wrap its children
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // CPU metrics - more compact
@@ -131,6 +134,7 @@ class NodePerformanceWidget extends StatelessWidget {
     final cpuPercent = metric.cpu['cpu_percent'] ?? 0.0;
     
     return Column(
+      mainAxisSize: MainAxisSize.min, // Allow the column to shrink-wrap its children
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
@@ -191,6 +195,7 @@ class NodePerformanceWidget extends StatelessWidget {
     }
     
     return Column(
+      mainAxisSize: MainAxisSize.min, // Allow the column to shrink-wrap its children
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
@@ -220,6 +225,7 @@ class NodePerformanceWidget extends StatelessWidget {
           return Padding(
             padding: const EdgeInsets.only(bottom: 4.0),
             child: Column(
+              mainAxisSize: MainAxisSize.min, // Allow the column to shrink-wrap its children
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Interface name

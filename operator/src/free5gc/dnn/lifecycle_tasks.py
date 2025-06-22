@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import asyncio
 import os
 import kopf
 from utils.compute import *
@@ -53,11 +54,22 @@ async def run_install(namespace, vm_name):
     logger.debug(hosts)
     logger.debug(extravars)
 
-    r = ansible_runner.run(private_data_dir=constants.basedir+"/free5gc/dnn/playbooks", 
-                           inventory={'all': hosts},
-                           playbook='install.yaml',
-                           event_handler=event_handler,
-                           extravars=extravars)
+    def run_ansible():
+        """Wrapper function to run ansible_runner.run_async"""
+        thread, runner = ansible_runner.run_async(
+            private_data_dir=constants.basedir+"/free5gc/dnn/playbooks", 
+            inventory={'all': hosts},
+            playbook='install.yaml',
+            event_handler=event_handler,
+            extravars=extravars
+        )
+        # Wait for the thread to complete
+        thread.join()
+        return runner
+
+    # Execute in thread pool to avoid blocking the async event loop
+    loop = asyncio.get_event_loop()
+    r = await loop.run_in_executor(None, run_ansible)
 
     logger.debug("status = %s", r.status)
     if r.status != 'successful':

@@ -5,7 +5,6 @@ import '../models/network_node.dart';
 import '../utils/environment_config.dart';
 import 'chat_panel.dart';
 import 'network_topology.dart';
-import 'network_performance.dart';
 import 'markdown_drawer.dart';
 import 'log_widget.dart';
 import 'settings_screen.dart';
@@ -24,7 +23,6 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
   
   // Widget display state
   bool _showChat = false; // Chat is hidden by default
-  bool _showPerformanceView = false; // Toggle between topology and performance view
   bool _showLogs = false;
   
   // Control the horizontal split view ratio (chat vs. topology+logs)
@@ -171,19 +169,6 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
               ),
             ),
           ),
-          // View toggle button
-          IconButton(
-            icon: Icon(
-              _showPerformanceView ? Icons.device_hub : Icons.speed,
-              color: Colors.white,
-            ),
-            onPressed: () {
-              setState(() {
-                _showPerformanceView = !_showPerformanceView;
-              });
-            },
-            tooltip: _showPerformanceView ? 'Show Topology' : 'Show Performance',
-          ),
           // Chat toggle button
           IconButton(
             icon: Icon(
@@ -269,13 +254,20 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                 // Network Topology or Performance Widget
                 Expanded(
                   flex: (_verticalSplitRatio * 100).round(), // Convert ratio to flex units
-                  child: _showPerformanceView
-                    ? NetworkPerformanceWidget(
-                        metrics: appState.metrics,
-                      )
-                    : appState.hasReceivedTopology 
-                      ? NetworkTopologyWidget(
-                          topology: appState.topology,
+                  child: appState.hasReceivedTopology 
+                      ? Consumer<Appstate>(
+                          // Listen to topology changes only - filter and layout changes are handled internally
+                          builder: (context, appState, child) {
+                            // Create a key based only on the topology to avoid excessive rebuilds
+                            final topologyKey = ValueKey(
+                              'topology-${appState.topology.nodes.length}-'
+                              '${appState.topology.connections.length}'
+                            );
+                            return NetworkTopologyWidget(
+                              key: topologyKey,
+                              topology: appState.topology,
+                            );
+                          },
                         )
                       : Center(
                             child: Column(

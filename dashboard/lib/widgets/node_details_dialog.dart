@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../appstate.dart';
 import '../models/network_node.dart';
 import '../utils/APIService.dart';
+import 'node_performance.dart';
 
 class NodeDetailsDialog extends StatefulWidget {
   final NetworkNode node;
@@ -152,10 +153,71 @@ class _NodeDetailsDialogState extends State<NodeDetailsDialog> {
                     const SizedBox(height: 8),
                     
                     // Scrollable content area
+                    // Use Flexible with FlexFit.loose instead of Expanded to allow the column to size itself
                     Flexible(
+                      fit: FlexFit.loose,
                       child: SingleChildScrollView(
-                        child: MarkdownBody(
-                          data: _markdownSummary,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min, // Allow the column to shrink-wrap its children
+                          children: [
+                            // Performance Card - Using Consumer to automatically update when metrics change
+                            Consumer<Appstate>(
+                              builder: (context, appState, child) {
+                                final nodeMetrics = appState.metrics.data[widget.node.id];
+                                if (nodeMetrics != null && nodeMetrics.isNotEmpty) {
+                                  return Card(
+                                    elevation: 2,
+                                    margin: const EdgeInsets.symmetric(vertical: 8),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(8.0),
+                                      child: StreamBuilder<void>(
+                                        // This stream will rebuild whenever appState.metrics changes
+                                        stream: Stream.periodic(const Duration(milliseconds: 100))
+                                            .asyncMap((_) async => appState.metrics),
+                                        builder: (context, snapshot) {
+                                          // Get the latest metrics for this node
+                                          final latestNodeMetrics = appState.metrics.data[widget.node.id] ?? [];
+                                          return NodePerformanceWidget(
+                                            metrics: latestNodeMetrics,
+                                            nodeId: widget.node.id,
+                                            showCpuMetrics: true,
+                                            showNetworkMetrics: true,
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                } else {
+                                  return const SizedBox.shrink();
+                                }
+                              },
+                            ),
+                            // Configuration Card
+                            Card(
+                              elevation: 2,
+                              margin: const EdgeInsets.symmetric(vertical: 8),
+                              child: Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min, // Allow the column to shrink-wrap its children
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Configuration',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const Divider(),
+                                    MarkdownBody(
+                                      data: _markdownSummary,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),

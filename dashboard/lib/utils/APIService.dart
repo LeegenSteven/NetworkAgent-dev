@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:networkagent/models/agent.dart';
+import 'package:networkagent/models/metrics.dart';
 import 'package:networkagent/utils/environment_config.dart' as config;
 
 class APIService{
@@ -203,6 +204,153 @@ class APIService{
       }
     } catch (e) {
       print('Error fetching node details: $e');
+      rethrow;
+    }
+  }
+  
+  // Metrics API methods
+  
+  Future<Metrics> getAllLastMetrics() async {
+    try {
+      var url = Uri.parse('${config.EnvironmentConfig.agentUrl}/metrics/last');
+      print('Fetching all last metrics from: $url');
+      
+      final http.Response response = await http.get(url, headers: getRequestHeaders);
+      
+      if (response.statusCode == 200) {
+        final dynamic decodedData = jsonDecode(response.body);
+        return Metrics.fromJson(decodedData);
+      } else {
+        print('Failed to load all last metrics: ${response.statusCode}');
+        print('Response body: ${response.body}');
+        throw Exception('Failed to load all last metrics');
+      }
+    } catch (e) {
+      print('Error fetching all last metrics: $e');
+      rethrow;
+    }
+  }
+  
+  Future<Metrics> getAllMetrics() async {
+    try {
+      var url = Uri.parse('${config.EnvironmentConfig.agentUrl}/metrics/all');
+      print('Fetching all metrics from: $url');
+      
+      final http.Response response = await http.get(url, headers: getRequestHeaders);
+      
+      if (response.statusCode == 200) {
+        final dynamic decodedData = jsonDecode(response.body);
+        return Metrics.fromJson(decodedData);
+      } else {
+        print('Failed to load all metrics: ${response.statusCode}');
+        print('Response body: ${response.body}');
+        throw Exception('Failed to load all metrics');
+      }
+    } catch (e) {
+      print('Error fetching all metrics: $e');
+      rethrow;
+    }
+  }
+  
+  Future<Metrics> getLastMetricsForId(String nodeId) async {
+    try {
+      var url = Uri.parse('${config.EnvironmentConfig.agentUrl}/metrics/last/$nodeId');
+      print('Fetching last metrics for node $nodeId from: $url');
+      
+      final http.Response response = await http.get(url, headers: getRequestHeaders);
+      
+      if (response.statusCode == 200) {
+        final dynamic decodedData = jsonDecode(response.body);
+        return Metrics.fromJson(decodedData);
+      } else {
+        print('Failed to load last metrics for node $nodeId: ${response.statusCode}');
+        print('Response body: ${response.body}');
+        throw Exception('Failed to load last metrics for node $nodeId');
+      }
+    } catch (e) {
+      print('Error fetching last metrics for node $nodeId: $e');
+      rethrow;
+    }
+  }
+  
+  Future<Metrics> getAllMetricsForId(String nodeId) async {
+    try {
+      var url = Uri.parse('${config.EnvironmentConfig.agentUrl}/metrics/all/$nodeId');
+      print('Fetching all metrics for node $nodeId from: $url');
+      
+      final http.Response response = await http.get(url, headers: getRequestHeaders);
+      
+      if (response.statusCode == 200) {
+        final dynamic decodedData = jsonDecode(response.body);
+        return Metrics.fromJson(decodedData);
+      } else {
+        print('Failed to load all metrics for node $nodeId: ${response.statusCode}');
+        print('Response body: ${response.body}');
+        throw Exception('Failed to load all metrics for node $nodeId');
+      }
+    } catch (e) {
+      print('Error fetching all metrics for node $nodeId: $e');
+      rethrow;
+    }
+  }
+  
+  Future<bool> resetMetrics() async {
+    try {
+      var url = Uri.parse('${config.EnvironmentConfig.agentUrl}/metrics/reset');
+      print('Resetting metrics at: $url');
+      
+      final http.Response response = await http.post(url, headers: postRequestHeaders);
+      print('Reset metrics response status: ${response.statusCode}');
+      print('Reset metrics response body: ${response.body}');
+      
+      if (response.statusCode == 200) {
+        try {
+          final dynamic decodedData = jsonDecode(response.body);
+          print('Decoded reset metrics data: $decodedData');
+          
+          // Check if response has status field
+          if (decodedData is Map<String, dynamic> && decodedData.containsKey('status')) {
+            bool success = decodedData['status'] == 'success';
+            print('Reset metrics success: $success');
+            return success;
+          } else {
+            // If no status field, assume success if we got 200
+            print('No status field in response, assuming success for 200 status code');
+            return true;
+          }
+        } catch (jsonError) {
+          print('Error parsing JSON response: $jsonError');
+          // If JSON parsing fails but we got 200, assume success
+          return true;
+        }
+      } else {
+        print('Failed to reset metrics: ${response.statusCode}');
+        print('Response body: ${response.body}');
+        return false; // Return false instead of throwing exception
+      }
+    } catch (e) {
+      print('Error resetting metrics: $e');
+      return false; // Return false instead of rethrowing
+    }
+  }
+  
+  Future<bool> deleteLogs() async {
+    try {
+      var url = Uri.parse('${config.EnvironmentConfig.agentUrl}/logs/delete');
+      print('Deleting logs at: $url');
+      
+      final http.Response response = await http.post(url, headers: postRequestHeaders);
+      
+      if (response.statusCode == 200) {
+        final dynamic decodedData = jsonDecode(response.body);
+        return decodedData['status'] == 'success';
+      } else {
+        print('Failed to delete logs: ${response.statusCode}');
+        print('Response body: ${response.body}');
+        throw Exception('Failed to delete logs');
+      }
+    } catch (e) {
+      print('Error deleting logs: $e');
       rethrow;
     }
   }

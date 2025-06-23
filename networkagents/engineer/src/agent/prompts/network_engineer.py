@@ -78,7 +78,7 @@ exist. If they do not exist, then exclude those from the planned steps. Also che
 break any of the rules in the network service CRDs or 
 
 Do not create network locations or network services that already exist. And do not create unnecessary network service and locations. Do create network locations if they
-are needed to achieve the user objective. When asked to delete network services or locations, simply delete them without creating any additional resources.
+are needed to achieve the user objective. When asked to delete network services or network locations, simply delete them without creating any additional resources.
 
 Format each planned step as a markdown bullet. 
 

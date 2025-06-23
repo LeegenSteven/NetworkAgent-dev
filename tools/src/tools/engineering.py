@@ -118,6 +118,7 @@ def createLocation(
         "kind": "ComputeNetwork",
         "metadata": {
             "name": name,
+            "namespace": "network",
             "labels": {
                 "graph": "true"
             },
@@ -151,6 +152,7 @@ def createLocation(
         "kind": "ComputeSubnetwork",
         "metadata": {
             "name": name,
+            "namespace": "network",
             "labels": {
                 "graph": "true"
             }
@@ -188,6 +190,7 @@ def createLocation(
         "kind": "ComputeFirewall",
         "metadata": {
             "name": name,
+            "namespace": "network",
             "labels": {
                 "graph": "true"
             }
@@ -215,7 +218,7 @@ def createLocation(
         if result:
             logger.info(f"service {filename} manifest successfully submitted for deployment")
         else:
-            logger.error(f"service {filename} manifest errpr deploying:\n```yaml\n{gitops_manifest}\n```")
+            logger.error(f"service {filename} manifest error deploying:\n```yaml\n{gitops_manifest}\n```")
     else:
         client = kubernetes.dynamic.DynamicClient(get_client())
         try:
@@ -241,7 +244,6 @@ def createLocation(
 @globals.networkagent_mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
 def deleteLocation(
     name: Annotated[str, "the name of the network location to delete"],
-    namespace: Annotated[str, "the namespace of the network to delete - usually the same as the name"],
 ):
     """
     Delete an existing network location.
@@ -252,22 +254,8 @@ def deleteLocation(
     logger.info("Deleting VPC %s", name)
 
     if GITOPS:
-        filename = name+"-firewall.yaml"
-        result = delete_git_file(filename, f"{name} firewall deletion")
-        if result:
-            logger.error (f"service {filename} successfully submitted for deletion")
-        else:
-            logger.error(f"service {filename} could not be deleted")
-
-        filename = name+"-subnet.yaml"
-        result = delete_git_file(filename, f"{name} subnetwork deletion")
-        if result:
-            logger.error (f"service {filename} successfully submitted for deletion")
-        else:
-            logger.error(f"service {filename} could not be deleted")
-
-        filename = name+"-network.yaml"
-        result = delete_git_file(filename, f"{name} network deletion")
+        filename = name+"-network-location.yaml"
+        result = delete_git_file(filename, f"{name} location deletion")
         if result:
             logger.error (f"service {filename} successfully submitted for deletion")
         else:
@@ -280,19 +268,19 @@ def deleteLocation(
                 api_version="compute.cnrm.cloud.google.com/v1beta1",
                 kind="ComputeNetwork",
             )
-            network_api.delete(namespace=namespace, name=name)
+            network_api.delete(namespace="network", name=name)
 
             network_api = client.resources.get(
                 api_version="compute.cnrm.cloud.google.com/v1beta1",
                 kind="ComputeSubnetwork",
             )
-            network_api.delete(namespace=namespace, name=name)
+            network_api.delete(namespace="network", name=name)
 
             network_api = client.resources.get(
                 api_version="compute.cnrm.cloud.google.com/v1beta1",
                 kind="ComputeFirewall",
             )
-            network_api.delete(namespace=namespace, name=name)
+            network_api.delete(namespace="network", name=name)
 
         except kubernetes.client.rest.ApiException as e: 
             logger.info(e.status)
@@ -302,7 +290,7 @@ def deleteLocation(
             else:
                 logger.info(e)
 
-    return "network deleted successfully"
+    return "network location deleted successfully"
 
 ######################################################################
 # Get a list of Service Definitions

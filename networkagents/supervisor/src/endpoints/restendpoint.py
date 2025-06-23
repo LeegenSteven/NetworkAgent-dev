@@ -83,30 +83,31 @@ class RestEndpoint:
         deleteLogsRoute = self.app.router.add_post("/logs/delete", self.deleteLogs)
         self.cors.add(deleteLogsRoute, corsConfig)
 
+    #################################################################
+    # Get node details
+    #################################################################
     def _parse_node_details_to_markdown(self, node_details):
-        markdown = f"# {node_details['name']} ({node_details['kind']})\n\n"
+        markdown = ""
         
         spec = node_details.get('spec', {})
         if isinstance(spec, dict):
             for key, value in spec.items():
-                if isinstance(value, dict):
-                    markdown += f"- **{key.replace('_', ' ').title()}**:\n"
-                    for sub_key, sub_value in value.items():
-                        markdown += f"  - **{sub_key.replace('_', ' ').title()}**: {sub_value}\n"
-                elif isinstance(value, list):
-                    markdown += f"- **{key.replace('_', ' ').title()}**:\n"
-                    for item in value:
-                        markdown += f"  - {item}\n"
-                else:
-                    markdown += f"- **{key.replace('_', ' ').title()}**: {value}\n"
+                if key in ['status', 'spec']:
+                    if isinstance(value, dict):
+                        markdown += f"\n__{key.replace('_', ' ').title()}__:\n"
+                        for sub_key, sub_value in value.items():
+                            markdown += f"  - **{sub_key.replace('_', ' ').title()}**: {sub_value}\n"
+                    elif isinstance(value, list):
+                        markdown += f"- **{key.replace('_', ' ').title()}**:\n"
+                        for item in value:
+                            markdown += f"  - {item}\n"
+                    else:
+                        markdown += f"- **{key.replace('_', ' ').title()}**: {value}\n"
         else:
             markdown += f"- {spec}\n"
 
         return markdown
 
-    #################################################################
-    # Get node details
-    #################################################################
     async def getNodeDetails(self, request):
         logger.info("REST endpoint: get node details")
         try:

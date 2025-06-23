@@ -45,6 +45,9 @@ class Appstate extends ChangeNotifier {
   Metrics _metrics = Metrics({});
   bool _isLoadingMetrics = false;
   
+  // Performance graph widget state
+  bool _showPerformanceGraph = false;
+  
   // Push notifications state
   final List<PushNotification> _pushNotifications = [];
   
@@ -63,6 +66,7 @@ class Appstate extends ChangeNotifier {
   bool get isLoadingLogs => _isLoadingLogs;
   Metrics get metrics => _metrics;
   bool get isLoadingMetrics => _isLoadingMetrics;
+  bool get showPerformanceGraph => _showPerformanceGraph;
   List<PushNotification> get pushNotifications => List.unmodifiable(_pushNotifications);
   
   Appstate() {
@@ -658,6 +662,12 @@ class Appstate extends ChangeNotifier {
     if (_socket != null && _socket!.connected) {
       _socket!.emit('reset_metrics');
     }
+  }
+  
+  // Toggle performance graph visibility
+  void togglePerformanceGraph() {
+    _showPerformanceGraph = !_showPerformanceGraph;
+    notifyListeners();
   }
   
   // Get node details

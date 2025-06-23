@@ -165,26 +165,22 @@ class _NodeDetailsDialogState extends State<NodeDetailsDialog> {
                               builder: (context, appState, child) {
                                 final nodeMetrics = appState.metrics.data[widget.node.id];
                                 if (nodeMetrics != null && nodeMetrics.isNotEmpty) {
-                                  return Card(
-                                    elevation: 2,
+                                  return Container(
                                     margin: const EdgeInsets.symmetric(vertical: 8),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(8.0),
-                                      child: StreamBuilder<void>(
-                                        // This stream will rebuild whenever appState.metrics changes
-                                        stream: Stream.periodic(const Duration(milliseconds: 100))
-                                            .asyncMap((_) async => appState.metrics),
-                                        builder: (context, snapshot) {
-                                          // Get the latest metrics for this node
-                                          final latestNodeMetrics = appState.metrics.data[widget.node.id] ?? [];
-                                          return NodePerformanceWidget(
-                                            metrics: latestNodeMetrics,
-                                            nodeId: widget.node.id,
-                                            showCpuMetrics: true,
-                                            showNetworkMetrics: true,
-                                          );
-                                        },
-                                      ),
+                                    child: StreamBuilder<void>(
+                                      // This stream will rebuild whenever appState.metrics changes
+                                      stream: Stream.periodic(const Duration(milliseconds: 100))
+                                          .asyncMap((_) async => appState.metrics),
+                                      builder: (context, snapshot) {
+                                        // Get the latest metrics for this node
+                                        final latestNodeMetrics = appState.metrics.data[widget.node.id] ?? [];
+                                        return NodePerformanceWidget(
+                                          metrics: latestNodeMetrics,
+                                          nodeId: widget.node.id,
+                                          showCpuMetrics: true,
+                                          showNetworkMetrics: true,
+                                        );
+                                      },
                                     ),
                                   );
                                 } else {
@@ -195,21 +191,39 @@ class _NodeDetailsDialogState extends State<NodeDetailsDialog> {
                             // Configuration Card
                             Card(
                               elevation: 2,
-                              margin: const EdgeInsets.symmetric(vertical: 8),
+                              margin: const EdgeInsets.all(4.0),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8.0),
+                                side: BorderSide(
+                                  color: Color(0xFF1976D2),
+                                  width: 1.0,
+                                ),
+                              ),
                               child: Padding(
                                 padding: const EdgeInsets.all(8.0),
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min, // Allow the column to shrink-wrap its children
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text(
-                                      'Configuration',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.settings,
+                                          color: Color(0xFF1976D2),
+                                          size: 16,
+                                        ),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'Configuration',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF0D47A1),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    const Divider(),
+                                    Divider(height: 12),
                                     MarkdownBody(
                                       data: _markdownSummary,
                                     ),

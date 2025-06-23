@@ -44,14 +44,14 @@ class NodePerformanceWidget extends StatelessWidget {
             Row(
               children: [
                 Icon(
-                  Icons.computer,
+                  Icons.speed,
                   color: Color(0xFF1976D2),
                   size: 16,
                 ),
                 SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    latestMetric?.hostname ?? 'Node $nodeId',
+                    'Performance',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,

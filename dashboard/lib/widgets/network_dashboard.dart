@@ -7,6 +7,7 @@ import 'chat_panel.dart';
 import 'network_topology.dart';
 import 'markdown_drawer.dart';
 import 'log_widget.dart';
+import 'performance_graph_widget.dart';
 import 'settings_screen.dart';
 import 'notification_screen.dart';
 
@@ -45,7 +46,25 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
     setState(() {
       _showLogs = !_showLogs;
       appState.toggleLogs(_showLogs);
+      
+      // If logs are being shown, hide performance graph
+      if (_showLogs && appState.showPerformanceGraph) {
+        appState.togglePerformanceGraph();
+      }
     });
+  }
+  
+  void _togglePerformanceGraph() {
+    final appState = Provider.of<Appstate>(context, listen: false);
+    appState.togglePerformanceGraph();
+    
+    // If performance graph is being shown, hide logs
+    if (appState.showPerformanceGraph && _showLogs) {
+      setState(() {
+        _showLogs = false;
+        appState.toggleLogs(false);
+      });
+    }
   }
   
   void _toggleChat() {
@@ -178,6 +197,19 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
             onPressed: () => _toggleChat(),
             tooltip: 'Toggle Chat',
           ),
+          // Performance graph toggle button
+          Consumer<Appstate>(
+            builder: (context, appState, child) {
+              return IconButton(
+                icon: Icon(
+                  Icons.show_chart,
+                  color: appState.showPerformanceGraph ? Colors.amber : Colors.white,
+                ),
+                onPressed: () => _togglePerformanceGraph(),
+                tooltip: 'Toggle Performance Graphs',
+              );
+            },
+          ),
           // Log toggle button
           IconButton(
             icon: Icon(
@@ -251,7 +283,7 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
           Expanded(
             child: Column(
               children: [
-                // Network Topology or Performance Widget
+                // Main content area - Always show Network Topology
                 Expanded(
                   flex: (_verticalSplitRatio * 100).round(), // Convert ratio to flex units
                   child: appState.hasReceivedTopology 
@@ -287,45 +319,62 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                           )
                 ),
                 
-                // Only show the vertical divider and logs panel when logs are enabled
-                if (_showLogs) ...[
-                  // Vertical resizable divider
-                  GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onVerticalDragUpdate: (details) {
-                      setState(() {
-                        // Calculate the new ratio based on the drag
-                        final totalHeight = MediaQuery.of(context).size.height;
-                        _verticalSplitRatio += details.delta.dy / totalHeight;
-                        _verticalSplitRatio = _verticalSplitRatio.clamp(_minVerticalSplitRatio, _maxVerticalSplitRatio);
-                      });
-                    },
-                    child: Container(
-                      height: 8,
-                      color: const Color(0xFFE3F2FD), // Light blue background
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            width: 30,
-                            height: 2,
-                            color: const Color(0xFF90CAF9), // Slightly darker blue for the handle
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  // Logs panel
-                  Expanded(
-                    flex: ((1 - _verticalSplitRatio) * 100).round(), // Convert ratio to flex units
-                    child: LogWidget(
-                      logs: appState.logs,
-                      socket: appState.socket!,
-                      isLoading: appState.isLoadingLogs,
-                    ),
-                  ),
-                ],
+                // Show the vertical divider and bottom panel when logs or performance graph are enabled
+                Consumer<Appstate>(
+                  builder: (context, appState, child) {
+                    if (_showLogs || appState.showPerformanceGraph) {
+                      return Expanded(
+                        flex: ((1 - _verticalSplitRatio) * 100).round(), // Convert ratio to flex units
+                        child: Column(
+                          children: [
+                            // Vertical resizable divider
+                            GestureDetector(
+                              behavior: HitTestBehavior.translucent,
+                              onVerticalDragUpdate: (details) {
+                                setState(() {
+                                  // Calculate the new ratio based on the drag
+                                  final totalHeight = MediaQuery.of(context).size.height;
+                                  _verticalSplitRatio += details.delta.dy / totalHeight;
+                                  _verticalSplitRatio = _verticalSplitRatio.clamp(_minVerticalSplitRatio, _maxVerticalSplitRatio);
+                                });
+                              },
+                              child: Container(
+                                height: 8,
+                                color: const Color(0xFFE3F2FD), // Light blue background
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      width: 30,
+                                      height: 2,
+                                      color: const Color(0xFF90CAF9), // Slightly darker blue for the handle
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            
+                            // Bottom panel - show either logs or performance graph
+                            Expanded(
+                              child: _showLogs 
+                                  ? LogWidget(
+                                      logs: appState.logs,
+                                      socket: appState.socket!,
+                                      isLoading: appState.isLoadingLogs,
+                                    )
+                                  : PerformanceGraphWidget(
+                                      socket: appState.socket!,
+                                      isLoading: appState.isLoadingMetrics,
+                                    ),
+                            ),
+                          ],
+                        ),
+                      );
+                    } else {
+                      return const SizedBox.shrink();
+                    }
+                  },
+                ),
               ],
             ),
           ),

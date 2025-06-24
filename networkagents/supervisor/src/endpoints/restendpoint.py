@@ -26,6 +26,7 @@ from tools.metrics import (
     fetch_all_metrics_for_id,
     clear_network_metrics
 )
+from tools.agents import get_available_agents
 from tools.logs import delete_logs
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,10 @@ class RestEndpoint:
 
         deleteLogsRoute = self.app.router.add_post("/logs/delete", self.deleteLogs)
         self.cors.add(deleteLogsRoute, corsConfig)
+
+        getAvailableAgentsRoute = self.app.router.add_get("/agents/available", self.getAvailableAgents)
+        self.cors.add(getAvailableAgentsRoute, corsConfig)
+
 
     #################################################################
     # Get node details
@@ -463,5 +468,25 @@ class RestEndpoint:
             logger.error(f"Error deleting logs: {str(e)}", exc_info=True)
             return web.json_response(
                 {"error": f"Error deleting logs: {str(e)}"},
+                status=500
+            )
+
+    
+    async def getAvailableAgents(self, request):
+        """
+        Get available network agents running that can be added to the
+        autonomous network agent UI
+        
+        Returns:
+            aiohttp.web.Response: JSON response indicating success or failure
+        """
+        logger.info("REST endpoint: get available agents")
+        try:
+            agents = await get_available_agents()
+            return web.json_response(agents)
+        except Exception as e:
+            logger.error(f"Error getting available agents: {str(e)}", exc_info=True)
+            return web.json_response(
+                {"error": f"Error getting available agents: {str(e)}"},
                 status=500
             )

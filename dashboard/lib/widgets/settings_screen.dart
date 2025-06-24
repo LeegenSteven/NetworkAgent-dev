@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../appstate.dart';
 import '../models/agent.dart';
 import '../utils/APIService.dart';
+import '../models/available_agent.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -119,7 +120,8 @@ class AgentSettingsSection extends StatelessWidget {
                 fontSize: 14,
               ),
             ),
-            const SizedBox(height: 16),
+            const AvailableAgentsList(),
+            const SizedBox(height: 24),
             const Expanded(
               child: AgentList(),
             ),
@@ -133,6 +135,88 @@ class AgentSettingsSection extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => const AddAgentDialog(),
+    );
+  }
+}
+
+class AvailableAgentsList extends StatefulWidget {
+  const AvailableAgentsList({super.key});
+
+  @override
+  State<AvailableAgentsList> createState() => _AvailableAgentsListState();
+}
+
+class _AvailableAgentsListState extends State<AvailableAgentsList> {
+  late Future<List<AvailableAgent>> _availableAgentsFuture;
+  final APIService _apiService = APIService();
+
+  @override
+  void initState() {
+    super.initState();
+    _availableAgentsFuture = _apiService.getAvailableAgents();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = Provider.of<Appstate>(context);
+    final addedAgentUrls = appState.agents.map((a) => a.url).toSet();
+
+    return FutureBuilder<List<AvailableAgent>>(
+      future: _availableAgentsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: Padding(
+            padding: EdgeInsets.all(16.0),
+            child: CircularProgressIndicator(),
+          ));
+        } else if (snapshot.hasError) {
+          return Center(child: Text('Error fetching available agents: ${snapshot.error}'));
+        } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final availableAgents = snapshot.data!;
+        final agentsToShow = availableAgents.where((a) => !addedAgentUrls.contains(a.url)).toList();
+
+        if (agentsToShow.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 16),
+            Text(
+              'Available Agents',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF0D47A1),
+                  ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'The following agents are currently running and can be added to your dashboard.',
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('URL', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Action', style: TextStyle(fontWeight: FontWeight.bold))),
+                ],
+                rows: agentsToShow.map((agent) => DataRow(cells: [
+                  DataCell(Text(agent.name)),
+                  DataCell(Text(agent.url)),
+                  DataCell(ElevatedButton(onPressed: () => appState.addAgent(agent.url), child: const Text('Add'))),
+                ])).toList(),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -177,12 +261,27 @@ class AgentList extends StatelessWidget {
       );
     }
 
-    return ListView.builder(
-      itemCount: agents.length,
-      itemBuilder: (context, index) {
-        final agent = agents[index];
-        return AgentListItem(agent: agent);
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Active Agents',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF0D47A1),
+              ),
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: ListView.builder(
+            itemCount: agents.length,
+            itemBuilder: (context, index) {
+              final agent = agents[index];
+              return AgentListItem(agent: agent);
+            },
+          ),
+        ),
+      ],
     );
   }
 }

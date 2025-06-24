@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:networkagent/models/agent.dart';
 import 'package:networkagent/models/metrics.dart';
+import 'package:networkagent/models/available_agent.dart';
 import 'package:networkagent/utils/environment_config.dart' as config;
 
 class APIService{
@@ -352,6 +353,30 @@ class APIService{
     } catch (e) {
       print('Error deleting logs: $e');
       rethrow;
+    }
+  }
+
+  Future<List<AvailableAgent>> getAvailableAgents() async {
+    try {
+      var url = Uri.parse('${config.EnvironmentConfig.agentUrl}/agents/available');
+      print('Available network agents at: $url');
+      
+      final http.Response response = await http.get(url, headers: getRequestHeaders);
+      
+      if (response.statusCode == 200) {
+        final List<dynamic> decodedData = jsonDecode(response.body);
+        List<AvailableAgent> availableAgents = [];
+        for (var agentData in decodedData) {
+          availableAgents.add(AvailableAgent.fromJson(agentData));
+        }
+        return availableAgents;
+      } else {
+        print('Failed to get available network agents: ${response.statusCode}');
+        print('Response body: ${response.body}');
+        throw Exception('Failed to get available network agents');
+      }
+    } catch (e) {
+      print('Error getting available agents: $e'); rethrow;
     }
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:provider/provider.dart';
 import '../appstate.dart';
@@ -142,6 +143,30 @@ class _NodeDetailsDialogState extends State<NodeDetailsDialog> {
                                   fontSize: 14,
                                   color: Colors.grey[600],
                                 ),
+                              ),
+                              Row(
+                                children: [
+                                  SelectableText(
+                                    'Id: ${widget.node.id}',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  IconButton(
+                                    icon: const Icon(Icons.copy, size: 16),
+                                    tooltip: 'Copy ID',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    onPressed: () {
+                                      Clipboard.setData(ClipboardData(text: widget.node.id));
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Node ID copied to clipboard')),
+                                      );
+                                    },
+                                  ),
+                                ],
                               ),
                             ],
                           ),

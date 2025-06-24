@@ -906,9 +906,9 @@ Networkagent()
         --service-account $GOOGLE_SERVICE_ACCOUNT \
         --min 1 \
         --timeout=3600 \
+        --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
+        --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
         --update-env-vars GOOGLE_GENAI_USE_VERTEXAI=TRUE \
-        --update-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_PROJECT \
-        --update-env-vars GOOGLE_CLOUD_LOCATION=$GOOGLE_REGION \
         --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
         --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
         --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL \

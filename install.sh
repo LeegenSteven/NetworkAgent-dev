@@ -856,8 +856,11 @@ Networkagent()
     fi
     export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter="networkagent@${GOOGLE_PROJECT}."`
 
+    agent_processed=false
+
     # deploy the mcp tools
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"networktools"* ]]; then
+        agent_processed=true
         cd tools
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networktools:latest"
         if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
@@ -886,13 +889,20 @@ Networkagent()
         sleep 5
     fi
 
+    TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
+    if [[ $? -ne 0 ]]; then
+        echo
+        echo "**ERROR** cannot determine the networktools URL required by other agents. Exiting"
+        exit 1
+    fi
+
     # deploy supervisor
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"supervisor"* ]]; then
-        TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
+        agent_processed=true
         cd networkagents/supervisor
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networksupervisor:latest"
         if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-            read -p "Supervisor image already exists. Rebuild? (y/n) " -n 1 -r
+            read -p "Supervisor agent image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
@@ -933,12 +943,12 @@ Networkagent()
 
     # deploy the engineer agent
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"engineer"* ]]; then
-        TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
+        agent_processed=true
         SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
         cd networkagents/engineer
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/engineeragent:latest"
         if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-            read -p "Engineer image already exists. Rebuild? (y/n) " -n 1 -r
+            read -p "Engineer agent image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
@@ -964,11 +974,11 @@ Networkagent()
 
     # deploy the tester agent
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"test"* ]]; then 
-        TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
+        agent_processed=true
         cd networkagents/tester
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/testagent:latest"
         if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-            read -p "Tester image already exists. Rebuild? (y/n) " -n 1 -r
+            read -p "Tester agent image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
@@ -993,12 +1003,12 @@ Networkagent()
 
     # deploy the incident agent
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"incident"* ]]; then 
-        TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
+        agent_processed=true
         SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
         cd networkagents/incident
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/incidentagent:latest"
         if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-            read -p "Incident image already exists. Rebuild? (y/n) " -n 1 -r
+            read -p "Incident agent image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
@@ -1026,11 +1036,11 @@ Networkagent()
 
     # deploy the operations agent
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"operations"* ]]; then
-        TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
+        agent_processed=true
         cd networkagents/operations
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/operationsagent:latest"
         if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-            read -p "Operations image already exists. Rebuild? (y/n) " -n 1 -r
+            read -p "Operations agent image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
@@ -1053,8 +1063,38 @@ Networkagent()
         cd ../..
     fi
 
+    # deploy the logs agent
+    if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"logs"* ]]; then
+        agent_processed=true
+        cd networkagents/logs
+        IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/logsagent:latest"
+        if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+            read -p "Logs agent image already exists. Rebuild? (y/n) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+            fi
+        else
+            gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+        fi
+        gcloud run deploy logsagent \
+        --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/logsagent:latest \
+        --region $GOOGLE_REGION \
+        --service-account $GOOGLE_SERVICE_ACCOUNT \
+        --min 1 \
+        --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
+        --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
+        --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
+        --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL \
+        --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
+        --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
+        --allow-unauthenticated 
+        cd ../..
+    fi
+
     # build and deploy the network dashboard
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"dashboard"* ]]; then
+        agent_processed=true
         GITEA_HOST=$(kubectl get gitea gitea -o 'jsonpath={..status.create_gitea.external_ip_address}')
         SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
         cd dashboard
@@ -1097,6 +1137,11 @@ Networkagent()
         echo "Dashboard URL is ${DASHBOARD_URL}"
     fi
 
+    if [ "$agent_processed" = false ]; then
+        echo
+        echo "**ERROR**: the agent names(s) \"$AGENT_NAMES\" you specified for -n are incorrect"
+        exit 1
+    fi
     # Display demo information summary
     DisplayDemoInfo
 
@@ -1113,6 +1158,7 @@ DisplayDemoInfo()
     OPERATIONS_URL=$(gcloud run services describe operationsagent --region=$GOOGLE_REGION --format="value(status.url)")
     ENGINEER_URL=$(gcloud run services describe engineeragent --region=$GOOGLE_REGION --format="value(status.url)")
     TESTER_URL=$(gcloud run services describe testagent --region=$GOOGLE_REGION --format="value(status.url)")
+    LOGS_URL=$(gcloud run services describe logsagent --region=$GOOGLE_REGION --format="value(status.url)")
     INCIDENT_URL=$(gcloud run services describe incidentagent --region=$GOOGLE_REGION --format="value(status.url)")
     TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
 
@@ -1125,6 +1171,7 @@ DisplayDemoInfo()
     echo "Operations Agent is ${OPERATIONS_URL}"
     echo "Engineer Agent is ${ENGINEER_URL}"
     echo "Test Agent is ${TESTER_URL}"
+    echo "Logs Agent is ${LOGS_URL}"
     echo "Incident Agent is ${INCIDENT_URL}"
     echo "MCP Tools Host is ${TOOLS_URL}"
     echo ""

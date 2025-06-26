@@ -487,6 +487,7 @@ class HostAgent:
             )
 
             request = SendStreamingMessageRequest(
+                id = str(uuid4()),
                 params=MessageSendParams(**send_payload)
             )
 

@@ -199,27 +199,14 @@ class AgentList extends StatelessWidget {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Active Agents',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFF0D47A1),
-              ),
-        ),
-        const SizedBox(height: 16),
-        Expanded(
-          child: ListView.builder(
-            itemCount: agents.length,
-            itemBuilder: (context, index) {
-              final agent = agents[index];
-              return AgentListItem(agent: agent);
-            },
-          ),
-        ),
-      ],
+    return Expanded(
+      child: ListView.builder(
+        itemCount: agents.length,
+        itemBuilder: (context, index) {
+          final agent = agents[index];
+          return AgentListItem(agent: agent);
+        },
+      ),
     );
   }
 }

@@ -123,7 +123,7 @@ class EngineerAgentExecutor(AgentExecutor):
                 if background_task:
                     task.metadata={"input_data": query_data}
 
-                event_queue.enqueue_event(task)
+                await event_queue.enqueue_event(task)
 
             logger.info("Processing continuation for task %s, with id %s", query_text, task.contextId)
             async for event in agent.stream(query_text, task.contextId):
@@ -139,13 +139,13 @@ class EngineerAgentExecutor(AgentExecutor):
                         task_id=task.id,
                         final=event.get('is_task_complete', False)
                     )
-                    event_queue.enqueue_event(error_event)
+                    await event_queue.enqueue_event(error_event)
                     
                     # If this is a critical error that should end the task
                     if error.severity in [ErrorSeverity.ERROR, ErrorSeverity.CRITICAL] and event.get('is_task_complete', False):
                         return
                 elif event['is_task_complete']:
-                    event_queue.enqueue_event(
+                    await event_queue.enqueue_event(
                         TaskStatusUpdateEvent(
                             status=TaskStatus(
                                 state=TaskState.completed,
@@ -167,7 +167,7 @@ class EngineerAgentExecutor(AgentExecutor):
                         await self.send_notification(task, event)
 
                     # send back to user chat
-                    event_queue.enqueue_event(
+                    await event_queue.enqueue_event(
                         TaskStatusUpdateEvent(
                             status=TaskStatus(
                                 state=TaskState.input_required,
@@ -183,7 +183,7 @@ class EngineerAgentExecutor(AgentExecutor):
                         )
                     )
                 else:
-                    event_queue.enqueue_event(
+                    await event_queue.enqueue_event(
                         TaskStatusUpdateEvent(
                             status=TaskStatus(
                                 state=TaskState.working,
@@ -207,7 +207,7 @@ class EngineerAgentExecutor(AgentExecutor):
                     task_id=task.id,
                     final=True
                 )
-                event_queue.enqueue_event(error_event)
+                await event_queue.enqueue_event(error_event)
             # Re-raise for the decorator to handle
             raise
         except Exception as e:
@@ -224,7 +224,7 @@ class EngineerAgentExecutor(AgentExecutor):
                     task_id=task.id,
                     final=True
                 )
-                event_queue.enqueue_event(error_event)
+                await event_queue.enqueue_event(error_event)
             logger.error(f"Error during agent streaming: {str(e)}", exc_info=True)
             # Re-raise for the decorator to handle
             raise error
@@ -253,7 +253,7 @@ class EngineerAgentExecutor(AgentExecutor):
             logger.warning(f"Cancel requested for task {task.id}, but cancellation is not fully supported")
             
             # Send a status update to inform the user
-            event_queue.enqueue_event(
+            await event_queue.enqueue_event(
                 TaskStatusUpdateEvent(
                     status=TaskStatus(
                         state=TaskState.cancelled,
@@ -277,7 +277,7 @@ class EngineerAgentExecutor(AgentExecutor):
                     task_id=task.id,
                     final=True
                 )
-                event_queue.enqueue_event(error_event)
+                await event_queue.enqueue_event(error_event)
             # Re-raise for the decorator to handle
             raise
         except Exception as e:
@@ -294,7 +294,7 @@ class EngineerAgentExecutor(AgentExecutor):
                     task_id=task.id,
                     final=True
                 )
-                event_queue.enqueue_event(error_event)
+                await event_queue.enqueue_event(error_event)
             logger.error(f"Unexpected error in cancel: {str(e)}", exc_info=True)
             # Re-raise for the decorator to handle
             raise error

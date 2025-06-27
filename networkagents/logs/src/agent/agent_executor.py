@@ -14,7 +14,7 @@
 
 import logging
 import traceback
-from agent.agent import TestAgent
+from agent.agent import LogsAgent
 from typing_extensions import override
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events.event_queue import EventQueue
@@ -25,15 +25,15 @@ from a2a.types import (
 )
 from a2a.utils import new_task, new_text_artifact, new_agent_text_message
 from utils.error_handler import (
-    TestAgentError,
+    LogsAgentError,
     ErrorSeverity,
     create_error_status_event
 )
 
 logger = logging.getLogger(__name__)
 
-class TestAgentExecutor(AgentExecutor):
-    """Test AgentExecutor Example."""
+class LogsAgentExecutor(AgentExecutor):
+    """Logs AgentExecutor Example."""
 
     @override
     async def execute(
@@ -48,13 +48,13 @@ class TestAgentExecutor(AgentExecutor):
         task = None
         
         try:
-            agent = await TestAgent().get_instance()
+            agent = await LogsAgent().get_instance()
 
             query = context.get_user_input()
             task = context.current_task
 
             if not context.message:
-                raise TestAgentError(
+                raise LogsAgentError(
                     message='No message provided',
                     severity=ErrorSeverity.ERROR
                 )
@@ -88,7 +88,7 @@ class TestAgentExecutor(AgentExecutor):
 
             except Exception as e:
                 # Handle any exceptions that occur during streaming
-                error = TestAgentError(
+                error = LogsAgentError(
                     message=f"Error during agent streaming: {str(e)}",
                     severity=ErrorSeverity.ERROR,
                     original_exception=e
@@ -102,7 +102,7 @@ class TestAgentExecutor(AgentExecutor):
                 await event_queue.enqueue_event(error_event)
                 logger.error(f"Error during agent streaming: {str(e)}", exc_info=True)
                 
-        except TestAgentError as e:
+        except LogsAgentError as e:
             # If we have a task, report the error through the event queue
             if task:
                 error_event = create_error_status_event(
@@ -115,8 +115,8 @@ class TestAgentExecutor(AgentExecutor):
             # Re-raise the error
             raise
         except Exception as e:
-            # Convert generic exceptions to TestAgentError and handle
-            error = TestAgentError(
+            # Convert generic exceptions to LogsAgentError and handle
+            error = LogsAgentError(
                 message=f"Unexpected error in execute: {str(e)}",
                 severity=ErrorSeverity.ERROR,
                 original_exception=e
@@ -144,11 +144,11 @@ class TestAgentExecutor(AgentExecutor):
         
         try:
             # Attempt to get the agent instance
-            agent = await TestAgent().get_instance()
+            agent = await LogsAgent().get_instance()
             
             # Check if we have a valid task
             if not task:
-                raise TestAgentError(
+                raise LogsAgentError(
                     message='Cannot cancel: No active task found',
                     severity=ErrorSeverity.WARNING
                 )
@@ -172,7 +172,7 @@ class TestAgentExecutor(AgentExecutor):
                     taskId=task.id,
                 )
             )
-        except TestAgentError as e:
+        except LogsAgentError as e:
             # If we have a task, report the error through the event queue
             if task:
                 error_event = create_error_status_event(
@@ -185,8 +185,8 @@ class TestAgentExecutor(AgentExecutor):
             # Re-raise the error
             raise
         except Exception as e:
-            # Convert generic exceptions to TestAgentError and handle
-            error = TestAgentError(
+            # Convert generic exceptions to LogsAgentError and handle
+            error = LogsAgentError(
                 message=f"Unexpected error in cancel: {str(e)}",
                 severity=ErrorSeverity.ERROR,
                 original_exception=e

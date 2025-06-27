@@ -3,6 +3,7 @@ langchain-google-genai>=2.0.10
 langgraph==0.4.0
 langchain-mcp-adapters==0.1.0
 langchain-google-spanner
+google-cloud-aiplatform
 google-api-python-client
 ruamel.yaml
 scikit-learn

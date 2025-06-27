@@ -63,7 +63,7 @@ class OperationsAgentExecutor(AgentExecutor):
             if not task:
                 logger.info("Creating new task!!")
                 task = new_task(context.message)
-                event_queue.enqueue_event(task)
+                await event_queue.enqueue_event(task)
 
             logger.info("start stream %s, with id %s", query, task.contextId)
             
@@ -72,7 +72,7 @@ class OperationsAgentExecutor(AgentExecutor):
                 logger.info("RESPONSE FROM OPS AGENT")
                 logger.info(response)
 
-                event_queue.enqueue_event(
+                await event_queue.enqueue_event(
                     TaskStatusUpdateEvent(
                         status=TaskStatus(
                             state=TaskState.completed,
@@ -101,7 +101,7 @@ class OperationsAgentExecutor(AgentExecutor):
                     task_id=task.id,
                     final=True
                 )
-                event_queue.enqueue_event(error_event)
+                await event_queue.enqueue_event(error_event)
                 logger.error(f"Error during agent streaming: {str(e)}", exc_info=True)
                 
         except OperationsAgentError as e:
@@ -113,7 +113,7 @@ class OperationsAgentExecutor(AgentExecutor):
                     task_id=task.id,
                     final=True
                 )
-                event_queue.enqueue_event(error_event)
+                await event_queue.enqueue_event(error_event)
             # Re-raise the error
             raise
         except Exception as e:
@@ -130,7 +130,7 @@ class OperationsAgentExecutor(AgentExecutor):
                     task_id=task.id,
                     final=True
                 )
-                event_queue.enqueue_event(error_event)
+                await event_queue.enqueue_event(error_event)
             logger.error(f"Unexpected error in execute: {str(e)}", exc_info=True)
             # Re-raise the error
             raise error
@@ -159,7 +159,7 @@ class OperationsAgentExecutor(AgentExecutor):
             logger.warning(f"Cancel requested for task {task.id}, but cancellation is not fully supported")
             
             # Send a status update to inform the user
-            event_queue.enqueue_event(
+            await event_queue.enqueue_event(
                 TaskStatusUpdateEvent(
                     status=TaskStatus(
                         state=TaskState.cancelled,
@@ -183,7 +183,7 @@ class OperationsAgentExecutor(AgentExecutor):
                     task_id=task.id,
                     final=True
                 )
-                event_queue.enqueue_event(error_event)
+                await event_queue.enqueue_event(error_event)
             # Re-raise the error
             raise
         except Exception as e:
@@ -200,7 +200,7 @@ class OperationsAgentExecutor(AgentExecutor):
                     task_id=task.id,
                     final=True
                 )
-                event_queue.enqueue_event(error_event)
+                await event_queue.enqueue_event(error_event)
             logger.error(f"Unexpected error in cancel: {str(e)}", exc_info=True)
             # Re-raise the error
             raise error

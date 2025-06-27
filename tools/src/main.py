@@ -27,7 +27,8 @@ BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 # import all tools
 import tools.engineering
-import tools.logs
+import tools.logs_fetch
+import tools.logs_query
 import tools.metrics
 
 sse_app = networkagent_mcp.http_app(transport="sse")

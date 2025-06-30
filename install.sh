@@ -316,6 +316,7 @@ Create()
         cp networkagent.json networkagents/engineer/src
         cp networkagent.json networkagents/operations/src
         cp networkagent.json networkagents/tester/src
+        cp networkagent.json networkagents/logs/src
         cp networkagent.json networkagents/incident/src
     else
         echo "#############################################################"
@@ -344,6 +345,7 @@ Create()
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO tools/cloudbuild.j2 > tools/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/engineer/cloudbuild.j2 > networkagents/engineer/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/tester/cloudbuild.j2 > networkagents/tester/cloudbuild.yaml
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/logs/cloudbuild.j2 > networkagents/logs/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/incident/cloudbuild.j2 > networkagents/incident/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/operations/cloudbuild.j2 > networkagents/operations/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/supervisor/cloudbuild.j2 > networkagents/supervisor/cloudbuild.yaml
@@ -598,7 +600,7 @@ Delete()
     fi
 
     # Delete all agents artifacts
-    for pkg in networkoperator networktools engineeragent operationsagent testagent incidentagent dashboard; do
+    for pkg in networksupervisor networkoperator networktools engineeragent operationsagent testagent incidentagent dashboard; do
         (gcloud artifacts packages describe $pkg --repository=$GOOGLE_REPO --location=$GOOGLE_REGION > /dev/null 2>&1) && \
         gcloud artifacts packages delete $pkg --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
     done
@@ -621,6 +623,8 @@ Delete()
         networkagents/operations/cloudbuild.yaml \
         networkagents/tester/src/networkagent.json \
         networkagents/tester/cloudbuild.yaml \
+        networkagents/logs/src/networkagent.json \
+        networkagents/logs/cloudbuild.yaml \
         networkagents/incident/src/networkagent.json \
         networkagents/incident/cloudbuild.yaml \
         dashboard/cloudbuild.yaml \
@@ -918,7 +922,9 @@ Networkagent()
         --timeout=3600 \
         --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
         --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
-        --update-env-vars GOOGLE_GENAI_USE_VERTEXAI=TRUE \
+        --update-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_PROJECT \
+        --update-env-vars GOOGLE_CLOUD_LOCATION=$GOOGLE_REGION \
+        --update-env-vars GOOGLE_GENAI_USE_VERTEXAI=1 \
         --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
         --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
         --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL \

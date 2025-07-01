@@ -30,6 +30,7 @@ import tools.engineering
 import tools.logs_fetch
 import tools.logs_query
 import tools.metrics
+import tools.spanner
 
 sse_app = networkagent_mcp.http_app(transport="sse")
 

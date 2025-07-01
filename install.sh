@@ -697,6 +697,7 @@ Kill()
     gcloud run services delete engineeragent --region=$GOOGLE_REGION --quiet
     gcloud run services delete operationsagent --region=$GOOGLE_REGION --quiet
     gcloud run services delete testagent --region=$GOOGLE_REGION --quiet
+    gcloud run services delete logsagent --region=$GOOGLE_REGION --quiet
     gcloud run services delete incidentagent --region=$GOOGLE_REGION --quiet
     gcloud run services delete network-agent-supervisor --region=$GOOGLE_REGION --quiet
     gcloud run services delete network-dashboard --region=$GOOGLE_REGION --quiet

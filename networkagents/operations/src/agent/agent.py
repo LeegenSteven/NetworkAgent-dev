@@ -85,7 +85,7 @@ class OperationsAgent:
         )
         try:
             # names of the tools this agent can use
-            allowed_tools_names=["getNetworkDesign","getLocations","getServiceDefinitions","getServices"]
+            allowed_tools_names=["getNetworkDesign","getLocations","getServiceDefinitions","getServices", "getNodePath"]
             # load all tools
             self.tools = await self.mcpClient.get_tools()
             self.allowed_tools=[]

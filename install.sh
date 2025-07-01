@@ -600,7 +600,7 @@ Delete()
     fi
 
     # Delete all agents artifacts
-    for pkg in networksupervisor networkoperator networktools engineeragent operationsagent testagent incidentagent dashboard; do
+    for pkg in networksupervisor networkoperator networktools engineeragent operationsagent testagent logsagent incidentagent dashboard; do
         (gcloud artifacts packages describe $pkg --repository=$GOOGLE_REPO --location=$GOOGLE_REGION > /dev/null 2>&1) && \
         gcloud artifacts packages delete $pkg --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
     done

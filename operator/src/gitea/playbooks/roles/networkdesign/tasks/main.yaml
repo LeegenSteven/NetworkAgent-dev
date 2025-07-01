@@ -53,6 +53,7 @@
   loop:
    - 5gnetwork.md
    - performance.md
+   - 5GNetworkDesign.pdf
 
 - name: add to master branch in cellsite1 repo
   command: sudo -u git git add .

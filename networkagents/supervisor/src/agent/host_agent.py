@@ -353,6 +353,8 @@ class HostAgent:
         Update the state of the current task, user, session.
         """
 
+        logger.info("Update the agent %s state of the task %s, to %s ", agent_name, task_id, task_status)
+
         state_changes = {}
 
         if agent_name is not None:
@@ -506,7 +508,7 @@ class HostAgent:
                         }
                     elif taskStatus.state == TaskState.completed:
                         # task is done so remove the agent from the state and reset back to "None"
-                        await self.updateState(session_id=session_id,agent_name="None", task_status="None")
+                        await self.updateState(session_id=session_id, agent_name="None", task_status="None", task_id="None")
                         return {
                                 "status" : "Task Completed",
                                 "text": taskStatus.message.parts[0].root.text

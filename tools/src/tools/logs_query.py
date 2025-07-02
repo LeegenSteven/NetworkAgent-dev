@@ -119,7 +119,7 @@ def query_log_entries(
         sql_parts.append("WHERE " + " AND ".join(where_clauses))
       
       # 5. Add ordering and limit
-      sql_parts.append("ORDER BY distance LIMIT 30")
+      sql_parts.append("ORDER BY timestamp DESC LIMIT 30")
       
       sql = " ".join(sql_parts)
       logger.info(f"Executing log query: {sql} with params: {params.keys()}")

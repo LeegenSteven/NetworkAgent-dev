@@ -304,6 +304,10 @@ class _ChatPanelContentState extends State<_ChatPanelContent> with WidgetsBindin
                     child: Text('Can you add a radio simulator to cellsite1 and create a plan for a working 5G network'),
                   ),
                   const PopupMenuItem<String>(
+                    value: 'Were there any error logs in the last 2 hours?',
+                    child: Text('Can you add a radio simulator to cellsite1 and create a plan for a working 5G network'),
+                  ),
+                  const PopupMenuItem<String>(
                     value: 'Create a test with UERanSim created earlier',
                     child: Text('Create a test with UERanSim created earlier'),
                   ),

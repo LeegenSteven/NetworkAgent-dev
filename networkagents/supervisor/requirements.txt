@@ -11,4 +11,4 @@ ruamel.yaml
 scikit-learn
 pandas
 numpy
-a2a-sdk==0.2.*
+a2a-sdk==0.2.9

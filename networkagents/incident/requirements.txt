@@ -2,4 +2,4 @@ aiohttp==3.12.12
 aiohttp_cors
 google-cloud-spanner
 google-api-python-client
-a2a-sdk==0.2.*
+a2a-sdk==0.2.9

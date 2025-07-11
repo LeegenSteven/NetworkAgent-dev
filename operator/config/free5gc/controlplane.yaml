@@ -55,13 +55,14 @@ spec:
                   type: object
                   properties:
                     name:
-                      description: name of the upf
+                      description: name of the User Plane Function (upf)
                       type: string
                 dnn:
                   description: The DataNetwork network service to connect the ControlPlane network service to
                   type: object
                   properties:
                     name:
+                      description: name of the Data Network (dnn)
                       type: string
               x-kubernetes-preserve-unknown-fields: true
             status:

@@ -102,8 +102,8 @@
     group: git
     mode: '0644'
   loop: 
-   - core.yaml
-   - internet.yaml
+   - core-network-location.yaml
+   - internet-network-location.yaml
 
 - name: add to core branch in network repo
   command: sudo -u git git add .
@@ -153,8 +153,8 @@
     group: git
     mode: '0644'
   loop: 
-   - core.yaml
-   - internet.yaml
+   - core-network-location.yaml
+   - internet-network-location.yaml
    - cellsite1.yaml
 
 - name: add to 5g branch in network repo

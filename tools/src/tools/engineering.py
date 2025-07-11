@@ -342,7 +342,7 @@ def getServices()-> str:
     Fetch the network service instances that are currently deployed.
 
     Returns:
-        Network service instances are returned as a list of kubernetes custom resourcec instance objects. 
+        Network service instances are returned as a list of kubernetes custom resource instance objects. 
         Providing general information, the network service configuration in the 'spec' section and 
         its current operational state in the 'status' section
     """

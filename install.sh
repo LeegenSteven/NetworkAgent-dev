@@ -75,14 +75,15 @@ EOF
     fi
 
     # Check GCP region is valid
-    gcloud compute regions describe $GOOGLE_REGION > /dev/null 2>&1
+    gcloud services enable --project=$GOOGLE_PROJECT compute.googleapis.com --quiet
+    gcloud compute regions describe $GOOGLE_REGION --project $GOOGLE_PROJECT > /dev/null 2>&1
     if [[ $? -ne 0 ]]; then
         echo "**ERROR** GCP Region $GOOGLE_REGION is invalid. Please set the GOOGLE_REGION environment variable with a valid region name"
         exit 1
     fi
 
     # Check GCP zone is valid
-    gcloud compute zones describe $GOOGLE_ZONE > /dev/null 2>&1
+    gcloud compute zones describe $GOOGLE_ZONE --project $GOOGLE_PROJECT > /dev/null 2>&1
     if [[ $? -ne 0 ]]; then
         echo "**ERROR** GCP zone $GOOGLE_ZONE is invalid. Please set the GOOGLE_ZONE environment variable with a valid zone name"
         exit 1
@@ -181,6 +182,13 @@ SetDemoEnv()
     export CAPTURE_LOG_FUNCTION="capture_log"
     export NETWORK_OPERATOR="free5gc-operator"
     export GIT_OPERATOR="gitea-operator"
+
+    # If running from a Cloud Shell session fix a few problems
+    # with preinstalled flutter
+    if [[ $GOOGLE_CLOUD_SHELL="true" ]]; then
+        git config --global --add safe.directory /google/flutter
+        flutter --version >/dev/null # finishes the pre-installation properly
+    fi
 
     # Display current work environment information
     DisplayGCPEnv
@@ -582,12 +590,14 @@ Start()
 ############################################################
 Delete()
 {
-    read -p "Are you sure you want to delete the environment configuration (y/n)? " choice
-    case "$choice" in 
-        y|Y ) echo "proceeding to delete environment configuration";;
-        n|N ) exit 0;;
-        * ) echo "please enter y/n";;
-    esac
+    if [[ $YES_FLAG != "y" ]]; then
+        read -p "Are you sure you want to delete the environment configuration (y/n)? " choice
+        case "$choice" in 
+            y|Y ) echo "proceeding to delete environment configuration";;
+            n|N ) exit 0;;
+            * ) echo "please enter y/n";;
+        esac
+    fi
 
     # DO NOT DELETE the artifact repo as it takes sooooo long to generate
     # the Free5GC build (kernel recompilation)
@@ -653,13 +663,14 @@ Monitoring()
 ############################################################
 Kill()
 {
-    read -p "Are you sure you want to kill the environment(y/n)? " choice
-    case "$choice" in 
-        y|Y ) echo "proceeding to kill the environment";;
-        n|N ) exit 0;;
-        * ) echo "please enter y/n";;
-    esac
-
+    if [[ $YES_FLAG != "y" ]]; then
+        read -p "Are you sure you want to kill the environment(y/n)? " choice
+        case "$choice" in 
+            y|Y ) echo "proceeding to kill the environment";;
+            n|N ) exit 0;;
+            * ) echo "please enter y/n";;
+        esac
+    fi
     echo "##############################################"
     echo "Killing the environment - will take a few mins"
     echo "##############################################"
@@ -706,6 +717,7 @@ Kill()
     echo "Deleting GKE Cluster"
     echo "#####################"
     gcloud container clusters delete networkautomation --region=$GOOGLE_ZONE --quiet
+    kubectl config unset current-context
 
     echo "#####################"
     echo "Deleting mgmt network"

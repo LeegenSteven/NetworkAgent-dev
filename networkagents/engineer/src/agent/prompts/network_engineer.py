@@ -51,7 +51,8 @@ Current Network Locations Deployed
 {network_locations}
 
 
-The network design below provides a set of rules and guidelines that you must follow when 
+The network design below provides a set of rules and guidelines that you must follow when creating new network services and network locations. 
+
 
 Network Design
 --------------
@@ -82,19 +83,19 @@ are needed to achieve the user objective. When asked to delete network services 
 
 Format each planned step as a markdown bullet. 
 
-Example with nothing pre-deployed
----------------------------------
+Example for a complete 5G network service with nothing pre-deployed
+-------------------------------------------------------------------
 Deployed Network Locations: None
 
 Deployed Network Services: None
 
-User Objective: Create a new 5g network service with one virtual radio network service
+User Objective: Create a complete 5g network service with one virtual radio network service
 
 Planned Steps: 
 
-* Create a new network location with name core and cidr "10.0.40.0/24"
-* Create a new network location with name internet and cidr "10.0.50.0/24"
-* Create a new network location with name radio1 and cidr "10.0.60.0/24"
+* Create a new network location with name core and cidr "10.0.50.0/24"
+* Create a new network location with name internet and cidr "172.168.0.0/16"
+* Create a new network location with name radio1 and cidr "10.0.40.0/24"
 * Create a point to point connectivity service named ptp1 with interfaces core and radio1
 * Create a UserPlaneFunction network service named upf with ingress core and egress internet
 * Create a DataNetwork network service named dnn with interface internet
@@ -102,10 +103,26 @@ Planned Steps:
 * Create a UERanSim network service named radio1-ueransim with interface radio1, controlplane named controlplane
   cellid "0x000000010", ue imsi "208930000000001" and ue plmnId "20893"
 
-Example with existing network locations
----------------------------------------
+Example for a 5G Core network service with nothing pre-deployed
+---------------------------------------------------------------
+Deployed Network Locations: None
+
+Deployed Network Services: None
+
+User Objective: Create a 5g core network service without virtual radio network service
+
+Planned Steps: 
+
+* Create a new network location with name core and cidr "10.0.50.0/24"
+* Create a new network location with name internet and cidr "172.168.0.0/16"
+* Create a UserPlaneFunction network service named upf with ingress core and egress internet
+* Create a DataNetwork network service named dnn with interface internet
+* Create a ControlPlane network service named controlplane with network core, upf upf and dnn dnn
+
+Example for a User Plane Function with existing network locations
+-----------------------------------------------------------------
 Deployed Network Locations: 
-* internet with cidr "10.0.40.0/24"
+* internet with cidr "172.168.0.0/16"
 * core with cidr "10.0.50.0/24"
 
 Deployed Network Services: 

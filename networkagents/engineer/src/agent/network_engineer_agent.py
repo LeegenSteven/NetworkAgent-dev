@@ -208,7 +208,7 @@ class NetworkEngineerAgent:
 
             try:
                 model = ChatVertexAI(
-                    model_name="gemini-2.5-flash-preview-05-20",
+                    model_name="gemini-2.5-flash",
                     temperature=0,
                     credentials=self.credentials,
                     project=os.getenv("GOOGLE_PROJECT"),

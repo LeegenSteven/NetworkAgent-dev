@@ -99,7 +99,7 @@ Planned Steps:
 * Create a point to point connectivity service named ptp1 with interfaces core and radio1
 * Create a UserPlaneFunction network service named upf with ingress core and egress internet
 * Create a DataNetwork network service named dnn with interface internet
-* Create a ControlPlane network service named controlplane with network core, upf upf and dnn dnn
+* Create a ControlPlane network service named controlplane with network named core, upf named upf and dnn named dnn
 * Create a UERanSim network service named radio1-ueransim with interface radio1, controlplane named controlplane
   cellid "0x000000010", ue imsi "208930000000001" and ue plmnId "20893"
 
@@ -117,7 +117,7 @@ Planned Steps:
 * Create a new network location with name internet and cidr "172.168.0.0/16"
 * Create a UserPlaneFunction network service named upf with ingress core and egress internet
 * Create a DataNetwork network service named dnn with interface internet
-* Create a ControlPlane network service named controlplane with network core, upf upf and dnn dnn
+* Create a ControlPlane network service named controlplane with network named core, upf named upf and dnn named dnn
 
 Example for a User Plane Function with existing network locations
 -----------------------------------------------------------------
@@ -132,7 +132,7 @@ User Objective: Create a upf
 
 Planned Steps: 
 
-* Create a UserPlaneFunction network service named upf1 with ingress core and egress internet
+* Create a UserPlaneFunction network service named upf with ingress core and egress internet
 
 Current time: {current_time}
 

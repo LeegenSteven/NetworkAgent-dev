@@ -55,7 +55,7 @@
    - performance.md
    - 5GNetworkDesign.pdf
 
-- name: add to master branch in cellsite1 repo
+- name: add to master branch in networkdesign repo
   command: sudo -u git git add .
   args:
     chdir: /opt/networkdesign-repo

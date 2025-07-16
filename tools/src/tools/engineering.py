@@ -384,54 +384,54 @@ def getServices()-> str:
 ######################################################################
 @globals.networkagent_mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
 def createService(
-    serviceKind: Annotated[str, "the kubernetes kind for this network service instance"], 
-    serviceName: Annotated[str, "the kubernetes name for this network service instance"], 
-    serviceSpec: Annotated[Dict, "the kubernetes spec object for the new network service"]
+    kind: Annotated[str, "the kubernetes kind for this network service instance"], 
+    name: Annotated[str, "the kubernetes name for this network service instance"], 
+    spec: Annotated[Dict, "the kubernetes spec object for the new network service"]
     ) -> str:
     """
     Tool used to deploy (also called instantiate) a new network service. 
     The types and specifications of network services available can be discovered by calling the getServiceDefinitions tool.
     Only call this tool if explicitely stated in the network agent query or question.
     """
-    logger.info("Create a new Service %s", str(serviceSpec))
+    logger.info("Create a new Service %s", str(spec))
 
     # If the user gave the entire spec block then only keep its
     # content which should be the 'interfaces' description
-    if "spec" in serviceSpec.keys():
-        serviceSpec = serviceSpec["spec"]
-    if not serviceName:
-        serviceName = serviceKind.lower()+str(uuid.uuid4())[:8]
+    if "spec" in spec.keys():
+        spec = spec["spec"]
+    if not name:
+        name = kind.lower()+str(uuid.uuid4())[:8]
 
     crd_manifest= { 
         "apiVersion": "google.dev/v1",
-        "kind": serviceKind,
+        "kind": kind,
         "metadata": {
-            "name": serviceName,
+            "name": name,
             "labels": {
                 "graph": "true", 
                 "monitor": "true"
             },
         },
-        "spec": serviceSpec
+        "spec": spec
     }
 
     crd_manifest_yaml = yaml.dump(crd_manifest, indent=2)
     if GITOPS:
-        filename = serviceName+".yaml"
+        filename = f"{kind.lower()}-{name}.yaml"
         result = commit_git_file(filename,
-                                 f"Deployment of {serviceName}",
+                                 f"Deployment of {kind} {name}",
                                  crd_manifest_yaml)
         if result:
-            return f"service {serviceName} successfully submitted for deployment"
+            return f"service {name} successfully submitted for deployment"
         else:
-            return f"service {serviceName} could not be deployed:\n```yaml\n{crd_manifest_yaml}\n```"
+            return f"service {name} could not be deployed:\n```yaml\n{crd_manifest_yaml}\n```"
 
     else:
         client = kubernetes.dynamic.DynamicClient(get_client())
         try:
             network_api = client.resources.get(
                 api_version="google.dev/v1",
-                kind=serviceKind,
+                kind=kind,
             )
             result = network_api.create(crd_manifest)
             return "new service request successful"
@@ -439,7 +439,7 @@ def createService(
             logger.info(e.status)
             logger.debug(e)
             if e.status == 409:
-                return f"service {serviceName} already exists"
+                return f"service {name} already exists"
             else:
                 logger.info(e)
 
@@ -448,8 +448,8 @@ def createService(
 ######################################################################
 @globals.networkagent_mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
 def deleteService(
-    name: Annotated[str, "The name of the running/deployed network service to delete"], 
-    kind: Annotated[str, "The kubernetes kind of the network service instance to delete"]
+    kind: Annotated[str, "The kubernetes kind of the network service instance to delete"],
+    name: Annotated[str, "The kubenetes name of the running/deployed network service to delete"]
      ) -> str:
     """
     Delete a running network service instance.
@@ -458,7 +458,7 @@ def deleteService(
         return {}, 400
     
     if GITOPS:
-        filename = name+".yaml"
+        filename = f"{kind.lower()}-{name}.yaml"
         result = delete_git_file(filename, f"{name} deletion")
         if result:
             return f"service {name} successfully submitted for deletion"

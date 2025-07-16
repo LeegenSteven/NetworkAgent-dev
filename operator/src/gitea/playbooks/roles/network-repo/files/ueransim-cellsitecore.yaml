@@ -15,7 +15,7 @@
 apiVersion: google.dev/v1
 kind: UERanSIM
 metadata:
-  name: core-cellsite
+  name: cellsitecore
   labels:
     graph: "true"
     monitor: "true"

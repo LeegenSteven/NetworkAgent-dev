@@ -90,9 +90,9 @@
     mode: '0644'
   loop:
    - Readme.md
-   - upf.yaml
-   - dnn.yaml
-   - controlplane.yaml
+   - userplanefunction-upf.yaml
+   - datanetwork-dnn.yaml
+   - controlplane-controlplane.yaml
 
 - name: push templated network files
   ansible.builtin.template:
@@ -139,11 +139,11 @@
     mode: '0644'
   loop:
    - Readme.md
-   - upf.yaml
-   - dnn.yaml
-   - controlplane.yaml
-   - ptp1.yaml
-   - ueransim1.yaml
+   - userplanefunction-upf.yaml
+   - datanetwork-dnn.yaml
+   - controlplane-controlplane.yaml
+   - pointtopointservice-ptp1.yaml
+   - ueransim-cellsite1.yaml
 
 - name: push templated network files
   ansible.builtin.template:
@@ -155,7 +155,7 @@
   loop: 
    - core-network-location.yaml
    - internet-network-location.yaml
-   - cellsite1.yaml
+   - cellsite1-network-location.yaml
 
 - name: add to 5g branch in network repo
   command: sudo -u git git add .

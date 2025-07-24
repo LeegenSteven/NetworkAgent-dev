@@ -18,7 +18,8 @@ import httpx
 from agent.agent_executor import EngineerAgentExecutor
 from agent.network_engineer_agent import NetworkEngineerAgent
 from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.tasks import InMemoryTaskStore, InMemoryPushNotifier
+from a2a.server.tasks import InMemoryTaskStore
+from a2a.server.tasks import InMemoryPushNotificationConfigStore, BasePushNotificationSender
 from a2a.server.apps import A2AStarletteApplication
 from a2a.types import (
     AgentCapabilities,
@@ -36,7 +37,7 @@ BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 def get_agent_card(host: str, port: int):
     """Returns the Agent Card for the Engineering Agent."""
-    capabilities = AgentCapabilities(streaming=True, pushNotifications=True)
+    capabilities = AgentCapabilities(streaming=True, push_notifications=True)
 
     chat_skill = AgentSkill(
         id='network_engineer_agent_chat',
@@ -59,8 +60,8 @@ def get_agent_card(host: str, port: int):
         description=descriptions.description,
         url=f'http://{host}:{port}/',
         version='1.0.0',
-        defaultInputModes=NetworkEngineerAgent.SUPPORTED_CONTENT_TYPES,
-        defaultOutputModes=NetworkEngineerAgent.SUPPORTED_CONTENT_TYPES,
+        default_input_modes=NetworkEngineerAgent.SUPPORTED_CONTENT_TYPES,
+        default_output_modes=NetworkEngineerAgent.SUPPORTED_CONTENT_TYPES,
         capabilities=capabilities,
         skills=[chat_skill, background_skill],
     )
@@ -70,10 +71,17 @@ if __name__ == "__main__":
     logger.info("starting network engineer agent server...")
 
     # init the agent class
+    httpx_client = httpx.AsyncClient
+    push_notification_store = InMemoryPushNotificationConfigStore()
+    push_notification_sender = BasePushNotificationSender(
+        httpx_client=httpx_client,  
+        config_store=push_notification_store)
+    
     request_handler = DefaultRequestHandler(
         agent_executor=EngineerAgentExecutor(),
         task_store=InMemoryTaskStore(),
-        push_notifier=InMemoryPushNotifier(httpx_client=httpx.AsyncClient())
+        push_config_store=push_notification_store,
+        push_sender=push_notification_sender
     )
 
     host = "0.0.0.0"

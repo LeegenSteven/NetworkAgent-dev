@@ -35,7 +35,7 @@ BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 def get_agent_card(host: str, port: int):
     """Returns the Agent Card for the Operations Agent."""
-    capabilities = AgentCapabilities(streaming=True, pushNotifications=True)
+    capabilities = AgentCapabilities(streaming=True, push_notifications=True)
     skill = AgentSkill(
         id='operations_agent',
         name='Operations Agent',
@@ -48,8 +48,8 @@ def get_agent_card(host: str, port: int):
         description=descriptions.description,
         url=f'http://{host}:{port}/',
         version='1.0.0',
-        defaultInputModes=OperationsAgent.SUPPORTED_CONTENT_TYPES,
-        defaultOutputModes=OperationsAgent.SUPPORTED_CONTENT_TYPES,
+        default_input_modes=OperationsAgent.SUPPORTED_CONTENT_TYPES,
+        default_output_modes=OperationsAgent.SUPPORTED_CONTENT_TYPES,
         capabilities=capabilities,
         skills=[skill],
     )

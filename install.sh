@@ -413,7 +413,6 @@ Start()
     gcloud container clusters create networkautomation \
         --no-enable-autoupgrade \
         --release-channel=None \
-        --cluster-version="1.30.12-gke.1151000" \
         --addons ConfigConnector \
         --enable-ip-alias \
         --service-account $GOOGLE_SERVICE_ACCOUNT\

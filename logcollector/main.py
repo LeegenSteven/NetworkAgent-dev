@@ -16,6 +16,7 @@ import sys
 import os
 import base64
 import json
+import re
 import functions_framework
 from cloudevents.http import CloudEvent
 
@@ -65,6 +66,16 @@ Severity = {
   800 : "EMERGENCY", # One or more systems are unusable.
 }
 
+SeverityMapping5GC = {
+  'INFO': 'INFO',
+  'NOTI': 'NOTICE',
+  'WARN': 'WARNING',
+  'ERRO': 'ERROR',
+  'CRIT': 'CRITICAL',
+  'ALER': 'ALERT',
+  'EMER': 'EMERGENCY',
+}
+
 # Connect to Spanner database
 def spanner_connect():
   spanner_client = spanner.Client()
@@ -104,6 +115,59 @@ database = spanner_connect()
 """
 
 # ------------------------------------------
+# Clean up simple ANSI escape codes
+# ------------------------------------------
+def remove_color_ansi_codes(text):
+    """
+    Removes simple ANSI escape codes of the form '[<number>m' from a string.
+
+    Args:
+        text (str): The input string containing potential ANSI codes.
+
+    Returns:
+        str: The string with simple ANSI codes removed.
+    """
+    # Regular expression to match simple ANSI escape codes like '[36m', '[0m', '[1m'
+    # It looks for:
+    #   \[        - A literal opening square bracket
+    #   \d+       - One or more digits (for the numerical parameter)
+    #   m         - A literal 'm' character
+    pattern = r'\x1b\[\d{1,3}m'
+    
+    # Use re.sub to replace all occurrences of the pattern with an empty string
+    cleaned_text = re.sub(pattern, '', text)
+    return cleaned_text
+
+# ------------------------------------------
+# Extract severity level from Free5GC message
+# ------------------------------------------
+def extract_free5gc_fields(text):
+  """
+  Extract severity, source, location, message from free5gc log message.
+  like in:
+  2025-07-29T12:10:00.374833121Z [INFO][WEBUI][Main] Report Caller is set to [false]
+
+  Args:
+      text (str): The input string containing the log message
+
+  Returns:
+      str: a list of the 4 field values for severity, source, location, message
+  """
+  # for remove all ANSI escape codes for color coding
+  cleaned_text = remove_color_ansi_codes(text)
+
+  # Regular expression to match the 4 fields
+  pattern = r'\[([^\]]+)\]\[([^\]]+)\]\[([^\]]+)\]\s*(.+)$' 
+  # Find all occurrences of the pattern 
+  fields_array = re.findall(pattern, cleaned_text)
+  # If no occurence found return the log message as is (it may happen
+  # with MongoDB log message for instance)
+  if not fields_array:
+    return 'DEFAULT','','',text
+  else:
+    return fields_array[0]
+  
+# ------------------------------------------
 # Given a piece of text return the embedding (Array of Float64)
 # ------------------------------------------
 def get_embedding(text, task_type, model):
@@ -123,11 +187,12 @@ def capture_log(cloud_event: CloudEvent) -> None:
   def insert_log_entry(transaction):
     transaction.execute_update(
       "INSERT INTO KgLogEntryNode "
-      "(id, severity, message, timestamp, content, embedding)"
-      "VALUES (@id, @severity, @message, @timestamp, @content, @embedding)",
+      "(id, severity, source, message, timestamp, content, embedding)"
+      "VALUES (@id, @severity, @source, @message, @timestamp, @content, @embedding)",
       params={
         "id": insert_id, 
         "severity": severity, 
+        "source": source,
         "message": message, 
         "timestamp": timestamp, 
         "content": content, 
@@ -135,6 +200,7 @@ def capture_log(cloud_event: CloudEvent) -> None:
       param_types={
         "id": spanner.param_types.STRING, 
         "severity": spanner.param_types.STRING,
+        "source": spanner.param_types.STRING,
         "message": spanner.param_types.STRING, 
         "timestamp": spanner.param_types.TIMESTAMP,
         "content": spanner.param_types.STRING, 
@@ -147,9 +213,21 @@ def capture_log(cloud_event: CloudEvent) -> None:
   nwop_logging_json_string = base64.b64decode(nwop_logging_data).decode('utf-8')
 
   nwop_logging_json = json.loads(nwop_logging_json_string)
+  logger.info(nwop_logging_json_string)
 
   insert_id = nwop_logging_json["insertId"]
-  severity = nwop_logging_json["severity"] or "DEFAULT"
+  if "severity" in nwop_logging_json:
+    severity = nwop_logging_json["severity"] 
+  else:
+    severity = "DEFAULT"
+
+  # Source field - General case (see specific cases below)
+  source = ''
+  if 'resource' in nwop_logging_json:
+    if 'labels' in nwop_logging_json['resource']:
+      if 'container_name' in nwop_logging_json['resource']['labels']:
+        source = nwop_logging_json['resource']['labels']['container_name']
+
 
   # The log message can either be in textPayload or in a jsonPayLoad
   message = ''
@@ -157,6 +235,20 @@ def capture_log(cloud_event: CloudEvent) -> None:
     if "jsonPayload" in nwop_logging_json:
       if "message" in nwop_logging_json["jsonPayload"]:
         message = nwop_logging_json["jsonPayload"]["message"]
+        # Special case for messages coming from the 5GC core container
+        if "container" in nwop_logging_json["jsonPayload"] and \
+           "metadata" in nwop_logging_json["jsonPayload"]["container"] and \
+           "free5gc_name" in nwop_logging_json["jsonPayload"]["container"]["metadata"]:
+          severity, source, location, message = extract_free5gc_fields(message)
+          logger.info(f"severity: {severity}, source: {source}, message: {message}")
+          if not source: source = nwop_logging_json["jsonPayload"]["container"]["metadata"]["free5gc_name"]
+          source = f"Free5GC-{source.lower()}"
+          try:
+            severity = SeverityMapping5GC[severity]
+          except Exception as e:
+            # Do nothing - Keep level as is
+            pass
+            
       elif "msg" in nwop_logging_json["jsonPayload"]:
         message = nwop_logging_json["jsonPayload"]["msg"]
         if "error" in nwop_logging_json["jsonPayload"]:

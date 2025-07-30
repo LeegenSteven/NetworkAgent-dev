@@ -591,7 +591,7 @@ class Appstate extends ChangeNotifier {
             ? LogEntry.fromJson(logData)
             : LogEntry(
                 timestamp: DateTime.now().toIso8601String(),
-                level: 'INFO',
+                severity: 'INFO',
                 message: logData.toString(),
                 source: 'unknown',
               )
@@ -601,7 +601,7 @@ class Appstate extends ChangeNotifier {
         print('Unexpected log data format: ${logsData.runtimeType}');
         newLogs.add(LogEntry(
           timestamp: DateTime.now().toIso8601String(),
-          level: 'WARNING',
+          severity: 'WARNING',
           message: 'Received logs in unexpected format: ${logsData.runtimeType}',
           source: 'dashboard',
         ));

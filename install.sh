@@ -808,7 +808,7 @@ LogCapture()
             --description="Network operator logs sink" \
             --log-filter="resource.labels.project_id=${GOOGLE_PROJECT} AND 
                  ((resource.labels.container_name=${NETWORK_OPERATOR} AND labels.python_logger!=kopf._cogs.clients.watching) OR
-                 jsonPayload.container.metadata.free5gc_name=(\"amf\" OR \"upf\" OR \"udm\" OR \"udr\" OR \"smf\" OR \"pcf\" OR \"nrf\" OR \"ueransim\"))"
+                 logName:gcplogs-docker-driver)"
     else
         echo "Logging sink '${SINK_NAME}' already exists..."
     fi

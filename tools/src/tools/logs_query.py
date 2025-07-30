@@ -67,7 +67,7 @@ def query_log_entries(
     A list of JSON objects representing each log entry, example log is below:
     {
       "timestamp": "",    # timestamp
-      "level": "",        # severity level
+      "severity": "",     # severity level
       "message": "",      # log message
       "source":  "",      # source of the log
       "details": ""       # any further details
@@ -141,7 +141,7 @@ def query_log_entries(
           source = '-'
         log_entries.append({
           'timestamp': timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp),
-          'level': severity,
+          'severity': severity,
           'message': message, 
           'source': source, 
           'details': {'distance': distance}

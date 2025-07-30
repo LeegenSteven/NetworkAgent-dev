@@ -105,7 +105,7 @@ class LogWidget extends StatelessWidget {
                   ),
                   DataColumn(
                     label: Text(
-                      'Level',
+                      'Severity',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -126,7 +126,7 @@ class LogWidget extends StatelessWidget {
                   return DataRow(
                     cells: [
                       DataCell(Text(_formatTimestamp(log.timestamp))),
-                      DataCell(_buildLevelIndicator(log.level)),
+                      DataCell(_buildSeverityIndicator(log.severity)),
                       DataCell(Text(log.source)),
                       DataCell(
                         Container(
@@ -156,9 +156,9 @@ class LogWidget extends StatelessWidget {
     }
   }
 
-  Widget _buildLevelIndicator(String level) {
+  Widget _buildSeverityIndicator(String severity) {
     Color color;
-    switch (level.toUpperCase()) {
+    switch (severity.toUpperCase()) {
       case 'ERROR':
         color = Colors.red;
         break;
@@ -187,7 +187,7 @@ class LogWidget extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        Text(level.toUpperCase()),
+        Text(severity.toUpperCase()),
       ],
     );
   }

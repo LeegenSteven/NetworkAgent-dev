@@ -41,7 +41,8 @@ def fetch_log_entries()->str:
     A list of JSON objects representing each log entry, example log is below:
     {
       "timestamp": "",    # timestamp
-      "level": "",        # severity level
+      "severity": "",     # severity level
+      "source":  "",      # source of the log
       "message": "",      # log message
       "source":  "",      # source of the log
       "details": ""       # any further details
@@ -49,23 +50,24 @@ def fetch_log_entries()->str:
   """
   with database.snapshot() as snapshot:
     try:
-      sql = "SELECT timestamp, severity, message, content FROM KgLogEntryNode ORDER BY timestamp DESC LIMIT 50"
+      sql = "SELECT timestamp, severity, source, message, content FROM KgLogEntryNode ORDER BY timestamp DESC LIMIT 50"
       results = snapshot.execute_sql(sql)
       
       # Convert to a list of dictionaries that match the LogEntry model in the dashboard app
       log_entries = []
       for row in results:
-        timestamp, severity, message, content = row
-        full_log_entry = json.loads(content)
-        try:
-          source = full_log_entry['resource']['labels']['container_name']
-        except Exception as e:
-          source = '-'
+        timestamp, severity, source, message, content = row
+        # full_log_entry = json.loads(content)
+        # try:
+        #   source = full_log_entry['resource']['labels']['container_name']
+        # except Exception as e:
+        #   source = '-'
+        if not source: source = ''
         log_entries.append({
           'timestamp': timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp),
-          'level': severity,  # Map 'severity' to 'level' to match LogEntry model
-          'message': message,
+          'severity': severity,
           'source': source,
+          'message': message,
           'details': {}  # Empty details
         })
       

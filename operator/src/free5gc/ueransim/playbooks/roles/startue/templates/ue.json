@@ -25,7 +25,7 @@
     },
     "AccessAndMobilitySubscriptionData": {
         "gpsis": [
-            "msisdn-0900000000"
+            "msisdn-{{ msisdn }}"
         ],
         "nssai": {
             "defaultSingleNssais": [

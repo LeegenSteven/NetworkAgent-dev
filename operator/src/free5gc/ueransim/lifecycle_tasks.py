@@ -68,6 +68,7 @@ async def run_install(namespace, upf_vm_name, amfAddress, amfPort, webAddress, c
         'webAddress': webAddress,
         'imsi': ue['imsi'],
         'plmnId': ue['plmnId'] ,
+        'msisdn': ue['msisdn'],
         'cellid': cellid
     }
     hosts = {

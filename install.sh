@@ -387,13 +387,16 @@ Build()
 
     # Check if a custom image called networkagent already exists, if it does ask the user if they want to proceed
     if gcloud compute images describe networkagent --project=$GOOGLE_PROJECT > /dev/null 2>&1; then
-        if [[ $YES_FLAG != "y" ]]; then
+        if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]]; then
             read -p "Custom image 'networkagent' already exists. Do you want to rebuild it? (y/n) " choice
             case "$choice" in 
                 y|Y ) echo "Proceeding to rebuild the networkagent image";;
                 n|N ) echo "Skipping image build"; return 0;;
                 * ) echo "Please enter y/n"; exit 1;;
             esac
+        elif [[ $NO_FLAG == "y" ]]; then
+            echo "Skipping image build (NO_FLAG set)"
+            return 0
         fi
         echo "Deleting existing networkagent image..."
         gcloud compute images delete networkagent --project=$GOOGLE_PROJECT --quiet
@@ -761,13 +764,16 @@ Start()
 ############################################################
 Delete()
 {
-    if [[ $YES_FLAG != "y" ]]; then
+    if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]]; then
         read -p "Are you sure you want to delete the environment configuration (y/n)? " choice
         case "$choice" in 
             y|Y ) echo "proceeding to delete environment configuration";;
             n|N ) exit 0;;
             * ) echo "please enter y/n";;
         esac
+    elif [[ $NO_FLAG == "y" ]]; then
+        echo "Skipping environment configuration deletion (NO_FLAG set)"
+        exit 0
     fi
 
     # DO NOT DELETE the artifact repo as it takes sooooo long to generate
@@ -834,13 +840,16 @@ Monitoring()
 ############################################################
 Kill()
 {
-    if [[ $YES_FLAG != "y" ]]; then
+    if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]]; then
         read -p "Are you sure you want to kill the environment(y/n)? " choice
         case "$choice" in 
             y|Y ) echo "proceeding to kill the environment";;
             n|N ) exit 0;;
             * ) echo "please enter y/n";;
         esac
+    elif [[ $NO_FLAG == "y" ]]; then
+        echo "Skipping environment kill (NO_FLAG set)"
+        exit 0
     fi
     echo "##############################################"
     echo "Killing the environment - will take a few mins"
@@ -914,12 +923,14 @@ Operator()
 
     cd operator
     IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networkoperator:latest"
-    if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+    if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
         read -p "Operator image already exists. Rebuild? (y/n) " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
         fi
+    elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+        echo "Skipping operator image rebuild (NO_FLAG set)"
     else
         gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
     fi
@@ -1051,13 +1062,15 @@ Networkagent()
         agent_processed=true
         cd tools
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networktools:latest"
-        if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+        if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
             read -p "Networktools image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
             fi
-        else
+        elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+            echo "Networktools image already exists - not building the image (NO_FLAG set)"
+        elif [[ $NO_FLAG != "y" ]]; then
             gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
         fi
         gcloud run deploy networktools \
@@ -1089,13 +1102,15 @@ Networkagent()
         agent_processed=true
         cd networkagents/supervisor
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/networksupervisor:latest"
-        if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+        if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
             read -p "Supervisor agent image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
             fi
-        else
+        elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+            echo "Supervisor agent image already exists - not building the image (NO_FLAG set)"
+        elif [[ $NO_FLAG != "y" ]]; then
             gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
         fi
         gcloud run deploy network-agent-supervisor \
@@ -1137,13 +1152,15 @@ Networkagent()
         SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
         cd networkagents/engineer
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/engineeragent:latest"
-        if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+        if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
             read -p "Engineer agent image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
             fi
-        else
+        elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+            echo "Engineer agent image already exists - not building the image (NO_FLAG set)"
+        elif [[ $NO_FLAG != "y" ]]; then
             gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
         fi
         gcloud run deploy engineeragent \
@@ -1167,13 +1184,15 @@ Networkagent()
         agent_processed=true
         cd networkagents/tester
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/testagent:latest"
-        if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+        if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
             read -p "Tester agent image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
             fi
-        else
+        elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+            echo "Tester agent image already exists - not building the image (NO_FLAG set)"
+        elif [[ $NO_FLAG != "y" ]]; then
             gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
         fi
         gcloud run deploy testagent \
@@ -1197,13 +1216,15 @@ Networkagent()
         SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
         cd networkagents/incident
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/incidentagent:latest"
-        if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+        if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
             read -p "Incident agent image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
             fi
-        else
+        elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+            echo "Incident agent image already exists - not building the image (NO_FLAG set)"
+        elif [[ $NO_FLAG != "y" ]]; then
             gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
         fi
         gcloud run deploy incidentagent \
@@ -1229,13 +1250,15 @@ Networkagent()
         agent_processed=true
         cd networkagents/operations
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/operationsagent:latest"
-        if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+        if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
             read -p "Operations agent image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
             fi
-        else
+        elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+            echo "Operations agent image already exists - not building the image (NO_FLAG set)"
+        elif [[ $NO_FLAG != "y" ]]; then
             gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
         fi
         gcloud run deploy operationsagent \
@@ -1258,13 +1281,15 @@ Networkagent()
         agent_processed=true
         cd networkagents/logs
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/logsagent:latest"
-        if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+        if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
             read -p "Logs agent image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
             fi
-        else
+        elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+            echo "Logs agent image already exists - not building the image (NO_FLAG set)"
+        elif [[ $NO_FLAG != "y" ]]; then
             gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
         fi
         gcloud run deploy logsagent \
@@ -1393,6 +1418,7 @@ Help()
    echo "  -g     display active GCP environment (user, project, GKE cluster,...)"
    echo "  -i     display demo information"
    echo "  -y     answer 'yes' to all questions (no ask for confirmation)"
+   echo "  -N     answer 'no' to all questions (no ask for confirmation)"
 
    echo 
    echo "Some typical use cases:"
@@ -1410,9 +1436,10 @@ Help()
 # Global variable to store agent names
 AGENT_NAMES=""
 YES_FLAG="n"
+NO_FLAG="n"
 func_calls=""
 
-while getopts "hcsolbn:kdpgiy" option; do
+while getopts "hcsolbn:kdpgiyN" option; do
    case $option in
       h) 
         func_calls="Help"
@@ -1454,6 +1481,10 @@ while getopts "hcsolbn:kdpgiy" option; do
       y)
         # Say yes to all questions (no ask for confirmation)
         YES_FLAG="y"
+        ;;
+      N)
+        # Say no to all questions (no ask for confirmation)
+        NO_FLAG="y"
         ;;
       \?) # Invalid option
         echo "Error: Invalid option"

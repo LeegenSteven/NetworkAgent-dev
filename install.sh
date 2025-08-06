@@ -409,6 +409,7 @@ Build()
         echo "Creating temporary VM: $VM_NAME"        
         # Create a new Ubuntu 22.04 virtual machine in GCP with a public ip address and 200G drive
         gcloud compute instances create $VM_NAME \
+            --project=$GOOGLE_PROJECT \
             --zone=$GOOGLE_ZONE \
             --machine-type=n1-standard-4 \
             --subnet=mgmt-subnet \
@@ -450,6 +451,8 @@ Build()
 
     if [ $attempt -eq $max_attempts ]; then
         echo "ERROR: SSH connection failed after $max_attempts attempts"
+        echo "If you install from within the Google network,"
+        echo "make sure to first run gcert on your machine"
         gcloud compute instances delete $VM_NAME --zone=$GOOGLE_ZONE --project=$GOOGLE_PROJECT --quiet
         exit 1
     fi

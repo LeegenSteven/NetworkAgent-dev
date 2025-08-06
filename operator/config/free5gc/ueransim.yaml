@@ -62,16 +62,22 @@ spec:
                       type: string
                 ue: 
                   description:  |
-                    User Equipment subscriber details. the combination of imsi and plmnId must be unique across all UERanSim instances. 
+                    User Equipment subscriber details. The following rules apply to the ue data provided
+                      - the combination of imsi and plmnId must be unique across all UERanSim instances. 
+                      - MSISDN must be unique across UERANSIM instances. 
                     Check this is the case when adding a new UERanSim by using tools to discover what existing UERanSim services are configured.
                   type: object
                   properties:
                     imsi: 
-                      description: subscriber identifier
+                      description: subscriber identifier, a 15 digit string. ensure the value provided is enclosed in quotes
                       type: string
                       default: "208930000000001"
+                    msisdn:
+                      description: MSISDN identifier, a 10 digit string. ensure the value provided is enclosed in quotes
+                      type: string
+                      default: "0900000000"
                     plmnId:
-                      description: plmnid for the radio site - this does not change - it is always the default
+                      description: plmnid for the radio site - this does not change - it is always the default. ensure the value provided is enclosed in quotes
                       type: string
                       default: "20893"
               x-kubernetes-preserve-unknown-fields: true

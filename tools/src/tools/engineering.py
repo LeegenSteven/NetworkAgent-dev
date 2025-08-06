@@ -26,6 +26,21 @@ from mcp.types import ToolAnnotations
 
 logger = logging.getLogger(__name__)
 
+# Custom YAML representer to preserve quotes for numeric strings
+def represent_str(dumper, data):
+    """
+    Custom string representer that preserves quotes for numeric strings
+    that should remain as strings (e.g., phone numbers, IDs starting with 0)
+    """
+    # Preserve quotes for numeric strings that start with 0 or other patterns
+    # that should remain as strings
+    if isinstance(data, str) and data.isdigit() and data.startswith('0'):
+        return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='"')
+    return dumper.represent_scalar('tag:yaml.org,2002:str', data)
+
+# Register the custom representer
+yaml.add_representer(str, represent_str)
+
 # if GITOPS true then the service deletion / creation
 # is performed through the Gitea repository + Config Sync
 # Otherwise it is executed directly through K8s apply/delete
@@ -415,7 +430,8 @@ def createService(
         "spec": spec
     }
 
-    crd_manifest_yaml = yaml.dump(crd_manifest, indent=2)
+    crd_manifest_yaml = yaml.dump(crd_manifest, indent=2, allow_unicode=True, default_flow_style=False)
+    logger.info(crd_manifest)
     if GITOPS:
         filename = f"{kind.lower()}-{name}.yaml"
         result = commit_git_file(filename,

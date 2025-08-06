@@ -44,6 +44,17 @@ async def pointtopointservice(body, spec, status, namespace, name, uid, logger, 
       str(uuid.uuid4())[:8],
       keys
     )
+  
+  # Ensure serviceInfo is valid before proceeding
+  if serviceInfo is None:
+    logger.error(f"Error creating {kind} {name}, (id: {uid}). Failed to create or retrieve service configuration")
+    raise kopf.PermanentError(f"Failed creating {kind} {name}: Unable to create service configuration")
+  
+  # Ensure serviceInfo has the required structure
+  if not isinstance(serviceInfo, dict) or 'uuid' not in serviceInfo:
+    logger.error(f"Error creating {kind} {name}, (id: {uid}). Invalid service configuration structure")
+    raise kopf.PermanentError(f"Failed creating {kind} {name}: Invalid service configuration")
+  
   logger.debug(serviceInfo)
 
   # Do some sanity check
@@ -119,4 +130,3 @@ async def delete_service_resources(namespace, name, logger, **kwargs):
 
   # remove the configmap for this service
   await delete_configmap(namespace, name)
-

@@ -42,14 +42,14 @@ async def wireguardappliance(body,spec, name, namespace, uid, logger, **kwargs):
                         os.getenv("GOOGLE_REGION"),
                         os.getenv("GOOGLE_ZONE"), 
                         vpn=True,
-                        monitor=True, # set to false so this VM is not scraped by prometheus
+                        monitor=False, # set to false so this VM is not scraped by prometheus
                         graph=True)
 
     # Get mgmt and dataplane address for the VM created above
     mgmt_ip_address = await get_ip(namespace, name)
     data_ip_address = await get_ip(namespace, name, networkname="dataplane")
     if mgmt_ip_address is None or data_ip_address is None:
-        raise kopf.TemporaryError("No ip address found on VM yet, temporary error - waiting")
+        raise kopf.TemporaryError("No ip address found on VM yet, temporary error - waiting",10)
 
     logger.debug("found mgmt ip address %s (%s, %s, %s)", mgmt_ip_address, kind, name, uid )
     logger.debug("found dataplane ip address %s (%s, %s, %s)", data_ip_address, kind, name, uid )
@@ -84,8 +84,9 @@ async def wireguardappliance(body,spec, name, namespace, uid, logger, **kwargs):
 
     # once the vpn is running create the route from source to allowed interface
     # loop over all allowed interfaces and create routes from source interface
+    logger.info("setting up routes now")
     for peer in peersInfo:
-        logger.debug("Creating route from %s to %s",spec.get('sourceInterface'), peer['allowedInterface'])
+        logger.info("Creating route from %s to %s",spec.get('sourceInterface'), peer['allowedInterface'])
         await create_route(namespace, name, spec.get('sourceInterface'), peer['allowedInterface'])
 
     return {

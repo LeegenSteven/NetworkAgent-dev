@@ -12,25 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-- name: install pip dependencies for metrics collector
-  ansible.builtin.pip:
-    name:
-      - psutil
-      - google-cloud-spanner
-      - google-cloud-logging
-
-- name: copy metrics collector script
-  ansible.builtin.copy: 
-    src: /operator/metricscollector/collect_metrics.py
-    dest: /opt/collect_metrics.py
-    mode: 0755
-
-- name: copy GCP application credentials
-  ansible.builtin.copy: 
-    src: /operator/networkagent.json
-    dest: /opt
-
-
 - name: run metrics collector script in background
   ansible.builtin.shell:
     cmd: "nohup /opt/collect_metrics.py > /opt/metrics.log 2>&1 &"

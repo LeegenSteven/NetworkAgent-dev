@@ -10,6 +10,7 @@ The following packages are required before proceeding with the installation
 * kubectl (on Debian: ```sudo apt-get install kubectl```)
 * Python3 pip installer (on Debian: ```sudo apt-get install python3-pip```)
 * jinja templating engine (```pip install jinja-cli```).
+* ansible (```pip install ansible```).
 
 Note: it is recommended to create your own Python virtual environment first prior to installing jinja or any other python packages.
 
@@ -56,10 +57,11 @@ The script options are as follows:
 ./install.sh
 Network Agent environment manager.
 
-Syntax: install.sh [-c|-s|-o|-l|-r|-n|-k|-d|-p|-g|-i]
+Syntax: install.sh [-c|-s|-b|-o|-l|-r|-n|-k|-d|-p|-g|-i]
 options:
   -c     create network agent environment (keys, manifests,..)
   -s     build and start network agent runtime (incl. the operator)
+  -b     build the Virtual Network Function image with Free5GC, UERANSIM, Docker, and Wireguard
   -o     build and deploy the network operator
   -l     build and deploy the logs capture function
   -n     build and deploy the network dashboard and network agents
@@ -93,10 +95,16 @@ Then run the command below to start the GCP services, e.g. VPCs, GKE Cluster, Ne
 ./install.sh -s
 ```
 
+To build the free5gc network virtual machine (this needs to be done only once).
+
+```shell
+./install.sh -b
+```
+
 To deploy the Network Agent UI in Cloud Run (recommended)
 
 ```shell
-./install.sh -n
+./install.sh -n all
 ```
 Alternatively you may install the Network Agent on your own machine
 

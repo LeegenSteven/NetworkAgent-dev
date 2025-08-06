@@ -55,7 +55,6 @@ if os.getenv("VPN") is not None:
 
 if os.getenv("FREE5GC") is not None:
     logger.info("FREE5GC Lifecycle")
-    from free5gc.build.lifecycle import *
     from free5gc.ueransim.lifecycle import *
     from free5gc.upf.lifecycle import *
     from free5gc.controlplane.lifecycle import *

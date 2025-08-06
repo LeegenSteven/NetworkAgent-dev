@@ -27,9 +27,13 @@ logger = logging.getLogger(__name__)
 async def userplanefunction(meta, spec, status, namespace, name, logger, **kwargs):
   logger.debug(f"Create upf {name} with spec: {spec}")
 
-  # get the VPCs to bind UPF to
+  # get the VPCs to bind UPF to and wait for them to exist if needed
   ingress = spec.get('ingress')
+  if get_subnetwork(namespace, ingress) is None:
+    raise kopf.TemporaryError(f"Waiting for subnet {ingress}", 20 )
   egress = spec.get('egress')
+  if get_subnetwork(namespace, egress) is None:
+    raise kopf.TemporaryError(f"Waiting for subnet {egress}", 20 )
 
   # get monitor and graph labels from the metadata / labels.
   monitor = get_boolean_label(meta, 'monitor')
@@ -43,9 +47,7 @@ async def userplanefunction(meta, spec, status, namespace, name, logger, **kwarg
                         [ ingress, egress], # set this to the target network names to bind to
                         os.getenv("GOOGLE_PROJECT"),
                         os.getenv("GOOGLE_REGION"),
-                        os.getenv("GOOGLE_ZONE"), 
-                        family="ubuntu-os-pro-cloud",
-                        release="ubuntu-minimal-pro-2004-lts",
+                        os.getenv("GOOGLE_ZONE"),
                         monitor=monitor, # set to false so this VM is not scraped by prometheus
                         graph=graph)
 

@@ -12,14 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-- name: install wireguard
-  become: True
-  ansible.builtin.apt:
-    name: 
-     - wireguard
-     - python3-pip
-    state: present
-
 - name: set ip forwarding
   become: True
   ansible.posix.sysctl:
@@ -28,8 +20,14 @@
     sysctl_set: true
     reload: true
 
-- name: generate server config
+- name: generate wireguard server config
   become: True
   template:
     src: server.conf
     dest: /etc/wireguard/wg0.conf
+
+- name: generate babel config
+  become: True
+  template:
+    src: babeld.conf
+    dest: /etc/babeld.conf

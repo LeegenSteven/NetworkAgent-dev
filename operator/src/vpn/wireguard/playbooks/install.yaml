@@ -14,7 +14,7 @@
 
 - hosts: all
   become: True
-  gather_facts: False
+  gather_facts: True
   tasks:
 
     - name: run install wireguard
@@ -25,13 +25,16 @@
       import_role:
         name: metricscollector
 
-    # - name: install ops agent
-    #   import_role:
-    #     name: opsagent
-
     - name: run wireguard
       become: True
       ansible.builtin.systemd_service:
         state: restarted
         enabled: true
         name: wg-quick@wg0
+
+    # - name: run babeld
+    #   become: True
+    #   ansible.builtin.systemd_service:
+    #     state: restarted
+    #     enabled: true
+    #     name: babeld

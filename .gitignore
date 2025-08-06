@@ -39,7 +39,7 @@ porch-install
 .pub-preload-cache/
 .pub-cache/
 .pub/
-build/
+dashboard/build/
 flutter_*.png
 linked_*.ds
 unlinked.ds

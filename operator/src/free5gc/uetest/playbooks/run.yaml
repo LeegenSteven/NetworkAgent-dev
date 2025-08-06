@@ -19,7 +19,7 @@
 
   - name: copy uetest 
     ansible.builtin.copy: 
-      src: /operator/uetest/run_test.py
+      src: run_test.py
       dest: /opt/run_test.py
       mode: 0777
 
@@ -28,7 +28,7 @@
 
   - name: run test in background
     ansible.builtin.shell:
-      cmd: "nohup /opt/run_test.py > /opt/test.log 2>&1 &"
+      cmd: "nohup python3 /opt/run_test.py > /opt/test.log 2>&1 &"
     args:
       chdir: /opt
     environment:

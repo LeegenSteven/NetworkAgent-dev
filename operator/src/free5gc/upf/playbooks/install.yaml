@@ -17,9 +17,9 @@
   gather_facts: True
   tasks:
 
-    - name: install docker etc
+    - name: start docker logging
       import_role:
-        name: install
+        name: logs
 
     - name: install and run metrics collector
       import_role:

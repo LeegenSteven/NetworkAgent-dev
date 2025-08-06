@@ -330,7 +330,7 @@ async def create_nat(namespace, network_name, region):
 ########################################################################
 # Create ComputeInstance
 ########################################################################
-async def create_compute(namespace, parent_name, vm_name, external_ip, interfaces, project, region, zone, vpn=False, monitor=True,family="ubuntu-os-cloud", release="ubuntu-2204-lts",graph=True):
+async def create_compute(namespace, parent_name, vm_name, external_ip, interfaces, project, region, zone, vpn=False, monitor=True,family="networkagent", release="networkagent",graph=True):
   logger.debug(f"Create compute vm {vm_name} in ns {namespace}")
   compute_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeInstance")
 
@@ -352,12 +352,8 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
   address_name = vm_name+"-mgmt-address"
   subnet = f"https://www.googleapis.com/compute/v1/projects/{project}/regions/{region}/subnetworks/mgmt-subnet"
   net = f"https://www.googleapis.com/compute/v1/projects/{project}/regions/{region}/networks/mgmt"
-  mgmtAddress = await create_internal_ip(namespace, address_name, region, externalsubnet=subnet, graph=graph)
 
-  #if not await get_compute_address(namespace, address_name):
-  #  mgmtAddress = await create_internal_ip(namespace, address_name, region, externalsubnet=subnet, graph=True)
-  #else:
-  #  logger.info(f"ComputeAddress {address_name} in ns {namespace} already exists. Skipping creation.")
+  await create_internal_ip(namespace, address_name, region, externalsubnet=subnet, graph=graph)
   networkInterfaces.append(
     {
       "networkRef": {
@@ -387,12 +383,7 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
     address_name = vm_name+"-dataplane-address"
     subnet = f"https://www.googleapis.com/compute/v1/projects/{project}/regions/{region}/subnetworks/dataplane"
     net = f"https://www.googleapis.com/compute/v1/projects/{project}/regions/{region}/networks/dataplane"
-    dataplaneAddress = await create_internal_ip(namespace, address_name, region, externalsubnet=subnet, graph=graph)
-
-    #if not await get_compute_address(namespace, address_name):
-    #  dataplaneAddress = await create_internal_ip(namespace, address_name, region, externalsubnet=subnet, graph=True)
-    #else:
-    #  logger.info(f"ComputeAddress {address_name} in ns {namespace} already exists. Skipping creation.")
+    await create_internal_ip(namespace, address_name, region, externalsubnet=subnet, graph=graph)
     networkInterfaces.append(
       {
         "networkRef": {
@@ -426,16 +417,8 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
       subnet = f"https://www.googleapis.com/compute/v1/projects/{project}/regions/{region}/subnetworks/{interface['name']}"
       net = f"https://www.googleapis.com/compute/v1/projects/{project}/regions/{region}/networks/{interface['name']}"
 
-      networkAddress=None
-      networkNamespace=None
-      # if this is a VPN, then add the addresses to the vpn namespace, if not then put in interface namespace
-      if vpn==True:
-        networkAddress = await create_internal_ip(namespace, address_name, region, externalsubnet=subnet, graph=graph)
-        networkNamespace = namespace
-      else:
-        networkAddress = await create_internal_ip(namespace, address_name, region, externalsubnet=subnet, graph=graph)
-        networkNamespace = namespace
-
+      # create address and add to network interfaces
+      await create_internal_ip(namespace, address_name, region, externalsubnet=subnet, graph=graph)
       networkInterfaces.append(
         {
           "networkRef": {
@@ -447,7 +430,7 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
           "networkIpRef": {
             "kind": "ComputeAddress",
             "name": address_name,
-            "namespace": networkNamespace
+            "namespace": namespace
           }
         })
   
@@ -490,6 +473,10 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
   if graph:
     labels["graph"] = "true"
 
+  sourceImageRef = f"projects/{project}/global/images/{release}"
+  if family != "networkagent":
+    sourceImageRef=f"{family}/{release}"
+
   crd_manifest = {
     "apiVersion": "compute.cnrm.cloud.google.com/v1beta1",
     "kind": "ComputeInstance",
@@ -511,7 +498,7 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
           "size": 200,
           "type": "pd-ssd",
           "sourceImageRef": {
-            "external": f"{family}/{release}"
+            "external": sourceImageRef
           },
         },
       },
@@ -577,15 +564,15 @@ async def get_compute(namespace, vm_name):
       status: "False"
       type: Ready"""
     reason = None
-    if 'conditions' in result.get('status'):
+    if result.get('status').get('conditions') is not None:
       reason = result.get('status').get('conditions')[-1].get('reason')
 
     currentStatus = result.get('status').get('currentStatus')
     if (currentStatus is not None and currentStatus == "RUNNING") or (reason == "UpdateFailed"):
       return result
     else:
-        logger.debug(f"Waiting for vm {vm_name} to come up")
-        raise kopf.TemporaryError(f"Waiting for VM {vm_name} to become ready",30)
+      logger.debug(f"Waiting for vm {vm_name} to come up")
+      raise kopf.TemporaryError(f"Waiting for VM {vm_name} to become ready",30)
 
   except kubernetes.client.rest.ApiException as e: 
     logger.debug(e.status)

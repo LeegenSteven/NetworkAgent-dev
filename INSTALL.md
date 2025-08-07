@@ -89,7 +89,7 @@ The first step is to generate keys and deployment descriptors for each of the ne
 ./install.sh -c
 ```
 
-Then run the command below to start the GCP services, e.g. VPCs, GKE Cluster, Network Agent K8s operastor, Git repos, network AI agent etc. 
+Then run the command below to start the GCP services, e.g. VPCs, GKE Cluster, Network Agent K8s operator, Git repos, network AI agent etc. 
 
 ```shell
 ./install.sh -s
@@ -106,12 +106,7 @@ To deploy the Network Agent UI in Cloud Run (recommended)
 ```shell
 ./install.sh -n all
 ```
-Alternatively you may install the Network Agent on your own machine
 
-```shell
-pip install -r ./networkagent/requirements.txt
-(cd ./networkagent/src; streamlit run ./main.py)
-```
 To recreate a complete environment and runtime from scratch: 
 ```shell
 ./install.sh -k; ./install.sh -d; ./install.sh -c; ./install.sh -s

@@ -49,6 +49,13 @@ CheckGCPEnv()
         exit 1
     fi
 
+    # test if ansible exists
+    if ! command -v ansible &> /dev/null
+    then
+        echo "ansible could not be found, you must run 'pip install ansible'"
+        exit 1
+    fi
+
     # The WEBAPPS_PWD and WEBAPPS_LOGIN used for all web front ends like Gitea, Streamlit NW Agent
     # This is to avoid hard coding the passwd in source code
     if [ -z "${GOOGLE_PROJECT}" ] || [ -z "${GOOGLE_REGION}" ] || \
@@ -541,18 +548,19 @@ EOF
 ############################################################
 Start()
 {
+    echo "####################################"
+    echo "Starting the network agent services"
+    echo "####################################"
+
    # Create artifact repository
-    echo "########################################"
+    echo "###########################"
     echo "Create Artifact Repository "
-    echo "########################################"
+    echo "############################"
     gcloud artifacts repositories describe $GOOGLE_REPO --location=$GOOGLE_REGION > /dev/null 2>&1
     if [[ $? -ne 0 ]]; then
         gcloud artifacts repositories create $GOOGLE_REPO --repository-format=docker --location=$GOOGLE_REGION --description="Network Agent Repository" --quiet
     fi
 
-    echo "###########################"
-    echo "Starting the network agent"
-    echo "###########################"
     # check if SERVICE ACCOUNT exists
     export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter="networkagent@${GOOGLE_PROJECT}."`
     echo "GKE Cluster Service Account: $GOOGLE_SERVICE_ACCOUNT"
@@ -741,12 +749,6 @@ Start()
     # kubectl apply -f environment/logsink.yaml
     # kubectl apply -f environment/prometheus.yaml
     kubectl apply -f environment/git.yaml
-    # kubectl apply -f environment/free5gc-build.yaml
-
-    # echo "##################################"
-    # echo "Deploy Porch                      "
-    # echo "##################################"
-    # Porch
 
     # Say how to access the gitea server
     while [[ $(kubectl get gitea gitea -o 'jsonpath={..status.create_gitea.status}' 2>/dev/null) != "Running" ]]; do
@@ -824,15 +826,6 @@ Delete()
         networkagent.json \
         google-compute*
 
-}
-
-############################################################
-# Setup Monitoring                                         #
-############################################################
-Monitoring()
-{
-    # To be done
-    true
 }
 
 ############################################################
@@ -1024,21 +1017,6 @@ LogCapture()
     gcloud functions deploy $CAPTURE_LOG_FUNCTION --source ./logcollector --runtime python312 \
       --trigger-topic $TOPIC_NAME  --entry-point=capture_log --memory=512MB \
       --project=$GOOGLE_PROJECT --region=$GOOGLE_REGION
-}
-
-
-############################################################
-# Deploy the Porch systems                                 #
-############################################################
-Porch()
-{
-    if ! test -f deployment-blueprint.tar.gz; then
-        wget https://github.com/kptdev/kpt/releases/download/porch%2Fv0.0.35/deployment-blueprint.tar.gz
-        mkdir porch-install
-        tar xzf ./deployment-blueprint.tar.gz -C porch-install
-    fi
-    kubectl apply -f porch-install
-    kubectl wait deployment --for=condition=Available porch-server -n porch-system --timeout=300s
 }
 
 
@@ -1393,6 +1371,45 @@ DisplayDemoInfo()
 }
 
 ############################################################
+# Install everything - comprehensive setup                 #
+############################################################
+InstallAll()
+{
+    echo "########################################"
+    echo "Starting comprehensive installation..."
+    echo "########################################"
+    
+    # Check if networkagent.json exists, if not run Create function
+    if [[ ! -f "networkagent.json" ]] || [[ ! -s "networkagent.json" ]]; then
+        echo "networkagent.json not found or empty, running Create function..."
+        Create
+    else
+        echo "networkagent.json found, skipping Create function"
+    fi
+    
+    # Run Start function
+    echo "Running Start function..."
+    Start
+
+    # Check if networkagent image exists, if not run Build function
+    if ! gcloud compute images describe networkagent --project=$GOOGLE_PROJECT > /dev/null 2>&1; then
+        echo "networkagent image not found, running Build function..."
+        Build
+    else
+        echo "networkagent image found, skipping Build function"
+    fi
+
+    # Run Networkagent function with all agents
+    echo "Running Networkagent function with all agents..."
+    AGENT_NAMES="all"
+    Networkagent
+    
+    echo "########################################"
+    echo "Comprehensive installation completed!"
+    echo "########################################"
+}
+
+############################################################
 # Help                                                     #
 ############################################################
 Help()
@@ -1400,8 +1417,9 @@ Help()
    # Display Help
    echo "Network Agent environment manager."
    echo
-   echo "Syntax: install.sh [-c|-s|-b|-o|-l|-r|-n|-k|-d|-p|-g|-i]"
+   echo "Syntax: install.sh [-c|-s|-b|-o|-l|-r|-n|-k|-d|-g|-i|-all]"
    echo "options:"
+   echo "  -all   install everything (comprehensive setup: create env if needed, build image if needed, start runtime, deploy all agents)"
    echo "  -c     create network agent environment (keys, manifests,..)"
    echo "  -s     build and start network agent runtime (incl. the operator)"
    echo "  -b     build the Virtual Network Function image with Free5GC, UERANSIM, Docker, and Wireguard"
@@ -1413,7 +1431,6 @@ Help()
    echo "         example: -n dashboard,operations or -n all (to deploy all agents)"
    echo "  -k     stop and delete the network agent runtime (GKE cluster, VMS, DB, etc..)"
    echo "  -d     delete the network agent environment (keys, manifests...)."
-   echo "  -p     deploy porch tools"
    echo "  -i     display demo information"
    echo "  -g     display active GCP environment (user, project, GKE cluster,...)"
    echo "  -i     display demo information"
@@ -1422,6 +1439,7 @@ Help()
 
    echo 
    echo "Some typical use cases:"
+   echo " - To install everything from scratch: ./install.sh -all"
    echo " - To create and run a network agent environment including the operator: ./install.sh -c; ./install.sh -s"
    echo " - To redeploy the operator alone : ./install.sh -o"
    echo " - To (re)deploy the network agent Web UI alone : ./install.sh -n"
@@ -1439,62 +1457,68 @@ YES_FLAG="n"
 NO_FLAG="n"
 func_calls=""
 
-while getopts "hcsolbn:kdpgiyN" option; do
-   case $option in
-      h) 
-        func_calls="Help"
-        ;;
-      c) 
-        func_calls="CheckGCPEnv SetDemoEnv Create"
-        ;;
-      s) 
-        func_calls="CheckGCPEnv SetDemoEnv Start"
-        ;;
-      b) 
-        func_calls="SetDemoEnv Build"
-        ;;
-      o) 
-        func_calls="CheckGCPEnv SetDemoEnv Operator"
-        ;;
-      l) 
-        func_calls="CheckGCPEnv SetDemoEnv LogCapture"
-        ;;
-      n) 
-        AGENT_NAMES=$OPTARG
-        func_calls="CheckGCPEnv SetDemoEnv Networkagent"
-        ;;
-      k) 
-        func_calls="CheckGCPEnv SetDemoEnv Kill"
-        ;;
-      d)
-        func_calls="CheckGCPEnv SetDemoEnv Delete"
-        ;;
-      p)
-        func_calls="CheckGCPEnv SetDemoEnv Porch"
-        ;;
-      g)
-        func_calls="CheckGCPEnv SetDemoEnv DisplayGCPEnv"
-        ;;
-      i)
-        func_calls="CheckGCPEnv SetDemoEnv DisplayDemoInfo"
-        ;;
-      y)
-        # Say yes to all questions (no ask for confirmation)
-        YES_FLAG="y"
-        ;;
-      N)
-        # Say no to all questions (no ask for confirmation)
-        NO_FLAG="y"
-        ;;
-      \?) # Invalid option
-        echo "Error: Invalid option"
-        func_calls="Help"
-        ;;
-      :)
-        echo "Option -$OPTARG requires an argument."
-        ;;
-   esac
-done
+# Handle long options first
+if [[ "$1" == "-all" ]]; then
+    func_calls="CheckGCPEnv SetDemoEnv InstallAll"
+    shift # Remove -all from arguments
+fi
+
+# If func_calls is already set (from -all), skip getopts
+if [[ -z $func_calls ]]; then
+    while getopts "hcsolbn:kdpgiyN" option; do
+       case $option in
+          h) 
+            func_calls="Help"
+            ;;
+          c) 
+            func_calls="CheckGCPEnv SetDemoEnv Create"
+            ;;
+          s) 
+            func_calls="CheckGCPEnv SetDemoEnv Start"
+            ;;
+          b) 
+            func_calls="SetDemoEnv Build"
+            ;;
+          o) 
+            func_calls="CheckGCPEnv SetDemoEnv Operator"
+            ;;
+          l) 
+            func_calls="CheckGCPEnv SetDemoEnv LogCapture"
+            ;;
+          n) 
+            AGENT_NAMES=$OPTARG
+            func_calls="CheckGCPEnv SetDemoEnv Networkagent"
+            ;;
+          k) 
+            func_calls="CheckGCPEnv SetDemoEnv Kill"
+            ;;
+          d)
+            func_calls="CheckGCPEnv SetDemoEnv Delete"
+            ;;
+          g)
+            func_calls="CheckGCPEnv SetDemoEnv DisplayGCPEnv"
+            ;;
+          i)
+            func_calls="CheckGCPEnv SetDemoEnv DisplayDemoInfo"
+            ;;
+          y)
+            # Say yes to all questions (no ask for confirmation)
+            YES_FLAG="y"
+            ;;
+          N)
+            # Say no to all questions (no ask for confirmation)
+            NO_FLAG="y"
+            ;;
+          \?) # Invalid option
+            echo "Error: Invalid option"
+            func_calls="Help"
+            ;;
+          :)
+            echo "Option -$OPTARG requires an argument."
+            ;;
+       esac
+    done
+fi
 
 if [[ -z $func_calls ]]; then
     Help

@@ -1,17 +1,5 @@
 # Gitea
 
-A gitea virtual machine is automatically created when the __install.sh -s__ runs.
-
-The k8s manifest can be found in __environment/git.yaml__
-
-You must wait for the status to be __Ready__ by running the following
-
-```
-kubectl describe gitea
-```
-
-## Log into Gitea
-
 To get access to the gitea UI run the following command to find the VM's public IP address.
 
 ```

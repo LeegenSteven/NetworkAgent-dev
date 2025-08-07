@@ -121,12 +121,11 @@
     chdir: /opt/network-repo
 
 
-
 ###############################################
-# 5g branch
+# single site branch
 ###############################################
-- name: checkout 5g branch
-  command: sudo -u git git checkout -B 5g
+- name: checkout singlesite branch
+  command: sudo -u git git checkout -B singlesite
   args:
     chdir: /opt/network-repo
 
@@ -157,18 +156,69 @@
    - internet-network-location.yaml
    - cellsite1-network-location.yaml
 
-- name: add to 5g branch in network repo
+- name: add to singlesite branch in network repo
   command: sudo -u git git add .
   args:
     chdir: /opt/network-repo
 
 - name: network files commit 
-  command: sudo -u git git commit -m "add all 5g files"
+  command: sudo -u git git commit -m "add all singlesite files"
   args:
     chdir: /opt/network-repo
 
-- name: push to repo
-  command: sudo -u git git -c http.sslVerify=false push -u origin 5g
+- name: push to singlesite repo
+  command: sudo -u git git -c http.sslVerify=false push -u origin singlesite
   args:
     chdir: /opt/network-repo
 
+###############################################
+# multi site branch
+###############################################
+- name: checkout multisite branch
+  command: sudo -u git git checkout -B multisite
+  args:
+    chdir: /opt/network-repo
+
+- name: push network files
+  ansible.builtin.copy:
+    src: "{{item}}"
+    dest: "/opt/network-repo/{{item}}"
+    owner: git
+    group: git
+    mode: '0644'
+  loop:
+   - Readme.md
+   - userplanefunction-upf.yaml
+   - datanetwork-dnn.yaml
+   - controlplane-controlplane.yaml
+   - meshservice-meshservice1.yaml
+   - ueransim-cellsite1.yaml
+   - ueransim-cellsite2.yaml
+
+- name: push templated network files
+  ansible.builtin.template:
+    src: "{{item}}"
+    dest: "/opt/network-repo/{{item}}"
+    owner: git
+    group: git
+    mode: '0644'
+  loop: 
+   - core-network-location.yaml
+   - internet-network-location.yaml
+   - cellsite1-network-location.yaml
+   - cellsite2-network-location.yaml
+
+- name: add to singlesite branch in network repo
+  command: sudo -u git git add .
+  args:
+    chdir: /opt/network-repo
+
+- name: network files commit 
+  command: sudo -u git git commit -m "add all singlesite files"
+  args:
+    chdir: /opt/network-repo
+
+- name: push to singlesite repo
+  command: sudo -u git git -c http.sslVerify=false push -u origin singlesite
+  args:
+    chdir: /opt/network-repo

@@ -214,11 +214,11 @@
     chdir: /opt/network-repo
 
 - name: network files commit 
-  command: sudo -u git git commit -m "add all singlesite files"
+  command: sudo -u git git commit -m "add all multisite files"
   args:
     chdir: /opt/network-repo
 
-- name: push to singlesite repo
-  command: sudo -u git git -c http.sslVerify=false push -u origin singlesite
+- name: push to multisite repo
+  command: sudo -u git git -c http.sslVerify=false push -u origin multisite
   args:
     chdir: /opt/network-repo

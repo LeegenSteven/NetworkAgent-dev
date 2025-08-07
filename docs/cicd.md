@@ -14,11 +14,3 @@ There are two k8s operators that execute changes on the network, as follows:
 * [Network Service Operator](/operator/Readme.md): Making network function changes, often requesting intents from config connector as part of network function lifecycle. 
 
 These operators publish a set of CRDs for the resource lifecycles they manage. External systems or users can add Config Connector or Network Service Custom Resources to gitea, and config sync will trigger the orchestration process within both operators. 
-
-## Repository Structure
-
-The strategy taken in the demo is to have a repository in git that maps to a site location. 
-
-![git hierarchy](/drawings/lifecycle/repos.drawio.svg)
-
-An example git repository hierarchy can be seen in the figure above. 

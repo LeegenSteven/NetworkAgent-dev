@@ -296,6 +296,10 @@ class _ChatPanelContentState extends State<_ChatPanelContent> with WidgetsBindin
                     child: Text('What locations are there?'),
                   ),
                   const PopupMenuItem<String>(
+                    value: 'Propose a plan to deploy a 5G core',
+                    child: Text('Propose a plan to deploy a 5G core'),
+                  ),
+                  const PopupMenuItem<String>(
                     value: 'Create a plan to deploy a new network location called cellsite1 with CIDR  10.0.40.0/24',
                     child: Text('Create a plan to deploy a new network location called cellsite1 with CIDR 10.0.40.0/24'),
                   ),

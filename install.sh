@@ -148,6 +148,16 @@ EOF
         exit 1
     fi
 
+    # Check that the GCP user (GOOGLE_USER) doesn't have 'admin' or 'user'
+    # before the @ sign
+    if [[ "$GOOGLE_USER" == "admin@"* ]] || [[ "$GOOGLE_USER" == "user@"* ]]; then
+        echo "**ERROR** GCP user $GOOGLE_USER contains 'admin@' or 'user@'."
+        echo "This is not allowed both for security reasons and because it"
+        echo "can cause conflicts with internal VM user accounts."
+        echo "Please use a different GCP user account."
+        exit 1
+    fi
+    
     echo " all good!"
 }
 
@@ -300,7 +310,7 @@ Create()
         echo "Granting permissions to the GKE Cluster service account..."
         for role in "roles/editor" "roles/container.admin" "roles/compute.admin" \
             "roles/compute.networkAdmin" "roles/iam.serviceAccountAdmin" "roles/monitoring.metricWriter" \
-            "roles/aiplatform.user" "roles/logging.logWriter" "roles/run.admin"; do
+            "roles/aiplatform.user" "roles/logging.logWriter" "roles/run.admin" "roles/spanner.databaseUser"; do
             echo "$role"   
             gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" \
               --role="$role" --no-user-output-enabled
@@ -308,7 +318,7 @@ Create()
 
     fi
 
-    # if the creadentail file doesn't exist or as a zero byte size 
+    # if the creadential file doesn't exist or as a zero byte size 
     # then create it
     if [[ ! ( -f "networkagent" && -s "networkagent" ) ]]; then
         echo "Creating the application credential file for service account $GOOGLE_SERVICE_ACCOUNT..."

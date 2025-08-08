@@ -17,6 +17,7 @@ from utils.compute import *
 import kopf
 from free5gc.utils.k8s import getDNNAddress, getUPFAddress
 from free5gc.controlplane.lifecycle_tasks import *
+from graph.lifecycle_tasks import update_network_node
 
 logger = logging.getLogger(__name__)
 
@@ -74,3 +75,12 @@ async def controlplane(spec, status, namespace, name, logger, **kwargs):
       "amfPort": 38412,
       "webuiAddress": f"http://{vmMgmtAddress}:5000"
   }
+
+##########################################
+# Catch updates on status
+##########################################
+@kopf.on.update('google.dev', 'v1', 'controlplane', field='status')
+async def controlplane_update(body, spec, meta, status, namespace, name, logger, **kwargs):
+  logger.debug(f"Update controlplane {name} with spec: {spec} and status: {status['controlplane']['status']}")
+  kind = body.get('kind')
+  await update_network_node(body, spec, namespace, name, kind, meta['uid'])

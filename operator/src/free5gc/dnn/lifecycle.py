@@ -17,6 +17,7 @@ from utils.compute import *
 from utils.resources import get_boolean_label
 import kopf
 from free5gc.dnn.lifecycle_tasks import *
+from graph.lifecycle_tasks import update_network_node
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +51,19 @@ async def datanetwork(spec, meta, status, namespace, name, logger, **kwargs):
 
   # install UPF to VM 
   await run_install(namespace, name)
-  ip=await get_ip(namespace, name, network_interface.get('name'))
+  ip = await get_ip(namespace, name, network_interface.get('name'))
 
   return {
       "status":"Running",
       "address": ip
   }
+
+##########################################
+# Catch updates on status
+##########################################
+@kopf.on.update('google.dev', 'v1', 'datanetwork', field='status')
+async def datanetwork_update(body, spec, meta, status, namespace, name, logger, **kwargs):
+  logger.debug(f"Update datanetwork {name} with spec: {spec} and status: {status['datanetwork']['status']}")
+  kind = body.get('kind')
+  await update_network_node(body, spec, namespace, name, kind, meta['uid'])
+

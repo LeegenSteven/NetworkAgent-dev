@@ -17,6 +17,7 @@ from vpn.utils.resources import *
 import uuid
 from utils.keys import WgKey
 from utils.k8s import *
+from graph.lifecycle_tasks import update_network_node
 
 logger = logging.getLogger(__name__)
 
@@ -130,3 +131,12 @@ async def delete_service_resources(namespace, name, logger, **kwargs):
 
   # remove the configmap for this service
   await delete_configmap(namespace, name)
+
+##########################################
+# Catch updates on status
+##########################################
+@kopf.on.update('google.dev', 'v1', 'pointtopointservice', field='status')
+async def pointtopointservice_update(body, spec, meta, status, namespace, name, logger, **kwargs):
+  logger.debug(f"Update pointtopointservice {name} with spec: {spec} and status: {status['pointtopointservice']['status']}")
+  kind = body.get('kind')
+  await update_network_node(body, spec, namespace, name, kind, meta['uid'])

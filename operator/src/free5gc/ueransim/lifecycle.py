@@ -18,8 +18,9 @@ from utils.compute import *
 from free5gc.ueransim.lifecycle_tasks import *
 from utils.k8s import getClusterDetails
 from utils.resources import get_boolean_label
-
 from free5gc.utils.k8s import get_api_client
+from graph.lifecycle_tasks import update_network_node
+
 
 logger = logging.getLogger(__name__)
 
@@ -87,3 +88,11 @@ async def ueransim(spec, meta, status, namespace, name, logger, **kwargs):
     raise kopf.TemporaryError("Amf not running yet", 30)
 
 
+##########################################
+# Catch updates on status
+##########################################
+@kopf.on.update('google.dev', 'v1', 'ueransim', field='status')
+async def ueransim_update(body, spec, meta, status, namespace, name, logger, **kwargs):
+  logger.debug(f"Update ueransim {name} with spec: {spec} and status: {status['ueransim']['status']}")
+  kind = body.get('kind')
+  await update_network_node(body, spec, namespace, name, kind, meta['uid'])

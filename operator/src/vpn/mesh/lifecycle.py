@@ -19,6 +19,7 @@ import kopf
 import kubernetes
 from utils.k8s import *
 from vpn.utils.resources import *
+from graph.lifecycle_tasks import update_network_node
 
 logger = logging.getLogger(__name__)
 
@@ -131,3 +132,11 @@ async def delete_service_resources(namespace, name, logger, **kwargs):
   # remove the configmap for this service
   await delete_configmap(namespace, name)
 
+##########################################
+# Catch updates on status
+##########################################
+@kopf.on.update('google.dev', 'v1', 'meshservice', field='status')
+async def meshservice_update(body, spec, meta, status, namespace, name, logger, **kwargs):
+  logger.debug(f"Update meshservice {name} with spec: {spec} and status: {status['meshservice']['status']}")
+  kind = body.get('kind')
+  await update_network_node(body, spec, namespace, name, kind, meta['uid'])

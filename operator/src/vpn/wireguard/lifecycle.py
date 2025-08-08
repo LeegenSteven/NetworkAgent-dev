@@ -16,6 +16,7 @@ import kopf
 import logging
 from utils.compute import *
 from vpn.wireguard.lifecycle_tasks import *
+from graph.lifecycle_tasks import update_network_node
 
 # https://wireguard.how/server/google-cloud-platform/
 # https://ubuntu.com/server/docs/wireguard-vpn-site-to-site
@@ -97,3 +98,11 @@ async def wireguardappliance(body,spec, name, namespace, uid, logger, **kwargs):
         "peer_data_ip_address": peer_ip_address
     }
 
+##########################################
+# Catch updates on status
+##########################################
+@kopf.on.update('google.dev', 'v1', 'wireguardappliance', field='status')
+async def wireguardappliance_update(body, spec, meta, status, namespace, name, logger, **kwargs):
+  logger.debug(f"Update wireguardappliance {name} with spec: {spec} and status: {status['wireguardappliance']['status']}")
+  kind = body.get('kind')
+  await update_network_node(body, spec, namespace, name, kind, meta['uid'])

@@ -25,6 +25,7 @@ The following packages are required before proceeding with the installation:
 * Python3 pip installer (on Debian: `sudo apt-get install python3-pip`)
 * jinja templating engine (`pip install jinja-cli`)
 * ansible (`pip install ansible`)
+* [flutter sdk](https://flutter.dev/)
 
 **Note:** It is recommended to create your own Python virtual environment first prior to installing jinja or any other python packages.
 
@@ -69,9 +70,10 @@ The **install.sh** script provides flexible installation options:
 ```bash
 Network Agent environment manager.
 
-Syntax: install.sh [-c|-s|-b|-o|-l|-r|-n|-k|-d|-g|-i|-all]
+Syntax: install.sh [-c|-s|-b|-o|-l|-r|-n|-k|-d|-g|-i|-all] [-y|-N]
 options:
   -all   install everything (comprehensive setup: create env if needed, build image if needed, start runtime, deploy all agents)
+         can be combined with -y or -N flags (e.g., ./install.sh -all -y)
   -c     create network agent environment (keys, manifests,..)
   -s     build and start network agent runtime (incl. the operator)
   -b     build the Virtual Network Function image with Free5GC, UERANSIM, Docker, and Wireguard
@@ -79,7 +81,7 @@ options:
   -l     build and deploy the logs capture function
   -n     build and deploy the network dashboard and network agents
          can be followed by a comma-separated list of agent names to (re)deploy selectively
-         valid agent names: all, networktools, supervisor, engineer, dashboard, operations, test
+         valid agent names: all, networktools, supervisor, engineer, dashboard, operations, test, incident, logs
          example: -n dashboard,operations or -n all (to deploy all agents)
   -k     stop and delete the network agent runtime (GKE cluster, VMS, DB, etc..)
   -d     delete the network agent environment (keys, manifests...).
@@ -90,6 +92,8 @@ options:
 
 Some typical use cases:
  - To install everything from scratch: ./install.sh -all
+ - To install everything from scratch without prompts: ./install.sh -all -y
+ - To install everything from scratch, skipping rebuilds: ./install.sh -all -N
  - To create and run a network agent environment including the operator: ./install.sh -c; ./install.sh -s
  - To redeploy the operator alone : ./install.sh -o
  - To (re)deploy the network agent Web UI alone : ./install.sh -n
@@ -142,6 +146,12 @@ You can deploy specific agents individually:
 
 # Deploy only the supervisor agent
 ./install.sh -n supervisor
+
+# Deploy specific agents (incident and logs agents)
+./install.sh -n incident,logs
+
+# Deploy network tools
+./install.sh -n networktools
 
 # Deploy all agents
 ./install.sh -n all

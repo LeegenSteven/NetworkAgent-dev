@@ -179,6 +179,11 @@
   args:
     chdir: /opt/network-repo
 
+- name: delete pointtopointservice
+  ansible.builtin.file:
+    path: /opt/network-repo/pointtopointservice-ptp1.yaml
+    state: absent
+
 - name: push network files
   ansible.builtin.copy:
     src: "{{item}}"

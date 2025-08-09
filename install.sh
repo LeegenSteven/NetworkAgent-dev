@@ -56,6 +56,13 @@ CheckGCPEnv()
         exit 1
     fi
 
+    # test if flutter exists
+    if ! command -v flutter &> /dev/null
+    then
+        echo "flutter could not be found, install from https://flutter.dev'"
+        exit 1
+    fi
+
     # The WEBAPPS_PWD and WEBAPPS_LOGIN used for all web front ends like Gitea, Streamlit NW Agent
     # This is to avoid hard coding the passwd in source code
     if [ -z "${GOOGLE_PROJECT}" ] || [ -z "${GOOGLE_REGION}" ] || \
@@ -623,6 +630,12 @@ Start()
       echo "ERROR while creating the networkautomation cluster. Exiting"
     fi
 
+    # disable auto upgrade
+    gcloud container node-pools update default-pool \
+    --cluster networkautomation \
+    --location $GOOGLE_ZONE \
+    --no-enable-autoupgrade
+
     # On glinux machines gcloud components cannot be installed
     # through gcloud. apt must be used instead
     if [[ `uname -v` =~ "rodete" ]]; then
@@ -860,7 +873,6 @@ Kill()
     kubectl config set-context --current --namespace $GOOGLE_NAMESPACE
     
     kubectl delete -f environment/git.yaml
-    kubectl delete -f environment/free5gc-build.yaml
     # kubectl delete -f environment/bigquery.yaml
     kubectl delete -f environment/spanner.yaml
     # Sometimes kopf finalizers are not removed from the network resources
@@ -1302,25 +1314,33 @@ Networkagent()
         SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
         cd dashboard
         echo "Supervisor Agent URL is ${SUPERVISOR_URL}"
-        echo "Cleaning flutter environment"
-        flutter clean
-
-        echo "Building flutter web app"
-        flutter build web \
-                --dart-define=WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
-                --dart-define=WEBAPPS_PWD=${WEBAPPS_PWD} \
-                --dart-define=GCP_PROJECT=${GOOGLE_PROJECT}\
-                --dart-define=GITEA_URL=https://${GITEA_HOST}:3000 \
-                --dart-define=NETWORKAGENT_URL=${SUPERVISOR_URL}
 
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/dashboard:latest"
-        if [[ $YES_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+        if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
             read -p "Dashboard image already exists. Rebuild? (y/n) " -n 1 -r
             echo
             if [[ $REPLY =~ ^[Yy]$ ]]; then
+                echo "Cleaning flutter environment"
+                flutter clean
+                echo "Building flutter web app"
+                flutter build web \
+                        --dart-define=WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
+                        --dart-define=WEBAPPS_PWD=${WEBAPPS_PWD} \
+                        --dart-define=GCP_PROJECT=${GOOGLE_PROJECT}\
+                        --dart-define=GITEA_URL=https://${GITEA_HOST}:3000 \
+                        --dart-define=NETWORKAGENT_URL=${SUPERVISOR_URL}
                 gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
             fi
         else
+            echo "Cleaning flutter environment"
+            flutter clean
+            echo "Building flutter web app"
+            flutter build web \
+                    --dart-define=WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
+                    --dart-define=WEBAPPS_PWD=${WEBAPPS_PWD} \
+                    --dart-define=GCP_PROJECT=${GOOGLE_PROJECT}\
+                    --dart-define=GITEA_URL=https://${GITEA_HOST}:3000 \
+                    --dart-define=NETWORKAGENT_URL=${SUPERVISOR_URL}
             gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
         fi
 
@@ -1427,9 +1447,10 @@ Help()
    # Display Help
    echo "Network Agent environment manager."
    echo
-   echo "Syntax: install.sh [-c|-s|-b|-o|-l|-r|-n|-k|-d|-g|-i|-all]"
+   echo "Syntax: install.sh [-c|-s|-b|-o|-l|-r|-n|-k|-d|-g|-i|-all] [-y|-N]"
    echo "options:"
    echo "  -all   install everything (comprehensive setup: create env if needed, build image if needed, start runtime, deploy all agents)"
+   echo "         can be combined with -y or -N flags (e.g., ./install.sh -all -y)"
    echo "  -c     create network agent environment (keys, manifests,..)"
    echo "  -s     build and start network agent runtime (incl. the operator)"
    echo "  -b     build the Virtual Network Function image with Free5GC, UERANSIM, Docker, and Wireguard"
@@ -1450,6 +1471,8 @@ Help()
    echo 
    echo "Some typical use cases:"
    echo " - To install everything from scratch: ./install.sh -all"
+   echo " - To install everything from scratch without prompts: ./install.sh -all -y"
+   echo " - To install everything from scratch, skipping rebuilds: ./install.sh -all -N"
    echo " - To create and run a network agent environment including the operator: ./install.sh -c; ./install.sh -s"
    echo " - To redeploy the operator alone : ./install.sh -o"
    echo " - To (re)deploy the network agent Web UI alone : ./install.sh -n"
@@ -1471,6 +1494,25 @@ func_calls=""
 if [[ "$1" == "-all" ]]; then
     func_calls="CheckGCPEnv SetDemoEnv InstallAll"
     shift # Remove -all from arguments
+    
+    # Process remaining arguments for -y or -N flags
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -y)
+                YES_FLAG="y"
+                shift
+                ;;
+            -N)
+                NO_FLAG="y"
+                shift
+                ;;
+            *)
+                echo "Error: Invalid option '$1' with -all"
+                Help
+                exit 1
+                ;;
+        esac
+    done
 fi
 
 # If func_calls is already set (from -all), skip getopts

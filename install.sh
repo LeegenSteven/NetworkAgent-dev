@@ -1462,7 +1462,6 @@ Help()
    echo "         example: -n dashboard,operations or -n all (to deploy all agents)"
    echo "  -k     stop and delete the network agent runtime (GKE cluster, VMS, DB, etc..)"
    echo "  -d     delete the network agent environment (keys, manifests...)."
-   echo "  -i     display demo information"
    echo "  -g     display active GCP environment (user, project, GKE cluster,...)"
    echo "  -i     display demo information"
    echo "  -y     answer 'yes' to all questions (no ask for confirmation)"

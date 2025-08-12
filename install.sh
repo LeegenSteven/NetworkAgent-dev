@@ -1440,6 +1440,61 @@ InstallAll()
 }
 
 ############################################################
+# Wipe out all resources deployed by the Agent demo        #
+############################################################
+DemoWipeOut()
+{
+    patch_timeout = 30 # seconds
+    for kind in uetest ueransim ptp mesh userplanefunction controlplane datanetwork; do
+        RSC_NAMES=$(kubectl get $kind -n network -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+        echo -n "$kind objects: "
+        if [ -n "$RSC_NAMES" ]; then
+            echo "$RSC_NAMES"
+            for name in $RSC_NAMES; do
+                kubectl delete $kind "$name" -n network &
+                job_id=$!
+                echo "Waiting $patch_timeout s for deletion to complete"
+                timeout "${patch_timeout}s" sh -c "while kill -0 $job_id 2>/dev/null; do sleep 1; done"
+                code = $?
+                if [ $code -eq 124 ]; then
+                    echo "Patching $name finalizers to force deletion..."
+                    kubectl patch uetest $name -n network --patch '{"metadata":{"finalizers":[]}}' --type=merge
+                elif [ $code -eq 0 ]; then
+                    echo "Successfully deleted $kind $name"
+                else
+                    echo "Failed to delete $kind $name (exit code $code)"
+                fi
+            done
+        else
+            echo "None"
+        fi
+    done
+
+    # Delete all cellsite locations
+    for name in cellsite1 cellsite2; do
+    echo "Deleting resources of $name location... "
+        for kind in ComputeFirewall ComputeSubnetwork ComputeNetwork; do
+            kubectl get $kind $name -n network 2>/dev/null || continue
+            # Resource still exists. Proceed with deletion
+            echo "Deleting $kind $name..."
+            kubectl delete $kind $name -n network 2>/dev/null &
+            job_id=$!
+            echo "Waiting up to 1 min for deletion to complete"
+            timeout 1m sh -c "while kill -0 $job_id 2>/dev/null; do sleep 1; done"
+            if [ $? -eq 124 ]; then
+            echo "Patching $name finalizers to force deletion..."
+            kubectl patch $kind $name -n network --patch '{"metadata":{"finalizers":[]}}'  --type=merge
+            fi
+        done
+    done
+
+    # bounce the operator in case of config connector issues
+    kubectl delete -f operator/deployment.yaml
+    kubectl apply -f operator/deployment.yaml
+
+}
+
+############################################################
 # Help                                                     #
 ############################################################
 Help()
@@ -1447,7 +1502,7 @@ Help()
    # Display Help
    echo "Network Agent environment manager."
    echo
-   echo "Syntax: install.sh [-c|-s|-b|-o|-l|-r|-n|-k|-d|-g|-i|-all] [-y|-N]"
+   echo "Syntax: install.sh [-c|-s|-b|-o|-l|-r|-n|-k|-d|-g|-i|-w|-all] [-y|-N]"
    echo "options:"
    echo "  -all   install everything (comprehensive setup: create env if needed, build image if needed, start runtime, deploy all agents)"
    echo "         can be combined with -y or -N flags (e.g., ./install.sh -all -y)"
@@ -1464,6 +1519,7 @@ Help()
    echo "  -d     delete the network agent environment (keys, manifests...)."
    echo "  -g     display active GCP environment (user, project, GKE cluster,...)"
    echo "  -i     display demo information"
+   echo "  -w     wipe out the entire autonomous network agent demo resources (ptp, mesh, uetest,...)"
    echo "  -y     answer 'yes' to all questions (no ask for confirmation)"
    echo "  -N     answer 'no' to all questions (no ask for confirmation)"
 
@@ -1516,7 +1572,7 @@ fi
 
 # If func_calls is already set (from -all), skip getopts
 if [[ -z $func_calls ]]; then
-    while getopts "hcsolbn:kdpgiyN" option; do
+    while getopts "hcsolbn:kdpgiwyN" option; do
        case $option in
           h) 
             func_calls="Help"
@@ -1551,6 +1607,9 @@ if [[ -z $func_calls ]]; then
             ;;
           i)
             func_calls="CheckGCPEnv SetDemoEnv DisplayDemoInfo"
+            ;;
+          w)
+            func_calls="CheckGCPEnv SetDemoEnv DemoWipeOut"
             ;;
           y)
             # Say yes to all questions (no ask for confirmation)

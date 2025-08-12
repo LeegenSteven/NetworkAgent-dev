@@ -91,7 +91,7 @@ async def ueransim(spec, meta, status, namespace, name, logger, **kwargs):
 ##########################################
 # Catch updates on status
 ##########################################
-@kopf.on.update('google.dev', 'v1', 'ueransim', field='status')
+@kopf.on.update('ueransim', field='status')
 async def ueransim_update(body, spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Update ueransim {name} with spec: {spec} and status: {status['ueransim']['status']}")
   kind = body.get('kind')

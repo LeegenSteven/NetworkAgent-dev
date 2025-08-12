@@ -79,7 +79,7 @@ async def controlplane(spec, status, namespace, name, logger, **kwargs):
 ##########################################
 # Catch updates on status
 ##########################################
-@kopf.on.update('google.dev', 'v1', 'controlplane', field='status')
+@kopf.on.update('controlplane', field='status')
 async def controlplane_update(body, spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Update controlplane {name} with spec: {spec} and status: {status['controlplane']['status']}")
   kind = body.get('kind')

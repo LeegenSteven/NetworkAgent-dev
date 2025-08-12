@@ -135,7 +135,7 @@ async def delete_service_resources(namespace, name, logger, **kwargs):
 ##########################################
 # Catch updates on status
 ##########################################
-@kopf.on.update('google.dev', 'v1', 'meshservice', field='status')
+@kopf.on.update('meshservice', field='status')
 async def meshservice_update(body, spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Update meshservice {name} with spec: {spec} and status: {status['meshservice']['status']}")
   kind = body.get('kind')

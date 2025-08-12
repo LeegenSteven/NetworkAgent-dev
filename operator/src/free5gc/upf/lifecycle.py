@@ -30,10 +30,10 @@ async def userplanefunction(meta, spec, status, namespace, name, logger, **kwarg
 
   # get the VPCs to bind UPF to and wait for them to exist if needed
   ingress = spec.get('ingress')
-  if get_subnetwork(namespace, ingress) is None:
+  if await get_subnetwork(namespace, ingress) is None:
     raise kopf.TemporaryError(f"Waiting for subnet {ingress}", 20 )
   egress = spec.get('egress')
-  if get_subnetwork(namespace, egress) is None:
+  if await get_subnetwork(namespace, egress) is None:
     raise kopf.TemporaryError(f"Waiting for subnet {egress}", 20 )
 
   # get monitor and graph labels from the metadata / labels.
@@ -54,9 +54,9 @@ async def userplanefunction(meta, spec, status, namespace, name, logger, **kwarg
 
   # install UPF to VM 
   await run_install(namespace, name)
-  mgmtIP=await get_ip(namespace, name)
-  ingressIP=await get_ip(namespace, name, ingress.get('name'))
-  egressIP=await get_ip(namespace, name, egress.get('name'))
+  mgmtIP = await get_ip(namespace, name)
+  ingressIP = await get_ip(namespace, name, ingress.get('name'))
+  egressIP = await get_ip(namespace, name, egress.get('name'))
 
   return {
       "status":"Running",
@@ -68,7 +68,7 @@ async def userplanefunction(meta, spec, status, namespace, name, logger, **kwarg
 ##########################################
 # Catch updates on status
 ##########################################
-@kopf.on.update('google.dev', 'v1', 'userplanefunction', field='status')
+@kopf.on.update('userplanefunction', field='status')
 async def userplanefunction_update(body, spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Update userplanefunction {name} with spec: {spec} and status: {status['userplanefunction']['status']}")
   kind = body.get('kind')

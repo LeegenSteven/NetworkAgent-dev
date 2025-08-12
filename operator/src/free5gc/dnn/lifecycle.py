@@ -61,7 +61,7 @@ async def datanetwork(spec, meta, status, namespace, name, logger, **kwargs):
 ##########################################
 # Catch updates on status
 ##########################################
-@kopf.on.update('google.dev', 'v1', 'datanetwork', field='status')
+@kopf.on.update('datanetwork', field='status')
 async def datanetwork_update(body, spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Update datanetwork {name} with spec: {spec} and status: {status['datanetwork']['status']}")
   kind = body.get('kind')

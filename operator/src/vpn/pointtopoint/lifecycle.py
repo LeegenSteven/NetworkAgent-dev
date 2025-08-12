@@ -135,7 +135,7 @@ async def delete_service_resources(namespace, name, logger, **kwargs):
 ##########################################
 # Catch updates on status
 ##########################################
-@kopf.on.update('google.dev', 'v1', 'pointtopointservice', field='status')
+@kopf.on.update('pointtopointservice', field='status')
 async def pointtopointservice_update(body, spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Update pointtopointservice {name} with spec: {spec} and status: {status['pointtopointservice']['status']}")
   kind = body.get('kind')

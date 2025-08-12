@@ -72,8 +72,8 @@ async def uetest(spec, meta, status, namespace, name, logger, **kwargs):
 ##########################################
 # Catch updates on status
 ##########################################
-@kopf.on.update('google.dev', 'v1', 'uetest', field='status')
-async def uetest_update(body, spec, meta, status, namespace, name, logger, **kwargs):
-  logger.debug(f"Update uetest {name} with spec: {spec} and status: {status['uetest']['status']}")
-  kind = body.get('kind')
-  await update_network_node(body, spec, namespace, name, kind, meta['uid'])
+# @kopf.on.update('uetest', field='status')
+# async def uetest_update(body, spec, meta, status, namespace, name, logger, **kwargs):
+#   logger.debug(f"Update uetest {name} with spec: {spec} and status: {status['uetest']['status']}")
+#   kind = body.get('kind')
+#   await update_network_node(body, spec, namespace, name, kind, meta['uid'])

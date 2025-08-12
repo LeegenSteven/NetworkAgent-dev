@@ -101,7 +101,7 @@ async def wireguardappliance(body,spec, name, namespace, uid, logger, **kwargs):
 ##########################################
 # Catch updates on status
 ##########################################
-@kopf.on.update('google.dev', 'v1', 'wireguardappliance', field='status')
+@kopf.on.update('wireguardappliance', field='status')
 async def wireguardappliance_update(body, spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Update wireguardappliance {name} with spec: {spec} and status: {status['wireguardappliance']['status']}")
   kind = body.get('kind')

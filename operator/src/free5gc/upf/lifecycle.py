@@ -30,11 +30,13 @@ async def userplanefunction(meta, spec, status, namespace, name, logger, **kwarg
 
   # get the VPCs to bind UPF to and wait for them to exist if needed
   ingress = spec.get('ingress')
-  if await get_subnetwork(namespace, ingress) is None:
-    raise kopf.TemporaryError(f"Waiting for subnet {ingress}", 20 )
+  ingress_name = ingress.get('name') if ingress is not None else None
+  if await get_subnetwork(namespace, ingress_name) is None:
+    raise kopf.TemporaryError(f"Waiting for subnet {ingress_name}", 20 )
   egress = spec.get('egress')
-  if await get_subnetwork(namespace, egress) is None:
-    raise kopf.TemporaryError(f"Waiting for subnet {egress}", 20 )
+  egress_name = egress.get('name') if egress is not None else None
+  if await get_subnetwork(namespace, egress_name) is None:
+    raise kopf.TemporaryError(f"Waiting for subnet {egress_name}", 20 )
 
   # get monitor and graph labels from the metadata / labels.
   monitor = get_boolean_label(meta, 'monitor')
@@ -45,7 +47,7 @@ async def userplanefunction(meta, spec, status, namespace, name, logger, **kwarg
                         name, # parent name
                         name,
                         None,
-                        [ ingress, egress], # set this to the target network names to bind to
+                        [ ingress_name, egress_name], # set this to the target network names to bind to
                         os.getenv("GOOGLE_PROJECT"),
                         os.getenv("GOOGLE_REGION"),
                         os.getenv("GOOGLE_ZONE"),
@@ -54,9 +56,9 @@ async def userplanefunction(meta, spec, status, namespace, name, logger, **kwarg
 
   # install UPF to VM 
   await run_install(namespace, name)
-  mgmtIP = await get_ip(namespace, name)
-  ingressIP = await get_ip(namespace, name, ingress.get('name'))
-  egressIP = await get_ip(namespace, name, egress.get('name'))
+  mgmtIP    = await get_ip(namespace, name)
+  ingressIP = await get_ip(namespace, name, ingress_name)
+  egressIP  = await get_ip(namespace, name, egress_name)
 
   return {
       "status":"Running",

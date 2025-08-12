@@ -47,7 +47,7 @@ async def userplanefunction(meta, spec, status, namespace, name, logger, **kwarg
                         name, # parent name
                         name,
                         None,
-                        [ ingress_name, egress_name], # set this to the target network names to bind to
+                        [ ingress, egress], # set this to the target network names to bind to
                         os.getenv("GOOGLE_PROJECT"),
                         os.getenv("GOOGLE_REGION"),
                         os.getenv("GOOGLE_ZONE"),

@@ -142,7 +142,7 @@
    - datanetwork-dnn.yaml
    - controlplane-controlplane.yaml
    - pointtopointservice-ptp1.yaml
-   - ueransim-cellsite1.yaml
+   - ueransim-cellsite1-ueransim.yaml
 
 - name: push templated network files
   ansible.builtin.template:
@@ -197,8 +197,8 @@
    - datanetwork-dnn.yaml
    - controlplane-controlplane.yaml
    - meshservice-meshservice1.yaml
-   - ueransim-cellsite1.yaml
-   - ueransim-cellsite2.yaml
+   - ueransim-cellsite1-ueransim.yaml
+   - ueransim-cellsite2-ueransim.yaml
 
 - name: push templated network files
   ansible.builtin.template:

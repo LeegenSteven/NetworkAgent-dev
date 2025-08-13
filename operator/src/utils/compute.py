@@ -193,7 +193,8 @@ async def get_subnetwork(namespace, name):
     return result
   except kubernetes.client.rest.ApiException as e:
     if e.status == 404:
-      logger.error("%s in namespace %s not found", name, namespace)
+      # Not an error in itself so just send a debug message
+      logger.debug("%s in namespace %s not found", name, namespace)
     else:
       logger.error("Exception raised while getting subnetwork %s: %s", name, e.status)
       logger.debug(e)

@@ -1444,7 +1444,7 @@ InstallAll()
 ############################################################
 DemoWipeOut()
 {
-    patch_timeout = 30 # seconds
+    patch_timeout=30 # seconds
     for kind in uetest ueransim ptp mesh userplanefunction controlplane datanetwork; do
         RSC_NAMES=$(kubectl get $kind -n network -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
         echo -n "$kind objects: "
@@ -1455,10 +1455,10 @@ DemoWipeOut()
                 job_id=$!
                 echo "Waiting $patch_timeout s for deletion to complete"
                 timeout "${patch_timeout}s" sh -c "while kill -0 $job_id 2>/dev/null; do sleep 1; done"
-                code = $?
+                code=$?
                 if [ $code -eq 124 ]; then
                     echo "Patching $name finalizers to force deletion..."
-                    kubectl patch uetest $name -n network --patch '{"metadata":{"finalizers":[]}}' --type=merge
+                    kubectl patch $kind $name -n network --patch '{"metadata":{"finalizers":[]}}' --type=merge
                 elif [ $code -eq 0 ]; then
                     echo "Successfully deleted $kind $name"
                 else
@@ -1479,11 +1479,16 @@ DemoWipeOut()
             echo "Deleting $kind $name..."
             kubectl delete $kind $name -n network 2>/dev/null &
             job_id=$!
-            echo "Waiting up to 1 min for deletion to complete"
-            timeout 1m sh -c "while kill -0 $job_id 2>/dev/null; do sleep 1; done"
-            if [ $? -eq 124 ]; then
-            echo "Patching $name finalizers to force deletion..."
-            kubectl patch $kind $name -n network --patch '{"metadata":{"finalizers":[]}}'  --type=merge
+            echo "Waiting $patch_timeout s for deletion to complete"
+            timeout "${patch_timeout}s" sh -c "while kill -0 $job_id 2>/dev/null; do sleep 1; done"
+            code=$?
+            if [ $code -eq 124 ]; then
+                echo "Patching $name finalizers to force deletion..."
+                kubectl patch $kind $name -n network --patch '{"metadata":{"finalizers":[]}}' --type=merge
+            elif [ $code -eq 0 ]; then
+                echo "Successfully deleted $kind $name"
+            else
+                echo "Failed to delete $kind $name (exit code $code)"
             fi
         done
     done

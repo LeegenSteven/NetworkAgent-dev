@@ -78,7 +78,8 @@ def configure(settings: kopf.OperatorSettings, **_):
     settings.posting.enabled = True
     settings.watching.connect_timeout = 1 * 60
     settings.watching.server_timeout = 10 * 60
-
+    settings.execution.max_workers = 5
+    
 # Login with k8s client
 @kopf.on.login()
 def login_fn(**kwargs):

@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 ##########################################
 # Create a new ueransim
 ##########################################
-@kopf.on.create('google.dev', 'v1', 'ueransim')
+@kopf.on.create('ueransim')
 async def ueransim(spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Create ueransim {name} with spec: {spec}")
 

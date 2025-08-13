@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 ##########################################
 # Create a new UE Test
 ##########################################
-@kopf.on.create('google.dev', 'v1', 'uetest')
+@kopf.on.create('uetest')
 async def uetest(spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Create ue test {name} with spec: {spec}")
 

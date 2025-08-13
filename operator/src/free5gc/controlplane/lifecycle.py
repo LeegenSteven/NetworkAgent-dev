@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 ##########################################
 # Create a new controlplane
 ##########################################
-@kopf.on.create('google.dev', 'v1', 'controlplane')
+@kopf.on.create('controlplane')
 async def controlplane(spec, status, namespace, name, logger, **kwargs):
   logger.info(f"Create control plane with spec: {spec}")
 

@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 ##########################################
 # Create a new dnn
 ##########################################
-@kopf.on.create('google.dev', 'v1', 'datanetwork')
+@kopf.on.create('datanetwork')
 async def datanetwork(spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Create datanetwork {name} with spec: {spec}")
 

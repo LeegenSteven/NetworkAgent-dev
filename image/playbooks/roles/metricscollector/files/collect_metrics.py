@@ -69,7 +69,7 @@ SQL_TEMPLATES = {
                     " VALUES (@id, @kind, @name, @timestamp, @json_metrics)",
   'update_metrics': "UPDATE NetworkMetrics SET timestamp = {timestamp}, metrics = JSON '{metrics}' WHERE id = '{id}'",
 }
-CREDENTIAL_FILE = '/misc/applications/GCP/TME_projects/New_Network_Agent/NetworkAgent/networkagent.json'
+CREDENTIAL_FILE = '/opt/networkagent.json'
 SCRIPT_NAME = os.path.basename(__file__)
 HISTORY = int(HISTORY_IN_MINUTES * (60 / POLLING_INTERVAL_IN_SECONDS)) # Number of metrics row we keep in history
 

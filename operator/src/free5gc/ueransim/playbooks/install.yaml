@@ -25,6 +25,10 @@
       import_role:
         name: metricscollector
 
+    # - name: run UERANSIM monitor
+    #   import_role:
+    #     name: ueransim_monitor
+
     - name: run UERANSIM
       import_role:
         name: run

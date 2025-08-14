@@ -189,7 +189,7 @@ async def get_subnetwork(namespace, name):
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeSubnetwork")
   try:
     result = network_api.get(namespace=namespace, name=name)
-    logger.info("returning subnet result: %s", result)
+    logger.debug("returning subnet result: %s", result)
     return result
   except kubernetes.client.rest.ApiException as e:
     if e.status == 404:

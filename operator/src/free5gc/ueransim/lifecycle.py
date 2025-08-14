@@ -61,10 +61,6 @@ async def ueransim(spec, meta, status, namespace, name, logger, **kwargs):
   graph = get_boolean_label(meta, 'graph')
 
   try:
-    controlplaneAddresses = await get_controlplane_addresses(namespace, controlplaneName)
-    if controlplaneAddresses is None:
-      raise kopf.TemporaryError("Waiting for control plane...", 20)
-
     # create UERANSIM VM on target network 
     await create_compute( namespace, 
                           name, # parent name
@@ -76,6 +72,10 @@ async def ueransim(spec, meta, status, namespace, name, logger, **kwargs):
                           os.getenv("GOOGLE_ZONE"), 
                           monitor=monitor, # set to false so this VM is not scraped by prometheus
                           graph=graph)
+
+    controlplaneAddresses = await get_controlplane_addresses(namespace, controlplaneName)
+    if controlplaneAddresses is None:
+      raise kopf.TemporaryError("Waiting for control plane...", 20)
 
     # install UERANSIM to VM 
     await run_install(namespace, name, controlplaneAddresses['dataAddress'], controlplaneAddresses['amfPort'], controlplaneAddresses['webuiAddress'], cellid, ue_spec)

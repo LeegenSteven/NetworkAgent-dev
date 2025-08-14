@@ -26,22 +26,10 @@ logger = logging.getLogger(__name__)
 ##########################################
 @kopf.on.create('controlplane')
 async def controlplane(spec, status, namespace, name, logger, **kwargs):
-  logger.info(f"Create control plane with spec: {spec}")
+  logger.info(f"Create control plane with spec: {spec} in namespace {namespace}")
 
   # get the VPC to bind to
   network = spec.get('network')
-
-  # get UPF address
-  upf = spec.get("upf")
-  upfAddress = await getUPFAddress(namespace, upf['name'])
-  if upfAddress is None:
-    raise kopf.PermanentError("no UPF address")
-
-  # get the DNN VM address and wait until it comes up
-  dnn = spec.get("dnn")
-  dnnAddress = await getDNNAddress(namespace, dnn['name'])
-  if dnnAddress is None:
-    raise kopf.PermanentError("no DNN address")
 
   await create_compute( namespace, 
                         name, # parent name
@@ -54,6 +42,17 @@ async def controlplane(spec, status, namespace, name, logger, **kwargs):
                         graph=True,
                         monitor=True) 
 
+  # get UPF address
+  upf = spec.get("upf")
+  upfAddress = await getUPFAddress(namespace, upf['name'])
+  if upfAddress is None:
+    raise kopf.PermanentError("no UPF address")
+
+  # get the DNN VM address and wait until it comes up
+  dnn = spec.get("dnn")
+  dnnAddress = await getDNNAddress(namespace, dnn['name'])
+  if dnnAddress is None:
+    raise kopf.PermanentError("no DNN address")
 
   # get the external ip address of the VM
   vmMgmtAddress = await get_ip(namespace, name)

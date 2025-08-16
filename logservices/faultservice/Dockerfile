@@ -12,27 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-- hosts: all
-  become: True
-  gather_facts: True
-  tasks:
-
-    - name: start docker logging
-      import_role:
-        name: logs
-
-    - name: run metrics collector
-      import_role:
-        name: metricscollector
-
-    - name: run UERANSIM
-      import_role:
-        name: run
-
-    - name: run UERANSIM monitor
-      import_role:
-        name: ueransim_monitor
-
-    - name: run UE
-      import_role:
-        name: startue
+FROM python:3.13.2
+ADD ./requirements.txt /
+RUN pip install -r /requirements.txt
+ADD ./src/ /app
+WORKDIR /app
+CMD ["python3", "main.py"]

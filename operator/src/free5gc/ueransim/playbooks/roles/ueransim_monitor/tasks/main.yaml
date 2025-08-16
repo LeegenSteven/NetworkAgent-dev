@@ -2,6 +2,7 @@
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
+# You may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
@@ -23,36 +24,12 @@
     dest: /opt/ueransim_monitor.py
     mode: 0755
 
-- name: Create systemd service for UERANSIM monitor
-  ansible.builtin.copy:
-    dest: /etc/systemd/system/ueransim_monitor.service
-    content: |
-      [Unit]
-      Description=UERANSIM Monitor Service
-      After=docker.service
-      Requires=docker.service
-
-      [Service]
-      ExecStart=/usr/bin/python3 /opt/ueransim_monitor.py
-      Restart=always
-      User=root
-      Group=root
-
-      [Install]
-      WantedBy=multi-user.target
-    mode: 0644
-
-- name: Enable and start UERANSIM monitor service
-  ansible.builtin.systemd:
-    name: ueransim_monitor
-    enabled: yes
-    state: started
-
-- name: Add handler to reload systemd
-  ansible.builtin.systemd:
-    daemon_reload: yes
-
-- name: Add handler to restart ueransim_monitor
-  ansible.builtin.systemd:
-    name: ueransim_monitor
-    state: restarted
+- name: run health script in background
+  ansible.builtin.shell:
+    cmd: "nohup /opt/ueransim_monitor.py > /opt/health.log 2>&1 &"
+  args:
+    chdir: /opt
+  environment:
+    GOOGLE_APPLICATION_CREDENTIALS: "/opt/networkagent.json"
+  async: 15 # A short async timeout is fine here as nohup and '&' handle the backgrounding
+  poll: 0 # Tell Ansible to start and move on immediately

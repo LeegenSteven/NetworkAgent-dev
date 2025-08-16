@@ -14,6 +14,7 @@
 
 import logging
 from utils.compute import *
+# from utils.request_throttler import throttled, throttled_call
 import json
 # Imports the Google Cloud Spanner Client Library.
 from google.cloud import spanner
@@ -27,13 +28,14 @@ EMBEDDING_MODEL_NAME="text-embedding-005"
 EMBEDDING_MODEL = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL_NAME)
 
 SQL_TEMPLATES = {
-  'create_nw_node': "INSERT NetworkNode (id, kind, name, display_name, self_link, status, node_property)" 
+  'upsert_nw_node': "INSERT OR UPDATE NetworkNode (id, kind, name, display_name, self_link, status, node_property)" 
                     " VALUES ('{id}', '{kind}', '{name}', '{display_name}', {self_link}, {status}, JSON '{body}')",
+  'exist_nw_node': "SELECT id FROM NetworkNode WHERE id = '{id}'",
   'delete_nw_node': "DELETE FROM NetworkNode WHERE id = '{id}'",
   'update_nw_node': "UPDATE NetworkNode SET status = {status}, node_property = JSON '{body}' WHERE id = '{id}'",
-  'create_rs_cnx': "INSERT ResourceConnection (id, to_id) VALUES ('{id}', '{to_id}')",
+  'upsert_rs_cnx': "INSERT OR IGNORE ResourceConnection (id, to_id) VALUES ('{id}', '{to_id}')",
   'delete_node_rs_cnx': "DELETE FROM ResourceConnection WHERE (id = '{id}' OR to_id = '{id}')",
-  'create_nw_cnx': "INSERT NetworkConnection (id, to_id) VALUES ('{id}', '{to_id}')",
+  'upsert_nw_cnx': "INSERT OR IGNORE NetworkConnection (id, to_id) VALUES ('{id}', '{to_id}')",
   'delete_node_nw_cnx': "DELETE FROM NetworkConnection WHERE (id = '{id}' OR to_id = '{id}')",
   'exist_nw_cnx': "SELECT id FROM NetworkConnection WHERE (id = '{id}' AND to_id = '{to_id}')",
   'create_kg_res_node': "INSERT KgResourceDescriptionNode (id, content, embedding)"
@@ -167,13 +169,14 @@ async def get_embedding(text, task_type, model):
     return []
 
 # ------------------------------------------
-# Create a network node
+# Create a network node (idempotent)
 # ------------------------------------------
+# @throttled
 async def create_network_node(body, spec, namespace, name, kind, uid):
 
-  def sql_create_network_node(transaction):
-    tmpl = SQL_TEMPLATES['create_nw_node']
-    # Build and execute the SQL query
+  def sql_upsert_network_node(transaction):
+    tmpl = SQL_TEMPLATES['upsert_nw_node']
+    # Build and execute the SQL query using UPSERT
     sql = tmpl.format(id=uid, kind=kind, name=name, display_name=display_name, 
                       self_link='NULL', status=status, body=body_dump)
     logger.debug(f"SQL: {sql}")
@@ -189,23 +192,27 @@ async def create_network_node(body, spec, namespace, name, kind, uid):
   row_ct = 0
   success = True
   try:
-    row_ct = database.run_in_transaction(sql_create_network_node)
+    row_ct = database.run_in_transaction(sql_upsert_network_node)
+    logger.debug(f"Network node upserted id: {uid}, kind: {kind}, name: {name}, status: {status} (row count: {row_ct})")
   except Exception as e:
     success = False
-    logger.error(f"SQL error: {e}")
+    logger.error(f"SQL error during upsert: {e}")
 
-  success = success & await create_or_update_kg_resource_description_node(uid, body_string)
+  # Always try to create/update KG node regardless of upsert result
+  kg_success = await create_or_update_kg_resource_description_node(uid, body_string)
+  success = success and kg_success
 
   if success:
-    logger.debug(f"Network node inserted id: {uid}, kind: {kind}, name: {name}, status: {status} (row count: {row_ct})")
+    logger.debug(f"Network node and KG node successfully processed id: {uid}, kind: {kind}, name: {name}")
   else:
-    logger.error(f"Network node creation failed id: {uid}, kind: {kind}, name: {name}, status: {status}")
+    logger.error(f"Network node processing failed id: {uid}, kind: {kind}, name: {name}, status: {status}")
   return success
 
 
 # ------------------------------------------
 # Update a network node
 # ------------------------------------------
+# @throttled
 async def update_network_node(body, spec, namespace, name, kind, uid):
 
   def sql_update_network_node(transaction):
@@ -239,6 +246,7 @@ async def update_network_node(body, spec, namespace, name, kind, uid):
 # ------------------------------------------
 # Delete a network node
 # ------------------------------------------
+# @throttled
 async def delete_network_node(uid, kind, name):
 
   def sql_delete_network_node(transaction):
@@ -265,12 +273,13 @@ async def delete_network_node(uid, kind, name):
   return success
 
 # ------------------------------------------
-# Create a network connection
+# Create a network connection (idempotent)
 # ------------------------------------------
+# @throttled
 async def create_network_connection(parent_uid, uid):
 
-  def sql_create_network_connection(transaction):
-    tmpl = SQL_TEMPLATES['create_nw_cnx']
+  def sql_upsert_network_connection(transaction):
+    tmpl = SQL_TEMPLATES['upsert_nw_cnx']
     sql = tmpl.format(id=parent_uid, to_id=uid)
     logger.debug(f"SQL: {sql}")
     return transaction.execute_update(sql)
@@ -278,20 +287,18 @@ async def create_network_connection(parent_uid, uid):
   row_ct = 0
   success = True
   try:
-    row_ct = database.run_in_transaction(sql_create_network_connection)
+    row_ct = database.run_in_transaction(sql_upsert_network_connection)
+    logger.debug("Network node connection from id: {} to id: {} upserted (row count: {})".format(parent_uid,uid,row_ct))
   except Exception as e:
     success = False
-    logger.error(f"SQL error: {e}")
+    logger.error(f"SQL error during network connection upsert: {e}")
 
-  if success:
-    logger.debug("Network node connection from id: {} to id: {} created (row count: {})".format(parent_uid,uid,row_ct))
-  else:
-    logger.error("Network node connection from id: {} to id: {} creation failed".format(parent_uid, uid))
   return success
 
 # ------------------------------------------
 # Does a network connection exists
 # ------------------------------------------
+# @throttled
 async def exist_network_connection(parent_uid, uid):
 
   tmpl = SQL_TEMPLATES['exist_nw_cnx']
@@ -315,6 +322,7 @@ async def exist_network_connection(parent_uid, uid):
 # ------------------------------------------
 # Delete network connections
 # ------------------------------------------
+# @throttled
 async def delete_node_network_connections(uid, kind, name):
 
   def sql_delete_node_network_connections(transaction):
@@ -338,12 +346,13 @@ async def delete_node_network_connections(uid, kind, name):
   return success
 
 # ------------------------------------------
-# Create K8s resource connection
+# Create K8s resource connection (idempotent)
 # ------------------------------------------
+# @throttled
 async def create_resource_connection(parent_uid, uid):
 
-  def sql_create_resource_connections(transaction):
-    tmpl = SQL_TEMPLATES['create_rs_cnx']
+  def sql_upsert_resource_connections(transaction):
+    tmpl = SQL_TEMPLATES['upsert_rs_cnx']
     sql = tmpl.format(id=parent_uid, to_id=uid)
     logger.debug(f"SQL: {sql}")
     return transaction.execute_update(sql)
@@ -351,21 +360,18 @@ async def create_resource_connection(parent_uid, uid):
   row_ct = 0
   success = True
   try:
-    row_ct = database.run_in_transaction(sql_create_resource_connections)
+    row_ct = database.run_in_transaction(sql_upsert_resource_connections)
+    logger.debug("Resource node connection from id: {} to id: {} upserted (row count: {})".format(parent_uid,uid,row_ct))
   except Exception as e:
     success = False
-    logger.error(f"SQL error: {e}")
-
-  if success:
-    logger.debug("Resource node connection from id: {} to id: {} created (row count: {})".format(parent_uid,uid,row_ct))
-  else:
-    logger.debug("Resource node connection from id: {} to id: {} creation failed".format(parent_uid, uid))
+    logger.error(f"SQL error during resource connection upsert: {e}")
 
   return success
 
 # ------------------------------------------
 # Delete K8s resource connections
 # ------------------------------------------
+# @throttled
 async def delete_node_resource_connections(uid, kind, name):
 
   def sql_delete_node_resource_connection(transaction):
@@ -392,6 +398,7 @@ async def delete_node_resource_connections(uid, kind, name):
 # Idempotent function to create or update a
 # KG resource node
 # ------------------------------------------
+# @throttled
 async def create_or_update_kg_resource_description_node(id, body_string):
   success = True
   if await exist_kg_resource_description_node(id):
@@ -403,6 +410,7 @@ async def create_or_update_kg_resource_description_node(id, body_string):
 # ------------------------------------------
 # Does a KG resource node exists
 # ------------------------------------------
+# @throttled
 async def exist_kg_resource_description_node(id):
 
   tmpl = SQL_TEMPLATES['exist_kg_res_node']
@@ -426,6 +434,7 @@ async def exist_kg_resource_description_node(id):
 # ------------------------------------------
 # Create K8s resource descriptions in Knowledge Graph
 # ------------------------------------------
+# @throttled
 async def create_kg_resource_description_node(id, body_string):
 
   def sql_create_kg_resource_description_node(transaction):
@@ -461,6 +470,7 @@ async def create_kg_resource_description_node(id, body_string):
 # ------------------------------------------
 # Update K8s resource descriptions in Knowledge Graph
 # ------------------------------------------
+# @throttled
 async def update_kg_resource_description_node(id, body_string):
 
   def sql_update_kg_resource_description_node(transaction):
@@ -496,8 +506,9 @@ async def update_kg_resource_description_node(id, body_string):
   return success
 
 # ------------------------------------------
-# Update K8s resource descriptions in Knowledge Graph
+# Delete K8s resource descriptions in Knowledge Graph
 # ------------------------------------------
+# @throttled
 async def delete_kg_resource_description_node(id):
 
   def sql_delete_kg_resource_description_node(transaction):
@@ -541,6 +552,7 @@ def find_xnet_name(spec_base, attribute):
 
 # Find the reference network of of K8s resource
 # given its spec (or part of its spec) as a parameter
+# @throttled
 async def find_network_reference(namespace, spec_base):
   # Try finding a subnet resource first
   subnet_name, subnet_namespace, subnet_external = find_xnet_name(spec_base, 'subnetworkRef')
@@ -574,6 +586,7 @@ async def find_network_reference(namespace, spec_base):
 
 # Find the routes which nextHopIP matches the given destination
 # range
+# @throttled
 async def find_destination_subnets(dest_range):
   # Find all route resources
   resource_api = get_resource_api(
@@ -594,6 +607,7 @@ async def find_destination_subnets(dest_range):
 # Idempotent function to create or update the
 # network connections of a resource
 # ------------------------------------------
+# @throttled
 async def create_or_update_network_connections(body, spec, meta, uid, namespace, name):  # For all resources look for networkRef and subNetworkRef attributes in spec
   success = True
   # For ComputeInstances look for those fields in the list of NICs

@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 ##########################################
 # Create a new Mesh VPN
 ##########################################
-@kopf.on.create('meshservice')
+@kopf.on.create('google.dev', 'v1', 'meshservice')
 async def meshservice(body, spec, status, namespace, name, uid, logger, **kwargs):
   logger.debug(f"Creating mesh connectivity service {name} with spec: {spec}")
 
@@ -125,7 +125,7 @@ async def meshservice(body, spec, status, namespace, name, uid, logger, **kwargs
 ##########################################
 # Cleanup a new Mesh VPN
 ##########################################
-@kopf.on.delete('meshservice')
+@kopf.on.delete('google.dev', 'v1', 'meshservice')
 async def delete_service_resources(namespace, name, logger, **kwargs):
   logger.info(f"Deleting mesh service {name} in namespace {namespace}")
 
@@ -135,7 +135,7 @@ async def delete_service_resources(namespace, name, logger, **kwargs):
 ##########################################
 # Catch updates on status
 ##########################################
-@kopf.on.update('meshservice', field='status')
+@kopf.on.update('google.dev', 'v1', 'meshservice', field='status')
 async def meshservice_update(body, spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Update meshservice {name} with spec: {spec} and status: {status['meshservice']['status']}")
   kind = body.get('kind')

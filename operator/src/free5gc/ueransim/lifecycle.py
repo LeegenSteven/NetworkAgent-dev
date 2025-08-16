@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 ##########################################
 # Create a new ueransim
 ##########################################
-@kopf.on.create('ueransim')
+@kopf.on.create('google.dev', 'v1', 'ueransim')
 async def ueransim(spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Create ueransim {name} with spec: {spec}")
 
@@ -91,7 +91,7 @@ async def ueransim(spec, meta, status, namespace, name, logger, **kwargs):
 ##########################################
 # Catch updates on status
 ##########################################
-@kopf.on.update('ueransim', field='status')
+@kopf.on.update('google.dev', 'v1', 'ueransim', field='status')
 async def ueransim_update(body, spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Update ueransim {name} with spec: {spec} and status: {status['ueransim']['status']}")
   kind = body.get('kind')

@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 ##########################################
 # Create a new controlplane
 ##########################################
-@kopf.on.create('controlplane')
+@kopf.on.create('google.dev', 'v1', 'controlplane')
 async def controlplane(spec, status, namespace, name, logger, **kwargs):
   logger.info(f"Create control plane with spec: {spec} in namespace {namespace}")
 
@@ -78,7 +78,7 @@ async def controlplane(spec, status, namespace, name, logger, **kwargs):
 ##########################################
 # Catch updates on status
 ##########################################
-@kopf.on.update('controlplane', field='status')
+@kopf.on.update('google.dev', 'v1', 'controlplane', field='status')
 async def controlplane_update(body, spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Update controlplane {name} with spec: {spec} and status: {status['controlplane']['status']}")
   kind = body.get('kind')

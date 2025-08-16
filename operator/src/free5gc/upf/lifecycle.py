@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 ##########################################
 # Create a new userplanefunction
 ##########################################
-@kopf.on.create('userplanefunction')
+@kopf.on.create('google.dev', 'v1', 'userplanefunction')
 async def userplanefunction(meta, spec, status, namespace, name, logger, **kwargs):
   logger.debug(f"Create upf {name} with spec: {spec}")
 

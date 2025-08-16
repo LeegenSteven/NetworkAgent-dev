@@ -37,11 +37,11 @@ The interaction diagram below shows the flow of interactions to support a chat s
 
 The flow is summarised as follows
 
-* The dashboard app communicates with the supervisor agent through a socket interface. When the dashboard connects to the socket a socket session id is generated and used to identify the users conversation with all agents. 
-* The user types a request into the UI and a socket event is sent to the supervisor agent. The supervisor agent creates an ADK session if it doesnt already exist, using the socket id as ADK session identifier. 
-* The Supervisor agent has discovered the remote agent capabilities and adds this to a prompt along with the user request and Gemini decides whether to send the request to one of the remote agents
-* If a remote agent is chosen, the supervisor creates an A2A SendStreamingMessageRequest with the user request, the context_id uses the socket session id. This message is then sent to the remote A2A agent
-* The remote agents sends back a SendMessageSuccessResponse which includes the new Task with its task_id. This task_id is added to the supervisor agent state for use later. 
+* The dashboard app communicates with the supervisor agent through a socket interface. When the dashboard connects, its socket id is stored. 
+* The user types a request through the Chat interfaxe and a socket event is sent to the supervisor agent. The supervisor agent creates a new agent session id if it doesnt already exist. This session id can be reset by the user through the chat interface at any time to reset the agent's session memory.  
+* The Supervisor agent routes the users request one of the remote agents it is aware of, or it tells the user it is not able to service their request. 
+* The supervisor creates an A2A SendStreamingMessageRequest with the content of the users request, the context_id uses the agent session id created earlier. This message is then sent to the remote A2A agent
+* The remote agents sends back a SendMessageSuccessResponse which includes a Task with its task_id. This task_id is added to the supervisor agent state for use later.
 * The remote agent can also send a series of SendMessageSuccessResponse's with TaskUpdateStatus events reporting the current task state, task update events are handled as follows depending on their TaskState:
   * TaskState=__input_required__: Agent is requesting information from the user. The supervisor summarises the agent request and updates the supervisor ADK state to track we are waiting for user input for this task id. In response to this request for information another SendStreamingMessageRequest is sent to the remote agent, this time including the task_id and context_id along with the users response. 
   * TaskState=__working__: The agent is running through its flow successfully and can send status update events to show progress. The supervisor passes these events straight to the dashboard chat interface through the socket.
@@ -90,7 +90,7 @@ If the supervisor agent cannot map to an agent it can clarify the context with t
 
 ### Operations Agent
 
-Operations agent provides the user with information on what network services can be deployed and what network services are already deployed. This agent is informational only has access only to the read only tools from the MCP server.
+Operations agent provides the user with information on what network services can be deployed and what network services are already deployed. This agent is informational only has and has access only to the read only tools from the MCP server.
 
 ### Network Engineer Agent
 
@@ -111,10 +111,10 @@ The engineer steps are as follows:
 
 ### Test Agent
 
-Test agent can run new test on the network or delete already running tests. This agent only has access only to the test related tools from the MCP server.
+Test agent can run traffic tests on the network or delete running tests. This agent only has access only to the test related tools from the MCP server.
 
 
-### Anomaly Agent
+### Anomaly Agent (work in progress)
 
 The following example shows an anomaly flow.
 
@@ -132,3 +132,19 @@ The following example shows an anomaly flow.
 8. GKE orchestrates the network services changes.
 
 
+### Fault Agent (work in progress)
+
+Faults are reported from a number of sources:
+
+1. the scripts that generate traffic tests if they encounter errors trigger a fault. 
+2. liveness probes watching network function software can generate faults if the processes they are watching dies. 
+
+The fault logs are caught by a GCP Log Sink and sent to a pub/sub topic which in turn triggers an event into a Cloud Run Fault Service. The Cloud Run Fault Service groups errors from various nodes that may be related to the same incident and notifies an Incident agent to investigate. 
+
+![fault trigger](/drawings/agent/faulttrigger.drawio.svg)
+
+The incident agent receives the group of nodes with their reported errors. An initial diagnosis is run to search for similar incidents that have been reported in the past and any resolution that may have resolved the problem. 
+
+![fault agent](/drawings/agent/fault_agent.drawio.svg)
+
+If the resolution risk is low enough to automation a remediation, the incident agent sends a request to the engineering agent to execute. 

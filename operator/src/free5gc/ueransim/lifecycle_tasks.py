@@ -30,21 +30,22 @@ async def get_controlplane_addresses(namespace, name):
     api = get_resource_api(api_version="v1", kind="ControlPlane")
     try:
         result = api.get(name=name, namespace=namespace)
-        addresses=None
 
         # get the ip and port on the status field
-        if result.get('status'):
+        if result.get('status') and result.get('status').get('controlplane'):
             addresses = result.get('status')['controlplane']
+            logger.debug("controlplane address = %s", addresses)
+            return addresses
         else:
-            raise kopf.PermanentError("No Control Plane status")
+            raise kopf.TemporaryError("Control Plane status not ready yet. Waiting...", delay=10)
 
-        logger.debug("controlplane address = %s", addresses)
-        return addresses
     except kubernetes.client.rest.ApiException as e:
         if e.status == 404:
             logger.debug("%s Not found", name)
+            raise kopf.TemporaryError(f"ControlPlane resource {name} not found. Waiting...", delay=10)
         else:
             logger.error(e)
+            raise
 
 ########################################################
 # Install UERANSIM to VM

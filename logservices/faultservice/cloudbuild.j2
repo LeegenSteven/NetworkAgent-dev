@@ -11,28 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-- hosts: all
-  become: True
-  gather_facts: True
-  tasks:
-
-    - name: start docker logging
-      import_role:
-        name: logs
-
-    - name: run metrics collector
-      import_role:
-        name: metricscollector
-
-    - name: run UERANSIM
-      import_role:
-        name: run
-
-    - name: run UERANSIM monitor
-      import_role:
-        name: ueransim_monitor
-
-    - name: run UE
-      import_role:
-        name: startue
+#
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  script: |
+    docker build -t {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/faultservice:latest .
+  automapSubstitutions: true
+images:
+- '{{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/faultservice:latest'

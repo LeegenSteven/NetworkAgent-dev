@@ -24,6 +24,7 @@ import os
 
 logger = logging.getLogger(__name__)
 from utils.compute import get_resource_api
+# from .request_throttler import throttled
 
 ########################################################################
 # Create configmap instance
@@ -100,19 +101,24 @@ async def get_configmap(namespace, name):
 ########################################################################
 # delete configmap instance
 ########################################################################
+# @throttled
 async def delete_configmap(namespace, name):
-  logger.debug("getting config name %s", name)
+  logger.debug("Delete configmap %s in namespace %s", name, namespace)
 
   client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
   api = client.resources.get(api_version="v1", kind="ConfigMap") 
 
   try:
-    api.delete(name=name,namespace=namespace)
+    result = api.delete(name=name, namespace=namespace)
+    logger.info("Successfully deleted configmap %s", name)
+    return result
   except kubernetes.client.rest.ApiException as e: 
-    logger.debug(e.status)
-    logger.debug(e)
     if e.status == 404:
-      logger.error("no configmap named %s", name)
+      logger.debug("Configmap %s not found - already deleted", name)
+      return None
+    else:
+      logger.error("Failed to delete configmap %s: HTTP %s - %s", name, e.status, e.reason)
+      raise e
 
 
 ##########################################

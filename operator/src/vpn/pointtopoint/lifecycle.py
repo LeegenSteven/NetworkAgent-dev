@@ -18,13 +18,14 @@ import uuid
 from utils.keys import WgKey
 from utils.k8s import *
 from graph.lifecycle_tasks import update_network_node
+from utils.request_throttler import throttled
 
 logger = logging.getLogger(__name__)
 
 ##########################################
 # Create a new Point To Point VPN
 ##########################################
-@kopf.on.create('pointtopointservice')
+@kopf.on.create('google.dev', 'v1', 'pointtopointservice')
 async def pointtopointservice(body, spec, status, namespace, name, uid, logger, **kwargs):
   logger.debug(f"Create pointtopoint service {name} with spec: {spec}")
 
@@ -125,7 +126,7 @@ async def pointtopointservice(body, spec, status, namespace, name, uid, logger, 
 ##########################################
 # Cleanup a new PTP VPN
 ##########################################
-@kopf.on.delete('pointtopointservice')
+@kopf.on.delete('google.dev', 'v1', 'pointtopointservice')
 async def delete_service_resources(namespace, name, logger, **kwargs):
   logger.debug(f"Delete pointtopoint service {name} in ns {namespace}")
 
@@ -135,7 +136,7 @@ async def delete_service_resources(namespace, name, logger, **kwargs):
 ##########################################
 # Catch updates on status
 ##########################################
-@kopf.on.update('pointtopointservice', field='status')
+@kopf.on.update('google.dev', 'v1', 'pointtopointservice', field='status')
 async def pointtopointservice_update(body, spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Update pointtopointservice {name} with spec: {spec} and status: {status['pointtopointservice']['status']}")
   kind = body.get('kind')

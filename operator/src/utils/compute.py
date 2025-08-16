@@ -20,6 +20,7 @@ import yaml
 import os
 import re
 import utils.constants as constants
+# from .request_throttler import throttled, throttled_call
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ def get_resource_api(api_version, kind, client=None):
 ########################################################################
 # Create ComputeNetwork
 ########################################################################
+# @throttled
 async def create_network(namespace, network_name):
   logger.debug("Create compute network %s", network_name)
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeNetwork")
@@ -69,18 +71,26 @@ async def create_network(namespace, network_name):
 ########################################################################
 # Delete ComputeNetwork
 ########################################################################
+# @throttled
 async def delete_network(namespace, network_name):
   logger.debug("Delete compute network %s", network_name)
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeNetwork")
   try: 
     result = network_api.delete(name=network_name, body={}, namespace=namespace)
+    logger.info("Successfully deleted compute network %s", network_name)
+    return result
   except kubernetes.client.rest.ApiException as e: 
-    logger.error("Exception raised while deleting network %s: %s", network_name, e.status)
-    logger.debug(e)
+    if e.status == 404:
+      logger.debug("Compute network %s not found - already deleted", network_name)
+      return None
+    else:
+      logger.error("Failed to delete network %s: HTTP %s - %s", network_name, e.status, e.reason)
+      raise e
 
 ########################################################################
 # Create ComputeSubNetwork
 ########################################################################
+# @throttled
 async def create_subnetwork(namespace, network_name, subnet_name, cidr, region):
   logger.debug("Create compute subnetwork")
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeSubnetwork")
@@ -332,6 +342,7 @@ async def create_nat(namespace, network_name, region):
 ########################################################################
 # Create ComputeInstance
 ########################################################################
+# @throttled
 async def create_compute(namespace, parent_name, vm_name, external_ip, interfaces, project, region, zone, vpn=False, monitor=True,family="networkagent", release="networkagent",graph=True):
   logger.debug(f"Create compute vm {vm_name} in ns {namespace}")
   compute_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeInstance")
@@ -586,6 +597,7 @@ async def get_compute(namespace, vm_name):
 ########################################################################
 # Create External ComputeAddress
 ########################################################################
+# @throttled
 async def create_external_ip(namespace, name, region, graph=True):
   logger.debug("Create external ip")
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeAddress")
@@ -630,6 +642,7 @@ async def create_external_ip(namespace, name, region, graph=True):
 ########################################################################
 # Create Internal ComputeAddress
 ########################################################################
+# @throttled
 async def create_internal_ip(namespace, name, region, externalsubnet=None, subnetworkref=None, address=None, graph=True):
   logger.debug(f"Create internal ip {name} in ns {namespace}")
   network_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeAddress")

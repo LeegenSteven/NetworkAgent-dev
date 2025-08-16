@@ -80,6 +80,15 @@ spec:
         timestamp INT64 NOT NULL,
         metrics JSON
     ) PRIMARY KEY (id, timestamp)"
+  - "CREATE TABLE ServicePerformance (
+        id STRING(36) NOT NULL,
+        service_type STRING(MAX) NOT NULL,
+        response_time_ms FLOAT64,
+        timestamp INT64 NOT NULL,
+        userid STRING(MAX),
+        error STRING(MAX),
+        node STRING(MAX)
+      ) PRIMARY KEY (id)"
   - "CREATE OR REPLACE PROPERTY GRAPH networkGraph
        NODE TABLES (NetworkNode)
        EDGE TABLES (

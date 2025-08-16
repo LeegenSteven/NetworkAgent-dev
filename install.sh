@@ -207,6 +207,9 @@ SetDemoEnv()
     export NETWORK_OPERATOR="free5gc-operator"
     export GIT_OPERATOR="gitea-operator"
 
+    export FAULT_SINK_NAME="network-fault-sink"
+    export FAULT_TOPIC_NAME="network-fault"
+
     # If running from a Cloud Shell session fix a few problems
     # with preinstalled flutter
     if [[ $GOOGLE_CLOUD_SHELL="true" ]]; then
@@ -350,6 +353,7 @@ Create()
         cp networkagent.json networkagents/tester/src
         cp networkagent.json networkagents/logs/src
         cp networkagent.json networkagents/incident/src
+        cp networkagent.json logservices/faultservice/src
     else
         echo "#############################################################"
         echo "networkagent.json is empty, check your project is allowed to "
@@ -382,6 +386,7 @@ Create()
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/operations/cloudbuild.j2 > networkagents/operations/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/supervisor/cloudbuild.j2 > networkagents/supervisor/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO dashboard/cloudbuild.j2 > dashboard/cloudbuild.yaml
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO logservices/faultservice/cloudbuild.j2 > logservices/faultservice/cloudbuild.yaml
 
 }
 
@@ -756,11 +761,7 @@ Start()
     echo "Create Operator Log Sink and capture"
     echo "#####################################"
     LogCapture
-
-    # echo "#####################################"
-    # echo "Create the Agent"
-    # echo "#####################################"
-    # Networkagent
+    FaultCapture
 
     # start the network and git repos
     kubectl apply -f environment/networks.yaml
@@ -770,7 +771,6 @@ Start()
     # to no avail. I couldn't fix the dataset or topic access permission problem :-(
     # That's why it is created by hand above
     # kubectl apply -f environment/logsink.yaml
-    # kubectl apply -f environment/prometheus.yaml
     kubectl apply -f environment/git.yaml
 
     # Say how to access the gitea server
@@ -801,21 +801,18 @@ Delete()
         exit 0
     fi
 
-    # DO NOT DELETE the artifact repo as it takes sooooo long to generate
-    # the Free5GC build (kernel recompilation)
-    if false; then
-        echo "######################"
-        echo "Deleting Artifact Repo"
-        echo "######################"
-        (gcloud artifacts repositories describe $GOOGLE_REPO --location=$GOOGLE_REGION > /dev/null 2>&1) && \
-        gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
-    fi
+    echo "######################"
+    echo "Deleting Artifact Repo"
+    echo "######################"
+    (gcloud artifacts repositories describe $GOOGLE_REPO --location=$GOOGLE_REGION > /dev/null 2>&1) && \
+    gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
 
-    # Delete all agents artifacts
-    for pkg in networksupervisor networkoperator networktools engineeragent operationsagent testagent logsagent incidentagent dashboard; do
-        (gcloud artifacts packages describe $pkg --repository=$GOOGLE_REPO --location=$GOOGLE_REGION > /dev/null 2>&1) && \
-        gcloud artifacts packages delete $pkg --repository=$GOOGLE_REPO --location=$GOOGLE_REGION --quiet
-    done
+    # Delete the custom image created in the build step
+    echo "######################"
+    echo "Deleting custom image"
+    echo "######################"
+    (gcloud compute images describe networkagent --project=$GOOGLE_PROJECT > /dev/null 2>&1) && \
+    gcloud compute images delete networkagent --project=$GOOGLE_PROJECT --quiet
 
     echo "#######################################"
     echo "Deleting environment manifests and keys"
@@ -840,6 +837,8 @@ Delete()
         networkagents/incident/src/networkagent.json \
         networkagents/incident/cloudbuild.yaml \
         dashboard/cloudbuild.yaml \
+        logservices/faultservice/src/networkagent.json \
+        logservices/faultservice/cloudbuild.yaml \
         \
         environment/bigquery.yaml \
         environment/spanner.yaml \
@@ -883,7 +882,13 @@ Kill()
     gcloud logging sinks delete $SINK_NAME --quiet
     gcloud pubsub topics delete $TOPIC_NAME --quiet
     gcloud functions delete $CAPTURE_LOG_FUNCTION --region=$GOOGLE_REGION  --quiet
-    #bq rm --recursive --force --dataset nwoplogs
+
+    # delete the fault service    
+    FAULT_TRIGGER_NAME="network-fault-trigger"
+    (gcloud eventarc triggers describe $FAULT_TRIGGER_NAME --location=$GOOGLE_REGION > /dev/null 2>&1) && gcloud eventarc triggers delete $FAULT_TRIGGER_NAME --location=$GOOGLE_REGION --quiet
+    (gcloud logging sinks describe $FAULT_SINK_NAME > /dev/null 2>&1) && gcloud logging sinks delete $FAULT_SINK_NAME --quiet
+    (gcloud pubsub topics describe $FAULT_TOPIC_NAME > /dev/null 2>&1) && gcloud pubsub topics delete $FAULT_TOPIC_NAME --quiet    
+    (gcloud run services describe faultservice --region=$GOOGLE_REGION > /dev/null 2>&1) && gcloud run services delete faultservice --region=$GOOGLE_REGION --quiet
 
     # Launch the kubectl command in the backgroun
     kubectl delete -f environment/networks.yaml &
@@ -1036,9 +1041,96 @@ LogCapture()
     # Create the Cloud Run function that receives the eventarc
     # events from pub/pub  and feed the Spanner DB
     echo "Deploying Log capture function..."
-    gcloud functions deploy $CAPTURE_LOG_FUNCTION --source ./logcollector --runtime python312 \
+    gcloud functions deploy $CAPTURE_LOG_FUNCTION --source ./logservices/logcollector --runtime python312 \
       --trigger-topic $TOPIC_NAME  --entry-point=capture_log --memory=512MB \
       --project=$GOOGLE_PROJECT --region=$GOOGLE_REGION
+}
+
+############################################################
+# Build and deploy the liveness probe for UERANSIM         #
+############################################################
+FaultCapture()
+{
+    # Create the Cloud Run service that receives the eventarc
+    # events from pub/pub
+    echo "Deploying Fault capture service..." 
+
+    cd logservices/faultservice
+    IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/faultservice:latest"
+    if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+        read -p "Fault service image already exists. Rebuild? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+        fi
+    elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+        echo "Fault service image already exists - not building the image (NO_FLAG set)"
+    elif [[ $NO_FLAG != "y" ]]; then
+        gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+    fi
+    gcloud run deploy faultservice \
+    --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/faultservice:latest \
+    --region $GOOGLE_REGION \
+    --service-account $GOOGLE_SERVICE_ACCOUNT \
+    --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
+    --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
+    --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
+    --update-env-vars WEBAPPS_PWD=${WEBAPPS_PWD} \
+    --update-env-vars WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
+    --update-env-vars NETWORK_AGENT_FILE="/app/networkagent.json" \
+    --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/app/networkagent.json" \
+    --allow-unauthenticated 
+    cd ../..
+    sleep 5
+
+    # Create the pubsub topic if it doesn't exist yet
+    gcloud pubsub topics describe $FAULT_TOPIC_NAME > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo "Creating Pub/Sub topic '${FAULT_TOPIC_NAME}'..."
+        gcloud pubsub topics create $FAULT_TOPIC_NAME --project=${GOOGLE_PROJECT}
+    else
+        echo "Pub/Sub topic '${FAULT_TOPIC_NAME}' already exists..."
+    fi
+
+    # Create the logging sink if it doesn't exist yet
+    gcloud logging sinks describe $FAULT_SINK_NAME > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo "Creating Fault logging sink '${FAULT_SINK_NAME}'..."
+        gcloud logging sinks create $FAULT_SINK_NAME pubsub.googleapis.com/projects/${GOOGLE_PROJECT}/topics/${FAULT_TOPIC_NAME} \
+            --description="Network fault sink" \
+            --log-filter="labels.python_logger=UERANSIMHEALTH OR labels.python_logger=CRITICALSERVICEERROR"
+    else
+        echo "Logging sink '${FAULT_SINK_NAME}' already exists..."
+    fi
+
+    # Grant the Cloud Logging service account used by the Log sink the right to publish 
+    # log entries to the PubSub topic
+    gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
+        --member="serviceAccount:service-${GOOGLE_PROJECT_NUMBER}@gcp-sa-logging.iam.gserviceaccount.com" \
+        --role="roles/pubsub.publisher" --condition=None --no-user-output-enabled
+
+    # Create an Eventarc trigger to connect Pub/Sub to Cloud Run
+    FAULT_TRIGGER_NAME="network-fault-trigger"
+    gcloud eventarc triggers describe $FAULT_TRIGGER_NAME --location=$GOOGLE_REGION > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        echo "Creating Eventarc trigger '${FAULT_TRIGGER_NAME}'..."
+        gcloud eventarc triggers create ${FAULT_TRIGGER_NAME} \
+            --location=${GOOGLE_REGION} \
+            --destination-run-service=faultservice \
+            --destination-run-region=${GOOGLE_REGION} \
+            --event-filters="type=google.cloud.pubsub.topic.v1.messagePublished" \
+            --transport-topic=projects/${GOOGLE_PROJECT}/topics/$FAULT_TOPIC_NAME \
+            --service-account=${GOOGLE_SERVICE_ACCOUNT}
+    else
+        echo "Eventarc trigger '${FAULT_TRIGGER_NAME}' already exists..."
+    fi
+
+    # Grant the Eventarc service account permission to invoke the Cloud Run service
+    gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
+        --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+        --role="roles/run.invoker" --condition=None --no-user-output-enabled
+
+    echo "Fault capture service setup completed successfully!"
 }
 
 
@@ -1389,14 +1481,12 @@ DisplayDemoInfo()
     echo "=                Demo information Summary                  ="
     echo "============================================================"
     echo ""
-    echo "GITEA Host is https://${GITEA_HOST}:3000"
-    echo "Dashboard is ${DASHBOARD_URL}"
-    echo "Operations Agent is ${OPERATIONS_URL}"
-    echo "Engineer Agent is ${ENGINEER_URL}"
-    echo "Test Agent is ${TESTER_URL}"
-    echo "Logs Agent is ${LOGS_URL}"
-    echo "Incident Agent is ${INCIDENT_URL}"
-    echo "MCP Tools Host is ${TOOLS_URL}"
+    echo "Network Agent Dashboard: ${DASHBOARD_URL}"
+    echo "Incident Agent: ${INCIDENT_URL}"
+    echo "GITEA Host: https://${GITEA_HOST}:3000"
+    echo "  git clone https://$GITEA_HOST:3000/networkagent/network -c http.sslVerify=false"
+    echo ""
+    echo "Username/password: ${WEBAPPS_LOGIN}/${WEBAPPS_PWD}"
     echo ""
 }
 

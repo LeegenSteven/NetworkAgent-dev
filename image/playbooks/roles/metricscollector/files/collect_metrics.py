@@ -280,7 +280,7 @@ def poll_metrics(interval):
   success, id = find_host_id(HOSTNAME)
   if not success:
     # This host id doesn't exist in DB - Do not save metrics
-    logger.error(f"Host {hostname} has no uid in database. Metrics not saved. Exiting")
+    logger.error(f"Host {HOSTNAME} has no uid in database. Metrics not saved. Exiting")
     exit(124)
   
   while True:
@@ -337,6 +337,3 @@ if __name__ == "__main__":
       except KeyboardInterrupt:
         logger.info("Keyboard interrupt received. Exiting.")
         exit(0)
-
-
-

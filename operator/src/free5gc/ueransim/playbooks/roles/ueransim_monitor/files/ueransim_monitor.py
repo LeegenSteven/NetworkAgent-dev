@@ -18,7 +18,7 @@ import os
 import psutil
 
 #----------------------Send logging to GCP ----------------------------
-# Attach the Cloud Logging handler to the Python root logger 
+# Attach the Cloud Logging handler to the Python root logger
 # by calling the setup_logging method. By doing so Cloud Logging
 # will properly report the logs severity for instance. If we do it
 # directly (as above) all logs are classified with ERROR severity
@@ -28,53 +28,65 @@ logging_client = google.cloud.logging.Client()
 import logging
 logging_client.setup_logging(log_level=logging.INFO)
 
-logger = logging.getLogger(__name__)
-
-# After importing the Python standard logging library we end up with 2 log
-# handlers at the root level causing duplicate log entries to appear
-# in Cloud Logging, one that comes from the Cloud Logging Structured
-# handler and the other from the standard Python StreamHandler
-# Logger root handlers: [<StreamHandler <stderr> (NOTSET)>, <StructuredLogHandler <stderr> (NOTSET)>]
-# Remove the standard Python logging handler to avoid duplicate (first handler in the list)
-del logging.getLogger().handlers[0]
-
-HOSTNAME = os.uname().nodename
-CREDENTIAL_FILE = '/opt/networkagent.json'
-SCRIPT_NAME = os.path.basename(__file__)
+criticallogger = logging.getLogger("UERANSIMHEALTH")
+basiclogger = logging.getLogger("LIVENESSHEALTH")
 
 # --- Configuration ---
 POLLING_INTERVAL_IN_SECONDS = 5
 PROCESS_NAME = "./nr-gnb"
+HOSTNAME = os.uname().nodename
+SCRIPT_NAME = os.path.basename(__file__)
+# --- Configuration ---
+POLLING_INTERVAL_IN_SECONDS = 5
+PROCESS_NAME = "./nr-gnb"
+HOSTNAME = os.uname().nodename
+SCRIPT_NAME = os.path.basename(__file__)
 
 def is_process_running():
     """Check if the specified process is running and log error if not."""
-    process_found = False
-    
-    # Check all running processes
-    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+    while True:
+        process_found = False
         try:
-            # Check if the process name or command line contains our target process
-            if proc.info['cmdline']:
-                cmdline = ' '.join(proc.info['cmdline'])
-                if PROCESS_NAME in cmdline or PROCESS_NAME in proc.info['name']:
-                    process_found = True
-                    logger.info(f"Process {PROCESS_NAME} is running (PID: {proc.info['pid']})")
-                    break
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-            # Process might have terminated or we don't have access
-            continue
-    
-    if not process_found:
-        error_msg = f"CRITICAL: Process {PROCESS_NAME} is not running on host {HOSTNAME}"
-        logger.error(error_msg)
-        print(f"ERROR: {error_msg}")  # Also print to stdout for debugging
+            # Check all running processes
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    # Check if the process name or command line contains our target process
+                    if proc.info['cmdline'] and PROCESS_NAME in ' '.join(proc.info['cmdline']):
+                        process_found = True
+                        break
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    # Process might have terminated or we don't have access
+                    continue
+
+            if not process_found:
+                error_msg = f"CRITICAL: Process {PROCESS_NAME} is not running on host {HOSTNAME}"
+                error_payload = {
+                    'process_name': PROCESS_NAME,
+                    'hostname': HOSTNAME,
+                    'error': 'Process not running'
+                }
+                criticallogger.error(error_msg, extra={'json_fields': error_payload})
+                print(error_msg, extra={'json_fields': error_payload})
+
+        except Exception as e:
+            basiclogger.error(f"An error occurred while checking for process {PROCESS_NAME}: {e}")
+            print(f"An error occurred while checking for process {PROCESS_NAME}: {e}")
+
+        time.sleep(POLLING_INTERVAL_IN_SECONDS)
 
 def main():
-    """Main loop to monitor the process."""
-    logger.info(f"Starting ueransim  on host {HOSTNAME}")
-    while True:
-        is_process_running()
-        time.sleep(POLLING_INTERVAL_IN_SECONDS)
+  """Main function to start the monitor."""
+  # Check if the GOOGLE_APPLICATION_CREDENTIALS env variable is set and file exists
+  if 'GOOGLE_APPLICATION_CREDENTIALS' not in os.environ:
+    basiclogger.error("GOOGLE_APPLICATION_CREDENTIALS env variable not set")
+    exit(1)
+  if not os.path.exists(os.environ['GOOGLE_APPLICATION_CREDENTIALS']):
+    basiclogger.error(f"GOOGLE_APPLICATION_CREDENTIALS file {os.environ['GOOGLE_APPLICATION_CREDENTIALS']} doesn't exist")
+    exit(1)
+
+  basiclogger.info(f"Starting {SCRIPT_NAME} on host {HOSTNAME}")
+  is_process_running()
+  print("Monitor Started")
 
 if __name__ == "__main__":
     main()

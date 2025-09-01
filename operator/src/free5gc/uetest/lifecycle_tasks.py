@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 ########################################################
 # Run test on VM
 ########################################################
-async def run_test(namespace, vm_name, test_url):
+async def run_test(namespace, vm_name, imsi, test_url):
     logger.debug("Running UE test")
 
     ip_address = await get_ip(namespace, vm_name)
@@ -40,7 +40,8 @@ async def run_test(namespace, vm_name, test_url):
         'GOOGLE_ZONE': os.getenv("GOOGLE_ZONE"),
         'BASEDIR': constants.basedir,
         'VMNAME': vm_name,
-        'TEST_URL': test_url
+        'TEST_URL': test_url,
+        'IMSI': imsi
     }
     hosts = {
         'hosts': {

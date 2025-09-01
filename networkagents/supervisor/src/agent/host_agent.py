@@ -335,7 +335,7 @@ class HostAgent:
         payload: dict[str, Any] = {
             'message': {
                 'role': 'user',
-                'parts': [{'type': 'text', 'text': text}],
+                'parts': [{'kind': 'text', 'text': text}],
                 'messageId': uuid4().hex,
             },
         }
@@ -397,7 +397,7 @@ class HostAgent:
             payload: dict[str, Any] = {
                 'message': {
                     'role': 'user',
-                    'parts': [{'type': 'text', 'text': approval }],
+                    'parts': [{'kind': 'text', 'text': approval }],
                     'messageId': uuid4().hex,
                 },
             }

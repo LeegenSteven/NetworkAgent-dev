@@ -430,40 +430,44 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
                         boundaryMargin: const EdgeInsets.all(100),
                         minScale: 0.01,
                         maxScale: 5.6,
-                        child: GraphView(
-                          key: ValueKey('graph-${nodeMap.length}-${graph.edges.length}-${appState.selectedTopologyLayout}'),
-                          graph: graph,
-                          algorithm: algorithm,
-                          paint: Paint()
-                            ..color = const Color(0xFF0D47A1) // Dark blue for graph lines
-                            ..strokeWidth = 1.5 // Slightly thicker lines for better visibility
-                            ..style = PaintingStyle.stroke,
-                          builder: (Node node) {
-                            try {
-                              final nodeId = node.key!.value.toString();
-                              
-                              // Check if the node exists in our node map
-                              if (!nodeMap.containsKey(nodeId)) {
-                                // If the node doesn't exist in our map, return an empty container
-                                return Container();
-                              }
-                              
-                              // Find the corresponding network node
-                              final networkNode = widget.topology.nodes.firstWhere(
-                                (n) => n.id == nodeId,
-                                orElse: () => NetworkNode(
-                                  id: nodeId,
-                                  name: 'Unknown',
-                                  type: NodeType.compute,
-                                ),
-                              );
-                              
-                              return _buildNodeWidget(networkNode);
-                            } catch (e) {
-                              print('Error building node: $e');
-                              // Return an empty container if there's an error
-                              return Container();
-                            }
+                        child: Consumer<Appstate>(
+                          builder: (context, appState, child) {
+                            return GraphView(
+                              key: ValueKey('graph-${nodeMap.length}-${graph.edges.length}-${appState.selectedTopologyLayout}-${appState.incidents.length}'),
+                              graph: graph,
+                              algorithm: algorithm,
+                              paint: Paint()
+                                ..color = const Color(0xFF0D47A1) // Dark blue for graph lines
+                                ..strokeWidth = 1.5 // Slightly thicker lines for better visibility
+                                ..style = PaintingStyle.stroke,
+                              builder: (Node node) {
+                                try {
+                                  final nodeId = node.key!.value.toString();
+                                  
+                                  // Check if the node exists in our node map
+                                  if (!nodeMap.containsKey(nodeId)) {
+                                    // If the node doesn't exist in our map, return an empty container
+                                    return Container();
+                                  }
+                                  
+                                  // Find the corresponding network node
+                                  final networkNode = widget.topology.nodes.firstWhere(
+                                    (n) => n.id == nodeId,
+                                    orElse: () => NetworkNode(
+                                      id: nodeId,
+                                      name: 'Unknown',
+                                      type: NodeType.compute,
+                                    ),
+                                  );
+                                  
+                                  return _buildNodeWidget(networkNode);
+                                } catch (e) {
+                                  print('Error building node: $e');
+                                  // Return an empty container if there's an error
+                                  return Container();
+                                }
+                              },
+                            );
                           },
                         ),
                       ),
@@ -534,6 +538,9 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
     final bool isComputeInstance = node.type == NodeType.compute && 
                                   node.properties['kind'] == 'ComputeInstance';
 
+    // Check if this node has any associated incidents
+    final bool hasIncident = _hasMatchingIncident(node);
+
     return Tooltip(
       message: 'Click for details',
       child: InkWell(
@@ -545,6 +552,14 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
             padding: const EdgeInsets.all(6),
             width: 100,  // Increased width to accommodate traffic metrics
             height: 90,
+            decoration: hasIncident ? BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.yellow,
+              border: Border.all(
+                color: Colors.red,
+                width: 3,
+              ),
+            ) : null,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
@@ -694,6 +709,36 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
     final Matrix4 newTransform = Matrix4.identity()..scale(newScale);
     
     _transformationController.value = newTransform;
+  }
+
+  // Check if a node has any matching incidents
+  bool _hasMatchingIncident(NetworkNode node) {
+    // Only apply red borders to ComputeInstance nodes
+    if (node.type != NodeType.compute || node.properties['kind'] != 'ComputeInstance') {
+      return false;
+    }
+    
+    final appState = Provider.of<Appstate>(context, listen: false);
+    
+    // Get all open incidents
+    final incidents = appState.incidents;
+    
+    // Check if any incident title exactly matches this node's name
+    for (final incident in incidents) {
+      // Only consider unresolved incidents
+      if (incident.state != 'resolved') {
+        // Compare incident title with node name (case-insensitive, exact match only)
+        final incidentTitle = incident.title.toLowerCase().trim();
+        final nodeName = node.name.toLowerCase().trim();
+        
+        // Check for exact match only
+        if (incidentTitle == nodeName) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
   }
 
   // Simple dialog to filter nodes by type

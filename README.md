@@ -24,7 +24,7 @@ The following agents can be found in this repository.
 |Operations Agent| Query the current state of the network and available network services |
 |Test Agent| Run tests across the network |
 |Logs Agent| Query automation and network function logs |
-|Incident Agent| Triggers background anomaly and auto-resolution by interacting with other agents |
+|Resolver Agent| Investigates incidents and attempts to auto-resolve by interacting with other agents |
 
 These agents can interact with each other over A2A or directly with end users using natural language as described in the following sections. 
 
@@ -77,6 +77,7 @@ More details on the network agents, services and the environment can be found be
 
 * [Setup GCP environment](INSTALL.md)
 * [Build a 5G Network demo scenario](/docs/5gbuilddemo.md)
+* [Closed Loop demo scenario](/docs/closedloopdemo.md)
 
 ## LICENSES
 

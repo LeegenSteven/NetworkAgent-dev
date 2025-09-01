@@ -89,6 +89,15 @@ spec:
         error STRING(MAX),
         node STRING(MAX)
       ) PRIMARY KEY (id)"
+  - "CREATE TABLE Incident (
+        id STRING(MAX) NOT NULL,
+        recordedTimestamp INT64 NOT NULL,
+        agentTaskId String(MAX) NOT NULL,
+        issue JSON NOT NULL,
+        cause JSON,
+        resolution JSON,
+        resolvedTimestamp INT64
+      ) PRIMARY KEY (id)"
   - "CREATE OR REPLACE PROPERTY GRAPH networkGraph
        NODE TABLES (NetworkNode)
        EDGE TABLES (

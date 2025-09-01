@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:networkagent/models/agent.dart';
 import 'package:networkagent/models/metrics.dart';
 import 'package:networkagent/models/available_agent.dart';
+import 'package:networkagent/models/incident.dart';
 import 'package:networkagent/utils/environment_config.dart' as config;
 
 class APIService{
@@ -377,6 +378,72 @@ class APIService{
       }
     } catch (e) {
       print('Error getting available agents: $e'); rethrow;
+    }
+  }
+
+  Future<List<Incident>> getAllOpenIncidents() async {
+    try {
+      var url = Uri.parse('${config.EnvironmentConfig.agentUrl}/incidents');
+      print('Fetching all open incidents from: $url');
+      
+      final http.Response response = await http.get(url, headers: getRequestHeaders);
+      
+      if (response.statusCode == 200) {
+        final List<dynamic> decodedData = jsonDecode(response.body);
+        List<Incident> incidents = [];
+        for (var incidentData in decodedData) {
+          incidents.add(Incident.fromJson(incidentData));
+        }
+        print('Successfully fetched ${incidents.length} incidents');
+        return incidents;
+      } else {
+        print('Failed to get open incidents: ${response.statusCode}');
+        print('Response body: ${response.body}');
+        throw Exception('Failed to get open incidents');
+      }
+    } catch (e) {
+      print('Error getting open incidents: $e');
+      rethrow;
+    }
+  }
+
+  Future<bool> deleteAllIncidents() async {
+    try {
+      var url = Uri.parse('${config.EnvironmentConfig.agentUrl}/incidents/delete');
+      print('Deleting all incidents at: $url');
+      
+      final http.Response response = await http.post(url, headers: postRequestHeaders);
+      print('Delete incidents response status: ${response.statusCode}');
+      print('Delete incidents response body: ${response.body}');
+      
+      if (response.statusCode == 200) {
+        try {
+          final dynamic decodedData = jsonDecode(response.body);
+          print('Decoded delete incidents data: $decodedData');
+          
+          // Check if response has status field
+          if (decodedData is Map<String, dynamic> && decodedData.containsKey('status')) {
+            bool success = decodedData['status'] == 'success';
+            print('Delete incidents success: $success');
+            return success;
+          } else {
+            // If no status field, assume success if we got 200
+            print('No status field in response, assuming success for 200 status code');
+            return true;
+          }
+        } catch (jsonError) {
+          print('Error parsing JSON response: $jsonError');
+          // If JSON parsing fails but we got 200, assume success
+          return true;
+        }
+      } else {
+        print('Failed to delete incidents: ${response.statusCode}');
+        print('Response body: ${response.body}');
+        return false; // Return false instead of throwing exception
+      }
+    } catch (e) {
+      print('Error deleting incidents: $e');
+      return false; // Return false instead of rethrowing
     }
   }
 }

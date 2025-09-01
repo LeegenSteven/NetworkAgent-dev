@@ -34,7 +34,7 @@
     environment:
       GOOGLE_APPLICATION_CREDENTIALS: "/opt/networkagent.json"
       TEST_URL: "{{TEST_URL}}"
-      USERID: "brian"
+      USERID: "{{IMSI}}"
       VMNAME: "{{VMNAME}}"
     async: 15 # A short async timeout is fine here as nohup and '&' handle the backgrounding
     poll: 0 # Tell Ansible to start and move on immediately

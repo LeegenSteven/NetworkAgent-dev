@@ -308,8 +308,8 @@ class _ChatPanelContentState extends State<_ChatPanelContent> with WidgetsBindin
                     child: Text('Can you add a radio simulator to cellsite1 and create a plan for a working 5G network'),
                   ),
                   const PopupMenuItem<String>(
-                    value: 'Create a test with UERanSim created earlier',
-                    child: Text('Create a test with UERanSim created earlier'),
+                    value: 'Create a test called test1 between cellsite1-ueransim and DNN dnn',
+                    child: Text('Create a test called test1 between cellsite1-ueransim and DNN dnn'),
                   ),
                   const PopupMenuItem<String>(
                     value: 'Create a plan to delete the ueransim network service, the ptp network connectivity service and the cellsite1 network location',

@@ -17,7 +17,7 @@ from utils.compute import *
 import kopf
 from free5gc.uetest.lifecycle_tasks import *
 from utils.compute import *
-from free5gc.utils.k8s import getDNNAddress
+from free5gc.utils.k8s import getDNNAddress, getIMSI
 from graph.lifecycle_tasks import update_network_node
 
 logger = logging.getLogger(__name__)
@@ -30,10 +30,14 @@ async def uetest(spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Create ue test {name} with spec: {spec}")
 
   # get the name of the UERanSim VM
-  vmname = spec.get('ueransim')
-  if vmname is None:
+  ueransim = spec.get('ueransim')
+  if ueransim is None:
     raise kopf.PermanentError("No ueransim found")
 
+  imsi = await getIMSI(namespace, ueransim['name'])
+  if imsi is None:
+    raise kopf.PermanentError("No imsi found")
+  
   dnn = spec.get('datanetwork')
   if dnn is None:
     raise kopf.PermanentError("No data network found")
@@ -44,7 +48,7 @@ async def uetest(spec, meta, status, namespace, name, logger, **kwargs):
 
   dnn_url = f"http://{dnn_address}"
 
-  await run_test(namespace, vmname['name'],dnn_url)
+  await run_test(namespace, ueransim['name'],imsi ,dnn_url)
 
   return {
       "status":"Running",

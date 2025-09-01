@@ -6,6 +6,7 @@ import '../appstate.dart';
 import '../models/network_node.dart';
 import '../utils/APIService.dart';
 import 'node_performance.dart';
+import 'notification_screen.dart';
 
 class NodeDetailsDialog extends StatefulWidget {
   final NetworkNode node;
@@ -170,6 +171,44 @@ class _NodeDetailsDialogState extends State<NodeDetailsDialog> {
                               ),
                             ],
                           ),
+                        ),
+                        // Incident icon for ComputeInstance nodes with incidents
+                        Consumer<Appstate>(
+                          builder: (context, appState, child) {
+                            // Only show for ComputeInstance nodes (NodeType.compute)
+                            if (widget.node.type != NodeType.compute) {
+                              return const SizedBox.shrink();
+                            }
+                            
+                            // Check if there's an incident for this node
+                            final hasIncident = appState.incidents.any((incident) => 
+                              incident.title == widget.node.name
+                            );
+                            
+                            if (!hasIncident) {
+                              return const SizedBox.shrink();
+                            }
+                            
+                            return IconButton(
+                              icon: const Icon(
+                                Icons.warning,
+                                color: Colors.orange,
+                                size: 28,
+                              ),
+                              tooltip: 'View incidents for this node',
+                              onPressed: () {
+                                // Close the current dialog first
+                                Navigator.of(context).pop();
+                                
+                                // Navigate to the notification screen
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (context) => const NotificationScreen(),
+                                  ),
+                                );
+                              },
+                            );
+                          },
                         ),
                       ],
                     ),

@@ -25,14 +25,14 @@
       import_role:
         name: metricscollector
 
-    - name: run UERANSIM
+    - name: run UERANSIM gNB
       import_role:
         name: run
+
+    - name: run UE session
+      import_role:
+        name: startue
 
     - name: run UERANSIM monitor
       import_role:
         name: ueransim_monitor
-
-    - name: run UE
-      import_role:
-        name: startue

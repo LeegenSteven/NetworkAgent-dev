@@ -20,6 +20,7 @@ import os
 import uuid
 from urllib.parse import urlparse
 import sys
+import json
 from google.cloud import spanner
 
 #----------------------Send logging to GCP ----------------------------
@@ -121,13 +122,25 @@ def send_request():
         print("request successful")
     except requests.exceptions.ConnectionError as e:
         error_msg = f"URL is not accessible - connection failed: {e}"
+        error_payload = {
+            'url': url,
+            'userid': userid,
+            'node': node,
+            'error': error_msg
+        }
         print(error_msg)
-        errorlogger.error(f"Critical error: {error_msg}")
+        errorlogger.error(json.dumps(error_payload))
         save_performance_metric("WEB", None, userid, node, error=error_msg)
     except requests.exceptions.Timeout as e:
         error_msg = f"URL is not accessible - request timed out after {timeout}s: {e}"
+        error_payload = {
+            'url': url,
+            'userid': userid,
+            'node': node,
+            'error': error_msg
+        }
         print(error_msg)
-        errorlogger.error(f"Critical error: {error_msg}")
+        errorlogger.error(json.dumps(error_payload))
         save_performance_metric("WEB", None, userid, node, error=error_msg)
     except requests.exceptions.RequestException as e:
         error_msg = str(e)
@@ -137,8 +150,7 @@ def send_request():
             'node': node,
             'error': error_msg
         }
-        errorlogger.error(f"Error accessing {url}: {error_msg} for user {userid} at node {node}",
-                        extra={'json_fields': error_payload})
+        errorlogger.error(json.dumps(error_payload))
         print(f"Error accessing {url}: {error_msg} for user {userid} at node {node}")
         save_performance_metric("WEB", None, userid, node, error=error_msg)
 

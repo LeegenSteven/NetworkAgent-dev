@@ -7,8 +7,6 @@ This demo showcases how AI agents can accelerate a telco's journey to a more aut
 ### Key Agents
 - **Network Engineering Agent**: Simplifies network design and build processes, automating tasks and reducing errors
 - **Operations Agent**: Provides insights about existing network infrastructure and status
-- **Test Agent**: Executes network tests and validations
-- **Network Optimization Agent**: Runs in the background to auto-resolve incidents and improve performance through collaboration with other agents
 
 ## Demo Setup
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './LoginScreen.css';
 import googleLogo from '../../google.png';
+import { getApiUrl, API_ENDPOINTS } from '../../config/apiConfig';
 
 const LoginScreen = () => {
   const [username, setUsername] = useState('');
@@ -16,7 +17,7 @@ const LoginScreen = () => {
       setIsLoading(true);
       setErrorMessage(null);
       try {
-        const response = await fetch('/login', {
+        const response = await fetch(getApiUrl(API_ENDPOINTS.LOGIN), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

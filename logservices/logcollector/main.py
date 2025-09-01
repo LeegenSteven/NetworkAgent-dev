@@ -228,6 +228,11 @@ def capture_log(cloud_event: CloudEvent) -> None:
       if 'container_name' in nwop_logging_json['resource']['labels']:
         source = nwop_logging_json['resource']['labels']['container_name']
 
+  if 'python_logger' in nwop_logging_json['labels']:
+    if nwop_logging_json['labels']['python_logger']=='CRITICALSERVICEERROR':
+      source = nwop_logging_json['jsonPayload']['node']
+    elif nwop_logging_json['labels']['python_logger']=='UERANSIMHEALTH':
+      source = nwop_logging_json['jsonPayload']['hostname']
 
   # The log message can either be in textPayload or in a jsonPayLoad
   message = ''
@@ -253,6 +258,18 @@ def capture_log(cloud_event: CloudEvent) -> None:
         message = nwop_logging_json["jsonPayload"]["msg"]
         if "error" in nwop_logging_json["jsonPayload"]:
           message += ': ' + nwop_logging_json["jsonPayload"]["error"]
+
+      elif 'python_logger' in nwop_logging_json['labels']:
+        # this is from uetest or liveness probe, so bad things have happened
+        if nwop_logging_json['labels']['python_logger']=='CRITICALSERVICEERROR':
+          message = nwop_logging_json['jsonPayload']['error']
+          severity = 'CRITICAL'
+          location = nwop_logging_json['jsonPayload']['node']
+        elif nwop_logging_json['labels']['python_logger']=='UERANSIMHEALTH':
+          message = nwop_logging_json['jsonPayload']['error']
+          severity = 'CRITICAL'
+          location = nwop_logging_json['jsonPayload']['hostname']
+
     elif "textPayload" in nwop_logging_json:
       message = nwop_logging_json["textPayload"]
   except Exception as e:

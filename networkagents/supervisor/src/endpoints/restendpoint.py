@@ -13,6 +13,7 @@
 # limitations under the License.
 import logging
 import json
+import time
 from aiohttp_cors.cors_config import CorsConfig
 import aiohttp_cors
 from aiohttp import web
@@ -24,10 +25,15 @@ from tools.metrics import (
     fetch_all_metrics,
     fetch_last_metrics_for_id,
     fetch_all_metrics_for_id,
-    clear_network_metrics
+    clear_network_metrics,
 )
+from tools.service_performance import clear_service_metrics
+from tools.incidents import clear_incidents
 from tools.agents import get_available_agents
 from tools.logs import delete_logs
+from tools.service_performance import get_active_users, get_user_session_details, get_average_performance_by_service_type
+from tools.incidents import fetch_all_open_incidents
+
 logger = logging.getLogger(__name__)
 
 class RestEndpoint:
@@ -87,6 +93,11 @@ class RestEndpoint:
         getAvailableAgentsRoute = self.app.router.add_get("/agents/available", self.getAvailableAgents)
         self.cors.add(getAvailableAgentsRoute, corsConfig)
 
+        getAllOpenIncidentsRoute = self.app.router.add_get("/incidents", self.getAllOpenIncidents)
+        self.cors.add(getAllOpenIncidentsRoute, corsConfig)
+
+        deleteIncidentsRoute = self.app.router.add_post("/incidents/delete", self.resetIncidents)
+        self.cors.add(deleteIncidentsRoute, corsConfig)
 
     #################################################################
     # Get node details
@@ -259,14 +270,18 @@ class RestEndpoint:
     async def pushNotification(self, request):
         """
         Handle push notification requests from agents.
+
+        notification states:
+            'input_required': An agent needs information from the user to continue their task
+            'new_incident': A fault has been sent to the resolver agent to be investigated
         
         Notification request has the following structure:
         {
-            "state": "input_required",
-            "task_id": "",
-            "context_id": "",
-            "content": "",
-            "input_data": ""
+            "state": "<State>",
+            "task_id": "<A2A Agent Task id>",
+            "context_id": "<A2A Agent context id>",
+            "content": "<Text Description of the notification>",
+            "input_data": "<Any Meta data>"
         }
         
         Args:
@@ -275,7 +290,7 @@ class RestEndpoint:
         Returns:
             aiohttp.web.Response: JSON response indicating success or failure
         """
-        logger.info("Received agent task update")
+        logger.info("Received notification event")
 
         try:
             # Validate request has JSON content
@@ -289,6 +304,7 @@ class RestEndpoint:
             # Get the request data
             try:
                 data = await request.json()
+                logger.info(data)
             except json.JSONDecodeError as e:
                 logger.error(f"Invalid JSON in request: {str(e)}")
                 return web.json_response(
@@ -433,6 +449,7 @@ class RestEndpoint:
         logger.info("REST endpoint: reset metrics")
         try:
             success = clear_network_metrics()
+            success = clear_service_metrics()
             if success:
                 return web.json_response({"status": "success"})
             else:
@@ -447,6 +464,9 @@ class RestEndpoint:
                 status=500
             )
     
+    #################################################################
+    # Logs endpoints
+    #################################################################
     async def deleteLogs(self, request):
         """
         Delete all logs
@@ -471,7 +491,9 @@ class RestEndpoint:
                 status=500
             )
 
-    
+    #################################################################
+    # Get All Available agents
+    #################################################################    
     async def getAvailableAgents(self, request):
         """
         Get available network agents running that can be added to the
@@ -488,5 +510,50 @@ class RestEndpoint:
             logger.error(f"Error getting available agents: {str(e)}", exc_info=True)
             return web.json_response(
                 {"error": f"Error getting available agents: {str(e)}"},
+                status=500
+            )
+
+    #################################################################
+    # Incidents endpoints
+    #################################################################
+    async def getAllOpenIncidents(self, request):
+        """
+        Get all open incidents from the Spanner database
+        
+        Returns:
+            aiohttp.web.Response: JSON response with the incidents data
+        """
+        logger.info("REST endpoint: get all open incidents")
+        try:
+            incidents = fetch_all_open_incidents()
+            return web.json_response(incidents)
+        except Exception as e:
+            logger.error(f"Error fetching open incidents: {str(e)}", exc_info=True)
+            return web.json_response(
+                {"error": f"Error fetching open incidents: {str(e)}"},
+                status=500
+            )
+
+    async def resetIncidents(self, request):
+        """
+        Delete all incidents from the Spanner database
+        
+        Returns:
+            aiohttp.web.Response: JSON response indicating success or failure
+        """
+        logger.info("REST endpoint: delete all incidents")
+        try:
+            success = clear_incidents()
+            if success:
+                return web.json_response({"status": "success"})
+            else:
+                return web.json_response(
+                    {"error": "Failed to delete incidents"},
+                    status=500
+                )
+        except Exception as e:
+            logger.error(f"Error deleting incidents: {str(e)}", exc_info=True)
+            return web.json_response(
+                {"error": f"Error deleting incidents: {str(e)}"},
                 status=500
             )

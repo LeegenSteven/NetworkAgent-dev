@@ -7,6 +7,7 @@ import 'models/network_node.dart';
 import 'models/log_entry.dart';
 import 'models/metrics.dart';
 import 'models/push_notification.dart';
+import 'models/incident.dart';
 import 'utils/environment_config.dart';
 import 'utils/APIService.dart';
 import 'widgets/network_topology.dart';
@@ -51,6 +52,10 @@ class Appstate extends ChangeNotifier {
   // Push notifications state
   final List<PushNotification> _pushNotifications = [];
   
+  // Incidents state
+  final List<Incident> _incidents = [];
+  bool _isLoadingIncidents = false;
+  
   // Getters
   List<ChatMessage> get chatMessages => _chatMessages;
   io.Socket? get socket => _socket;
@@ -68,6 +73,8 @@ class Appstate extends ChangeNotifier {
   bool get isLoadingMetrics => _isLoadingMetrics;
   bool get showPerformanceGraph => _showPerformanceGraph;
   List<PushNotification> get pushNotifications => List.unmodifiable(_pushNotifications);
+  List<Incident> get incidents => List.unmodifiable(_incidents);
+  bool get isLoadingIncidents => _isLoadingIncidents;
   
   Appstate() {
     _connectToServer();
@@ -154,7 +161,7 @@ class Appstate extends ChangeNotifier {
     });
 
     // Listen for metrics updates
-    _socket!.on('all_last_metrics_update', (data) {
+    _socket!.on('metrics_update', (data) {
       if (data != null) {
         _updateMetrics(data);        
       }
@@ -691,11 +698,47 @@ class Appstate extends ChangeNotifier {
   void _addPushNotification(dynamic data) {
     try {
       final notification = PushNotification.fromJson(data);
-      _pushNotifications.add(notification);
-      notifyListeners();
+      if (notification.state == 'input_required') {
+        _pushNotifications.add(notification);
+        notifyListeners();
+      } else if (notification.state == 'new_incident') {
+        // Immediately notify listeners to trigger UI updates for the notification icon
+        notifyListeners();
+        
+        // Fetch updated incidents from the supervisor REST API
+        _fetchIncidents();
+      } else {
+        // For any other notification type, refresh incidents to ensure consistency
+        _fetchIncidents();
+      }
     } catch (e) {
       print('Error adding push notification: $e');
     }
+  }
+  
+  // Fetch incidents from the supervisor REST API
+  Future<void> _fetchIncidents() async {
+    try {
+      _isLoadingIncidents = true;
+      notifyListeners();
+      
+      final incidents = await _apiService.getAllOpenIncidents();
+      _incidents.clear();
+      _incidents.addAll(incidents);
+      print('Fetched ${incidents.length} open incidents');
+      
+      _isLoadingIncidents = false;
+      notifyListeners();
+    } catch (e) {
+      print('Error fetching incidents: $e');
+      _isLoadingIncidents = false;
+      notifyListeners();
+    }
+  }
+  
+  // Manually refresh incidents
+  Future<void> refreshIncidents() async {
+    await _fetchIncidents();
   }
   
   // Mark a push notification as read

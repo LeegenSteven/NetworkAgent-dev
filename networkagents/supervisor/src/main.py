@@ -20,6 +20,7 @@ import logging
 import os
 from tools.topology import build_graph, spanner_connect
 from tools.metrics import fetch_all_last_metrics
+from tools.service_performance import get_active_users, get_average_performance_by_service_type
 from tools.logs import fetch_log_entries
 from endpoints.socketendpoint import clients_state, view_to_edge_label_map
 
@@ -83,9 +84,11 @@ async def send_topology_updates():
                         logger.error(f"Error sending logs to client {sid}: {e}")
 
                 # Send all last metrics to client sid
-                metrics = fetch_all_last_metrics()
-                # print("========================\n", json.dumps(metrics, indent=2), "\n===========================")
-                await sio.emit('all_last_metrics_update', metrics, room=sid)
+                node_metrics = fetch_all_last_metrics()
+                users = await get_active_users()
+                service_performance = await get_average_performance_by_service_type()
+
+                await sio.emit('metrics_update', {'node_metrics': node_metrics, 'users': users, 'service_performance': service_performance}, room=sid)
                 
         except Exception as e:
             logger.error(f"Error in topology update task: {e}")

@@ -1,5 +1,10 @@
 aiohttp==3.12.12
 aiohttp_cors
+google-auth
+google-cloud-container
 google-cloud-spanner
 google-api-python-client
-a2a-sdk==0.2.16
+ansible
+ansible-runner
+kubernetes
+ruamel.yaml

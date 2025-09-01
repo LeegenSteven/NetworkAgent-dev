@@ -70,7 +70,7 @@ The **install.sh** script provides flexible installation options:
 ```bash
 Network Agent environment manager.
 
-Syntax: install.sh [-c|-s|-b|-o|-l|-r|-n|-k|-d|-g|-i|-all] [-y|-N]
+Syntax: install.sh [-c|-s|-b|-o|-l|-f|-r|-n|-k|-d|-g|-i|-w|-all] [-y|-N]
 options:
   -all   install everything (comprehensive setup: create env if needed, build image if needed, start runtime, deploy all agents)
          can be combined with -y or -N flags (e.g., ./install.sh -all -y)
@@ -79,14 +79,16 @@ options:
   -b     build the Virtual Network Function image with Free5GC, UERANSIM, Docker, and Wireguard
   -o     build and deploy the network operator
   -l     build and deploy the logs capture function
+  -f     build and deploy the fault capture and trigger service
   -n     build and deploy the network dashboard and network agents
          can be followed by a comma-separated list of agent names to (re)deploy selectively
-         valid agent names: all, networktools, supervisor, engineer, dashboard, operations, test, incident, logs
+         valid agent names: all, networktools, supervisor, engineer, dashboard, operations, test, resolver
          example: -n dashboard,operations or -n all (to deploy all agents)
   -k     stop and delete the network agent runtime (GKE cluster, VMS, DB, etc..)
   -d     delete the network agent environment (keys, manifests...).
-  -i     display demo information
   -g     display active GCP environment (user, project, GKE cluster,...)
+  -i     display demo information
+  -w     wipe out the entire autonomous network agent demo resources (ptp, mesh, uetest,...)
   -y     answer 'yes' to all questions (no ask for confirmation)
   -N     answer 'no' to all questions (no ask for confirmation)
 

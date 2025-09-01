@@ -213,191 +213,14 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
             color: Color(0xFFE3F2FD), // Light blue background
             borderRadius: BorderRadius.all(Radius.circular(8.0)),
           ),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              // Calculate if we have enough space for centered title
-              // Controls width estimate (filter + spacing + view dropdown + spacing + layout dropdown)
-              final controlsWidth = 32 + 16 + 120 + 16 + 120; // Approximate width of all controls
-              final hasEnoughSpace = constraints.maxWidth > (controlsWidth * 1.5); // 1.5x multiplier for comfortable spacing
-              
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Title - either centered in its own space or aligned to the left
-                  if (hasEnoughSpace)
-                    Expanded(
-                      child: Center(
-                        child: Text(
-                          'Network Topology',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF0D47A1), // Dark blue text
-                          ),
-                        ),
-                      ),
-                    )
-                  else
-                    Padding(
-                      padding: const EdgeInsets.only(right: 16.0),
-                      child: Text(
-                        'Network Topology',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0D47A1), // Dark blue text
-                        ),
-                      ),
-                    ),
-                  
-                  // Controls row
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                    // Filter icon button
-                    Container(
-                      height: 32,
-                      width: 32,
-                      decoration: BoxDecoration(
-                        color: appState.filterByNodeType ? Color(0xFF1976D2) : Colors.white,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Color(0xFF1976D2)),
-                      ),
-                      child: IconButton(
-                        icon: Icon(
-                          Icons.filter_list,
-                          color: appState.filterByNodeType ? Colors.white : Color(0xFF1976D2),
-                          size: 18,
-                        ),
-                        padding: EdgeInsets.zero,
-                        tooltip: 'Filter by node type',
-                        onPressed: _showNodeTypeFilterDialog,
-                      ),
-                    ),
-
-
-                    // Add some space between filter and view
-                    const SizedBox(width: 16),
-
-                    // View dropdown
-                    Row(
-                      children: [
-                        Text(
-                          'View: ',
-                          style: TextStyle(
-                            color: Color(0xFF0D47A1),
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          height: 32, // Set a fixed height for the container
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Color(0xFF1976D2)),
-                          ),
-                          child: DropdownButton<String>(
-                            value: _selectedView,
-                            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF1976D2), size: 20),
-                            elevation: 16,
-                            isDense: true, // Make the dropdown more compact
-                            style: const TextStyle(color: Color(0xFF0D47A1)),
-                            underline: Container(height: 0), // Remove the default underline
-                            iconSize: 20, // Smaller icon
-                            onChanged: (String? newValue) {
-                              if (newValue != null && newValue != _selectedView) {
-                                setState(() {
-                                  _selectedView = newValue;
-                                });
-                                // Request the new view from the server
-                                _getTopologyView(_selectedView);
-                                // The graph will be reinitialized when the new topology data is received
-                              }
-                            },
-                            items: _viewOptions.map<DropdownMenuItem<String>>((String value) {
-                              // Convert view option to display text - capitalize first letter
-                              String displayText = value[0].toUpperCase() + value.substring(1);
-                              
-                              return DropdownMenuItem<String>(
-                                value: value,
-                                child: Text(
-                                  displayText,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    // Add some space between filter and layout
-                    const SizedBox(width: 16),
-                    
-                    // Layout dropdown
-                    Row(
-                      children: [
-                        Text(
-                          'Layout: ',
-                          style: TextStyle(
-                            color: Color(0xFF0D47A1),
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          height: 32, // Set a fixed height for the container
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Color(0xFF1976D2)),
-                          ),
-                          child: DropdownButton<String>(
-                            value: appState.selectedTopologyLayout,
-                            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF1976D2), size: 20),
-                            elevation: 16,
-                            isDense: true, // Make the dropdown more compact
-                            style: const TextStyle(color: Color(0xFF0D47A1)),
-                            underline: Container(height: 0), // Remove the default underline
-                            iconSize: 20, // Smaller icon
-                            onChanged: (String? newValue) {
-                              if (newValue != null && newValue != appState.selectedTopologyLayout) {
-                                // Update the layout in appstate
-                                appState.updateTopologyLayout(newValue);
-                                // No need to call _initializeGraph() here as the widget will be rebuilt
-                                // due to the ValueKey change in network_dashboard.dart
-                              }
-                            },
-                            items: _layoutOptions.map<DropdownMenuItem<String>>((String value) {
-                              // Convert layout option to display text
-                              String displayText = value.split('-').map((word) => 
-                                word[0].toUpperCase() + word.substring(1)
-                              ).join(' ');
-                              
-                              return DropdownMenuItem<String>(
-                                value: value,
-                                child: Text(
-                                  displayText,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                      ],
-                    ),
-                    ],
-                  ),
-                ],
-              );
-            },
+          child: Center(
+            child: Text(
+              'Network Topology',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0D47A1), // Dark blue text
+              ),
+            ),
           ),
         ),
         // Divider removed as requested
@@ -471,7 +294,7 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
                           },
                         ),
                       ),
-                      // Zoom controls positioned in the top-right corner
+                      // Zoom controls and filter button positioned in the top-right corner
                       Positioned(
                         top: 16,
                         right: 16,
@@ -517,6 +340,33 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
                                 color: const Color(0xFF1976D2),
                                 tooltip: 'Zoom Out',
                                 onPressed: _zoomOut,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            // Filter button
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.2),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Consumer<Appstate>(
+                                builder: (context, appState, child) {
+                                  return IconButton(
+                                    icon: Icon(
+                                      Icons.filter_list,
+                                      color: appState.filterByNodeType ? Colors.amber : const Color(0xFF1976D2),
+                                    ),
+                                    tooltip: 'Filter nodes, view & layout options',
+                                    onPressed: _showNodeTypeFilterDialog,
+                                  );
+                                },
                               ),
                             ),
                           ],
@@ -757,8 +607,10 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
     // Get the appstate for filtering
     final appState = Provider.of<Appstate>(context, listen: false);
     
-    // Create a temporary set for the dialog
+    // Create temporary variables for the dialog
     Set<NodeType> tempSelection = Set<NodeType>.from(appState.selectedNodeTypes);
+    String tempSelectedView = _selectedView;
+    String tempSelectedLayout = appState.selectedTopologyLayout;
     
     // Show a simple dialog
     showDialog(
@@ -770,12 +622,138 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
             List<NodeType> sortedNodeTypes = NodeType.values.toList();
             
             return AlertDialog(
-              title: Text('Filter Nodes by Type'),
+              title: Text('Update Topology View'),
               content: SizedBox(
-                width: 300,
-                height: 300,
+                width: 350,
+                height: 400,
                 child: Column(
                   children: [
+                    // View and Layout dropdowns on the same row at the top
+                    Row(
+                      children: [
+                        // View dropdown
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'View:',
+                                style: TextStyle(
+                                  color: Color(0xFF0D47A1),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Container(
+                                height: 40,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: Color(0xFF1976D2)),
+                                ),
+                                child: DropdownButton<String>(
+                                  value: tempSelectedView,
+                                  icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF1976D2), size: 20),
+                                  elevation: 16,
+                                  isDense: true,
+                                  style: const TextStyle(color: Color(0xFF0D47A1)),
+                                  underline: Container(height: 0),
+                                  isExpanded: true,
+                                  onChanged: (String? newValue) {
+                                    if (newValue != null) {
+                                      setDialogState(() {
+                                        tempSelectedView = newValue;
+                                      });
+                                    }
+                                  },
+                                  items: _viewOptions.map<DropdownMenuItem<String>>((String value) {
+                                    String displayText = value[0].toUpperCase() + value.substring(1);
+                                    
+                                    return DropdownMenuItem<String>(
+                                      value: value,
+                                      child: Text(
+                                        displayText,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        const SizedBox(width: 16),
+                        
+                        // Layout dropdown
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Layout:',
+                                style: TextStyle(
+                                  color: Color(0xFF0D47A1),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Container(
+                                height: 40,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: Color(0xFF1976D2)),
+                                ),
+                                child: DropdownButton<String>(
+                                  value: tempSelectedLayout,
+                                  icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF1976D2), size: 20),
+                                  elevation: 16,
+                                  isDense: true,
+                                  style: const TextStyle(color: Color(0xFF0D47A1)),
+                                  underline: Container(height: 0),
+                                  isExpanded: true,
+                                  onChanged: (String? newValue) {
+                                    if (newValue != null) {
+                                      setDialogState(() {
+                                        tempSelectedLayout = newValue;
+                                      });
+                                    }
+                                  },
+                                  items: _layoutOptions.map<DropdownMenuItem<String>>((String value) {
+                                    String displayText = value.split('-').map((word) => 
+                                      word[0].toUpperCase() + word.substring(1)
+                                    ).join(' ');
+                                    
+                                    return DropdownMenuItem<String>(
+                                      value: value,
+                                      child: Text(
+                                        displayText,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    
+                    // Add divider
+                    SizedBox(height: 16),
+                    Divider(thickness: 1),
+                    SizedBox(height: 8),
+                    
                     Text('Select which node types to display:'),
                     SizedBox(height: 8),
                     Expanded(
@@ -840,9 +818,18 @@ class _NetworkTopologyWidgetState extends State<NetworkTopologyWidget> {
                         selectedNodeTypes: newSelection,
                       );
                       
-                      // Reinitialize the graph with the new filter
-                      // No need to use addPostFrameCallback as the widget will be rebuilt
-                      // due to the ValueKey change in network_dashboard.dart
+                      // Update view if changed
+                      if (tempSelectedView != _selectedView) {
+                        setState(() {
+                          _selectedView = tempSelectedView;
+                        });
+                        _getTopologyView(_selectedView);
+                      }
+                      
+                      // Update layout if changed
+                      if (tempSelectedLayout != appState.selectedTopologyLayout) {
+                        appState.updateTopologyLayout(tempSelectedLayout);
+                      }
                       
                       // Show feedback
                       ScaffoldMessenger.of(context).showSnackBar(

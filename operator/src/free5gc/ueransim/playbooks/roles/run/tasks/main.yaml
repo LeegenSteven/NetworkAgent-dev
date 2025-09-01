@@ -25,6 +25,20 @@
   - gnbcfg.yaml
   - uecfg.yaml
   - docker-compose.yaml
+  retries: 3
+  delay: 2
+  register: copy_result
+  until: copy_result is succeeded
+
+- name: verify all UERANSIM config files exist before starting
+  ansible.builtin.stat:
+    path: "/opt/{{item}}"
+  loop:
+  - gnbcfg.yaml
+  - uecfg.yaml
+  - docker-compose.yaml
+  register: file_check
+  failed_when: not file_check.stat.exists
 
 - name: start UERANSIM
   community.docker.docker_compose_v2:

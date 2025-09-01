@@ -6,6 +6,8 @@
   display: flex;
   flex-direction: column;
   height: min-content;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .node-list-header {
@@ -13,6 +15,13 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+}
+
+.instruction-text {
+  margin: 5px 0 0 0;
+  font-size: 0.9rem;
+  color: #666;
+  font-style: italic;
 }
 
 .refresh-button {
@@ -36,6 +45,7 @@
 .node-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .node-table th,
@@ -43,10 +53,32 @@
   border: 1px solid #ddd;
   padding: 8px;
   text-align: left;
+  word-wrap: break-word;
 }
 
 .node-table th {
   background-color: #f2f2f2;
+  font-weight: bold;
+}
+
+.node-table th:nth-child(1),
+.node-table td:nth-child(1) {
+  width: 30%;
+}
+
+.node-table th:nth-child(2),
+.node-table td:nth-child(2) {
+  width: 20%;
+}
+
+.node-table th:nth-child(3),
+.node-table td:nth-child(3) {
+  width: 30%;
+}
+
+.node-table th:nth-child(4),
+.node-table td:nth-child(4) {
+  width: 20%;
 }
 
 .node-row {

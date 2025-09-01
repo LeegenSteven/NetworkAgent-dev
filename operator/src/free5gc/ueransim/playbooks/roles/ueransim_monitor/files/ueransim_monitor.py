@@ -16,6 +16,7 @@
 import time
 import os
 import psutil
+import json
 
 #----------------------Send logging to GCP ----------------------------
 # Attach the Cloud Logging handler to the Python root logger
@@ -31,11 +32,6 @@ logging_client.setup_logging(log_level=logging.INFO)
 criticallogger = logging.getLogger("UERANSIMHEALTH")
 basiclogger = logging.getLogger("LIVENESSHEALTH")
 
-# --- Configuration ---
-POLLING_INTERVAL_IN_SECONDS = 5
-PROCESS_NAME = "./nr-gnb"
-HOSTNAME = os.uname().nodename
-SCRIPT_NAME = os.path.basename(__file__)
 # --- Configuration ---
 POLLING_INTERVAL_IN_SECONDS = 5
 PROCESS_NAME = "./nr-gnb"
@@ -63,13 +59,17 @@ def is_process_running():
                 error_payload = {
                     'process_name': PROCESS_NAME,
                     'hostname': HOSTNAME,
-                    'error': 'Process not running'
+                    'error': error_msg
                 }
-                criticallogger.error(error_msg, extra={'json_fields': error_payload})
-                print(error_msg, extra={'json_fields': error_payload})
+                criticallogger.error(json.dumps(error_payload))
 
         except Exception as e:
-            basiclogger.error(f"An error occurred while checking for process {PROCESS_NAME}: {e}")
+            error_payload = {
+                'process_name': PROCESS_NAME,
+                'hostname': HOSTNAME,
+                'error': f"An error occurred while checking for process {PROCESS_NAME}: {e}"
+            }
+            basiclogger.error(json.dumps(error_payload))
             print(f"An error occurred while checking for process {PROCESS_NAME}: {e}")
 
         time.sleep(POLLING_INTERVAL_IN_SECONDS)

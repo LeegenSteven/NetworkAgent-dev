@@ -586,6 +586,7 @@ class SpannerSection extends StatefulWidget {
 class _SpannerSectionState extends State<SpannerSection> {
   bool _isDeleting = false;
   bool _isDeletingLogs = false;
+  bool _isDeletingIncidents = false;
 
   @override
   Widget build(BuildContext context) {
@@ -720,6 +721,63 @@ class _SpannerSectionState extends State<SpannerSection> {
             ),
           ),
         ),
+        
+        const SizedBox(height: 20),
+        
+        // Incidents Section
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.warning,
+                      color: const Color(0xFF0D47A1),
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Incidents',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Delete all incidents from the Spanner database. This action cannot be undone.',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: _isDeletingIncidents ? null : () => _showDeleteIncidentsDialog(context),
+                  icon: _isDeletingIncidents 
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Icon(Icons.delete),
+                  label: Text(_isDeletingIncidents ? 'Deleting...' : 'Delete All Incidents'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -778,6 +836,37 @@ class _SpannerSectionState extends State<SpannerSection> {
             onPressed: () => _deleteLogs(context),
             child: const Text(
               'Remove',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteIncidentsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Delete All Incidents'),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to delete all incidents? This action cannot be undone and will permanently remove all incident records.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => _deleteIncidents(context),
+            child: const Text(
+              'Delete',
               style: TextStyle(color: Colors.red),
             ),
           ),
@@ -874,6 +963,52 @@ class _SpannerSectionState extends State<SpannerSection> {
       // Show the error in console
       if (mounted) {
         print('ERROR: Error removing logs: ${e.toString()}');
+      }
+    }
+  }
+
+  Future<void> _deleteIncidents(BuildContext context) async {
+    Navigator.of(context).pop(); // Close the confirmation dialog first
+    
+    // Set loading state
+    setState(() {
+      _isDeletingIncidents = true;
+    });
+
+    try {
+      print('Starting incidents deletion...');
+      final apiService = APIService();
+      final success = await apiService.deleteAllIncidents();
+      print('Incidents deletion completed. Success: $success');
+      
+      // Clear loading state
+      if (mounted) {
+        setState(() {
+          _isDeletingIncidents = false;
+        });
+      }
+      
+      // Show the result in console for now
+      if (mounted) {
+        if (success) {
+          print('SUCCESS: All incidents deleted successfully');
+        } else {
+          print('ERROR: Failed to delete incidents');
+        }
+      }
+    } catch (e) {
+      print('Error during incidents deletion: $e');
+      
+      // Clear loading state
+      if (mounted) {
+        setState(() {
+          _isDeletingIncidents = false;
+        });
+      }
+      
+      // Show the error in console
+      if (mounted) {
+        print('ERROR: Error deleting incidents: ${e.toString()}');
       }
     }
   }

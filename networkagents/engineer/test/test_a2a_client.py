@@ -77,7 +77,7 @@ class EngineerAgentClient:
         payload: dict[str, Any] = {
             'message': {
                 'role': 'user',
-                'parts': [{'type': 'data', 'data': {'objective': text }}],
+                'parts': [{'kind': 'data', 'data': {'objective': text }}],
                 'messageId': uuid4().hex,
             },
         }

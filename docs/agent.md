@@ -108,43 +108,28 @@ The engineer steps are as follows:
 * __Run Tool__: The tool and its arguments are sent from the previous step and passed to the MCP server.
 * __Summarise Response__: Gemini summarises the execution of the plan and passes back to the supervisor node and marks the task as complete. 
 
+### User Agent
 
-### Test Agent
-
-Test agent can run traffic tests on the network or delete running tests. This agent only has access only to the test related tools from the MCP server.
-
-
-### Anomaly Agent (work in progress)
-
-The following example shows an anomaly flow.
-
-![anomaly](/drawings/agent/anomalyflow.drawio.svg)
-
-1. An anomaly is pushed to spanner for one of the deployed network functions
-2. The Anomaly agent listens for new spanner events and triggers an investigation
-    1. the agent uses rules specified in the network design documentation to evaluate if any network changes are needed. 
-    2. if network changes are needed the agents generates a prompt with the change request
-3. The Anomaly agent sends a SendStreamingMessageRequest with the change request to the network engineer agent.
-4. The network engineering agent will propose a plan of steps needed to execute the requested change. The network engineering agent will then require user approval to execute the changes. This TaskStatus is reported to the supervisor agent through the PushNotification callback discussed in the earlier section
-5. The user is alerted and provides confirmation to proceed or not. 
-6. The supervisor agent updates the network engineer agent with the provided user input
-7. The network engineer runs the appropriate tools
-8. GKE orchestrates the network services changes.
+The user agent can simulate end user traffic on the network. This agent only has access only to the simulation related tools from the MCP server.
 
 
-### Fault Agent (work in progress)
+### Incident Resolver Agent
 
-Faults are reported from a number of sources:
+Network faults are reported from a number of sources:
 
-1. the scripts that generate traffic tests if they encounter errors trigger a fault. 
-2. liveness probes watching network function software can generate faults if the processes they are watching dies. 
+1. the scripts that simulate user traffic tests if they encounter errors trigger a fault. 
+2. liveness probes watching network function software can generate faults if the processes they are watching die. 
 
-The fault logs are caught by a GCP Log Sink and sent to a pub/sub topic which in turn triggers an event into a Cloud Run Fault Service. The Cloud Run Fault Service groups errors from various nodes that may be related to the same incident and notifies an Incident agent to investigate. 
+The fault logs are caught by a GCP Log Sink and sent to a pub/sub topic which in turn triggers an event into a Cloud Run Fault Service. The Cloud Run Fault Service correlates faults with existing incidents being investigateed and if there is no current incident a new one is created and the resolver agent is asked to investigate. 
 
 ![fault trigger](/drawings/agent/faulttrigger.drawio.svg)
 
-The incident agent receives the group of nodes with their reported errors. An initial diagnosis is run to search for similar incidents that have been reported in the past and any resolution that may have resolved the problem. 
+The resolver agent receives a new task to investigate the reported fault. The first step is to query the fault information from the incident spanner database, identifying the reporting node and error type.
 
-![fault agent](/drawings/agent/fault_agent.drawio.svg)
+![fault agent](/drawings/agent/resolver_agent.drawio.svg)
 
-If the resolution risk is low enough to automation a remediation, the incident agent sends a request to the engineering agent to execute. 
+Next step is to try dentify the cause of the error. A root cause analysis step uses networ design and runbook documents to come up with a plan to figure out the root cause of the issue. The plan can use a set of tools to identify connected or surrounding network nodes and test each node for various anomalies that could identify a root cause.
+
+If a root cause is identified the incident DB is updated with the investigation carried out and the node and cause. The next step is to identify a resolution that could be carried out. The agent uses past postmortems to see if similar incidents were resolved in the past and maps these to actions it can carry out. 
+
+The resolution actions are passed to the network engineering agent and once carried out the resolver agent summarises its actions, generates a new post mortem and closes the incident. 

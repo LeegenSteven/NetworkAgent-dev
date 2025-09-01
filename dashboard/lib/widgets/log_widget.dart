@@ -159,11 +159,14 @@ class LogWidget extends StatelessWidget {
   Widget _buildSeverityIndicator(String severity) {
     Color color;
     switch (severity.toUpperCase()) {
-      case 'ERROR':
+      case 'CRITICAL':
         color = Colors.red;
         break;
-      case 'WARNING':
+      case 'ERROR':
         color = Colors.orange;
+        break;
+      case 'WARNING':
+        color = Colors.yellow;
         break;
       case 'INFO':
         color = Colors.green;

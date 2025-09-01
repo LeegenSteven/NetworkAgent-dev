@@ -12,20 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 from aiohttp import web
 import aiohttp_cors
 import logging
 import os
-import aiohttp
 from utils.nodes import get_nodes
-from utils.a2a_client import EngineerAgentClient
+import utils.constants as constants
+from ansible.runner import run_incident
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"             "%(filename)s::%(lineno)d::%(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
 logger = logging.getLogger(__name__)
-BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
+# get the base directory for this file
+constants.basedir = os.path.dirname(os.path.realpath(__file__))
+logger.info("Base directory is %s", constants.basedir)
+
+# web app
 app = web.Application()
 
 # Setup CORS for aiohttp routes
@@ -38,9 +41,15 @@ cors = aiohttp_cors.setup(app, defaults={
     )
 })
 
+#########################################################################
+# return location of react ui
+#########################################################################
 async def serve_static_file(request):
-    return web.FileResponse(os.path.join(BASE_DIR, '..', 'frontend', 'build', 'index.html'))
+    return web.FileResponse(os.path.join(constants.basedir, '..', 'frontend', 'build', 'index.html'))
 
+#########################################################################
+# login
+#########################################################################
 async def login(request):
     logger.info("login")
 
@@ -59,26 +68,9 @@ async def login(request):
     else:
         return web.json_response({'success': False, 'message': 'Invalid credentials'}, status=401)
 
-async def get_agents(request):
-    logger.info("get agents")
-
-    supervisor_url = os.environ.get('SUPERVISOR_URL')
-    if not supervisor_url:
-        return web.json_response({'error': 'SUPERVISOR_URL not set'}, status=500)
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{supervisor_url}/listagents") as response:
-                if response.status == 200:
-                    agents = await response.json()
-                    return web.json_response(agents)
-                else:
-                    return web.json_response({'error': 'Failed to fetch agents from supervisor'}, status=response.status)
-    except Exception as e:
-        logger.error(f"Error fetching agents: {e}")
-        return web.json_response({'error': 'Internal server error'}, status=500)
-
-
+#########################################################################
+# return computeinstance nodes and their parents
+#########################################################################
 async def fetch_nodes(request):
     logger.info("get nodes")
 
@@ -88,45 +80,59 @@ async def fetch_nodes(request):
     else:
         return web.json_response([])
 
+#########################################################################
+# kill a process on a node
+#########################################################################
+async def kill_process(request):
+    logger.info("kill process on node")
+    
+    try:
+        data = await request.json()
+        node = data.get('node')
+        incident_type = data.get('incident_type')
+        
+        if not node or not incident_type:
+            return web.json_response({'error': 'Missing node or incident_type'}, status=400)
+        
+        # Extract node information
+        parent_node = node.get('parent', {})
+        child_node = node.get('child', {})
+        
+        logger.info(f"Processing {incident_type} incident for node: {child_node.get('name')} (kind: {child_node.get('kind')})")
+        logger.info(f"Parent node: {parent_node.get('name')} (kind: {parent_node.get('kind')})")
+        
+        # Run the incident with node and incident type information
+        await run_incident(
+            parent_node=parent_node,
+            parent_kind=parent_node.get('kind'),
+            child_node=child_node,
+            child_kind=child_node.get('kind'),
+            incident_type=incident_type
+        )
+        
+        return web.json_response({'success': True, 'message': f'{incident_type} incident initiated on {child_node.get("name")}'})
+        
+    except Exception as e:
+        logger.error(f"Error processing kill_process request: {e}")
+        return web.json_response({'error': str(e)}, status=500)
 
-async def start_task(request):
-    data = await request.json()
-    agent_name = data.get('agentName')
-    agent_url = data.get('agentUrl')
-    node_name = data.get('nodeName')
-    objective = data.get('objective')
-    additional_info = data.get('tableData')
-
-    logger.info("start task with %s %s %s %s %s", node_name, agent_name, agent_url, objective, additional_info)
-
-    client = EngineerAgentClient(agent_url)
-    task_id = await client.send_task(objective)
-
-    return web.json_response({'task_id': task_id})
-
-
-async def get_task_status(request):
-    id = request.match_info.get('id', "Unknown")
-    agent_url = request.query.get('agentUrl')
-    logger.info("get status for task %s", id)
-
-    if not agent_url:
-        return web.json_response({'error': 'agentUrl not provided'}, status=400)
-
-    client = EngineerAgentClient(agent_url)
-    status = await client.get_task_status(id)
-
-    return web.json_response({'task_id': id, 'status': status.value})
-
-
+#########################################################################
+# main function
+#########################################################################
 if __name__ == "__main__":
-    app.router.add_post('/login', login)
-    app.router.add_get('/api/agents', get_agents)
-    app.router.add_get('/api/nodes', fetch_nodes)
-    app.router.add_post('/api/start_task', start_task)
-    app.router.add_get('/api/task/{id}', get_task_status)
+    # Add routes and configure CORS for each route
+    login_route = app.router.add_post('/login', login)
+    nodes_route = app.router.add_get('/api/nodes', fetch_nodes)
+    kill_process_route = app.router.add_post('/api/killprocess', kill_process)
+    
+    # Add CORS to API routes
+    cors.add(login_route)
+    cors.add(nodes_route)
+    cors.add(kill_process_route)
+    
+    # Static file routes (no CORS needed)
     app.router.add_static('/static/',
-                          path=os.path.join(BASE_DIR, '..', 'frontend', 'build', 'static'),
+                          path=os.path.join(constants.basedir, '..', 'frontend', 'build', 'static'),
                           name='static')
     app.router.add_get('/', serve_static_file)
     app.router.add_get('/{path:.*}', serve_static_file)

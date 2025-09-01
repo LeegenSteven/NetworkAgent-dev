@@ -197,6 +197,25 @@ async def getDNNAddress(namespace, name):
 
     return address
 
+########################################################
+# Get the user running at the UERANSIM instance
+########################################################
+async def getIMSI(namespace, name):
+    logger.debug(f"Getting userid at UERANSIM {name}")
+    
+    network_api = get_resource_api("google.dev/v1", "UERanSIM")
+    userid=None
+    try:
+        result = network_api.get(name=name, namespace=namespace)
+        logger.debug(result)
+        userid=result.get('spec').get('ue').get('imsi')
+        logger.debug(f"found IMSI {userid}")
+    except kubernetes.client.rest.ApiException as e: 
+        logger.debug(e.status)
+        if e.status == 404:
+            raise kopf.TemporaryError(f"No UERANSIM {name} found yet. Waiting...")
+    return userid
+
 ##########################################################
 # Return the ip address of the UPF named
 ##########################################################

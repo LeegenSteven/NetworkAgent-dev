@@ -18,7 +18,7 @@ class NetworkDashboard extends StatefulWidget {
   State<NetworkDashboard> createState() => _NetworkDashboardState();
 }
 
-class _NetworkDashboardState extends State<NetworkDashboard> {
+class _NetworkDashboardState extends State<NetworkDashboard> with TickerProviderStateMixin {
   // Global key for the scaffold to access the drawer
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   
@@ -36,9 +36,71 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
   static const double _minVerticalSplitRatio = 0.3;
   static const double _maxVerticalSplitRatio = 0.9;
   
+  // Animation controllers for notification vibration
+  late AnimationController _vibrationController;
+  late Animation<double> _vibrationAnimation;
+  late AnimationController _intervalController;
+  
   @override
   void initState() {
     super.initState();
+    
+    // Initialize animation controllers
+    _vibrationController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    
+    _vibrationAnimation = Tween<double>(
+      begin: 1.0,
+      end: 1.3,
+    ).animate(CurvedAnimation(
+      parent: _vibrationController,
+      curve: Curves.easeInOut,
+    ));
+    
+    _intervalController = AnimationController(
+      duration: const Duration(seconds: 3),
+      vsync: this,
+    );
+    
+    // Start the interval animation that triggers vibration every 3 seconds
+    _intervalController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        final appState = Provider.of<Appstate>(context, listen: false);
+        final hasAnyAlerts = appState.pushNotifications.isNotEmpty || appState.incidents.isNotEmpty;
+        
+        if (hasAnyAlerts) {
+          _triggerVibration();
+        }
+        
+        _intervalController.reset();
+        _intervalController.forward();
+      }
+    });
+    
+    // Load incidents on startup
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final appState = Provider.of<Appstate>(context, listen: false);
+      appState.refreshIncidents();
+      
+      // Start the interval timer
+      _intervalController.forward();
+    });
+  }
+  
+  void _triggerVibration() {
+    _vibrationController.reset();
+    _vibrationController.forward().then((_) {
+      _vibrationController.reverse();
+    });
+  }
+  
+  @override
+  void dispose() {
+    _vibrationController.dispose();
+    _intervalController.dispose();
+    super.dispose();
   }
   
   void _toggleLogs() {
@@ -97,48 +159,29 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
         leading: Consumer<Appstate>(
           builder: (context, appState, child) {
             final notificationCount = appState.pushNotifications.length;
-            return Stack(
-              alignment: Alignment.center,
-              children: [
-                IconButton(
-                  icon: Icon(
-                    Icons.notifications,
-                    color: notificationCount > 0 ? Colors.amber : Colors.white,
+            final incidentCount = appState.incidents.length;
+            final hasAnyAlerts = notificationCount > 0 || incidentCount > 0;
+            
+            return AnimatedBuilder(
+              animation: _vibrationAnimation,
+              builder: (context, child) {
+                return Transform.scale(
+                  scale: _vibrationAnimation.value,
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.notifications,
+                      color: hasAnyAlerts ? Colors.red : Colors.white,
+                    ),
+                    onPressed: () {
+                      // Navigate to the notification screen
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (context) => const NotificationScreen()),
+                      );
+                    },
+                    tooltip: 'Notifications & Incidents (${notificationCount + incidentCount})',
                   ),
-                  onPressed: () {
-                    // Navigate to the notification screen
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => const NotificationScreen()),
-                    );
-                  },
-                  tooltip: 'Notifications',
-                ),
-                Positioned(
-                  top: 5,
-                  right: 5,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: notificationCount > 0 ? Colors.red : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
-                      border: notificationCount > 0 ? null : Border.all(color: Colors.white, width: 1),
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 18,
-                      minHeight: 18,
-                    ),
-                    child: Text(
-                      notificationCount > 99 ? '99+' : '$notificationCount',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-              ],
+                );
+              },
             );
           },
         ),

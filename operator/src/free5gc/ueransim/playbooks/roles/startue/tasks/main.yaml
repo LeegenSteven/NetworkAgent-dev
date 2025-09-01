@@ -38,7 +38,14 @@
     command: /bin/bash -c "nohup ./nr-ue -c config/uecfg.yaml < /dev/null > ./ue.log 2>&1 & sleep 1"
     chdir: /ueransim
 
+- name: wait for uesimtun0 interface to be available
+  shell: ip link show uesimtun0
+  register: interface_check
+  until: interface_check.rc == 0
+  retries: 10
+  delay: 5
+  ignore_errors: yes
+
 - name: add DN route to GTP tunnel
   command: /bin/bash -c "ip route add 172.168.0.0/24 dev uesimtun0"
-
-
+  when: interface_check.rc == 0

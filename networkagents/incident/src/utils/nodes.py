@@ -39,12 +39,18 @@ def get_nodes():
 
   with database.snapshot() as snapshot:
     try:
+      # Get parent/child relationships where parent manages ComputeInstance child
       results = snapshot.execute_sql(
 
         """GRAPH networkGraph
-          MATCH (a)
-          WHERE a.kind="ComputeInstance"
-          RETURN a.id AS a_id, a.name""")
+          MATCH (parent)-[:Manages]->(child)
+          WHERE child.kind="ComputeInstance"
+          RETURN parent.id AS parent_id, 
+                 parent.name AS parent_name, 
+                 parent.kind AS parent_kind,
+                 child.id AS child_id, 
+                 child.name AS child_name, 
+                 child.kind AS child_kind""")
 
     except Exception as e:
       logger.error("SQL error: {}".format(e))
@@ -53,6 +59,17 @@ def get_nodes():
   elements = []
   if success:
     for row in results:
-      elements.append({'id': row[0], 'name': row[1]})
+      elements.append({
+        'parent': {
+          'id': row[0], 
+          'name': row[1] if row[1] else row[0],
+          'kind': row[2] if row[2] else 'Unknown'
+        },
+        'child': {
+          'id': row[3], 
+          'name': row[4] if row[4] else row[3],
+          'kind': row[5]
+        }
+      })
   
   return elements, success

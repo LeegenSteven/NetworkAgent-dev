@@ -16,16 +16,35 @@ import logging
 import os
 import json
 import base64
-from flask import Flask, request, jsonify
-from datetime import datetime
+import asyncio
+import sys
+from aiohttp import web
+import aiohttp_cors
+from fault_client import FaultClient
+from correlate import correlate_incident
+from incidentdb import IncidentDB
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+# Initialize aiohttp application with no middleware
+app = web.Application()
 
+# Setup CORS for aiohttp routes
+cors = aiohttp_cors.setup(app, defaults={
+    "*": aiohttp_cors.ResourceOptions(
+        allow_credentials=True,
+        expose_headers="*",
+        allow_headers="*",
+        allow_methods="*"
+    )
+})
+
+######################################################################
+# Decode message
+######################################################################
 def decode_pubsub_message(message_data):
     logger.info("decode pubsub message")
     """Decode the Pub/Sub message data from base64."""
@@ -37,49 +56,35 @@ def decode_pubsub_message(message_data):
         logger.error(f"Error decoding message data: {e}")
         return None
 
-def process_fault_event(event_data):
+######################################################################
+# Process the fault event
+######################################################################
+async def process_fault_event(event_data):
     logger.info("process fault event")
     """Process the fault event and extract relevant information."""
     try:
         # Parse the log entry if it's JSON
         if event_data.startswith('{'):
             log_entry = json.loads(event_data)
+            logger.info(log_entry)
             
             # Extract relevant fields from the log entry
             timestamp = log_entry.get('timestamp', 'Unknown')
-            severity = log_entry.get('severity', 'Unknown')
-            log_name = log_entry.get('logName', 'Unknown')
-            resource = log_entry.get('resource', {})
-            labels = log_entry.get('labels', {})
-            text_payload = log_entry.get('textPayload', '')
             json_payload = log_entry.get('jsonPayload', {})
             
             logger.info(f"=== FAULT EVENT DETECTED ===")
             logger.info(f"Timestamp: {timestamp}")
-            logger.info(f"Severity: {severity}")
-            logger.info(f"Log Name: {log_name}")
-            logger.info(f"Resource: {resource}")
-            logger.info(f"Labels: {labels}")
-            logger.info(f"Text Payload: {text_payload}")
             logger.info(f"JSON Payload: {json_payload}")
             logger.info(f"=== END FAULT EVENT ===")
             
-            # Check for different types of fault events
-            python_logger = labels.get('python_logger', '')
-            if python_logger == 'UERANSIMHEALTH':
-                logger.warning(f"UERANSIM HEALTH ISSUE DETECTED: {text_payload}")
-                process_name = json_payload.get('process_name', 'N/A')
-                hostname = json_payload.get('hostname', 'N/A')
-                logger.error(f"Details: Process '{process_name}' not running on host '{hostname}'.")
-
-            elif python_logger == 'CRITICALSERVICEERROR':
-                logger.warning(f"CRITICAL SERVICE ERROR DETECTED: {text_payload}")
-                url = json_payload.get('url', 'N/A')
-                user = json_payload.get('userid', 'N/A')
-                node = json_payload.get('node', 'N/A')
-                error = json_payload.get('error', 'N/A')
-                logger.error(f"Details: Error '{error}' for user '{user}' when accessing '{url}' from node '{node}'.")
-                
+            # Check of this error has already triggered an incident
+            incident_exists = await correlate_incident(log_entry)
+            if incident_exists:
+                logger.info("Incident already open, not sending to resolver.")
+            else:
+                logger.info("No open incident found, sending to resolver.")
+                agent = await FaultClient.get_instance()
+                await agent.send_incident_to_resolver(log_entry)                
         else:
             # Handle plain text log entries
             logger.info(f"=== FAULT EVENT (TEXT) ===")
@@ -92,25 +97,15 @@ def process_fault_event(event_data):
     except Exception as e:
         logger.error(f"Error processing fault event: {e}")
 
-@app.route('/', methods=['POST'])
-def handle_eventarc():
+######################################################################
+# Handle basic eventarc 
+######################################################################
+async def handle_eventarc(request):
     logger.info("EVENT Received")
     """Handle incoming Eventarc events from Pub/Sub."""
-    try:
-        # Get the CloudEvent headers
-        ce_type = request.headers.get('ce-type', 'Unknown')
-        ce_source = request.headers.get('ce-source', 'Unknown')
-        ce_subject = request.headers.get('ce-subject', 'Unknown')
-        ce_time = request.headers.get('ce-time', 'Unknown')
-        
-        logger.info(f"Received Eventarc event:")
-        logger.info(f"  Type: {ce_type}")
-        logger.info(f"  Source: {ce_source}")
-        logger.info(f"  Subject: {ce_subject}")
-        logger.info(f"  Time: {ce_time}")
-        
+    try:        
         # Get the request data
-        event_data = request.get_json()
+        event_data = await request.json()
         
         if event_data:
             logger.info(f"Event data: {json.dumps(event_data, indent=2)}")
@@ -124,47 +119,68 @@ def handle_eventarc():
                 
                 if decoded_message:
                     logger.info(f"Decoded message: {decoded_message}")
-                    process_fault_event(decoded_message)
-                
-                # Log message attributes
-                attributes = message.get('attributes', {})
-                if attributes:
-                    logger.info(f"Message attributes: {json.dumps(attributes, indent=2)}")
-                
-                # Log message ID and publish time
-                message_id = message.get('messageId', 'Unknown')
-                publish_time = message.get('publishTime', 'Unknown')
-                logger.info(f"Message ID: {message_id}")
-                logger.info(f"Publish Time: {publish_time}")
+                    await process_fault_event(decoded_message)
         
-        return jsonify({'status': 'success', 'message': 'Event processed'}), 200
+        return web.json_response({'status': 'success', 'message': 'Event processed'})
         
     except Exception as e:
         logger.error(f"Error handling Eventarc event: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        return web.json_response({'status': 'error', 'message': str(e)}, status=500)
 
-@app.route('/health', methods=['GET'])
-def health_check():
+######################################################################
+# Health check
+######################################################################
+async def health_check(request):
     """Health check endpoint."""
-    return jsonify({'status': 'healthy', 'service': 'fault-service'}), 200
+    return web.json_response({'status': 'healthy', 'service': 'fault-service'})
 
-@app.route('/', methods=['GET'])
-def root():
+######################################################################
+# basic info
+######################################################################
+async def root(request):
     """Root endpoint for basic info."""
-    return jsonify({
+    return web.json_response({
         'service': 'Network Fault Service',
         'status': 'running',
         'description': 'Processes fault events from UERANSIM health monitoring'
-    }), 200
+    })
 
+######################################################################
+# Setup
+######################################################################
+async def init():
+    route = app.router.add_post('/', handle_eventarc)
+    cors.add(route)
+    route = app.router.add_get('/health', health_check)
+    cors.add(route)
+    route = app.router.add_get('/', root)
+    cors.add(route)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+
+    port = 8080
+    if os.getenv("DEBUG") is not None:
+        port = 9010
+
+    logger.info("starting server on port %s",port)
+    site = web.TCPSite(runner, host="0.0.0.0", port=port, ssl_context=None)
+    await site.start()
+    
+######################################################################
+# Main
+######################################################################
 if __name__ == "__main__":
-    logger.info("Starting Network Fault Service...")
+    logger.info("starting network agent...")
+
+    if "RESOLVER_URL" not in os.environ:
+        logger.critical("RESOLVER_URL not set, exiting")
+        sys.exit(1)
+    if "SUPERVISOR_URL" not in os.environ:
+        logger.critical("SUPERVISOR_URL not set, exiting")
+        sys.exit(1)
     
-    # Get port from environment variable (Cloud Run sets this)
-    port = int(os.environ.get('PORT', 8080))
-    
-    logger.info(f"Service will listen on port {port}")
-    logger.info("Ready to receive fault events from Eventarc/Pub/Sub")
-    
-    # Run the Flask app
-    app.run(host='0.0.0.0', port=port, debug=False)
+    loop=asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(init())
+    loop.run_forever()

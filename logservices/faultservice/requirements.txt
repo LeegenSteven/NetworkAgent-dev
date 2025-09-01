@@ -1,1 +1,6 @@
-flask==2.3.3
+aiohttp
+aiohttp_cors
+google-cloud-spanner
+a2a-sdk==0.2.16
+httpx
+google-cloud-tasks

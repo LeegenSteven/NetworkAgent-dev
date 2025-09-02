@@ -66,7 +66,7 @@
     chdir: /opt/networkdesign-repo
 
 - name: add remote repo
-  command: sudo -u git git remote add origin https://{{ lookup('env', 'WEBAPPS_LOGIN') }}:{{ lookup('env', 'WEBAPPS_PWD') }}@{{external_ip_address}}:3000/networkagent/networkdesign.git
+  command: sudo -u git git remote add origin https://{{ lookup('env', 'WEBAPPS_LOGIN') }}:{{ lookup('env', 'WEBAPPS_PWD') }}@{{external_ip_address}}:3000/{{ lookup('env', 'WEBAPPS_LOGIN') }}/networkdesign.git
   args:
     chdir: /opt/networkdesign-repo
 

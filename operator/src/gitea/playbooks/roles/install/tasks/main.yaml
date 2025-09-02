@@ -98,7 +98,9 @@
 
 - name: create networkagent user
   command: "sudo -u git /usr/local/bin/gitea admin user create --username {{ lookup('env', 'WEBAPPS_LOGIN') }} --password {{ lookup('env', 'WEBAPPS_PWD') }} --email me@example.com --config /etc/gitea/app.ini"
-  when: not "networkagent" in users.stdout
+  when: not user in users.stdout
+  vars:
+    user: "{{ lookup('env', 'WEBAPPS_LOGIN') }}"
 
 - name: copy ssh private key to /opt
   copy:

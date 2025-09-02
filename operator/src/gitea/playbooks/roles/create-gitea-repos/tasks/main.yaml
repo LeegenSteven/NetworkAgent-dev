@@ -16,7 +16,7 @@
 # Get API token
 ########################################################
 - name: authenticate with gitea
-  command: "curl -H 'Content-Type: application/json' -d '{\"name\":\"root-repo\", \"scopes\":[\"write:repository\", \"write:user\", \"write:admin\"]}' -u {{ lookup('env', 'WEBAPPS_LOGIN') }}:{{ lookup('env', 'WEBAPPS_PWD') }} https://{{external_ip_address}}:3000/api/v1/users/networkagent/tokens --insecure"
+  command: "curl -H 'Content-Type: application/json' -d '{\"name\":\"root-repo\", \"scopes\":[\"write:repository\", \"write:user\", \"write:admin\"]}' -u {{ lookup('env', 'WEBAPPS_LOGIN') }}:{{ lookup('env', 'WEBAPPS_PWD') }} https://{{external_ip_address}}:3000/api/v1/users/{{ lookup('env', 'WEBAPPS_LOGIN') }}/tokens --insecure"
   register: result
 
 - set_fact:

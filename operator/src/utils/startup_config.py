@@ -37,12 +37,12 @@ class StartupConfig:
         
         # Batching Settings
         self.worker_idle_timeout = float(os.getenv("KOPF_WORKER_IDLE_TIMEOUT", "5.0"))
-        self.worker_batch_size = int(os.getenv("KOPF_WORKER_BATCH_SIZE", "10"))
+        self.worker_batch_size = int(os.getenv("KOPF_WORKER_BATCH_SIZE", "1"))
         self.worker_exit_timeout = float(os.getenv("KOPF_WORKER_EXIT_TIMEOUT", "30.0"))
         
         # Execution Settings
         self.max_workers_default = int(os.getenv("KOPF_MAX_WORKERS_DEFAULT", "5"))
-        self.max_workers_free5gc = int(os.getenv("KOPF_MAX_WORKERS_FREE5GC", "15"))
+        self.max_workers_free5gc = int(os.getenv("KOPF_MAX_WORKERS_FREE5GC", "10"))
         
         # Networking Settings
         self.request_timeout = int(os.getenv("KOPF_REQUEST_TIMEOUT", "60"))

@@ -106,15 +106,17 @@ async def configure(settings: kopf.OperatorSettings, **_):
     settings.watching.namespace_timeout = startup_config.watch_namespace_timeout
     
     # Enhanced watcher resilience for 429 handling
-    settings.watching.retry_delay = startup_config.watcher_retry_delay
-    settings.watching.backoff_factor = startup_config.watcher_backoff_factor
-    settings.watching.max_delay = startup_config.watcher_max_delay
-    settings.watching.reconnect_backoff = startup_config.watcher_reconnect_backoff
+    # --------------------------------------------
+    # settings.watching.retry_delay = startup_config.watcher_retry_delay
+    # settings.watching.backoff_factor = startup_config.watcher_backoff_factor
+    # settings.watching.max_delay = startup_config.watcher_max_delay
+    # settings.watching.reconnect_backoff = startup_config.watcher_reconnect_backoff
     
     # Rate limiting settings
-    settings.batching.worker_idle_timeout = startup_config.worker_idle_timeout
-    settings.batching.worker_batch_size = startup_config.worker_batch_size
-    settings.batching.worker_exit_timeout = startup_config.worker_exit_timeout
+    # ----------------------
+    # settings.batching.worker_idle_timeout = startup_config.worker_idle_timeout
+    # settings.batching.worker_batch_size = startup_config.worker_batch_size
+    # settings.batching.worker_exit_timeout = startup_config.worker_exit_timeout
     
     # Execution settings
     if os.getenv("FREE5GC") is not None:

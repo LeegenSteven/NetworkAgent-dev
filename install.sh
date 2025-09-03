@@ -1023,7 +1023,7 @@ LogCapture()
             --description="Network operator logs sink" \
             --log-filter="resource.labels.project_id=${GOOGLE_PROJECT} AND 
                  ((resource.labels.container_name=${NETWORK_OPERATOR} AND labels.python_logger!=kopf._cogs.clients.watching) OR
-                 logName:gcplogs-docker-driver OR labels.python_logger=UERANSIMHEALTH OR labels.python_logger=CRITICALSERVICEERROR)"
+                 logName=\"projects/${GOOGLE_PROJECT}/logs/gcplogs-docker-driver\" OR labels.python_logger=UERANSIMHEALTH OR labels.python_logger=CRITICALSERVICEERROR)"
     else
         echo "Logging sink '${SINK_NAME}' already exists..."
     fi
@@ -1419,7 +1419,7 @@ Networkagent()
         --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
         --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
         --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
-        --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL \
+        --update-env-vars TOOLS_URL=$TOOLS_URL \
         --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
         --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
         --allow-unauthenticated 

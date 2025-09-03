@@ -24,17 +24,19 @@ from utils.gitea_extension import *
 # generated at Gitea server creation time 
 USER = os.environ['WEBAPPS_LOGIN']
 PWD = os.environ['WEBAPPS_PWD']
+
 DESIGN_REPO = 'networkdesign'
+INCIDENT_REPO = 'incident'
 SERVICE_REPO = 'network'
 MASTER_BRANCH = 'master'
 
 
-# get file from design repo
-def get_git_file(filename):
+# get file from repo
+def get_git_file(repo, filename):
   url = get_gitea_url()
   logger.debug(f"Gitea server at: {url}")
   gitea = Gitea(get_gitea_url(), auth=(USER, PWD), verify=False)
-  repo = Repository.request(gitea, USER, DESIGN_REPO)
+  repo = Repository.request(gitea, USER, repo)
   try:
     content = repo.get_git_content()
     readmes = [c for c in content if c.name == filename]

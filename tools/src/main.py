@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 # import all tools
+import tools.incidents
 import tools.engineering
 import tools.logs_fetch
 import tools.logs_query

@@ -1,2 +1,4 @@
 a2a-sdk==0.2.16
 uvicorn
+google-adk
+pydantic

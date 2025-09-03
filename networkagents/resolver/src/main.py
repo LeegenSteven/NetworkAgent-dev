@@ -14,7 +14,6 @@
 
 import logging
 import os
-import httpx
 from agent_executor import ResolverAgentExecutor
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
@@ -31,7 +30,6 @@ log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
 logger = logging.getLogger(__name__)
-
 
 def get_agent_card(host: str, port: int):
     """Returns the Agent Card for the Resolver Agent."""
@@ -54,10 +52,13 @@ def get_agent_card(host: str, port: int):
         skills=[skill],
     )
 
+###################################################
+# Main
+###################################################
 if __name__ == "__main__":
     logger.info("starting network resolver agent server...")
 
-    # init the agent class    
+    # init the agent executor class    
     request_handler = DefaultRequestHandler(
         agent_executor=ResolverAgentExecutor(),
         task_store=InMemoryTaskStore()

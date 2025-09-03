@@ -18,7 +18,8 @@ import kubernetes
 from utils.k8s import get_client
 import os
 import uuid
-from utils.git_helpers import *
+import json
+import utils.git_helpers as git
 import yaml
 import utils.globals as globals
 from mcp.types import ToolAnnotations
@@ -61,7 +62,7 @@ def getNetworkDesign()-> str:
     logger.info("Getting network design from git")
 
     filename = "5gnetwork.md"
-    result = get_git_file(filename)
+    result = git.get_git_file(git.DESIGN_REPO, filename)
     if result is not None:
         return result
     else:
@@ -227,7 +228,7 @@ def createLocation(
         gitops_manifest=gitops_manifest+"\n---\n"+yaml.dump(firewall_crd_manifest, indent=2)
 
         filename = name+"-network-location.yaml"
-        result = commit_git_file(filename,
+        result = git.commit_git_file(filename,
                                  f"Deployment of {name} network location",
                                  gitops_manifest)
         if result:
@@ -270,7 +271,7 @@ def deleteLocation(
 
     if GITOPS:
         filename = name+"-network-location.yaml"
-        result = delete_git_file(filename, f"{name} location deletion")
+        result = git.delete_git_file(filename, f"{name} location deletion")
         if result:
             logger.error (f"service {filename} successfully submitted for deletion")
         else:
@@ -395,6 +396,75 @@ def getServices()-> str:
             logger.info(e)
 
 ######################################################################
+# Get existing service instance by Name
+######################################################################
+@globals.networkagent_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+def getServiceByName(name: str, kind: str)-> str:
+    """
+    Find a Network Service instance with the provided name and kind.
+
+    Input Parameters: 
+        name: the name of the network service instance   
+        kind: the kubernetes kind associated with the network service instance. 
+
+    Returns:
+        Network service instance kubernetes custom resource instance object. 
+        Providing general information, the network service configuration in the 'spec' section and 
+        its current operational state in the 'status' section
+    """
+    logger.info(f"finding service instance {name} of kind {kind}")
+
+    client = kubernetes.dynamic.DynamicClient(get_client())
+
+    try:
+        # First, get the CRD to determine the correct API version
+        crd_api = client.resources.get(
+            api_version="apiextensions.k8s.io/v1", 
+            kind="CustomResourceDefinition",
+        )
+        
+        # Find the CRD for this kind that has the networkservices label
+        crds = crd_api.get(label_selector="type=networkservices")
+        target_crd = None
+        
+        for crd in crds.items:
+            if crd['spec']['names']['kind'] == kind:
+                target_crd = crd
+                break
+        
+        if target_crd is None:
+            return f"No CRD found for kind {kind} with label type=networkservices"
+        
+        # Get the API version from the CRD
+        api_version = target_crd['spec']['group'] + '/' + target_crd['spec']['versions'][0]['name']
+        
+        # Now get the specific service instance
+        svc_api = client.resources.get(
+            kind=kind,
+            api_version=api_version
+        )
+
+        # Get the specific service by name
+        try:
+            service = svc_api.get(name=name, namespace="network")
+            service_dict = service.to_dict()
+            text_representation = json.dumps(service_dict, indent=2)
+            logger.debug(f"Found service: {text_representation}")
+            return text_representation
+        except kubernetes.client.rest.ApiException as get_e:
+            if get_e.status == 404:
+                return f"Service {name} of kind {kind} not found"
+            else:
+                raise get_e
+
+    except kubernetes.client.rest.ApiException as e:
+        if e.status == 404:
+            return f"No services found for kind {kind}"
+        else:
+            logger.error(f"Error retrieving service: {e}")
+            return f"Error retrieving service: {e}"
+
+######################################################################
 # Create a new network service
 ######################################################################
 @globals.networkagent_mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))
@@ -434,7 +504,7 @@ def createService(
     logger.info(crd_manifest)
     if GITOPS:
         filename = f"{kind.lower()}-{name}.yaml"
-        result = commit_git_file(filename,
+        result = git.commit_git_file(filename,
                                  f"Deployment of {kind} {name}",
                                  crd_manifest_yaml)
         if result:
@@ -475,7 +545,7 @@ def deleteService(
     
     if GITOPS:
         filename = f"{kind.lower()}-{name}.yaml"
-        result = delete_git_file(filename, f"{name} deletion")
+        result = git.delete_git_file(filename, f"{name} deletion")
         if result:
             return f"service {name} successfully submitted for deletion"
         else:

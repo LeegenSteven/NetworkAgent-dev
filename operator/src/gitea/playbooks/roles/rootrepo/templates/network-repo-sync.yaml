@@ -21,7 +21,7 @@ spec:
   sourceType: git
   sourceFormat: unstructured
   git:
-    repo: https://{{ lookup('env', 'WEBAPPS_LOGIN') }}:{{ lookup('env', 'WEBAPPS_PWD') }}@{{external_ip_address}}:3000/networkagent/network
+    repo: https://{{ lookup('env', 'WEBAPPS_LOGIN') }}:{{ lookup('env', 'WEBAPPS_PWD') }}@{{external_ip_address}}:3000/{{ lookup('env', 'WEBAPPS_LOGIN') }}/network
     revision: HEAD
     branch: master
     auth: none

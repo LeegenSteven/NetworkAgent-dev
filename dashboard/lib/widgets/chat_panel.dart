@@ -280,8 +280,8 @@ class _ChatPanelContentState extends State<_ChatPanelContent> with WidgetsBindin
                     child: Text('What network services can i deploy?'),
                   ),
                   const PopupMenuItem<String>(
-                    value: 'Give me more detail about how i can deploy a UERanSIM',
-                    child: Text('Give me more detail about how i can deploy a UERanSIM'),
+                    value: 'Give me more detail about the UERanSIM network service',
+                    child: Text('Give me more detail about the UERanSIM network service'),
                   ),
                   const PopupMenuItem<String>(
                     value: 'What network services are already deployed?',

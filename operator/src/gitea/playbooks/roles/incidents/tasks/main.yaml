@@ -83,7 +83,7 @@
     chdir: /opt/incidents-repo
 
 - name: add remote repo
-  command: sudo -u git git remote add origin https://{{ lookup('env', 'WEBAPPS_LOGIN') }}:{{ lookup('env', 'WEBAPPS_PWD') }}@{{external_ip_address}}:3000/networkagent/incidents.git
+  command: sudo -u git git remote add origin https://{{ lookup('env', 'WEBAPPS_LOGIN') }}:{{ lookup('env', 'WEBAPPS_PWD') }}@{{external_ip_address}}:3000/{{ lookup('env', 'WEBAPPS_LOGIN') }}/incidents.git
   args:
     chdir: /opt/incidents-repo
 

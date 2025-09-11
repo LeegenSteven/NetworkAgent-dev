@@ -164,6 +164,14 @@ EOF
         echo "Please use a different GCP user account."
         exit 1
     fi
+
+    # Check that the OS Login flag is set to true at the project level
+    # It's needed when the script ssh into the gitea VM
+    oslogin_flag=$(gcloud compute project-info describe --project=$GOOGLE_PROJECT --format="value(commonInstanceMetadata.items.enable-oslogin)")
+    if [[ $oslogin_flag == "false" ]]; then
+        echo "The OS Login flag is false. It must be set to true at the project level"
+        exit 1
+    fi
     
     echo " all good!"
 }

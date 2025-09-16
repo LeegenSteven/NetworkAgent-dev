@@ -94,8 +94,9 @@ spec:
         recordedTimestamp INT64 NOT NULL,
         agentTaskId String(MAX) NOT NULL,
         issue JSON NOT NULL,
-        cause JSON,
-        resolution JSON,
+        strategy JSON,
+        root_cause String(MAX),
+        resolution String(MAX),
         resolvedTimestamp INT64
       ) PRIMARY KEY (id)"
   - "CREATE OR REPLACE PROPERTY GRAPH networkGraph

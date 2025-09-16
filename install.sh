@@ -407,6 +407,66 @@ Create()
 }
 
 #################################################
+# Individual components (Re)deploy functions    #
+#################################################
+#
+# All the fucntions below must be idempotent
+
+DeploySpanner()
+{
+    # Delete current instance
+    echo "Deleting current spanner DB..."
+    kubectl delete -f environment/spanner.yaml
+    # regenerate the spanner spec file
+    echo "Regenerating spanner manifest file..."
+    jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_SPANNER_DATABASE -E GOOGLE_SPANNER_INSTANCE environment/spanner.j2 >  environment/spanner.yaml
+
+    # Setup Spanner and wait until it's ready as we need it to be up and
+    # running before the Operator is deployed so as not to miss any
+    # creation events in the operator (especially on the networking part)
+    # 
+    echo "####################################"
+    echo "Waiting for Spanner DB to come up..."
+    echo "####################################"
+
+    echo "Creating Spanner database ${GOOGLE_SPANNER_INSTANCE}..."
+    kubectl apply -f environment/spanner.yaml -l "kind=spanner-instance"
+    while [[ $(kubectl get spannerinstance $GOOGLE_SPANNER_INSTANCE -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}' 2>/dev/null) != "True" ]]; do
+        sleep 20
+        echo "sleeping for 20 secs..."
+    done
+    echo "Spanner instance ready !"
+
+    # Work around because the edition spec is not supported in the manifest file
+    # Same for backup schedule updated to None as backup creation make the DB deletion
+    # more complex (not needed in this PoC)
+    # (See https://b.corp.google.com/issues/372631209)
+    echo "Updating Spanner instance to Enterprise Edition"
+    gcloud spanner instances update $GOOGLE_SPANNER_INSTANCE --edition=ENTERPRISE &
+    job_id=$!
+
+    # Sometimes changing to Enterprise edition hangs.. but it actually does the job
+    # so simply kill after a timeout
+    timeout 2m sh -c "while kill -0 $job_id 2>/dev/null; do sleep 1; done"
+    if [ $? -eq 124 ]; then
+        kill -TERM $job_id
+        # Do nothing for now
+    fi
+
+    echo "Updating Spanner instance to no backup schedule"
+    gcloud spanner instances update $GOOGLE_SPANNER_INSTANCE --default-backup-schedule-type=NONE
+
+    echo "Creating Spanner database ${GOOGLE_SPANNER_DATABASE}..."
+    kubectl apply -f environment/spanner.yaml -l "kind=spanner-database"
+    while [[ $(kubectl get spannerdatabase $GOOGLE_SPANNER_DATABASE -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}' 2>/dev/null) != "True" ]]; do
+        sleep 20
+        echo "sleeping for 20 secs..."
+    done
+    echo "Spanner database ready !"
+}
+
+
+#################################################
 # Build the Virtual Network Function image      #
 #################################################
 Build()
@@ -725,78 +785,22 @@ Start()
     gcloud beta container fleet config-management enable --project=$GOOGLE_PROJECT
     gcloud beta container fleet config-management apply --membership=networkautomation --config=./environment/configsync.yaml --project=$GOOGLE_PROJECT
 
-    # Setup Spanner and wait until it's ready as we need it to be up and
-    # running before the Operator is deployed so as not to miss any
-    # creation events in the operator (especially on the networking part)
-    # 
-    echo "####################################"
-    echo "Waiting for Spanner DB to come up..."
-    echo "####################################"
-    
-    echo "Creating Spanner database ${GOOGLE_SPANNER_INSTANCE}..."
-    kubectl apply -f environment/spanner.yaml -l "kind=spanner-instance"
-    while [[ $(kubectl get spannerinstance $GOOGLE_SPANNER_INSTANCE -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}' 2>/dev/null) != "True" ]]; do
-        sleep 20
-        echo "sleeping for 20 secs..."
-    done
-    echo "Spanner instance ready !"
+    DeploySpanner
 
-    # Work around because the edition spec is not supported in the manifest file
-    # Same for backup schedule updated to None as backup creation make the DB deletion
-    # more complex (not needed in this PoC)
-    # (See https://b.corp.google.com/issues/372631209)
-    echo "Updating Spanner instance to Enterprise Edition"
-    gcloud spanner instances update $GOOGLE_SPANNER_INSTANCE --edition=ENTERPRISE &
-    job_id=$!
+    DeployOperator
 
-    # Sometimes changing to Enterprise edition hangs.. but it actually does the job
-    # so simply kill after a timeout
-    timeout 2m sh -c "while kill -0 $job_id 2>/dev/null; do sleep 1; done"
-    if [ $? -eq 124 ]; then
-        kill -TERM $job_id
-        # Do nothing for now
-    fi
 
-    echo "Updating Spanner instance to no backup schedule"
-    gcloud spanner instances update $GOOGLE_SPANNER_INSTANCE --default-backup-schedule-type=NONE
-
-    echo "Creating Spanner database ${GOOGLE_SPANNER_DATABASE}..."
-    kubectl apply -f environment/spanner.yaml -l "kind=spanner-database"
-    while [[ $(kubectl get spannerdatabase $GOOGLE_SPANNER_DATABASE -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}' 2>/dev/null) != "True" ]]; do
-        sleep 20
-        echo "sleeping for 20 secs..."
-    done
-    echo "Spanner database ready !"
-
-    echo "#####################################"
-    echo "Deploy the Operator, networks and git"
-    echo "#####################################"
-    Operator
-
-    echo "#####################################"
-    echo "Create Operator Log Sink and capture"
-    echo "#####################################"
-    LogCapture
+    # I tried hard to create the Log Sink to BQ or PubSub with Config Connector
+    # to no avail. I couldn't fix the dataset or topic access permission problem :-(
+    # That's why it is created from the shell script
+    # kubectl apply -f environment/logsink.yaml
+    DeployLogCapture
 
     # start the network and git repos
     kubectl apply -f environment/networks.yaml
     # kubectl apply -f environment/bigquery.yaml
 
-    # I tried hard to create the Log Sink to BQ or PubSub with Config Connector
-    # to no avail. I couldn't fix the dataset or topic access permission problem :-(
-    # That's why it is created by hand above
-    # kubectl apply -f environment/logsink.yaml
-    kubectl apply -f environment/git.yaml
-
-    # Say how to access the gitea server
-    while [[ $(kubectl get gitea gitea -o 'jsonpath={..status.create_gitea.status}' 2>/dev/null) != "Running" ]]; do
-        sleep 60
-        echo "waiting for Gitea to be ready, sleeping for 60 secs..."
-    done
-    gitea_host=$(kubectl get gitea gitea -o 'jsonpath={..status.create_gitea.external_ip_address}')
-    echo -e "\nGitea server is available at:\n\thttps://$gitea_host:3000/explore/repos\n"
-    echo "You can clone the git repos as follows (username/password = ${WEBAPPS_LOGIN}/${WEBAPPS_PWD})"
-    echo "  git clone https://$gitea_host:3000/networkagent/network -c http.sslVerify=false"
+    DeployGit
 }
 
 ############################################################
@@ -954,8 +958,16 @@ Kill()
 ############################################################
 # Build and deploy the operator                            #
 ############################################################
-Operator()
+DeployOperator()
 {
+
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO -E WEBAPPS_LOGIN \
+          -E WEBAPPS_PWD -E NETWORK_OPERATOR -E GIT_OPERATOR -E GOOGLE_ORG_NAME operator/deployment.j2 > operator/deployment.yaml
+
+    echo "#####################################"
+    echo "Deploy the Operator, networks and git"
+    echo "#####################################"
+
     if ! test -f operator/deployment.yaml; then
         echo "No deployment.yaml found - you can generate by running ./install.sh -c"
         exit 1
@@ -989,10 +1001,40 @@ Operator()
 }
 
 ############################################################
+# Build and deploy the gitea server and git repo           #
+############################################################
+DeployGit()
+{
+    # Delete current instance
+    echo "Deleting current spanner DB..."
+    kubectl delete -f environment/git.yaml
+
+    echo "#####################################"
+    echo "Create The gitea server and git repo"
+    echo "#####################################"
+    kubectl apply -f environment/git.yaml
+    # Wit fir the gitea server to be up and running
+    while [[ $(kubectl get gitea gitea -o 'jsonpath={..status.create_gitea.status}' 2>/dev/null) != "Running" ]]; do
+        sleep 60
+        echo "waiting for Gitea to be ready, sleeping for 60 secs..."
+    done
+
+    # Say how to access the gitea server
+    gitea_host=$(kubectl get gitea gitea -o 'jsonpath={..status.create_gitea.external_ip_address}')
+    echo -e "\nGitea server is available at:\n\thttps://$gitea_host:3000/explore/repos\n"
+    echo "You can clone the git repos as follows (username/password = ${WEBAPPS_LOGIN}/${WEBAPPS_PWD})"
+    echo "  git clone https://$gitea_host:3000/networkagent/network -c http.sslVerify=false"
+}
+
+############################################################
 # Build and deploy the log capture                         #
 ############################################################
-LogCapture()
+DeployLogCapture()
 {
+    echo "#####################################"
+    echo "Create Operator Log Sink and capture"
+    echo "#####################################"
+
     # Create a  network log sink to bigquery and collect
     # logs from the network operator
     #
@@ -1406,6 +1448,8 @@ Networkagent()
     # deploy the resolver agent
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"resolver"* ]]; then
         agent_processed=true
+        SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
+        ENGINEER_URL=$(gcloud run services describe engineeragent --region=$GOOGLE_REGION --format="value(status.url)")
         cd networkagents/resolver
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/resolveragent:latest"
         if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
@@ -1424,12 +1468,15 @@ Networkagent()
         --region $GOOGLE_REGION \
         --service-account $GOOGLE_SERVICE_ACCOUNT \
         --min 1 \
-        --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
-        --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
-        --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
-        --update-env-vars TOOLS_URL=$TOOLS_URL \
-        --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
+        --update-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_PROJECT \
+        --update-env-vars GOOGLE_CLOUD_LOCATION=$GOOGLE_REGION \
+        --update-env-vars GOOGLE_GENAI_USE_VERTEXAI=1 \
         --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
+        --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
+        --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
+        --update-env-vars SUPERVISOR_URL=$SUPERVISOR_URL \
+        --update-env-vars ENGINEER_URL=$ENGINEER_URL \
+        --update-env-vars TOOLS_URL=$TOOLS_URL/sse \
         --allow-unauthenticated 
         cd ../..
     fi
@@ -1667,15 +1714,22 @@ Help()
    # Display Help
    echo "Network Agent environment manager."
    echo
-   echo "Syntax: install.sh [-c|-s|-b|-o|-l|-f|-r|-n|-k|-d|-g|-i|-w|-all] [-y|-N]"
-   echo "options:"
-   echo "  -all   install everything (comprehensive setup: create env if needed, build image if needed, start runtime, deploy all agents)"
+   echo "Syntax: install.sh [-c|-s|-b|-o|-l|-f|-r|-n|-k|-d|-g|-i|-w|--all|--deploy] [-y|-N]"
+   echo 
+   echo "long options:"
+   echo "-------------"
+   echo "  --all  install everything (comprehensive setup: create env if needed, build image if needed, start runtime, deploy all agents)"
    echo "         can be combined with -y or -N flags (e.g., ./install.sh -all -y)"
+   echo "  --deploy component1 component2"
+   echo "         (re)deploy specific components (valid components : spanner, operator, logcapture, git)"
+   echo 
+   echo "short options:"
+   echo "--------------"
    echo "  -c     create network agent environment (keys, manifests,..)"
    echo "  -s     build and start network agent runtime (incl. the operator)"
    echo "  -b     build the Virtual Network Function image with Free5GC, UERANSIM, Docker, and Wireguard"
-   echo "  -o     build and deploy the network operator"
-   echo "  -l     build and deploy the logs capture function"
+   echo "  -o     build and deploy the network operator (same as --deploy operator)"
+   echo "  -l     build and deploy the logs capture function (same as --deploy logcapture)"
    echo "  -f     build and deploy the fault capture and trigger service"
    echo "  -n     build and deploy the network dashboard and network agents"
    echo "         can be followed by a comma-separated list of agent names to (re)deploy selectively"
@@ -1688,14 +1742,13 @@ Help()
    echo "  -w     wipe out the entire autonomous network agent demo resources (ptp, mesh, uetest,...)"
    echo "  -y     answer 'yes' to all questions (no ask for confirmation)"
    echo "  -N     answer 'no' to all questions (no ask for confirmation)"
-
    echo 
    echo "Some typical use cases:"
-   echo " - To install everything from scratch: ./install.sh -all"
-   echo " - To install everything from scratch without prompts: ./install.sh -all -y"
-   echo " - To install everything from scratch, skipping rebuilds: ./install.sh -all -N"
+   echo " - To install everything from scratch: ./install.sh --all"
+   echo " - To install everything from scratch without prompts: ./install.sh --all -y"
+   echo " - To install everything from scratch, skipping rebuilds: ./install.sh --all -N"
    echo " - To create and run a network agent environment including the operator: ./install.sh -c; ./install.sh -s"
-   echo " - To redeploy the operator alone : ./install.sh -o"
+   echo " - To redeploy the operator alone : ./install.sh -o (or --deploy operator)"
    echo " - To (re)deploy the network agent Web UI alone : ./install.sh -n"
    echo " - To regenerate the network agent runtime with the same environment setup: ./install.sh -k; ./install.sh -s"
    echo " - To recreate a complete environment and runtime from scratch: ./install.sh -k; ./install.sh -d; ./install.sh -c; ./install.sh -s"
@@ -1712,7 +1765,7 @@ NO_FLAG="n"
 func_calls=""
 
 # Handle long options first
-if [[ "$1" == "-all" ]]; then
+if [[ "$1" == "--all" ]]; then
     func_calls="CheckGCPEnv SetDemoEnv InstallAll"
     shift # Remove -all from arguments
     
@@ -1728,7 +1781,38 @@ if [[ "$1" == "-all" ]]; then
                 shift
                 ;;
             *)
-                echo "Error: Invalid option '$1' with -all"
+                echo "Error: Invalid option '$1' with --all"
+                Help
+                exit 1
+                ;;
+        esac
+    done
+fi
+
+if [[ "$1" == "--deploy" ]]; then
+    func_calls="CheckGCPEnv SetDemoEnv"
+    shift
+    # Process remaining arguments for -y or -N flags
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            spanner)
+                func_calls="${func_calls} DeploySpanner"
+                shift
+                ;;
+            operator)
+                func_calls="${func_calls} DeployOperator"
+                shift
+                ;;
+            logcapture)
+                func_calls="${func_calls} DeployLogCapture"
+                shift
+                ;;
+            git)
+                func_calls="${func_calls} DeployGit"
+                shift
+                ;;
+            *)
+                echo "Error: Invalid component '$1' with --deploy"
                 Help
                 exit 1
                 ;;
@@ -1753,10 +1837,10 @@ if [[ -z $func_calls ]]; then
             func_calls="SetDemoEnv Build"
             ;;
           o) 
-            func_calls="CheckGCPEnv SetDemoEnv Operator"
+            func_calls="CheckGCPEnv SetDemoEnv DeployOperator"
             ;;
           l) 
-            func_calls="CheckGCPEnv SetDemoEnv LogCapture"
+            func_calls="CheckGCPEnv SetDemoEnv DeployLogCapture"
             ;;
           f) 
             func_calls="CheckGCPEnv SetDemoEnv FaultCapture"

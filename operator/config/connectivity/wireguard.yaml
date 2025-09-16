@@ -17,7 +17,7 @@ kind: CustomResourceDefinition
 metadata:
   name: wireguardappliances.google.dev
   labels:
-    type: connectivityresource
+    type: networkservices
 spec:
   scope: Namespaced
   group: google.dev
@@ -34,6 +34,8 @@ spec:
       schema:
         openAPIV3Schema:
           type: object
+          description: |
+            The wireguard appliance network service provides vpn endpoint for a mesh or ptp network service
           properties:
             spec:
               type: object

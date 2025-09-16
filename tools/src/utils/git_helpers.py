@@ -26,7 +26,7 @@ USER = os.environ['WEBAPPS_LOGIN']
 PWD = os.environ['WEBAPPS_PWD']
 
 DESIGN_REPO = 'networkdesign'
-INCIDENT_REPO = 'incident'
+INCIDENT_REPO = 'incidents'
 SERVICE_REPO = 'network'
 MASTER_BRANCH = 'master'
 

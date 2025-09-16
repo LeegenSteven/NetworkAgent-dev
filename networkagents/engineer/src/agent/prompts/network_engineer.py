@@ -63,10 +63,10 @@ Based on the description of deployed network services and network locations abov
 and locations already deployed and add missing network services and locations to complete the objective. Reuse existing network locations unless 
 there are some network service deployments rules prohibiting this, if so then you should create new network locations. 
 
-Your planned tasks should include enough detail to satisfy tools input schema for createService/deleteService or createLocation/deleteLocation, e.g. 
-- Include the name of the network service or connectivity service to be created or deleted
+Your planned tasks should include enough detail to satisfy tools input schema for createService/deleteService/reinstallFailedService or createLocation/deleteLocation, e.g. 
+- Include the name of the network service or connectivity service to be created, deleted or reinstalled
 - Provide detailed configuration required by the network service or connectivity service kubernetes spec, as per the CRDs above.
-- All values required to create or delete a network service or connectivity service kubernetes spec must be provided.
+- All values required to create, delete or reinstall a network service or connectivity service kubernetes spec must be provided.
 - There is no need to specify a namespace as all resources live in a default namespace called "network"
 
 Do not add any superfluous steps or steps that do not result in the execution of tools that create network service or network locations.  
@@ -134,9 +134,27 @@ Planned Steps:
 
 * Create a UserPlaneFunction network service named upf with ingress core and egress internet
 
+
+Example for requesting a network service to be reinstalled
+-----------------------------------------------------------
+Deployed Network Locations: 
+* internet with cidr "172.168.0.0/16"
+* core with cidr "10.0.50.0/24"
+
+Deployed Network Services: 
+* ptp vpn with networks internet and core
+  * child WireguardAppliance called internet-vpn123
+  * child WireguardAppliance called core-vpn123
+
+User Objective: wireguard network service core-vpn123 is not working reinstall it
+
+Planned Steps: 
+
+* Update WireguardAppliance named core-vpn123 status as Failed
+
+
+
 Current time: {current_time}
-
-
 """
 
 ######################################################################
@@ -149,6 +167,7 @@ execute_step_prompt="""
     You can use your tools to 
     - create new network services
     - create new network locations
+    - reinstall existing network services by updating their status to Failed
     - delete existing network services
     - delete existing network locations
 

@@ -12,17 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from google.adk.agents import LlmAgent
-import logging
+details_prompt="""
+You are a network incident formatting agent. Your job is to format the incident information collected so far into a structured set of computeinstances to be further investigated
 
-logger = logging.getLogger(__name__)
+You're job is to convert the incident analysis information below into a structured JSON object
 
-###################################################
-# Verify Agent
-###################################################
-verify_agent = LlmAgent(
-    name="VerifyAgent",
-    model="gemini-2.0-flash",
-    instruction="""You are an expert network operations dude.""",
-    description="Identifies the root cause to a network incident.",
-)
+---
+{initial_information}
+---
+
+"""

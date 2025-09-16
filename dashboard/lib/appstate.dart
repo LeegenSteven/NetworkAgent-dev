@@ -107,6 +107,13 @@ class Appstate extends ChangeNotifier {
         print('Error initializing remote agents: $e');
       }
       
+      // Initialize incidents from REST API on startup
+      try {
+        await _fetchIncidents();
+      } catch (e) {
+        print('Error initializing incidents on startup: $e');
+      }
+      
       notifyListeners();
     });
     
@@ -701,34 +708,139 @@ class Appstate extends ChangeNotifier {
       if (notification.state == 'input_required') {
         _pushNotifications.add(notification);
         notifyListeners();
-      } else if (notification.state == 'new_incident') {
-        // Immediately notify listeners to trigger UI updates for the notification icon
-        notifyListeners();
-        
-        // Fetch updated incidents from the supervisor REST API
-        _fetchIncidents();
+      } else if (notification.state == 'incident_update') {
+        // Handle incident progress updates (includes new incident creation)
+        _handleIncidentProgressUpdate(notification);
       } else {
-        // For any other notification type, refresh incidents to ensure consistency
-        _fetchIncidents();
+        // For any other notification type, just notify listeners
+        notifyListeners();
       }
     } catch (e) {
       print('Error adding push notification: $e');
     }
   }
   
+  // Handle incident progress updates from resolver agent (includes new incident creation)
+  void _handleIncidentProgressUpdate(PushNotification notification) {
+    try {
+      if (notification.inputData == null) {
+        print('No input data in incident update notification');
+        return;
+      }
+      
+      final inputData = notification.inputData!;
+      final incidentData = inputData['incident_data'];
+      
+      if (incidentData == null) {
+        print('No incident_data in notification input_data');
+        return;
+      }
+      
+      // Extract the incident ID from the notification
+      final incidentId = notification.taskId ?? notification.contextId;
+      if (incidentId == null) {
+        print('No incident ID found in notification');
+        return;
+      }
+      
+      // Extract progress data from the notification with consistent field mapping
+      final strategy = inputData['strategy'];
+      final rootCause = inputData['root_cause']; // Handle both field names
+      final resolution = inputData['resolution'];
+      
+      print('Socket notification incident update for $incidentId:');
+      print('  - Has strategy: ${strategy != null}');
+      print('  - Has rootCause: ${rootCause != null}');
+      print('  - Has resolution: ${resolution != null}');
+      
+      // Find the existing incident
+      final incidentIndex = _incidents.indexWhere((incident) => 
+        incident.id == incidentId || incident.agentTaskId == incidentId);
+      
+      if (incidentIndex == -1) {
+        // Create new incident from notification data
+        print('Creating new incident from socket notification: $incidentId');
+        
+        final incident = incidentData['incident'];
+        if (incident == null) {
+          print('No incident object in incident_data');
+          return;
+        }
+        
+        // Extract timestamp from incident data if available, otherwise use current time
+        DateTime recordedTimestamp = DateTime.now();
+        if (incident['recordedTimestamp'] != null) {
+          try {
+            if (incident['recordedTimestamp'] is int) {
+              recordedTimestamp = DateTime.fromMillisecondsSinceEpoch(incident['recordedTimestamp']);
+            } else if (incident['recordedTimestamp'] is String) {
+              recordedTimestamp = DateTime.parse(incident['recordedTimestamp']);
+            }
+          } catch (e) {
+            print('Error parsing recordedTimestamp from socket notification: $e');
+          }
+        }
+        
+        // Create new incident from the notification data with consistent field mapping
+        final newIncident = Incident(
+          id: incidentId,
+          recordedTimestamp: recordedTimestamp,
+          agentTaskId: incidentId,
+          issue: Map<String, dynamic>.from(incident),
+          strategy: strategy != null ? Map<String, dynamic>.from(strategy) : null,
+          rootCause: rootCause != null ? rootCause.toString() : null,
+          resolution: resolution != null ? resolution.toString() : null,
+          lastProgressUpdate: DateTime.now(),
+        );
+        
+        _incidents.add(newIncident);
+        print('Created new incident $incidentId from socket with progress: strategy=${strategy != null}, rootCause=${rootCause != null}, resolution=${resolution != null}');
+        print('  - Progress stage: ${newIncident.progressStage}');
+        print('  - Progress percentage: ${newIncident.progressPercentage}');
+      } else {
+        // Update existing incident with progress information
+        final existingIncident = _incidents[incidentIndex];
+        final updatedIncident = existingIncident.copyWith(
+          strategy: strategy != null ? Map<String, dynamic>.from(strategy) : null,
+          rootCause: rootCause != null ? rootCause.toString() : null,
+          resolution: resolution != null ? resolution.toString() : null,
+          lastProgressUpdate: DateTime.now(),
+        );
+        
+        _incidents[incidentIndex] = updatedIncident;
+        print('Updated existing incident $incidentId from socket with progress: strategy=${strategy != null}, rootCause=${rootCause != null}, resolution=${resolution != null}');
+        print('  - Progress stage: ${updatedIncident.progressStage}');
+        print('  - Progress percentage: ${updatedIncident.progressPercentage}');
+      }
+      
+      // Notify listeners to update the UI
+      notifyListeners();
+      
+    } catch (e) {
+      print('Error handling incident progress update: $e');
+      // Log the error but don't fall back to REST API - keep the socket-based approach
+      print('Notification data: ${notification.toJson()}');
+    }
+  }
+  
   // Fetch incidents from the supervisor REST API
   Future<void> _fetchIncidents() async {
     try {
+      print('Fetching running incidents from supervisor REST API...');
       _isLoadingIncidents = true;
       notifyListeners();
       
+      // Fetch all open incidents from the API
       final incidents = await _apiService.getAllOpenIncidents();
+      
+      // Update the incidents list
       _incidents.clear();
       _incidents.addAll(incidents);
-      print('Fetched ${incidents.length} open incidents');
       
+      print('Successfully fetched ${incidents.length} running incidents');
       _isLoadingIncidents = false;
       notifyListeners();
+      
     } catch (e) {
       print('Error fetching incidents: $e');
       _isLoadingIncidents = false;
@@ -738,6 +850,7 @@ class Appstate extends ChangeNotifier {
   
   // Manually refresh incidents
   Future<void> refreshIncidents() async {
+    print('Refreshing incidents from supervisor REST API...');
     await _fetchIncidents();
   }
   

@@ -274,6 +274,7 @@ class RestEndpoint:
         notification states:
             'input_required': An agent needs information from the user to continue their task
             'new_incident': A fault has been sent to the resolver agent to be investigated
+            'incident_update: There is a progress update from the resolver agent on a fault
         
         Notification request has the following structure:
         {

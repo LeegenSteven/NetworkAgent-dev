@@ -86,7 +86,7 @@ async def stop_test(namespace, vm_name):
 
     ip_address = await get_ip(namespace, vm_name)
     if ip_address is None:
-        raise kopf.TemporaryError("waiting for ip address", delay=15)
+        raise kopf.TemporaryError("waiting for ip address of VM #{vm_name}", delay=15)
 
     # run ansible playbook to install prometheus on the VM
     extravars = {

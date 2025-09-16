@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from google.adk.agents import SequentialAgent
+from google.adk.agents import SequentialAgent, LoopAgent
 import logging
-from .analyseincident import analyse_incident_agent
-from .incidentdetails import incident_details_agent
+from .analyse import analyse_incident_agent
+from .details import incident_details_agent
 
 logger = logging.getLogger(__name__)
 
@@ -26,4 +26,5 @@ incident_investigator_agent = SequentialAgent(
     name="IncidentInvestigatorAgent",
     sub_agents=[analyse_incident_agent, incident_details_agent],
     description="Collect information about an incident.",
+    # max_iterations=3
 )

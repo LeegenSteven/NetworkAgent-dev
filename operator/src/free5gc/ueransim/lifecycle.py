@@ -16,11 +16,8 @@ import logging
 import kopf
 from utils.compute import *
 from free5gc.ueransim.lifecycle_tasks import *
-from utils.k8s import getClusterDetails
 from utils.resources import get_boolean_label
-from free5gc.utils.k8s import get_api_client
 from graph.lifecycle_tasks import update_network_node
-
 
 logger = logging.getLogger(__name__)
 
@@ -31,30 +28,8 @@ logger = logging.getLogger(__name__)
 async def ueransim(spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Create ueransim {name} with spec: {spec}")
 
-  # get the cell id
-  cellid = spec.get('cellid')
-  if cellid is None:
-    raise kopf.PermanentError("no cell id provided. cant continue")
-
-  # get the VPC name to bind UERANSIM to
-  network_interface = spec.get('interface')
-  logger.debug("Network %s found", network_interface)
-  if network_interface is None:
-    raise kopf.PermanentError("No interface found")
-
-  controlplane_spec = spec.get('controlplane')
-  if controlplane_spec is None:
-    raise kopf.PermanentError("No control plane details found")
-
-  ue_spec = spec.get('ue')
-  if ue_spec is None:
-    raise kopf.PermanentError("No ue details found")
-
-  # get the controlplane instance named and grab its ip addresses and port
-  controlplaneName = controlplane_spec.get('name')
-  logger.debug("AMF %s found", controlplaneName)
-  if controlplaneName is None or controlplaneName is None:
-    raise kopf.PermanentError("controlplane name needs to be specified")  
+  # Validate spec and extract parameters
+  validated_params = validate_and_extract_ueransim_params(spec)
   
   # get monitor and graph labels from the metadata / labels.
   monitor = get_boolean_label(meta, 'monitor')
@@ -66,19 +41,15 @@ async def ueransim(spec, meta, status, namespace, name, logger, **kwargs):
                           name, # parent name
                           name, # vm name
                           None, # external IP
-                          [network_interface], # set this to the target network name to bind to
+                          [validated_params['network_interface']], # set this to the target network name to bind to
                           os.getenv("GOOGLE_PROJECT"),
                           os.getenv("GOOGLE_REGION"),
                           os.getenv("GOOGLE_ZONE"), 
                           monitor=monitor, # set to false so this VM is not scraped by prometheus
                           graph=graph)
 
-    controlplaneAddresses = await get_controlplane_addresses(namespace, controlplaneName)
-    if controlplaneAddresses is None:
-      raise kopf.TemporaryError("Waiting for control plane...", 20)
-
-    # install UERANSIM to VM 
-    await run_install(namespace, name, controlplaneAddresses['dataAddress'], controlplaneAddresses['amfPort'], controlplaneAddresses['webuiAddress'], cellid, ue_spec)
+    # Install UERANSIM using common installation function
+    await setup_ueransim_installation(namespace, name, validated_params)
 
     return {
         "status":"Running", 
@@ -96,3 +67,36 @@ async def ueransim_update(body, spec, meta, status, namespace, name, logger, **k
   logger.debug(f"Update ueransim {name} with spec: {spec} and status: {status['ueransim']['status']}")
   kind = body.get('kind')
   await update_network_node(body, spec, namespace, name, kind, meta['uid'])
+
+##########################################
+# Watch for Failed UERANSIM
+##########################################
+@kopf.on.field('google.dev', 'v1', 'ueransim', field='status.ueransim.status')
+async def handle_ueransim_status_change(old, new, spec, status, namespace, name, body, **kwargs):
+    """
+    Handler that watches for status field changes and triggers re-installation
+    when status changes from Running to Failed
+    """
+    logger.info(f"UERANSIM status change detected for {name}: {old} -> {new}")
+    
+    # Check if this is a Running -> Failed transition
+    if old == "Running" and new == "Failed":
+        logger.warning(f"Detected failure in UERANSIM {name}, triggering re-installation...")
+        
+        try:
+            # Update status to indicate re-installation is starting
+            await update_ueransim_status(namespace, name, "Reinstalling", "Re-installation triggered due to failure")
+            
+            # Trigger the installation process
+            await trigger_ueransim_reinstallation(spec, namespace, name, body)
+            
+            # Update status to Running after successful installation
+            await update_ueransim_status(namespace, name, "Running", "Re-installation completed successfully")
+            
+        except Exception as e:
+            logger.error(f"Re-installation failed for UERANSIM {name}: {e}")
+            await update_ueransim_status(namespace, name, "Failed", f"Re-installation failed: {str(e)}")
+            raise kopf.TemporaryError(f"Re-installation failed: {e}", delay=60)
+
+
+

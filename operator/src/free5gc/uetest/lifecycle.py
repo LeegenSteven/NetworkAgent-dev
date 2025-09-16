@@ -29,12 +29,19 @@ logger = logging.getLogger(__name__)
 async def uetest(spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Create ue test {name} with spec: {spec}")
 
-  # get the name of the UERanSim VM
+  # get the name of the UERanSim VM and check its existence
   ueransim = spec.get('ueransim')
   if ueransim is None:
-    raise kopf.PermanentError("No ueransim found")
+    raise kopf.PermanentError("ueransim not found in uetest spec")
+  
+  vmname = ueransim.get('name')
+  if vmname is None:
+    raise kopf.PermanentError("ueransim name not found in uetest #{name} spec")
+  
+  if get_compute(namespace, vmname) is None:
+    raise kopf.PermanentError("ueransim name #{vmname} not found")
 
-  imsi = await getIMSI(namespace, ueransim['name'])
+  imsi = await getIMSI(namespace, vmname)
   if imsi is None:
     raise kopf.PermanentError("No imsi found")
   
@@ -61,17 +68,23 @@ async def uetest(spec, meta, status, namespace, name, logger, **kwargs):
 async def uetest(spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Delete ue test {name} with spec: {spec}")
 
-  # get the name of the UERanSim VM
-  vmname = spec.get('ueransim')
+  # get the name of the UERanSim VM and check its existence
+  ueransim = spec.get('ueransim')
+  if ueransim is None:
+    raise kopf.PermanentError("ueransim not found in uetest spec")
+  
+  vmname = ueransim.get('name')
   if vmname is None:
-    raise kopf.PermanentError("No ueransim found")
+    raise kopf.PermanentError("ueransim name not found in uetest #{name} spec")
+  
+  if get_compute(namespace, vmname) is None:
+    raise kopf.PermanentError("ueransim name #{vmname} not found")
 
-  await stop_test(namespace, vmname['name'])
+  await stop_test(namespace, vmname)
 
   return {
       "status":"stopped",
   }
-
 
 ##########################################
 # Catch updates on status

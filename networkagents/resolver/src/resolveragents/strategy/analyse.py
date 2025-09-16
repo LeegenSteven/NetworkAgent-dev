@@ -12,44 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 from google.adk.agents import LlmAgent
-from google.adk.agents.callback_context import CallbackContext
-from google.adk.models import LlmResponse, LlmRequest
 from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import SseConnectionParams
-from typing import Optional
-from google.genai import types 
 import logging
+import os
+from .analyse_prompt import analyse_prompt
 
 logger = logging.getLogger(__name__)
 
 
 ###################################################
-# RCA before model callback
+# Incident Details Agent
 ###################################################
-def root_cause_callback(
-    callback_context: CallbackContext, llm_request: LlmRequest
-) -> Optional[LlmResponse]:
-    agent_name = callback_context.agent_name
-    logger.info(f"[Callback] Before model call for agent: {agent_name}")
-
-###################################################
-# RCA Agent
-###################################################
-troubleshoot_agent = LlmAgent(
-    name="TroubleShootAgent",
-    model="gemini-2.0-flash",
-    instruction="""You are an expert network operations dude.""",
-    description="Identifies the root cause to a network incident.",
-    before_model_callback=root_cause_callback,
+analyse_incident_agent = LlmAgent(
+    name="AnalyseIncidentAgent",
+    model="gemini-2.5-flash",
+    instruction=analyse_prompt,
+    description="Gathers incident information about the affected network services, locations and resources.",
     tools=[
         MCPToolset(
             connection_params=SseConnectionParams(
                 url=os.getenv("TOOLS_URL")
             ),
-            tool_filter=['fetch_all_metrics', 'getNodePath']
+            tool_filter=['get_node_details', 'get_connected_nodes', 'get_node_path','get_nodes_networking_by_kind']
         )
     ],
-    output_key="root_cause",
+    output_key='initial_information'
 )

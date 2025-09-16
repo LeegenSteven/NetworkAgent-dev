@@ -92,17 +92,17 @@ class HostAgent:
         # dict with sid->sio for sending messages back to dashboard socket session
         self.sio_sessions = {}
 
+        self.host_agent = self.create_agent()
+        # list of loaded remote agents
+        self.agents = None
+
         self.runner = Runner(
             app_name=self.app_name,
-            agent=self.create_agent(),
+            agent=self.host_agent,
             artifact_service=self.artifact_service,
             session_service=self.session_service,
         )
 
-        self.host_agent = self.create_agent()
-
-        # list of loaded remote agents
-        self.agents = None
 
     async def load_remote_agents(self):
         """
@@ -167,7 +167,7 @@ class HostAgent:
             Gemini agent with list of remote agents and task to route
         """
         return Agent(
-            model='gemini-2.0-flash-001',
+            model='gemini-2.0-flash',
             name=self.app_name,
             instruction=self.root_instruction,
             description=(
@@ -407,7 +407,7 @@ class HostAgent:
             logger.info(payload)
 
             params = MessageSendParams(**payload)
-            request = SendMessageRequest(params=params)
+            request = SendMessageRequest(id=uuid4().hex, params=params)
 
             client = self.remote_agent_connections[agent_name]
             if not client:
@@ -570,7 +570,7 @@ class HostAgent:
         Remove any agent state and add a new conversation to in memory session
         """
         logger.info("Reset conversation")
-        self.session_service.delete_session(app_name=self.app_name, user_id="agent", session_id=HostAgent._session_id)
+        await self.session_service.delete_session(app_name=self.app_name, user_id="agent", session_id=HostAgent._session_id)
         await self.create_session()
 
     async def create_session(self):

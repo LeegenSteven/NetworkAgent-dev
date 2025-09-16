@@ -131,7 +131,7 @@ class TestAgent:
             )
 
             model = ChatVertexAI(
-                model_name="gemini-2.0-flash-001",
+                model_name="gemini-2.5-flash",
                 temperature=0,
                 credentials=self.credentials,
                 project=os.getenv("GOOGLE_PROJECT"),

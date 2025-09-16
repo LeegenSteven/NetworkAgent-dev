@@ -13,20 +13,43 @@
 # limitations under the License.
 
 from google.adk.agents import SequentialAgent
-
+from google.adk import Runner
+from google.adk.artifacts import InMemoryArtifactService
+from google.adk.sessions import InMemorySessionService
 import logging
-from .incident.agent import incident_investigator_agent
+from .strategy.agent import incident_investigator_agent
+from .troubleshoot.agent import troubleshoot_agent
+from .resolution.agent import resolution_agent
 
 logger = logging.getLogger(__name__)
 
+class IncidentAgent:
+    """
+    The incident agent.
+    """
 
-###################################################
-# Incident Agent Pipeline
-###################################################
-supervisor_agent = SequentialAgent(
-    name="IncidentSupervisorAgent",
-    sub_agents=[incident_investigator_agent],
-    description="Executes a sequence of expert agents to investigate a network incident.",
-)
+    # static agent instance
+    _instance = None
 
-root_agent = incident_investigator_agent
+    @classmethod
+    async def get_instance(cls):
+        if IncidentAgent._instance is None:
+            IncidentAgent._instance = cls()
+        return IncidentAgent._instance
+
+    def __init__(self):
+        self.session_service = InMemorySessionService()
+        self.artifact_service = InMemoryArtifactService()
+
+        self.root_agent = SequentialAgent(
+            name="IncidentSupervisorAgent",
+            sub_agents=[incident_investigator_agent, troubleshoot_agent, resolution_agent ],
+            description="A sequence of expert agents investigate a network incident.",
+        )
+
+        self.runner = Runner(
+            app_name="IncidentSupervisorAgent",
+            agent=self.root_agent,
+            artifact_service=self.artifact_service,
+            session_service=self.session_service,
+        )        

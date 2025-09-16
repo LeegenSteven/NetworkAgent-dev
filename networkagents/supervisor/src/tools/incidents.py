@@ -36,7 +36,7 @@ def fetch_all_open_incidents():
     Fetch all open incidents from the Spanner database.
     
     Returns:
-        list: List of incident dictionaries
+        list: List of incident dictionaries with proper field mapping for dashboard
     """
     logger.info("getting all open incidents")
     database = spanner_connect()
@@ -51,7 +51,8 @@ def fetch_all_open_incidents():
                     recordedTimestamp,
                     agentTaskId,
                     issue,
-                    cause,
+                    strategy,
+                    root_cause,
                     resolution,
                     resolvedTimestamp
                 FROM Incident 
@@ -66,24 +67,47 @@ def fetch_all_open_incidents():
                     if field_value is None:
                         return None
                     if isinstance(field_value, str):
-                        return json.loads(field_value)
+                        try:
+                            return json.loads(field_value)
+                        except json.JSONDecodeError:
+                            logger.warning(f"Failed to parse JSON field: {field_value}")
+                            return None
                     # If it's already a dict/object, return as-is
                     return field_value
                 
+                # Convert timestamps to milliseconds for Dart compatibility
+                def timestamp_to_millis(timestamp):
+                    if timestamp is None:
+                        return None
+                    if hasattr(timestamp, 'timestamp'):
+                        return int(timestamp.timestamp() * 1000)
+                    return timestamp
+                
                 incident = {
                     'id': row[0],
-                    'recordedTimestamp': row[1],
+                    'recordedTimestamp': timestamp_to_millis(row[1]),
                     'agentTaskId': row[2],
                     'issue': parse_json_field(row[3]) or {},
-                    'cause': parse_json_field(row[4]),
-                    'resolution': parse_json_field(row[5]),
-                    'resolvedTimestamp': row[6]
+                    'strategy': parse_json_field(row[4]),
+                    'rootCause': row[5],  # Keep as String to match Spanner String(MAX) type
+                    'resolution': row[6],  # Keep as String to match Spanner String(MAX) type
+                    'resolvedTimestamp': timestamp_to_millis(row[7]),
+                    # Add lastProgressUpdate field based on available data
+                    'lastProgressUpdate': timestamp_to_millis(row[1])  # Use recordedTimestamp as fallback
                 }
+                
+                # Log the incident data for debugging
+                logger.info(f"Fetched incident {incident['id']}:")
+                logger.info(f"  - Has strategy: {incident['strategy'] is not None}")
+                logger.info(f"  - Has rootCause: {incident['rootCause'] is not None}")
+                logger.info(f"  - Has resolution: {incident['resolution'] is not None}")
+                
                 incidents.append(incident)
                 
         except Exception as e:
             logger.error(f"Error fetching incidents: {e}")
-    logger.info(incidents)
+    
+    logger.info(f"Successfully fetched {len(incidents)} open incidents with complete data")
     return incidents
 
 def fetch_incident_by_id(incident_id):
@@ -106,7 +130,8 @@ def fetch_incident_by_id(incident_id):
                     recordedTimestamp,
                     agentTaskId,
                     issue,
-                    cause,
+                    strategy,
+                    root_cause,
                     resolution,
                     resolvedTimestamp
                 FROM Incident 
@@ -130,9 +155,10 @@ def fetch_incident_by_id(incident_id):
                     'recordedTimestamp': row[1],
                     'agentTaskId': row[2],
                     'issue': parse_json_field(row[3]) or {},
-                    'cause': parse_json_field(row[4]),
-                    'resolution': parse_json_field(row[5]),
-                    'resolvedTimestamp': row[6]
+                    'strategy': parse_json_field(row[4]),
+                    'root_cause': parse_json_field(row[5]),
+                    'resolution': parse_json_field(row[6]),
+                    'resolvedTimestamp': row[7]
                 }
                 
         except Exception as e:

@@ -837,6 +837,7 @@ async def get_ip(namespace, name, networkname="mgmt"):
 
     # get server
     vm = await get_compute(namespace, name)
+    if vm is None: return None
     interfaces = vm.spec.get('networkInterface')
 
     ip_address=None

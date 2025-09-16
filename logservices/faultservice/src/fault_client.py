@@ -86,20 +86,25 @@ class FaultClient:
         return payload
 
     async def send_notification(self, taskid, incident_data):
-        logger.info("Sending notification to supervisor for user input")
+        logger.info("Sending notification to supervisor for incident update")
         supervisor_url = os.getenv("SUPERVISOR_URL", "http://127.0.0.1:9000")
         if not supervisor_url:
             logger.error("SUPERVISOR_URL environment variable not set")
         else:
             notification_url = f"{supervisor_url}/pushnotification"
-            # Create the payload
+            # Create the payload using incident_update state (replaces new_incident)
             payload = {
                 "name": "Fault Service",
-                "state": "new_incident",
+                "state": "incident_update",
                 "task_id": taskid,
                 "context_id": taskid,
-                "content": "New Fault Recorded",
-                "input_data": incident_data
+                "content": "Resolution progress update",
+                "input_data": {
+                    "incident_data": {"incident": incident_data},
+                    "strategy": None,  # No strategy yet in initial notification
+                    "root_case": None,  # No root cause yet in initial notification
+                    "resolution": None,  # No resolution yet in initial notification
+                }
             }
             
             try:
@@ -121,21 +126,24 @@ class FaultClient:
         Send incident data to the resolver agent.
         """
         # create a task id for the resolver agent
-        taskid = uuid4().hex
+        incidentid = uuid4().hex
+
+        # add the id to the incident payload so the agent can find in spanner
+        incident_data['jsonPayload']['incident_id']=incidentid
 
         logger.info("writing incident to db")
         db = await IncidentDB.get_instance()
-        await db.create_incident(incident_data['jsonPayload'], taskid)
+        await db.create_incident(incident_data['jsonPayload'], incidentid)
 
         # Create a message with data part - don't specify task_id to let A2A framework create a new task
-        send_payload = await self.create_send_message_payload(incident_data, context_id=taskid, task_id=None)
+        send_payload = await self.create_send_message_payload(incident_data['jsonPayload'], context_id=incidentid, task_id=None)
         params = MessageSendParams(**send_payload)
                 
         logger.info(f"Request parameters: {params}")
 
         try:
             # notify the supervisor notification endpoint that this incident has happened
-            await self.send_notification(taskid, incident_data['jsonPayload'])
+            await self.send_notification(incidentid, incident_data['jsonPayload'])
 
             logger.info("Sending non-streaming request with data part...")
             request = SendMessageRequest(id=uuid4().hex, params=params)

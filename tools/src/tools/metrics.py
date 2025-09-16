@@ -15,6 +15,7 @@
 import logging
 from utils.k8s import get_credentials
 import json
+from typing import Annotated, Dict, List
 from google.cloud import spanner
 import utils.globals as globals
 from mcp.types import ToolAnnotations
@@ -35,7 +36,20 @@ def spanner_connect():
 
 database = spanner_connect()
 
-def fetch_last_metrics_for_id(id):
+@globals.networkagent_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+def fetch_last_metrics_for_id(
+    id: Annotated[str, "id of the ComputeInstance"]
+  )->List[Dict]:
+  """
+  Lookup the most recent metrics for a given ComputeInstance
+  
+  Args:
+    id: string identifier for the ComputeInstance
+
+  Returns:
+    Dictionary of metrics representing the network statistics for all network interfaces in the ComputeInstance. Each
+    nic is a key in the dictionary
+  """
   with database.snapshot() as snapshot:
     try:
       sql = f"""SELECT id, kind, name, timestamp, metrics
@@ -50,6 +64,41 @@ def fetch_last_metrics_for_id(id):
         if id not in last_metrics: last_metrics[id] = []
         last_metrics[id].append({'kind': kind, 'name': name, 'timestamp': timestamp, 'metrics': metrics})
       
+      return last_metrics
+    except Exception as e:
+      logger.error("Metrics SQL error: {}".format(e))
+      return []  # Return empty list on error
+
+@globals.networkagent_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+def fetch_last_metrics_by_name(
+    name: Annotated[str, "name of the ComputeInstance"]
+  )->List[Dict]:
+  """
+  Lookup the most recent metrics for a given ComputeInstance
+  
+  Args:
+    name: name of the ComputeInstance
+
+  Returns:
+    Dictionary of metrics representing the network statistics for all network interfaces in the ComputeInstance. Each
+    nic is a key in the dictionary
+  """
+  logger.info(f"fetching last metrics for {name}")
+  with database.snapshot() as snapshot:
+    try:
+      sql = f"""SELECT id, kind, name, timestamp, metrics
+        FROM NetworkMetrics 
+        WHERE name = '{name}' ORDER BY timestamp DESC LIMIT 1"""
+      results = snapshot.execute_sql(sql)
+      
+      # Convert to a dcitionary with resource uid as key
+      last_metrics = {}
+      for row in results:
+        id, kind, name, timestamp, metrics = row
+        if id not in last_metrics: last_metrics[id] = []
+        last_metrics[id].append({'kind': kind, 'name': name, 'timestamp': timestamp, 'metrics': metrics})
+
+      logger.info(last_metrics)      
       return last_metrics
     except Exception as e:
       logger.error("Metrics SQL error: {}".format(e))
@@ -74,7 +123,6 @@ def fetch_all_metrics_for_id(id):
     except Exception as e:
       logger.error("Metrics SQL error: {}".format(e))
       return []  # Return empty list on error
-
 
 
 def fetch_all_last_metrics():
@@ -109,6 +157,7 @@ def fetch_all_metrics():
     List of JSON objects representing each metric
     
   """
+  logger.info("fetching all metrics")
   with database.snapshot() as snapshot:
     try:
       sql = """SELECT id, kind, name, timestamp, metrics
@@ -134,6 +183,7 @@ def clear_network_metrics():
   Returns:
     bool: True if the operation was successful, False otherwise.
   """
+  logger.info("clear all metrics")
   try:
     def delete_all(transaction):
       row_count = transaction.execute_update(

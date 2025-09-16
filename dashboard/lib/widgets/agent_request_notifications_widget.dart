@@ -91,32 +91,27 @@ class _AgentRequestNotificationsWidgetState extends State<AgentRequestNotificati
                                 ),
                               ),
                               
-                              // State chip with shadow
+                              // State chip
                               Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                                 decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(16),
+                                  color: _getStateColor(notification.state),
+                                  borderRadius: BorderRadius.circular(12),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.2),
-                                      blurRadius: 2,
-                                      offset: const Offset(0, 1),
+                                      color: _getStateColor(notification.state).withOpacity(0.3),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
                                     ),
                                   ],
                                 ),
-                                child: Chip(
-                                  label: Text(
-                                    notification.state,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  backgroundColor: _getStateColor(notification.state),
-                                  padding: EdgeInsets.zero,
-                                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                    side: BorderSide.none,
+                                child: Text(
+                                  notification.state.toUpperCase(),
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
                                   ),
                                 ),
                               ),

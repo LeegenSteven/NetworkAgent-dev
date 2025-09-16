@@ -55,14 +55,15 @@ def get_embedding(text, task_type, model):
 
 @globals.networkagent_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def query_log_entries(
-    request: Annotated[str, "the request from the user as typed in the network agent chat"],
+    request: Annotated[str, "natural language log query request"],
     severity_levels: Annotated[str, "one or more severity levels separated by a comma or a space to filter the logs. None if unspecified"],
     start_time: Annotated[str, "A start time string with the format YYYY-MM-DD HH:MM:SS that is suitable to create a python datetime object. None if unspecified"],
     end_time: Annotated[str, "An end time string with the format YYYY-MM-DD HH:MM:SS that is suitable to create a python datetime object. None if unspecified"]
   ) -> str:
   """
-  Fetch recent logs related to network and connectivity services
-
+  Fetch recent logs related to network and connectivity services. The query will semantically search all logs in a given time period, the logs include 
+  automation and software output running on a ComputeInstance. 
+  
   Returns:
     A list of JSON objects representing each log entry, example log is below:
     {

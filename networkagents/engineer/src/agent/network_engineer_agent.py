@@ -88,7 +88,7 @@ class NetworkEngineerAgent:
         self.network_service_definitions=None
 
         # limit the tools the agent can load
-        self.allowed_tools=["getNetworkDesign", "getLocations", "createLocation", "deleteLocation", "getServiceDefinitions", "getServices", "createService", "deleteService"]
+        self.allowed_tools=["getNetworkDesign", "getLocations", "createLocation", "deleteLocation", "getServiceDefinitions", "getServices", "createService", "deleteService",'reinstallFailedService']
         # loaded tools
         self.tools=[]
         self.tools_by_name = {tool.name: tool for tool in self.tools}
@@ -275,7 +275,7 @@ class NetworkEngineerAgent:
             last_message = state['context'][-1].content
             try:
                 model = ChatVertexAI(
-                    model_name="gemini-2.0-flash-001",
+                    model_name="gemini-2.5-flash",
                     temperature=0,
                     credentials=self.credentials,
                     project=os.getenv("GOOGLE_PROJECT"),
@@ -353,7 +353,7 @@ class NetworkEngineerAgent:
                     ]
                 )
                 model = ChatVertexAI(
-                    model_name="gemini-2.0-flash-001",
+                    model_name="gemini-2.5-flash",
                     temperature=0,
                     credentials=self.credentials,
                     project=os.getenv("GOOGLE_PROJECT"),
@@ -543,7 +543,7 @@ class NetworkEngineerAgent:
                     ("placeholder", "{messages}")
                 ]
             )
-            model = ChatVertexAI(model_name="gemini-2.0-flash-001",temperature=0,credentials=self.credentials,project=os.getenv("GOOGLE_PROJECT"),location=os.getenv("GOOGLE_REGION"))
+            model = ChatVertexAI(model_name="gemini-2.5-flash",temperature=0,credentials=self.credentials,project=os.getenv("GOOGLE_PROJECT"),location=os.getenv("GOOGLE_REGION"))
             runnable = prompt | model
 
             # if no objective was given for some reason, there will be no steps

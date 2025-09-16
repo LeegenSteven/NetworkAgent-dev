@@ -17,11 +17,20 @@ class Incident {
   /// Cause details as JSON (optional)
   final Map<String, dynamic>? cause;
   
-  /// Resolution details as JSON (optional)
-  final Map<String, dynamic>? resolution;
+  /// Resolution details as String (optional) - matches Spanner String(MAX) type
+  final String? resolution;
   
   /// Timestamp when the incident was resolved (optional)
   final DateTime? resolvedTimestamp;
+  
+  /// Investigation strategy details (optional)
+  final Map<String, dynamic>? strategy;
+  
+  /// Root cause analysis details as String (optional) - matches Spanner String(MAX) type
+  final String? rootCause;
+  
+  /// Last progress update timestamp
+  final DateTime? lastProgressUpdate;
 
   /// Creates a new incident
   const Incident({
@@ -32,6 +41,9 @@ class Incident {
     this.cause,
     this.resolution,
     this.resolvedTimestamp,
+    this.strategy,
+    this.rootCause,
+    this.lastProgressUpdate,
   });
 
   /// Creates a copy of this incident with the given fields replaced with new values
@@ -41,8 +53,11 @@ class Incident {
     String? agentTaskId,
     Map<String, dynamic>? issue,
     Map<String, dynamic>? cause,
-    Map<String, dynamic>? resolution,
+    String? resolution,
     DateTime? resolvedTimestamp,
+    Map<String, dynamic>? strategy,
+    String? rootCause,
+    DateTime? lastProgressUpdate,
   }) {
     return Incident(
       id: id ?? this.id,
@@ -52,6 +67,9 @@ class Incident {
       cause: cause ?? this.cause,
       resolution: resolution ?? this.resolution,
       resolvedTimestamp: resolvedTimestamp ?? this.resolvedTimestamp,
+      strategy: strategy ?? this.strategy,
+      rootCause: rootCause ?? this.rootCause,
+      lastProgressUpdate: lastProgressUpdate ?? this.lastProgressUpdate,
     );
   }
 
@@ -69,11 +87,16 @@ class Incident {
       cause: json['cause'] != null
           ? Map<String, dynamic>.from(json['cause'])
           : null,
-      resolution: json['resolution'] != null
-          ? Map<String, dynamic>.from(json['resolution'])
-          : null,
+      resolution: json['resolution'] as String?,
       resolvedTimestamp: json['resolvedTimestamp'] != null
           ? DateTime.fromMillisecondsSinceEpoch(json['resolvedTimestamp'])
+          : null,
+      strategy: json['strategy'] != null
+          ? Map<String, dynamic>.from(json['strategy'])
+          : null,
+      rootCause: json['rootCause'] as String?,
+      lastProgressUpdate: json['lastProgressUpdate'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(json['lastProgressUpdate'])
           : null,
     );
   }
@@ -88,18 +111,49 @@ class Incident {
       'cause': cause,
       'resolution': resolution,
       'resolvedTimestamp': resolvedTimestamp?.millisecondsSinceEpoch,
+      'strategy': strategy,
+      'rootCause': rootCause,
+      'lastProgressUpdate': lastProgressUpdate?.millisecondsSinceEpoch,
     };
   }
 
   // Helper getters to extract common fields from the issue JSON
   String get title => issue['node'] ?? issue['hostname'] ?? 'Unknown Node';
   String get description => issue['error'] ?? issue['error_text'] ?? issue['message'] ?? issue['description'] ?? 'No error details available';
-  String get state => resolution != null ? 'resolved' : 'open';
+  String get state {
+    if (resolution != null) return 'resolved';
+    if (rootCause != null) return 'analyzing';
+    if (strategy != null) return 'investigating';
+    return 'open';
+  }
   String get severity => issue['severity'] ?? 'medium';
   String? get affectedNode => issue['affected_node'];
   DateTime get createdAt => recordedTimestamp;
-  DateTime get updatedAt => resolvedTimestamp ?? recordedTimestamp;
+  DateTime get updatedAt => lastProgressUpdate ?? resolvedTimestamp ?? recordedTimestamp;
   String? get assignedAgent => issue['assigned_agent'];
+  
+  // Progress tracking getters
+  bool get hasStrategy => strategy != null;
+  bool get hasRootCause => rootCause != null;
+  bool get hasResolution => resolution != null;
+  
+  String? get strategyDescription => strategy?['description'] ?? strategy?['strategy'];
+  String? get rootCauseDescription => rootCause;
+  String? get resolutionDescription => resolution;
+  
+  double get progressPercentage {
+    if (hasResolution) return 1.0;
+    if (hasRootCause) return 0.75;
+    if (hasStrategy) return 0.5;
+    return 0.25;
+  }
+  
+  String get progressStage {
+    if (hasResolution) return 'Resolved';
+    if (hasRootCause) return 'Root Cause Identified';
+    if (hasStrategy) return 'Investigating';
+    return 'Initial Assessment';
+  }
 
   @override
   bool operator ==(Object other) {
@@ -110,7 +164,8 @@ class Incident {
         other.agentTaskId == agentTaskId &&
         mapEquals(other.issue, issue) &&
         mapEquals(other.cause, cause) &&
-        mapEquals(other.resolution, resolution) &&
+        other.resolution == resolution &&
+        other.rootCause == rootCause &&
         other.resolvedTimestamp == resolvedTimestamp;
   }
 

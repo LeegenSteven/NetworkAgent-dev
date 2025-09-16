@@ -12,28 +12,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from google.adk.agents import LlmAgent
 from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import SseConnectionParams
 import logging
-import os
+from resolveragents.utils.db import update_database
+from resolveragents.utils.notification import notify_supervisor
+from .agent_prompt import troubleshoot_node_prompt
 
 logger = logging.getLogger(__name__)
 
 ###################################################
-# Postmortem Agent
+# Troubleshoot Agent
 ###################################################
 troubleshoot_agent = LlmAgent(
     name="TroubleShootAgent",
-    model="gemini-2.0-flash",
-    instruction="""You are an expert network operations dude.""",
-    description="Identifies the root cause to a network incident.",
+    model="gemini-2.5-flash",
+    instruction=troubleshoot_node_prompt,
+    description="Trouble shoot an incident strategy",
     tools=[
         MCPToolset(
             connection_params=SseConnectionParams(
                 url=os.getenv("TOOLS_URL")
             ),
-            tool_filter=['fetch_all_metrics', 'getNodePath']
+            tool_filter=['get_parent_network_service', 'fetch_last_metrics_by_name']
         )
     ],
+    after_agent_callback=[notify_supervisor, update_database],
+    output_key='root_cause'
 )

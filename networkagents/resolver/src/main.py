@@ -29,6 +29,7 @@ import descriptions
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
+logging.getLogger("google_adk.google.adk.tools.base_authenticated_tool").setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 
 def get_agent_card(host: str, port: int):

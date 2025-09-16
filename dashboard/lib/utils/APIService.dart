@@ -389,12 +389,50 @@ class APIService{
       final http.Response response = await http.get(url, headers: getRequestHeaders);
       
       if (response.statusCode == 200) {
+        print('Raw incidents response body: ${response.body}');
+        
         final List<dynamic> decodedData = jsonDecode(response.body);
+        print('Decoded incidents data type: ${decodedData.runtimeType}');
+        print('Number of incidents in response: ${decodedData.length}');
+        
         List<Incident> incidents = [];
-        for (var incidentData in decodedData) {
-          incidents.add(Incident.fromJson(incidentData));
+        for (int i = 0; i < decodedData.length; i++) {
+          var incidentData = decodedData[i];
+          print('Processing incident $i: $incidentData');
+          
+          if (incidentData is Map<String, dynamic>) {
+            try {
+              // Log the fields we're looking for
+              print('Incident $i fields:');
+              print('  - id: ${incidentData['id']}');
+              print('  - issue: ${incidentData['issue']}');
+              print('  - strategy: ${incidentData['strategy']}');
+              print('  - rootCause: ${incidentData['rootCause']}');
+              print('  - resolution: ${incidentData['resolution']}');
+              print('  - recordedTimestamp: ${incidentData['recordedTimestamp']}');
+              print('  - agentTaskId: ${incidentData['agentTaskId']}');
+              print('  - lastProgressUpdate: ${incidentData['lastProgressUpdate']}');
+              
+              final incident = Incident.fromJson(incidentData);
+              incidents.add(incident);
+              
+              print('Successfully parsed incident ${incident.id}:');
+              print('  - Has strategy: ${incident.hasStrategy}');
+              print('  - Has rootCause: ${incident.hasRootCause}');
+              print('  - Has resolution: ${incident.hasResolution}');
+              print('  - Progress stage: ${incident.progressStage}');
+              print('  - Progress percentage: ${incident.progressPercentage}');
+              
+            } catch (e) {
+              print('Error parsing incident data at index $i: $e');
+              print('Incident data that failed: $incidentData');
+            }
+          } else {
+            print('Incident data at index $i is not a Map: ${incidentData.runtimeType}');
+          }
         }
-        print('Successfully fetched ${incidents.length} incidents');
+        
+        print('Successfully fetched and parsed ${incidents.length} incidents with complete progress data');
         return incidents;
       } else {
         print('Failed to get open incidents: ${response.statusCode}');

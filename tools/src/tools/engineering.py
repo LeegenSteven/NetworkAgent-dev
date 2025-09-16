@@ -530,6 +530,97 @@ def createService(
                 logger.info(e)
 
 ######################################################################
+# Patch the status of the service
+######################################################################
+@globals.networkagent_mcp.tool()
+def reinstallFailedService(
+    kind: Annotated[str, "The kubernetes kind of the network service instance to mark as failed"],
+    name: Annotated[str, "The kubernetes name of the running/deployed network service to mark as failed"]
+    )->str:
+    """
+    Useful to reinstall and reconfigure network services that are in a failed state. 
+    
+    Patch a running network service instance status to Failed. When a network service instance status is updated 
+    to 'Failed' from 'Running' it triggers a reinstallation of the network service software. 
+    
+    Returns:
+        success or failure
+    """
+    logger.info(f"Patch service {name} of kind {kind} to 'Failed'")
+
+    if name is None or kind is None:
+        return {}, 400
+
+    # validate the kind
+    client = kubernetes.dynamic.DynamicClient(get_client())
+    
+    try:
+        # First, get the CRD to determine the correct API version and validate the kind
+        crd_api = client.resources.get(
+            api_version="apiextensions.k8s.io/v1", 
+            kind="CustomResourceDefinition",
+        )
+        
+        # Find the CRD for this kind that has the networkservices label
+        crds = crd_api.get(label_selector="type=networkservices")
+        target_crd = None
+        correct_kind = None
+        
+        # Perform case-insensitive matching
+        for crd in crds.items:
+            if crd['spec']['names']['kind'].lower() == kind.lower():
+                target_crd = crd
+                correct_kind = crd['spec']['names']['kind']  # Store the correctly-cased kind
+                break
+        
+        if target_crd is None:
+            # Get list of valid kinds for error message
+            valid_kinds = [crd['spec']['names']['kind'] for crd in crds.items]
+            return f"Invalid kind '{kind}'. Valid network service kinds are: {', '.join(valid_kinds)}"
+        
+        # Get the API version from the CRD
+        api_version = target_crd['spec']['group'] + '/' + target_crd['spec']['versions'][0]['name']
+        
+    except kubernetes.client.rest.ApiException as e:
+        if e.status == 404:
+            return "No network service definitions found"
+        else:
+            logger.error(f"Error validating kind: {e}")
+            return f"Error validating kind: {e}"
+
+    try:
+        import datetime
+
+        # need to update the status.{kind}.status to 'Failed' for the kubernetes kind/name given
+        network_api = client.resources.get(
+            api_version=api_version, 
+            kind=correct_kind,
+        )
+        resource = network_api.get(name=name, namespace="network")
+        resource_dict = resource.to_dict()
+
+        resource_dict['status'][correct_kind.lower()]['status'] = 'Failed'
+
+        # Patch the resource
+        network_api.patch(
+            body=resource_dict, 
+            name=name, 
+            namespace='network', 
+            content_type='application/merge-patch+json'
+        )
+
+        return f"Service {name} marked as failed"
+
+    except kubernetes.client.rest.ApiException as e: 
+        logger.info(e.status)
+        logger.debug(e)
+        if e.status == 404:
+            logger.info("No service found")
+            return "No service found"
+        else:
+            logger.info(e)
+
+######################################################################
 # Delete an existing network service
 ######################################################################
 @globals.networkagent_mcp.tool(annotations=ToolAnnotations(readOnlyHint=False))

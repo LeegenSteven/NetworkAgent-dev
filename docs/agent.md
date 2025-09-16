@@ -120,16 +120,67 @@ Network faults are reported from a number of sources:
 1. the scripts that simulate user traffic tests if they encounter errors trigger a fault. 
 2. liveness probes watching network function software can generate faults if the processes they are watching die. 
 
-The fault logs are caught by a GCP Log Sink and sent to a pub/sub topic which in turn triggers an event into a Cloud Run Fault Service. The Cloud Run Fault Service correlates faults with existing incidents being investigateed and if there is no current incident a new one is created and the resolver agent is asked to investigate. 
+The fault logs are caught by a GCP Log Sink and sent to a pub/sub topic which in turn triggers an event into a Cloud Run Fault Service. The Cloud Run Fault Service correlates faults with existing incidents being investigated and if there is no current incident a new one is created and the resolver agent is asked to investigate and try to resolve. 
 
 ![fault trigger](/drawings/agent/faulttrigger.drawio.svg)
 
-The resolver agent receives a new task to investigate the reported fault. The first step is to query the fault information from the incident spanner database, identifying the reporting node and error type.
+The Incident Resolver Agent is implemented using [Google's ADK ](https://google.github.io/adk-docs/) framework. The resolver agent operates as a background agent that receives incident data through A2A messaging and coordinates a sequential workflow of specialist agents to investigate and resolve network incidents automatically.
 
 ![fault agent](/drawings/agent/resolver_agent.drawio.svg)
 
-Next step is to try dentify the cause of the error. A root cause analysis step uses networ design and runbook documents to come up with a plan to figure out the root cause of the issue. The plan can use a set of tools to identify connected or surrounding network nodes and test each node for various anomalies that could identify a root cause.
+#### Resolver Agent Architecture
 
-If a root cause is identified the incident DB is updated with the investigation carried out and the node and cause. The next step is to identify a resolution that could be carried out. The agent uses past postmortems to see if similar incidents were resolved in the past and maps these to actions it can carry out. 
+The resolver agent is structured as a `SequentialAgent` that orchestrates three specialist agents in a defined order:
 
-The resolution actions are passed to the network engineering agent and once carried out the resolver agent summarises its actions, generates a new post mortem and closes the incident. 
+1. **Incident Investigator Agent** (Strategy Agent)
+2. **TroubleShoot Agent** 
+3. **Resolution Agent**
+
+When triggered by an incident, the resolver agent:
+
+* Receives incident data via A2A messaging protocol
+* Retrieves the incident operating procedure documentation from the tools MCP server
+* Creates a session with the incident data and operating procedures as context
+* Executes the sequential workflow of specialist agents
+* Reports progress and completion status back to the supervisor agent
+
+#### Strategy Agent (Incident Investigator)
+
+The Strategy Agent is implemented as a `SequentialAgent` containing two sub-agents:
+
+* **Analyse Incident Agent**: Gathers initial information about affected network services, locations and resources using MCP tools (`get_node_details`, `get_connected_nodes`, `get_node_path`, `get_nodes_networking_by_kind`)
+* **Incident Details Agent**: Collects additional detailed information about the incident
+
+The output expected from this agent is comprehensive incident information and identification of network services to investigate further as potential root causes.
+
+#### TroubleShoot Agent
+
+The TroubleShoot Agent is implemented as an `LlmAgent` that investigates the network services identified by the Strategy Agent. It uses MCP tools to:
+
+* Get parent network service information (`get_parent_network_service`)
+* Fetch metrics data (`fetch_last_metrics_by_name`)
+
+The agent analyzes this data to identify the specific root cause, including the compute instance, software, or misconfiguration issue that caused the incident. The output is stored with the key `root_cause`.
+
+#### Resolution Agent
+
+The Resolution Agent is implemented as an `LlmAgent` that identifies and executes solutions for the reported root cause. Key capabilities include:
+
+* **Network Change Execution**: Uses the `make_network_change` tool to communicate with the Engineer Agent via A2A protocol
+* **Engineer Agent Integration**: Sends network change requests to the Engineer Agent, which can create plans for network locations, services, and reinstall failed components
+* **Automated Remediation**: Executes configuration changes, service restarts, or resource adjustments based on the identified root cause
+
+The Resolution Agent can request changes such as:
+- Creating or deleting network locations
+- Creating, deleting, or reinstalling network services  
+- Reinstalling failed network components (e.g., "reinstall a failed wireguard network service named cellsite1-vpn1234")
+
+The output is stored with the key `resolution` and includes the executed remediation actions.
+
+#### Workflow Integration
+
+Each specialist agent includes callback functions for:
+* **Database Updates**: Recording progress and results in the system database
+* **Supervisor Notification**: Sending status updates to the supervisor agent for user visibility
+
+The resolver agent operates autonomously but provides transparency through status updates and can integrate with the broader agent ecosystem for complex remediation scenarios.

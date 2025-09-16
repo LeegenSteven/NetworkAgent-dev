@@ -15,20 +15,24 @@
 from google.adk.agents import LlmAgent
 import logging
 from pydantic import BaseModel, Field
-from typing import TypedDict, Annotated, Tuple, List, Any
+from typing import List
+from .details_prompt import details_prompt
+from resolveragents.utils.db import update_database
+from resolveragents.utils.notification import notify_supervisor
 
 logger = logging.getLogger(__name__)
 
 class Node(BaseModel):
-    """Whether the user has confirmed the plan proposed by the agent or not"""
-    name: str = Field(description="")
-    kind: str = Field(description="")
+    """A ComputeInstance Node to be investigated"""
+    id: str = Field(description="id of the computeinstance")
+    name: str = Field(description="name of the computeinstance")
+    configuration: str = Field(description="the computeinstance configuration ")
+    status: str = Field(description="the computeinstance status")
 
 class IncidentDetails(BaseModel):
-    """Whether the user has confirmed the plan proposed by the agent or not"""
-    affectedNode: Node = Field(description="")
-    childrenNodes: List[Node] = Field(description="")
-    connectedNodes: List[Node] = Field(description="")
+    """The list of nodes to be investigated"""
+    affectedNode: Node = Field(description="the compute instance directly where the incident originated")
+    connectedNodes: List[Node] = Field(description="any related computeinstances that should be also investigated")
 
 ###################################################
 # Incident Details Agent
@@ -36,9 +40,11 @@ class IncidentDetails(BaseModel):
 incident_details_agent = LlmAgent(
     name="IncidentDetailsAgent",
     model="gemini-2.0-flash",
-    instruction="""You are an expert network operations dude.""",
+    instruction=details_prompt,
     description="Identifies the root cause to a network incident.",
     output_schema=IncidentDetails,
+    output_key='strategy',
+    after_agent_callback=[notify_supervisor, update_database],
     disallow_transfer_to_parent=True, 
     disallow_transfer_to_peers=True,
 )

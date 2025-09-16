@@ -1809,6 +1809,10 @@ if [[ "$1" == "--deploy" ]]; then
                 func_calls="${func_calls} DeployLogCapture"
                 shift
                 ;;
+            faultcapture)
+                func_calls="${func_calls} DeployFaultCapture"
+                shift
+                ;;
             git)
                 func_calls="${func_calls} DeployGit"
                 shift

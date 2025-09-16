@@ -702,7 +702,12 @@ class NetworkEngineerAgent:
         Bridge between A2A stream and langgraph stream
         """
         inputs: dict[str, Any] = {'messages': [('user', query)]}
-        config: RunnableConfig = {'configurable': {'thread_id': sessionId}}
+        config: RunnableConfig = {
+            'configurable': {'thread_id': sessionId},
+            # Increase recursion limit for complex plans with many steps
+            # Default value in ADK for langgraph recursion limit was 25
+            'recursion_limit': 50,
+        }
 
         logger.info("langgraph stream started with %s and thread id %s", query, sessionId)
 

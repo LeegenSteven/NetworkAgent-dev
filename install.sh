@@ -383,7 +383,7 @@ Create()
     echo "####################################################"
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/bigquery.j2 >  environment/bigquery.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_PROJECT_NUMBER -E GOOGLE_SERVICE_ACCOUNT environment/logsink.j2 >  environment/logsink.yaml
-    jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_SPANNER_DATABASE -E GOOGLE_SPANNER_INSTANCE environment/spanner.j2 >  environment/spanner.yaml
+    jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_SPANNER_DATABASE -E GOOGLE_SPANNER_INSTANCE -E GOOGLE_NAMESPACE environment/spanner.j2 >  environment/spanner.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/configconnector.j2 > environment/configconnector.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/networks.j2 > environment/networks.yaml
 
@@ -827,11 +827,13 @@ Delete()
     gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
 
     # Delete the custom image created in the build step
+    if false; then # LJ too long to compile. Do not delete this image
     echo "######################"
     echo "Deleting custom image"
     echo "######################"
     (gcloud compute images describe networkagent --project=$GOOGLE_PROJECT > /dev/null 2>&1) && \
     gcloud compute images delete networkagent --project=$GOOGLE_PROJECT --quiet
+    fi
 
     echo "#######################################"
     echo "Deleting environment manifests and keys"

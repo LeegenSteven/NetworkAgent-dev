@@ -20,6 +20,7 @@ import os
 import uuid
 from urllib.parse import urlparse
 import sys
+import string
 import json
 from google.cloud import spanner
 
@@ -60,6 +61,12 @@ SQL_TEMPLATES = {
   'create_performance_metric': "INSERT ServicePerformance (id, service_type, response_time_ms, timestamp, userid, error, node)" 
                                " VALUES (@id, @service_type, @response_time_ms, @timestamp, @userid, @error, @node)",
 }
+
+REQUEST_PARAMS = {
+    f'param{i}': ''.join(random.choices(
+        string.ascii_letters + string.digits, k=1024
+    )) for i in range(1, 6)
+ }
 
 # Connect to Spanner database
 def spanner_connect():
@@ -114,7 +121,10 @@ timeout = int(os.getenv("REQUEST_TIMEOUT", "5"))
 
 def send_request():
     try:
-        response = requests.get(url, timeout=timeout)
+        # Generate 5 parameters, each with 1024 characters
+        # This is to increase the traffic so that it is more visible
+        # in the metrics.
+        response = requests.get(url, params=REQUEST_PARAMS, timeout=timeout)
         response.raise_for_status()
         elapsed_ms = response.elapsed.total_seconds() * 1000
         print(f"url: {url}, status_code: {response.status_code}, latency: {elapsed_ms:.2f}ms")
@@ -183,7 +193,7 @@ if __name__ == "__main__":
         print("Starting performance monitoring service...")
         
         while True:
-            send_request()
+            for i in range(100): send_request()
             time.sleep(random.uniform(3, 5))
             
     except Exception as e:

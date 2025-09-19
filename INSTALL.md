@@ -4,15 +4,24 @@ This guide describes how to set up the Network Agent GCP environment.
 
 ## Quick Start
 
-For a complete installation from scratch, simply run:
+Edit the file `setenv.sh`, set the values of the variables to suit your GCP environment. Then
+```bash
+source ./setenv.sh
+```
+Check the prerequisites below.
+The for a complete, unattended (no question asked) installation, simply run:
 
 ```bash
-./install.sh -all
+./install.sh --all -y
 ```
+The first time installation takes roughly 30-40 minutes
 
-This command will automatically:
-- Create the environment configuration if needed
-- Build the Virtual Network Function image if needed  
+At the end of the installation you'll see a recap of the key URLs to access the demo, most notably the dashboard and the gitea server (git repo used for network gitops)
+
+For your information, the full installation process goes through the following steps:
+- Check that your GCP environment is set properly (project, org policies, permissions, APIs,...)
+- Create the demo environment configuration if needed
+- Build the Virtual Network Function image to run the Free5GC Core and UERANSIM simulator if needed  
 - Start the runtime services
 - Deploy all network agents and dashboard
 
@@ -27,11 +36,11 @@ The following packages are required before proceeding with the installation:
 * ansible (`pip install ansible`)
 * [flutter sdk](https://flutter.dev/)
 
-**Note:** It is recommended to create your own Python virtual environment first prior to installing jinja or any other python packages.
+**Note:** It is recommended to create your own [Python virtual environment](https://docs.python.org/3/library/venv.html) first prior to installing jinja or any other python packages. We recommend using Python 3.13.
 
 ### Update Organization Policies
 
-Ensure the organization policy values below are set as follows:
+The install script will do the GCP org policies check for you, but you may want to ensure the organization policy values below are set as follows:
 
 * Set **constraints/compute.vmExternalIpAccess** to **Allow All**
 * Set **constraints/compute.requireShieldedVm** to **Off**
@@ -68,17 +77,24 @@ export WEBAPPS_PWD=<YOUR_WEB_PWD>           # the password to access the web app
 The **install.sh** script provides flexible installation options:
 
 ```bash
-Network Agent environment manager.
+Autonomous Network Agent (ANA) environment manager.
 
-Syntax: install.sh [-c|-s|-b|-o|-l|-f|-r|-n|-k|-d|-g|-i|-w|-all] [-y|-N]
-options:
-  -all   install everything (comprehensive setup: create env if needed, build image if needed, start runtime, deploy all agents)
+Syntax: install.sh [-c|-s|-b|-o|-l|-f|-r|-n|-k|-d|-g|-i|-w|--all|--deploy] [-y|-N]
+
+long options:
+-------------
+  --all  install everything (comprehensive setup: create env if needed, build image if needed, start runtime, deploy all agents)
          can be combined with -y or -N flags (e.g., ./install.sh -all -y)
+  --deploy component1 component2
+         (re)deploy specific components (valid components : spanner, operator, logcapture, git)
+
+short options:
+--------------
   -c     create network agent environment (keys, manifests,..)
   -s     build and start network agent runtime (incl. the operator)
   -b     build the Virtual Network Function image with Free5GC, UERANSIM, Docker, and Wireguard
-  -o     build and deploy the network operator
-  -l     build and deploy the logs capture function
+  -o     build and deploy the network operator (same as --deploy operator)
+  -l     build and deploy the logs capture function (same as --deploy logcapture)
   -f     build and deploy the fault capture and trigger service
   -n     build and deploy the network dashboard and network agents
          can be followed by a comma-separated list of agent names to (re)deploy selectively
@@ -93,14 +109,15 @@ options:
   -N     answer 'no' to all questions (no ask for confirmation)
 
 Some typical use cases:
- - To install everything from scratch: ./install.sh -all
- - To install everything from scratch without prompts: ./install.sh -all -y
- - To install everything from scratch, skipping rebuilds: ./install.sh -all -N
+ - To install everything from scratch: ./install.sh --all
+ - To install everything from scratch without prompts: ./install.sh --all -y
+ - To install everything from scratch, skipping rebuilds: ./install.sh --all -N
  - To create and run a network agent environment including the operator: ./install.sh -c; ./install.sh -s
- - To redeploy the operator alone : ./install.sh -o
- - To (re)deploy the network agent Web UI alone : ./install.sh -n
+ - To redeploy the operator alone : ./install.sh -o (or --deploy operator)
+ - To (re)deploy the network agent Web UI alone : ./install.sh -n dashboard
  - To regenerate the network agent runtime with the same environment setup: ./install.sh -k; ./install.sh -s
  - To recreate a complete environment and runtime from scratch: ./install.sh -k; ./install.sh -d; ./install.sh -c; ./install.sh -s
+
 ```
 
 ## Installation Workflows
@@ -111,7 +128,7 @@ For most users, the comprehensive installation is the easiest approach:
 
 ```bash
 # Set your environment variables first (see Environment Setup section above)
-./install.sh -all
+./install.sh --all -y
 ```
 
 ### Step-by-Step Installation
@@ -165,10 +182,10 @@ For CI/CD or automated deployments, use the confirmation flags:
 
 ```bash
 # Answer 'yes' to all prompts automatically
-./install.sh -all -y
+./install.sh --all -y
 
 # Answer 'no' to all prompts (skip optional steps)
-./install.sh -all -N
+./install.sh --all -N
 ```
 
 ## Environment Management
@@ -187,10 +204,13 @@ For CI/CD or automated deployments, use the confirmation flags:
 
 ```bash
 # Rebuild and redeploy the operator only
-./install.sh -o
+./install.sh -o # or --deploy operator
+
 
 # Rebuild and redeploy log capture function
-./install.sh -l
+./install.sh -l # or --deploy logcapture
+
+# Rebuild and redeploy all components
 
 # Regenerate the runtime with same environment setup
 ./install.sh -k; ./install.sh -s

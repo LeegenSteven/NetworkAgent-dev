@@ -38,9 +38,12 @@ The demo begins with a fully operational 5g network.
 * Click on the notification icon to see the incidents screen, all incidents reported will have a resolver agent investigating their root cause and trying to propose/execute resolutions. 
 * The resolver agent progresses through an investigation strategy, troubleshooting and resolution steps. You can see its progress graphically and click on the analysis it has done at each stage. 
 
-## 4. Approve the Network Engineer Plan
+### 4. Approve the Network Engineer Plan
 
 * If a resolution is found the resolver agent will ask the network engineer agent to execute the resolution automatically. 
 * The network engineer will then ask for permission to proceed from the agent notification screen
 * Approve the change
 
+## Wipe it out
+Want to release all the network resources you have deployed for your demo session ? Well, guess what... the network engineer agent is your best friend. Simply send the request (the last on
+the menu) to delete all resources and the agent will do the rest. Magic, isn't it ?

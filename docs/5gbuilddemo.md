@@ -145,3 +145,7 @@ The demo begins with a partially configured 5G network where core network compon
 - Demonstrate the real-time nature of monitoring and logging
 - Show how agents collaborate to solve complex network challenges
 - Point out the AI-generated UI as a testament to agent capabilities
+
+## Wipe it out
+Want to release all the network resources you have deployed for your demo session ? Well, guess what... the network engineer agent is your best friend. Simply send the request (the last on
+the menu) to delete all resources and the agent will do the rest. Magic, isn't it ?

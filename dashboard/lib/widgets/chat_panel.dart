@@ -317,7 +317,11 @@ class _ChatPanelContentState extends State<_ChatPanelContent> with WidgetsBindin
                   ),
                   const PopupMenuItem<String>(
                     value: 'Were there any error logs in the last 2 hours?',
-                    child: Text('Were there any error logs in the last 2 hours?'),
+                    child: Text('Were there any error logs in the last 2 hours?')
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'Delete all the network resources currently deployed except dataplane',
+                    child: Text('Delete all the network resources currently deployed except dataplane'),
                   ),
                 ],
               ),

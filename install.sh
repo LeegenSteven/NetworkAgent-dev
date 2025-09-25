@@ -1026,7 +1026,7 @@ DeployGit()
     gitea_host=$(kubectl get gitea gitea -o 'jsonpath={..status.create_gitea.external_ip_address}')
     echo -e "\nGitea server is available at:\n\thttps://$gitea_host:3000/explore/repos\n"
     echo "You can clone the git repos as follows (username/password = ${WEBAPPS_LOGIN}/${WEBAPPS_PWD})"
-    echo "  git clone https://$gitea_host:3000/networkagent/network -c http.sslVerify=false"
+    echo "  git clone https://$gitea_host:3000/${WEBAPPS_LOGIN}/network -c http.sslVerify=false"
 }
 
 ############################################################
@@ -1598,7 +1598,7 @@ DisplayDemoInfo()
     echo "Network Agent Dashboard: ${DASHBOARD_URL}"
     echo "Incident Agent: ${INCIDENT_URL}"
     echo "GITEA Host: https://${GITEA_HOST}:3000"
-    echo "  git clone https://$GITEA_HOST:3000/networkagent/network -c http.sslVerify=false"
+    echo "  git clone https://$GITEA_HOST:3000/${WEBAPPS_LOGIN}/network -c http.sslVerify=false"
     echo ""
     echo "Username/password: ${WEBAPPS_LOGIN}/${WEBAPPS_PWD}"
     echo ""

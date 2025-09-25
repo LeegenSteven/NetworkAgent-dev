@@ -124,7 +124,7 @@ async def create_root_sync_private_key():
 ########################################################
 async def create_root_sync(ip_address):
 
-  root_repo_url = f"https://{os.environ['WEBAPPS_LOGIN']}:{os.environ['WEBAPPS_PWD']}@{ip_address}:3000/networkagent/root-repo"
+  root_repo_url = f"https://{os.environ['WEBAPPS_LOGIN']}:{os.environ['WEBAPPS_PWD']}@{ip_address}:3000/{os.environ['WEBAPPS_LOGIN']}/root-repo"
 
   logger.info(f"Create root sync to repo {root_repo_url}")
 

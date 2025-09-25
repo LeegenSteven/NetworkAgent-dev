@@ -160,8 +160,9 @@ EOF
     if [[ "$GOOGLE_USER" == "admin@"* ]] || [[ "$GOOGLE_USER" == "user@"* ]]; then
         echo "**ERROR** GCP user $GOOGLE_USER contains 'admin@' or 'user@'."
         echo "This is not allowed both for security reasons and because it"
-        echo "can cause conflicts with internal VM user accounts."
-        echo "Please use a different GCP user account."
+        echo "conflicts with internal VM user accounts."
+        echo "Please use a different GCP user account and don't forget to"
+        echo "update the GOOGLE_VM_USER accordingly"
         exit 1
     fi
 

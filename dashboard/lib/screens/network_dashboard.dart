@@ -3,11 +3,11 @@ import 'package:provider/provider.dart';
 import '../appstate.dart';
 import '../models/network_node.dart';
 import '../utils/environment_config.dart';
-import 'chat_panel.dart';
-import 'network_topology.dart';
-import 'markdown_drawer.dart';
-import 'log_widget.dart';
-import 'performance_graph_widget.dart';
+import '../widgets/agui_chat_panel.dart';
+import '../widgets/topology/network_topology.dart';
+import '../widgets/markdown_drawer.dart';
+import '../widgets/log_widget.dart';
+import '../widgets/performance/performance_graph_widget.dart';
 import 'settings_screen.dart';
 import 'notification_screen.dart';
 
@@ -293,7 +293,7 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
           if (_showChat) ...[
             SizedBox(
               width: MediaQuery.of(context).size.width * _horizontalSplitRatio,
-              child: ChatPanel(socket: appState.socket!),
+              child: AGUIChatPanel(socket: appState.socket!),
             ),
             
             // Horizontal resizable divider

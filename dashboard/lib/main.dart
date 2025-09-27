@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:networkagent/appstate.dart';
 import 'package:provider/provider.dart';
-import 'widgets/login_screen.dart';
+import 'screens/login_screen.dart';
 
 void main() async {
   runApp(

@@ -61,19 +61,42 @@ class RemoteAgentConnections:
 
     async def send_message(self, sio_list, text):
         """
-        Utility function to send a socketio message back to the dashboard ui
+        Utility function to send AG-UI events back to the dashboard ui
         """
-        if text !='':
-            response = {
-                'id': f'response-{datetime.datetime.now().timestamp()}',
-                'text': text,
-                'source': "",
-                'isUser': False,
-                'timestamp': datetime.datetime.now().isoformat()
+        if text != '':
+            # Generate a unique message ID for this progress update
+            import uuid
+            message_id = str(uuid.uuid4())
+            
+            # Send proper AG-UI events: START -> CONTENT -> END
+            start_event = {
+                'type': 'TEXT_MESSAGE_START',
+                'timestamp': None,
+                'raw_event': None,
+                'message_id': message_id,
+                'role': 'assistant'
             }
-            # send message to all registered sessions
+            
+            content_event = {
+                'type': 'TEXT_MESSAGE_CONTENT',
+                'timestamp': None,
+                'raw_event': None,
+                'message_id': message_id,
+                'delta': text
+            }
+            
+            end_event = {
+                'type': 'TEXT_MESSAGE_END',
+                'timestamp': None,
+                'raw_event': None,
+                'message_id': message_id
+            }
+            
+            # Send AG-UI events to all registered sessions
             for sid, sio in sio_list.items():
-                await sio.emit('chat_message', response, room=sid)
+                await sio.emit('agui_event', start_event, room=sid)
+                await sio.emit('agui_event', content_event, room=sid)
+                await sio.emit('agui_event', end_event, room=sid)
 
     async def send_task(self, request: SendMessageRequest):
         """
@@ -115,8 +138,14 @@ class RemoteAgentConnections:
 
                         if isinstance(chunk.root, SendStreamingMessageSuccessResponse) and isinstance(chunk.root.result, Task):
                             task: Task = chunk.root.result
-                            await self.host_agent.updateState(session_id, task_id=task.id)
-                            logger.info("updated task with id %s", task.id)
+                            # Update the session state with the task ID and agent name for the current session
+                            await self.host_agent.updateState(
+                                session_id=session_id, 
+                                agent_name=self.card.name,
+                                task_status="submitted",
+                                task_id=task.id
+                            )
+                            logger.info("updated task with id %s for agent %s in session %s", task.id, self.card.name, session_id)
 
                         if isinstance(chunk.root, SendStreamingMessageSuccessResponse) and isinstance(chunk.root.result, TaskArtifactUpdateEvent):
                             taskEvent: TaskArtifactUpdateEvent = chunk.root.result.artifact

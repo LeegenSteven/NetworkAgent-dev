@@ -15,6 +15,7 @@
 import logging
 import datetime
 import json
+from uuid import uuid4
 from agent.host_agent import HostAgent
 from tools.topology import fetch_db_node, build_graph, spanner_connect
 from tools.logs import fetch_log_entries, delete_logs
@@ -24,6 +25,8 @@ from utils.error_handler import (
     ErrorSeverity,
     send_error_message
 )
+from ag_ui.core import RunAgentInput, UserMessage
+from tools.agui import chartTool, approvalTool
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +48,45 @@ class SocketEndpoint:
 
         self.sio = sio
         self.callbacks()
+
+
+    async def _convert_to_run_agent_input(self, data):
+        """
+        Convert incoming WebSocket data to AG-UI RunAgentInput.
+        
+        Args:
+            data: Parsed JSON data from WebSocket
+            
+        Returns:
+            RunAgentInput instance
+        """
+        # Handle simple text message format
+        if isinstance(data, dict) and 'text' in data:
+            # Simple text message - convert to AG-UI format
+            thread_id = data.get('thread_id', str(uuid4()))
+            run_id = data.get('run_id', str(uuid4()))
+            
+            user_message = UserMessage(
+                id=str(uuid4()),
+                content=data['text']
+            )
+            
+            return RunAgentInput(
+                thread_id=thread_id,
+                run_id=run_id,
+                state={},
+                messages=[user_message],
+                tools=[chartTool, approvalTool],
+                context=[],
+                forwardedProps={}
+            )
+        
+        # Handle full AG-UI RunAgentInput format
+        elif isinstance(data, dict) and 'thread_id' in data:
+            return RunAgentInput(**data)
+        
+        else:
+            raise ValueError(f"Invalid message format: {data}")
 
     async def sendPushNotification(self, data):
         """
@@ -76,12 +118,40 @@ class SocketEndpoint:
             agent.sio_sessions[sid]=self.sio
             logger.info(agent.sio_sessions)
 
-        @self.sio.event
-        async def chat_message(sid, data):
-            logger.info("chat message from %s: %s", sid, data.get('text', ''))
 
-            agent=await HostAgent.get_instance()
-            await agent.run(data['text'], self.sio, sid)
+        @self.sio.event
+        async def agui_message(sid, data):
+            """
+            Handle AG-UI protocol messages via Socket.IO
+            
+            Args:
+                sid: Socket.IO session ID
+                data: AG-UI message data
+            """
+            logger.info("AG-UI message from %s: %s", sid, data)
+            
+            try:
+                # Convert to RunAgentInput
+                run_input = await self._convert_to_run_agent_input(data)
+                logger.info(f"SocketEndpoint: Converted to RunAgentInput - thread_id: {run_input.thread_id}, run_id: {run_input.run_id}")
+                
+                # Get agent instance and run AG-UI protocol
+                agent = await HostAgent.get_instance()
+                
+                # Stream AG-UI events back to client via Socket.IO
+                async for event in agent.run_agui(run_input):
+                    event_data = event.model_dump()
+                    await self.sio.emit('agui_event', event_data, room=sid)
+                    logger.debug(f"SocketEndpoint: Emitted {type(event).__name__} to session {sid}")
+                    
+            except Exception as e:
+                logger.error(f"Error processing AG-UI message from {sid}: {e}", exc_info=True)
+                error_response = {
+                    "type": "RUN_ERROR",
+                    "message": f"Error processing AG-UI message: {str(e)}",
+                    "code": "AGUI_PROCESSING_ERROR"
+                }
+                await self.sio.emit('agui_event', error_response, room=sid)
 
         @self.sio.event
         async def get_topology(sid, data):
@@ -160,35 +230,7 @@ class SocketEndpoint:
                 logger.error(f"Error handling reset_logs: {e}")
                 await self.sio.emit('logs_update', {'error': f"Error resetting logs: {str(e)}"}, room=sid)
 
-        @self.sio.event
-        async def reset_chat(sid, data):
-            """
-            reset the conversation history in the agent
-            """
-            logger.info("reset chat for %s", sid)
-            
-            try:
-                # Get the NetworkAgent instance and reset its conversation history
-                agent = await HostAgent.get_instance()
-                await agent.reset_conversation()
-                
-                # Send a confirmation message to the client
-                welcome_msg = {
-                    'id': f'welcome-{sid}-reset',
-                    'text': 'How can I help you?',
-                    'isUser': False,
-                    'timestamp': datetime.datetime.now().isoformat()
-                }
-                await self.sio.emit('chat_message', welcome_msg, room=sid)
-                logger.info(f"Chat reset for {sid}")
-            except Exception as e:
-                logger.error(f"Error resetting chat: {e}")
-                error = SupervisorAgentError(
-                    message=f"Error resetting chat: {str(e)}",
-                    severity=ErrorSeverity.ERROR,
-                    original_exception=e
-                )
-                await send_error_message(self.sio, sid, error)
+        # reset_chat handler removed - AG-UI chat panel manages thread IDs directly
             
         @self.sio.event
         async def disconnect(sid):
@@ -264,6 +306,44 @@ class SocketEndpoint:
                 logger.error(f"Error handling reset_metrics: {e}")
                 await self.sio.emit('all_metrics_update', {'error': f"Error resetting metrics: {str(e)}"}, room=sid)
                 
+        @self.sio.event
+        async def agui_tool_result(sid, data):
+            """
+            Handle AG-UI tool results from the dashboard UI
+            
+            Args:
+                sid: The session ID of the client
+                data: The tool result data containing tool_call_id and content
+            """
+            try:
+                tool_call_id = data.get('tool_call_id')
+                content = data.get('content')
+                
+                logger.info(f"Received AG-UI tool result from {sid}: {tool_call_id} -> {content}")
+                
+                # Extract thread_id from the encoded tool_call_id if present
+                # Format: original_id::thread_id
+                session_id_to_use = sid  # Default to socket session ID
+                
+                if tool_call_id and "::" in tool_call_id:
+                    # Extract thread_id from encoded tool_call_id
+                    parts = tool_call_id.split("::", 1)
+                    if len(parts) == 2:
+                        original_tool_call_id, thread_id = parts
+                        session_id_to_use = thread_id
+                        logger.info(f"Extracted thread_id {thread_id} from encoded tool_call_id {tool_call_id}")
+                    else:
+                        logger.warning(f"Invalid encoded tool_call_id format: {tool_call_id}")
+                else:
+                    logger.info(f"Using socket session ID {sid} as fallback for tool_call_id {tool_call_id}")
+                
+                # Get agent instance and forward the tool result with the correct session ID
+                agent = await HostAgent.get_instance()
+                await agent.handleToolResult(session_id_to_use, tool_call_id, content)
+                
+            except Exception as e:
+                logger.error(f"Error handling AG-UI tool result: {e}")
+
         @self.sio.event
         async def notification_feedback(sid, data):
             """

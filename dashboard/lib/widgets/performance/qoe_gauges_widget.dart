@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:math' as math;
-import '../appstate.dart';
+import '../../appstate.dart';
 
 enum QoELevel { poor, good, excellent }
 

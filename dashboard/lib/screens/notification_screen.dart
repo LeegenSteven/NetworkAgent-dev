@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../appstate.dart';
-import 'agent_request_notifications_widget.dart';
-import 'incident_notifications_widget.dart';
+import '../widgets/notifications/agent_request_notifications_widget.dart';
+import '../widgets/notifications/incident_notifications_widget.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});

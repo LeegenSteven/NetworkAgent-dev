@@ -19,6 +19,8 @@ from typing import Annotated, Dict, List
 from google.cloud import spanner
 import utils.globals as globals
 from mcp.types import ToolAnnotations
+from datetime import datetime
+import time
 
 SPANNER_INSTANCE = 'networktopology-instance'
 SPANNER_DATABASE = 'networktopology-db'
@@ -175,6 +177,131 @@ def fetch_all_metrics():
     except Exception as e:
       logger.error("Metrics SQL error: {}".format(e))
       return {}  # Return empty list on error
+
+def _parse_datetime_to_timestamp(datetime_str: str) -> int:
+  """
+  Convert datetime string to Unix timestamp.
+  
+  Supports multiple formats:
+  - ISO format: '2024-01-15T10:30:00Z' or '2024-01-15T10:30:00'
+  - Date only: '2024-01-15' (assumes 00:00:00)
+  - Unix timestamp as string: '1705312200'
+  
+  Args:
+    datetime_str: String representation of datetime
+    
+  Returns:
+    Unix timestamp as integer (seconds since epoch)
+  """
+  try:
+    # If it's already a Unix timestamp (all digits), return as int
+    if datetime_str.isdigit():
+      timestamp = int(datetime_str)
+      # Convert milliseconds to seconds if needed (timestamps > year 2100 are likely milliseconds)
+      if timestamp > 4102444800:  # Jan 1, 2100
+        timestamp = timestamp // 1000
+      return timestamp
+    
+    # Try parsing ISO format with timezone
+    if datetime_str.endswith('Z'):
+      dt = datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
+    elif 'T' in datetime_str:
+      # ISO format without timezone (assume UTC)
+      dt = datetime.fromisoformat(datetime_str)
+    else:
+      # Date only format, assume start of day
+      dt = datetime.fromisoformat(datetime_str + 'T00:00:00')
+    
+    # Convert to Unix timestamp
+    return int(dt.timestamp())
+    
+  except (ValueError, AttributeError) as e:
+    logger.error(f"Failed to parse datetime string '{datetime_str}': {e}")
+    raise ValueError(f"Invalid datetime format: {datetime_str}. Use ISO format (YYYY-MM-DDTHH:MM:SS) or Unix timestamp")
+
+@globals.networkagent_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+def fetch_metrics_by_time_window(
+    start_datetime: Annotated[str, "Start datetime string with the format YYYY-MM-DD HH:MM:SS that is suitable to create a python datetime object"],
+    end_datetime: Annotated[str, "End datetime string with the format YYYY-MM-DD HH:MM:SS that is suitable to create a python datetime object"],
+    name: Annotated[str, "Name of Network Service"],
+) -> List[Dict]:
+  """
+  Fetch metrics for Network Service within a specified time window.
+  
+  Args:
+    start_datetime: Start of the time window (ISO datetime string, date string, or Unix timestamp)
+    end_datetime: End of the time window (ISO datetime string, date string, or Unix timestamp)
+    name: Name of network service
+    
+  Returns:
+    Dictionary of metrics representing network statistics for all network interfaces
+    in the specified time window
+    
+  Examples:
+    - fetch_metrics_by_time_window("2024-01-15T10:30:00Z", "2024-01-15T11:30:00Z")
+    - fetch_metrics_by_time_window("2024-01-15", "2024-01-16")
+    - fetch_metrics_by_time_window("1705312200", "1705315800")
+  """
+  try:
+    # Convert datetime strings to Unix timestamps
+    start_timestamp = _parse_datetime_to_timestamp(start_datetime)
+    end_timestamp = _parse_datetime_to_timestamp(end_datetime)
+    
+    logger.info(f"Fetching metrics from {start_datetime} ({start_timestamp}) to {end_datetime} ({end_timestamp})")
+    
+    with database.snapshot() as snapshot:
+      try:
+        # Build the SQL query with optional filters
+        base_sql = """SELECT id, kind, name, timestamp, metrics
+          FROM NetworkMetrics 
+          WHERE timestamp >= @start_ts AND timestamp <= @end_ts"""
+        
+        params = {
+          'start_ts': start_timestamp,
+          'end_ts': end_timestamp
+        }
+        param_types = {
+          'start_ts': spanner.param_types.INT64,
+          'end_ts': spanner.param_types.INT64
+        }
+        
+        base_sql += " AND name = @name"
+        params['name'] = name
+        param_types['name'] = spanner.param_types.STRING
+        
+        # Order by timestamp descending
+        base_sql += " ORDER BY id, timestamp DESC"
+        
+        results = snapshot.execute_sql(
+          base_sql,
+          params=params,
+          param_types=param_types
+        )
+        
+        # Convert to a dictionary with resource id as key
+        time_window_metrics = {}
+        for row in results:
+          row_id, kind, name, timestamp, metrics = row
+          if row_id not in time_window_metrics:
+            time_window_metrics[row_id] = []
+          time_window_metrics[row_id].append({
+            'kind': kind,
+            'name': name,
+            'timestamp': timestamp,
+            'metrics': metrics
+          })
+        
+        logger.info(f"Found {len(time_window_metrics)} ComputeInstances with metrics in time window")
+        logger.info(time_window_metrics)
+        return time_window_metrics
+        
+      except Exception as e:
+        logger.error(f"Metrics time window SQL error: {e}")
+        return {}  # Return empty dict on error
+        
+  except ValueError as e:
+    logger.error(f"DateTime parsing error: {e}")
+    return {}  # Return empty dict on datetime parsing error
 
 def clear_network_metrics():
   """

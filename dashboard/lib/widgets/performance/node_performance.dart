@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../appstate.dart';
-import '../models/metric_entry.dart';
-import '../models/network_node.dart';
-import 'node_details_dialog.dart';
+import '../../appstate.dart';
+import '../../models/metric_entry.dart';
+import '../../models/network_node.dart';
+import '../topology/node_details_dialog.dart';
 
 class NodePerformanceWidget extends StatelessWidget {
   final String nodeId;

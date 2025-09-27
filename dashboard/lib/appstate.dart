@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
-import 'models/chat_message.dart';
 import 'models/agent.dart';
 import 'models/network_node.dart';
 import 'models/log_entry.dart';
@@ -10,11 +9,10 @@ import 'models/push_notification.dart';
 import 'models/incident.dart';
 import 'utils/environment_config.dart';
 import 'utils/APIService.dart';
-import 'widgets/network_topology.dart';
+import 'widgets/topology/network_topology.dart';
 
 class Appstate extends ChangeNotifier {
-  // Chat state
-  final List<ChatMessage> _chatMessages = [];
+  // Socket connection
   io.Socket? _socket;
   
   // API Service
@@ -57,7 +55,6 @@ class Appstate extends ChangeNotifier {
   bool _isLoadingIncidents = false;
   
   // Getters
-  List<ChatMessage> get chatMessages => _chatMessages;
   io.Socket? get socket => _socket;
   List<Agent> get agents => List.unmodifiable(_agents);
   NetworkTopology get topology => _topology;
@@ -130,21 +127,6 @@ class Appstate extends ChangeNotifier {
       notifyListeners();
     });
     
-    // Listen for chat messages from the server
-    _socket!.on('chat_message', (data) {
-      if (data != null) {
-        final message = ChatMessage(
-          id: data['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
-          text: data['text'] ?? '',
-          isUser: data['isUser'] ?? false,
-          timestamp: data['timestamp'] != null 
-              ? DateTime.parse(data['timestamp']) 
-              : DateTime.now(),
-        );
-        addChatMessage(message);
-      }
-    });
-
     // Agent management has been moved to REST endpoints
     
     // Listen for topology updates
@@ -190,69 +172,7 @@ class Appstate extends ChangeNotifier {
     // since the socket is now initialized in the constructor
   }
   
-  // Add a chat message
-  void addChatMessage(ChatMessage message) {
-    _chatMessages.add(message);
-    notifyListeners();
-  }
-  
-  // Add a new chat message with text
-  void addChatMessageWithText(String text, bool isUser) {
-    final message = ChatMessage(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      text: text,
-      isUser: isUser,
-      timestamp: DateTime.now(),
-    );
-    addChatMessage(message);
-  }
-  
-  // Send a message to the server
-  Future<void> sendChatMessage(String text) async {
-    if (text.trim().isEmpty) return;
-    
-    // Add user message to local state
-    addChatMessageWithText(text, true);
-    
-    // Send message to server if socket is connected
-    if (_socket != null && _socket!.connected) {
-      _socket!.emit('chat_message', {'text': text});
-    }
-  }
-  
-  // Reset chat history
-  void resetChat() {
-    _chatMessages.clear();
-    
-    // Send reset_chat event to server if socket is connected
-    if (_socket != null && _socket!.connected) {
-      _socket!.emit('reset_chat', {});
-    }
-    
-    notifyListeners();
-  }
-  
-  // Reset chat history with socket disconnect and reconnect
-  void resetChatWithSocketReset() {
-    // Clear chat messages
-    _chatMessages.clear();
-    
-    // Disconnect and reconnect the socket if it exists
-    if (_socket != null) {
-      print('Resetting connection: disconnecting socket');
-      
-      // Disconnect the socket
-      _socket!.disconnect();
-      
-      // Reconnect after a short delay
-      Future.delayed(const Duration(milliseconds: 500), () {
-        print('Resetting connection: reconnecting socket');
-        _socket!.connect();
-      });
-    }
-    
-    notifyListeners();
-  }
+  // resetChat method removed - AG-UI chat panel manages thread IDs directly
   
   // Agent management methods
   Future<void> addAgent(String url) async {
@@ -884,7 +804,6 @@ class Appstate extends ChangeNotifier {
   void dispose() {
     // Remove event listeners to prevent memory leaks
     if (_socket != null) {
-      _socket!.off('chat_message');
       // Agent management has been moved to REST endpoints
       _socket!.off('topology_update');
       _socket!.off('logs_update');

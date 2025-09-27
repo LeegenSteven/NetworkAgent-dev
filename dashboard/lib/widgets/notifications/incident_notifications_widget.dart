@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import '../appstate.dart';
-import '../models/incident.dart';
+import '../../appstate.dart';
+import '../../models/incident.dart';
 
 class IncidentNotificationsWidget extends StatefulWidget {
   const IncidentNotificationsWidget({super.key});

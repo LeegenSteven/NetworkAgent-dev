@@ -1,6 +1,7 @@
 aiohttp
 aiohttp_cors
 python-socketio
+ag-ui-protocol
 kubernetes
 google-adk==1.8.0
 google-cloud-spanner

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../appstate.dart';
-import '../models/push_notification.dart';
+import '../../appstate.dart';
+import '../../models/push_notification.dart';
 
 class AgentRequestNotificationsWidget extends StatefulWidget {
   const AgentRequestNotificationsWidget({super.key});

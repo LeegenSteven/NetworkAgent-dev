@@ -93,8 +93,7 @@ async def send_error_message(sio_sessions, error: SupervisorAgentError):
     Send an error message to the user through the socket.
     
     Args:
-        sio: The socket.io instance
-        sid: The socket session ID
+        sio_sessions: Dictionary of socket sessions
         error: The error that occurred
     """
     # Format the error message with severity
@@ -111,19 +110,39 @@ async def send_error_message(sio_sessions, error: SupervisorAgentError):
                 error_details += f"\n{key}: {value}"
         error_message += error_details
     
-    # Create the response message
-    response = {
-        'id': f'error-{datetime.datetime.now().timestamp()}',
-        'text': error_message,
-        'source': "",
-        'isUser': False,
-        'timestamp': datetime.datetime.now().isoformat()
+    # Generate a unique message ID for this error
+    import uuid
+    message_id = str(uuid.uuid4())
+    
+    # Send proper AG-UI events: START -> CONTENT -> END
+    start_event = {
+        'type': 'TEXT_MESSAGE_START',
+        'timestamp': None,
+        'raw_event': None,
+        'message_id': message_id,
+        'role': 'assistant'
+    }
+    
+    content_event = {
+        'type': 'TEXT_MESSAGE_CONTENT',
+        'timestamp': None,
+        'raw_event': None,
+        'message_id': message_id,
+        'delta': error_message
+    }
+    
+    end_event = {
+        'type': 'TEXT_MESSAGE_END',
+        'timestamp': None,
+        'raw_event': None,
+        'message_id': message_id
     }
 
-    # loop over the sessions and send the error
+    # Send AG-UI events to all registered sessions
     for sid, sio in sio_sessions.items():
-        # Send the message
-        await sio.emit('chat_message', response, room=sid)
+        await sio.emit('agui_event', start_event, room=sid)
+        await sio.emit('agui_event', content_event, room=sid)
+        await sio.emit('agui_event', end_event, room=sid)
         logger.info(f"Sent error message to {sid}: {error_message}")
 
 def with_error_handling(error_handler: Callable):

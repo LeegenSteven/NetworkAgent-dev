@@ -31,6 +31,7 @@ from utils.error_handler import (
     ErrorSeverity
 )
 import logging
+import datetime
 import os
 import json
 
@@ -85,7 +86,7 @@ class OperationsAgent:
         )
         try:
             # names of the tools this agent can use
-            allowed_tools_names=["getNetworkDesign","getLocations","getServiceDefinitions","getServices", "get_node_path"]
+            allowed_tools_names=["getNetworkDesign","getLocations","getServiceDefinitions","getServices", "get_node_path", "fetch_metrics_by_time_window" ]
             # load all tools
             self.tools = await self.mcpClient.get_tools()
             self.allowed_tools=[]
@@ -121,7 +122,7 @@ class OperationsAgent:
         try:
             prompt = ChatPromptTemplate(
                 [
-                    ("system", prompts.operations_prompt), 
+                    ("system", prompts.operations_prompt.format(current_time=datetime.datetime.now().isoformat())),
                     ("placeholder", "{messages}")
                 ]
             )

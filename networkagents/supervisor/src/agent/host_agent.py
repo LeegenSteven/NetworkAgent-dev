@@ -33,10 +33,6 @@ from google.adk import Agent
 from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.tools.tool_context import ToolContext
 from google.genai import types
-from google.adk import Runner
-from google.adk.artifacts import InMemoryArtifactService
-from google.adk.events import Event, EventActions
-from google.adk.sessions import InMemorySessionService
 from utils.error_handler import (
     SupervisorAgentError,
     RemoteAgentError,
@@ -45,6 +41,8 @@ from utils.error_handler import (
 )
 
 from .remote_agent_connection import RemoteAgentConnections
+from middleware.adk import ADKAgent
+from ag_ui.core import RunAgentInput
 
 logger = logging.getLogger(__name__)
 
@@ -86,9 +84,6 @@ class HostAgent:
 
         self.cards = {}
 
-        self.session_service = InMemorySessionService()
-        self.artifact_service = InMemoryArtifactService()
-
         # dict with sid->sio for sending messages back to dashboard socket session
         self.sio_sessions = {}
 
@@ -96,11 +91,12 @@ class HostAgent:
         # list of loaded remote agents
         self.agents = None
 
-        self.runner = Runner(
+        # Initialize ADKAgent wrapper for AG-UI protocol support
+        # Let ADKAgent manage its own session and artifact services
+        self.adk_agent = ADKAgent(
+            adk_agent=self.host_agent,
             app_name=self.app_name,
-            agent=self.host_agent,
-            artifact_service=self.artifact_service,
-            session_service=self.session_service,
+            use_in_memory_services=True
         )
 
 
@@ -185,7 +181,7 @@ class HostAgent:
         Build the root instruction for the host agent
         """
         current_agent = self.check_state(context)
-        return prompts.supervisor_prompt.format(agents=self.agents, current_agent=current_agent['active_agent'], current_task_status=current_agent['task_status'])
+        return prompts.supervisor_prompt.format(agents=self.agents, current_agent=current_agent['active_agent'], current_time=datetime.datetime.now().isoformat(),current_task_status=current_agent['task_status'])
 
     def check_state(self, context: ReadonlyContext):
         state = context.state
@@ -355,27 +351,48 @@ class HostAgent:
 
         logger.info("Update the agent %s state of the task %s, to %s ", agent_name, task_id, task_status)
 
-        state_changes = {}
+        # Use ADK session manager for state updates
+        try:
+            # Get the session manager from the ADK agent
+            session_manager = self.adk_agent._session_manager
+            app_name = self.adk_agent._get_app_name(None) if hasattr(self.adk_agent, '_get_app_name') else self.app_name
+            user_id = f"thread_user_{session_id}"  # Use consistent user_id format
+            
+            # Update individual state values
+            if agent_name is not None:
+                await session_manager.set_state_value(session_id, app_name, user_id, 'agent', agent_name)
+            
+            if task_status is not None:
+                await session_manager.set_state_value(session_id, app_name, user_id, 'task_status', task_status)
+            
+            if task_id is not None:
+                await session_manager.set_state_value(session_id, app_name, user_id, 'task_id', task_id)
+                
+            logger.info(f"Successfully updated state for session {session_id}")
+            
+        except Exception as e:
+            logger.error(f"Error updating state for session {session_id}: {e}", exc_info=True)
+            # No fallback needed - ADKAgent manages all session state
 
-        if agent_name is not None:
-            state_changes['agent'] = agent_name
 
-        if task_status is not None:
-            state_changes['task_status'] = task_status
-
-        if task_id is not None:
-            state_changes['task_id'] = task_id
-
-        actions_with_update = EventActions(state_delta=state_changes)
-        system_event = Event(
-            invocation_id=uuid4().hex,
-            author="system", 
-            actions=actions_with_update,
-        )
-
-        session = await self.session_service.get_session(app_name=self.app_name, user_id="agent", session_id=session_id)
-        await self.session_service.append_event(session, system_event)
-
+    async def handleToolResult(self, session_id: str, tool_call_id: str, content: str):
+        """
+        Handle tool result from AG-UI and forward to ADK agent
+        
+        Args:
+            session_id: Session ID from the UI
+            tool_call_id: ID of the tool call being responded to
+            content: User's response content
+        """
+        try:
+            logger.info(f"Handling tool result for session {session_id}, tool_call_id: {tool_call_id}, content: {content}")
+            
+            # Use ADK agent to handle the tool result
+            await self.adk_agent.handle_tool_result(session_id, tool_call_id, content)
+            logger.info(f"Successfully handled tool result for {tool_call_id}")
+            
+        except Exception as e:
+            logger.error(f"Error handling tool result: {e}", exc_info=True)
 
     async def sendApproval(self, agent_name: str, approval: str, task_id: str, context_id: str):
         """
@@ -432,7 +449,7 @@ class HostAgent:
           message: The message to send to the agent for the task.
           tool_context: The tool context this method runs in.
 
-        Yields:
+        Returns:
           A dictionary of JSON data from the agent.
         """
 
@@ -476,15 +493,16 @@ class HostAgent:
                 }
 
             task_id = None
-            if state['task_id'] != 'None':
+            if state.get('task_id') and state.get('task_id') != 'None':
                 task_id = state['task_id']
 
             state['task_status'] = "running"
 
             # create message payload with ids
+            # Use session_id as context_id for remote agent conversation continuity
             send_payload = self.create_send_message_payload(
                 text=message,
-                context_id=session_id,
+                context_id=session_id,  # This should be the thread_id for conversation continuity
                 task_id=task_id
             )
 
@@ -502,9 +520,11 @@ class HostAgent:
                     # if task is waiting for info update the state
                     if taskStatus.state == TaskState.input_required:
                         await self.updateState(session_id=session_id,task_status="input_needed")
-                        return{
+                        # Return the message content with require_user_input flag
+                        return {
                             "status" : "Input Required from User",
-                            "text": taskStatus.message.parts[0].root.text
+                            "text": taskStatus.message.parts[0].root.text,
+                            "require_user_input": True
                         }
                     elif taskStatus.state == TaskState.completed:
                         # task is done so remove the agent from the state and reset back to "None"
@@ -565,88 +585,46 @@ class HostAgent:
                     "text": f"Unexpected error: {str(e)}"
             }
 
-    async def reset_conversation(self):
-        """
-        Remove any agent state and add a new conversation to in memory session
-        """
-        logger.info("Reset conversation")
-        await self.session_service.delete_session(app_name=self.app_name, user_id="agent", session_id=HostAgent._session_id)
-        await self.create_session()
-
-    async def create_session(self):
-        """
-        Create a new session using the socket id as the session id
-        """
-        # regenerate the session id
-        HostAgent._session_id = uuid4().hex
-
-        # create new session
-        session = await self.session_service.create_session(
-            app_name=self.app_name, 
-            user_id="agent",
-            session_id=HostAgent._session_id,
-            state={"agent": "Supervisor", 
-                   "task_status": "None", 
-                   "task_id": "None", 
-                   "session_id": HostAgent._session_id}
-        )
-        return session
+    # reset_conversation and create_session methods removed - ADKAgent manages sessions automatically based on thread IDs
 
     async def send_message(self, sio, sid, text):
         """
-        Utility function to send a socketio message back to the dashboard ui
+        Utility function to send AG-UI events back to the dashboard ui
         """
-        if text !='':
-            response = {
-                'id': f'response-{datetime.datetime.now().timestamp()}',
-                'text': text,
-                'source': "",
-                'isUser': False,
+        if text != '':
+            # Send AG-UI TEXT_MESSAGE_CONTENT event instead of legacy chat_message
+            agui_event = {
+                'type': 'TEXT_MESSAGE_CONTENT',
+                'messageId': f'response-{datetime.datetime.now().timestamp()}',
+                'delta': text,
                 'timestamp': datetime.datetime.now().isoformat()
             }
-            await sio.emit('chat_message', response, room=sid)
+            await sio.emit('agui_event', agui_event, room=sid)
 
-    async def run(self, input, sio, sid):
+    async def run_agui(self, input: RunAgentInput):
         """
-        Entry point to run a conversation between a user and host agent. 
+        Entry point to run AG-UI protocol conversation with the host agent.
+        
+        Args:
+            input: AG-UI RunAgentInput containing messages, tools, context, etc.
+            
+        Yields:
+            AG-UI protocol events (TEXT_MESSAGE_START/CONTENT/END, TOOL_CALL_*, etc.)
         """
-        logger.info("input from user %s - session id %s", input, sid)
-
+        logger.info("AG-UI input from user - thread id %s, run id %s", input.thread_id, input.run_id)
+        
         try:
-            content = types.Content(
-                role='user', parts=[types.Part.from_text(text=input)]
-            )
-
-            # get the current conversation session
-            session = await self.session_service.get_session(app_name=self.app_name, user_id="agent", session_id=HostAgent._session_id)
-            if session is None:
-                session = await self.create_session()
-
-            logger.info('** User says:', content.model_dump(exclude_none=True))
-
-            try:
-
-                async for event in self.runner.run_async(user_id="agent", session_id=session.id, new_message=content):
-                    logger.info("ADK RUNNER EVENT")
-                    logger.info(event)
-
-                    if event.content.parts and event.content.parts[0].text:
-                        logger.info(f'** {event.author}: {event.content.parts[0].text}')  
-                        await self.send_message(sio, sid, event.content.parts[0].text)
-
-            except Exception as e:
-                logger.error(f"Error in ADK runner: {str(e)}", exc_info=True)
-                error = SupervisorAgentError(
-                    message=f"Error processing your request: {str(e)}",
-                    severity=ErrorSeverity.ERROR,
-                    original_exception=e
-                )
-                await send_error_message(self.sio_sessions, error)
+            # Use the ADKAgent wrapper to handle the AG-UI protocol
+            async for event in self.adk_agent.run(input):
+                logger.info(f"AG-UI event: {type(event).__name__}")
+                yield event
+                
         except Exception as e:
-            logger.error(f"Unexpected error in run: {str(e)}", exc_info=True)
-            error = SupervisorAgentError(
-                message=f"Unexpected error: {str(e)}",
-                severity=ErrorSeverity.ERROR,
-                original_exception=e
+            logger.error(f"Error in AG-UI run: {str(e)}", exc_info=True)
+            # Import here to avoid circular imports
+            from ag_ui.core import RunErrorEvent, EventType
+            yield RunErrorEvent(
+                type=EventType.RUN_ERROR,
+                message=f"Error processing AG-UI request: {str(e)}",
+                code="AGUI_PROCESSING_ERROR"
             )
-            await send_error_message(self.sio_sessions, error)

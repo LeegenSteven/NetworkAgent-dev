@@ -22,6 +22,7 @@ The operations agent can help the user fulfill tasks such as:
 - which networking locations are available
 - the state of the network resources deployed and their configuration
 - find out how network services are connected to each other via one or more network locations
+- query performance metrics for network services
 """
 
 tags=['chat']
@@ -31,6 +32,7 @@ examples=[
     "What network services are deployed?",
     "What network services can i deploy?",
     "Give me more information on how to deploy a UPF",
-    "What rules do i need to be aware of when deploying a UPF?"
-    "What is the path between ueransim1 and dnn?"
+    "What rules do i need to be aware of when deploying a UPF?",
+    "What is the path between ueransim1 and dnn?",
+    "Fetch the performance metrics for ueransim1 and dnn in the past 10 mins"
 ]

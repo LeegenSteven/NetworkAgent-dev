@@ -49,7 +49,7 @@ class TestAgentExecutor(AgentExecutor):
         task = None
         
         try:
-            agent = await TestAgent().get_instance()
+            agent = await TestAgent.get_instance()
 
             query = context.get_user_input()
             task = context.current_task

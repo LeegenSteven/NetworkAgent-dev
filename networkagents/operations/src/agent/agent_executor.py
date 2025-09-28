@@ -48,7 +48,7 @@ class OperationsAgentExecutor(AgentExecutor):
         task = None
         
         try:
-            agent = await OperationsAgent().get_instance()
+            agent = await OperationsAgent.get_instance()
 
             query = context.get_user_input()
             task = context.current_task
@@ -162,7 +162,7 @@ class OperationsAgentExecutor(AgentExecutor):
         
         try:
             # Attempt to get the agent instance
-            agent = await OperationsAgent().get_instance()
+            agent = await OperationsAgent.get_instance()
             
             # Check if we have a valid task
             if not task:

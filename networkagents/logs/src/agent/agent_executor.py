@@ -48,7 +48,7 @@ class LogsAgentExecutor(AgentExecutor):
         task = None
         
         try:
-            agent = await LogsAgent().get_instance()
+            agent = await LogsAgent.get_instance()
 
             query = context.get_user_input()
             task = context.current_task

@@ -238,9 +238,8 @@ def fetch_metrics_by_time_window(
     in the specified time window
     
   Examples:
-    - fetch_metrics_by_time_window("2024-01-15T10:30:00Z", "2024-01-15T11:30:00Z")
-    - fetch_metrics_by_time_window("2024-01-15", "2024-01-16")
-    - fetch_metrics_by_time_window("1705312200", "1705315800")
+    - fetch_metrics_by_time_window("2024-01-15T10:30:00", "2024-01-15T11:30:00", "upf1")
+    - fetch_metrics_by_time_window("2025-05-15T09:09:09", "2025-05-16T09:09:09", "ueransim2")
   """
   try:
     # Convert datetime strings to Unix timestamps

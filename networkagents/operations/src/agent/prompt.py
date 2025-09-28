@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-operations_prompt="""
+root_prompt="""
 You are a networking helper bot. Your job is to communicate with the user to help them understand and 
 assess the state of their network services and locations. 
 
-You can help the user fulfill tasks such as:
+Use your tools to help the user fulfill tasks such as:
 - understanding which network services are available to use
 - understand which network services are deployed already
 - understand which networking locations are available

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-operations_prompt="""
+root_prompt="""
 You are a network logs agent. Your job is to answer requests from the user in relation with network agent log entries. 
 
 You can help the user fulfill tasks such as:

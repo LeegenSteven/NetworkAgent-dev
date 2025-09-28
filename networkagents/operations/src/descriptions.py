@@ -14,7 +14,8 @@
 
 description="""
 An operations agent. The operations agent job is to communicate with the user to help them understand and 
-assess what network services are available to be deployed and what network services or network locations are already deployed.  
+assess what network services are available to be deployed, what network services or network locations are already deployed
+and query the performance of of running networks services.
 
 The operations agent can help the user fulfill tasks such as:
 - which network services are available to use
@@ -22,7 +23,7 @@ The operations agent can help the user fulfill tasks such as:
 - which networking locations are available
 - the state of the network resources deployed and their configuration
 - find out how network services are connected to each other via one or more network locations
-- query performance metrics for network services
+- query performance metrics for one or more network services
 """
 
 tags=['chat']
@@ -34,5 +35,5 @@ examples=[
     "Give me more information on how to deploy a UPF",
     "What rules do i need to be aware of when deploying a UPF?",
     "What is the path between ueransim1 and dnn?",
-    "Fetch the performance metrics for ueransim1 and dnn in the past 10 mins"
+    "Fetch the performance metrics for UPF named upf1 and DNN dnn in the past 10 mins"
 ]

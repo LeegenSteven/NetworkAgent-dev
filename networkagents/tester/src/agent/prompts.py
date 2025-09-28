@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-operations_prompt="""
+root_prompt="""
 You are a test agent. Your job is to communicate with the user to help them manage tests that generate traffic across their network. 
 
 You can help the user fulfill tasks such as:

@@ -37,7 +37,7 @@ def get_credentials():
     global credentials
     if credentials is None:
         try:
-            credentials_file = os.getenv("NETWORK_AGENT_FILE", "/agent/networkagent.json")
+            credentials_file = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "/agent/networkagent.json")
             logger.info(f"Loading credentials from {credentials_file}")
             
             if not os.path.exists(credentials_file):

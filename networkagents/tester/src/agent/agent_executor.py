@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import logging
-import traceback
 from agent.agent import TestAgent
 from typing_extensions import override
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -23,7 +22,9 @@ from a2a.types import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils import new_task, new_text_artifact, new_agent_text_message
+from google.genai import types
+from agent.agent import TestAgent
+from a2a.utils import new_task, new_agent_text_message
 from utils.error_handler import (
     TestAgentError,
     ErrorSeverity,
@@ -67,24 +68,43 @@ class TestAgentExecutor(AgentExecutor):
             logger.info("start stream %s, with id %s", query, task.contextId)
             
             try:
-                response = await agent.stream(query, task.contextId)
-                logger.info(response)
 
-                await event_queue.enqueue_event(
-                    TaskStatusUpdateEvent(
-                        status=TaskStatus(
-                            state=TaskState.completed,
-                            message=new_agent_text_message(
-                                response,
-                                task.contextId,
-                                task.id,
-                            ),
-                        ),
-                        final=True,
-                        contextId=task.contextId,
-                        taskId=task.id,
+                agent = await TestAgent.get_instance()
+                session = await agent.session_service.get_session(app_name="TestAgent", user_id="agent", session_id=context.context_id)
+                if session is None:
+                    logger.info("creating new session")
+                    session = await agent.session_service.create_session(
+                        app_name="TestAgent",
+                        user_id="agent",
+                        session_id=context.context_id
                     )
+
+                content = types.Content(
+                    role='user', parts=[types.Part.from_text(text=query)]
                 )
+
+                async for event in agent.runner.run_async(user_id="agent", session_id=context.context_id, new_message=content):
+                    logger.info("ADK RUNNER EVENT")
+                    logger.info(event)
+
+                    if event.content.parts and event.content.parts[0].text:
+                        logger.info(f'** {event.author}: {event.content.parts[0].text}')
+
+                        await event_queue.enqueue_event(
+                            TaskStatusUpdateEvent(
+                                status=TaskStatus(
+                                    state=TaskState.completed,
+                                    message=new_agent_text_message(
+                                        event.content.parts[0].text,
+                                        task.contextId,
+                                        task.id,
+                                    ),
+                                ),
+                                final=True,
+                                contextId=task.contextId,
+                                taskId=task.id,
+                            )
+                        )
 
             except Exception as e:
                 # Handle any exceptions that occur during streaming

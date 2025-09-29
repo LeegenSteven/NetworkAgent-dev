@@ -5,16 +5,20 @@ import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../appstate.dart';
 import '../agui/socket_provider.dart';
+import '../models/panel_type.dart';
+import '../screens/full_screen_panel_view.dart';
 import 'charts/time_series_chart_widget.dart';
 import 'approval/task_approval_widget.dart';
 import 'remote_task/remote_task_widget.dart';
 
 class AGUIChatPanel extends StatefulWidget {
   final io.Socket socket;
+  final bool isFullScreen;
   
   const AGUIChatPanel({
     super.key,
     required this.socket,
+    this.isFullScreen = false,
   });
 
   @override
@@ -141,11 +145,13 @@ class _AGUIChatPanelState extends State<AGUIChatPanel> {
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // Dropdown menu button on the left
               PopupMenuButton<String>(
                 icon: const Icon(Icons.menu, color: Color(0xFF0D47A1)),
                 tooltip: 'Quick questions',
+                padding: EdgeInsets.zero,
                 onSelected: (String value) {
                   // Send the selected question directly through AG-UI
                   _aguiProvider.generateStream(value);
@@ -213,10 +219,36 @@ class _AGUIChatPanelState extends State<AGUIChatPanel> {
                   ),
                 ),
               ),
+              // Expand/Collapse button
+              IconButton(
+                icon: Icon(
+                  widget.isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen, 
+                  color: Color(0xFF0D47A1)
+                ),
+                tooltip: widget.isFullScreen ? 'Exit full screen' : 'Expand to full screen',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () {
+                  if (widget.isFullScreen) {
+                    Navigator.of(context).pop();
+                  } else {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => FullScreenPanelView(
+                          panelType: PanelType.chat,
+                          socket: widget.socket,
+                        ),
+                      ),
+                    );
+                  }
+                },
+              ),
               // Reset button on the right
               IconButton(
                 icon: const Icon(Icons.delete_forever, color: Color(0xFF0D47A1)),
                 tooltip: 'Reset chat',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
                 onPressed: () {
                   // Reset the AG-UI conversation (creates new thread ID)
                   _aguiProvider.resetConversation();

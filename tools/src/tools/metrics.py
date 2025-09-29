@@ -73,13 +73,13 @@ def fetch_last_metrics_for_id(
 
 @globals.networkagent_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def fetch_last_metrics_by_name(
-    name: Annotated[str, "name of the ComputeInstance"]
+    name: Annotated[str, "name of the Network Service or ComputeInstance"]
   )->List[Dict]:
   """
-  Lookup the most recent metrics for a given ComputeInstance
+  Lookup the most recent metrics for a given ComputeInstance or Network Service
   
   Args:
-    name: name of the ComputeInstance
+    name: name of the ComputeInstance or Network Service
 
   Returns:
     Dictionary of metrics representing the network statistics for all network interfaces in the ComputeInstance. Each

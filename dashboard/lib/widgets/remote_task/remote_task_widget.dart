@@ -20,37 +20,12 @@ class RemoteTaskWidget extends StatefulWidget {
 }
 
 class _RemoteTaskWidgetState extends State<RemoteTaskWidget> {
-  bool _isCompleted = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _isCompleted = widget.isCompleted;
-  }
-  
   @override
   void didUpdateWidget(RemoteTaskWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.isCompleted != widget.isCompleted) {
-      setState(() {
-        _isCompleted = widget.isCompleted;
-      });
-      if (_isCompleted) {
-        widget.onComplete?.call();
-      }
+    if (oldWidget.isCompleted != widget.isCompleted && widget.isCompleted) {
+      widget.onComplete?.call();
     }
-  }
-
-  void _markCompleted() {
-    setState(() {
-      _isCompleted = true;
-    });
-    widget.onComplete?.call();
-  }
-  
-  // Public method to mark the task as completed from outside
-  void markCompleted() {
-    _markCompleted();
   }
 
   @override
@@ -60,7 +35,7 @@ class _RemoteTaskWidgetState extends State<RemoteTaskWidget> {
       child: Row(
         children: [
           // Progress indicator at the beginning
-          if (!_isCompleted)
+          if (!widget.isCompleted)
             SizedBox(
               width: 16,
               height: 16,
@@ -71,7 +46,7 @@ class _RemoteTaskWidgetState extends State<RemoteTaskWidget> {
                 ),
               ),
             ),
-          if (!_isCompleted) const SizedBox(width: 8),
+          if (!widget.isCompleted) const SizedBox(width: 8),
           // Agent name
           Expanded(
             child: Text(

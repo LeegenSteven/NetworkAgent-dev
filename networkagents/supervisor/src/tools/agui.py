@@ -269,10 +269,18 @@ chartTool = Tool(
     }
 )
 
+tableTool=Tool(
+    name="displayTable",
+    description="""
+    Used to visualise a tablular set of data. 
+    """,
+    parameters={}
+)
+
 actionTool= Tool(   
     name="displayActionResult",
     description="""
-    Used to visualise an action result in the user interface. 
+    Used to visualise the status of an action result in the user interface. 
     """,
     parameters={
         "type": "object",

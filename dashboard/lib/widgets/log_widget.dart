@@ -2,17 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../appstate.dart';
 import '../models/log_entry.dart';
+import '../models/panel_type.dart';
+import '../screens/full_screen_panel_view.dart';
 
 class LogWidget extends StatelessWidget {
   final List<LogEntry> logs;
   final socket;
   final bool isLoading;
+  final bool isFullScreen;
 
   const LogWidget({
     super.key,
     required this.socket,
     required this.logs,
     this.isLoading = false,
+    this.isFullScreen = false,
   });
 
   void _resetLogs(BuildContext context) {
@@ -47,6 +51,34 @@ class LogWidget extends StatelessWidget {
                 ),
               ),
  
+              // Expand/Collapse button (positioned on the right, before reset button)
+              Positioned(
+                right: 48, // Leave space for the reset button
+                child: IconButton(
+                  icon: Icon(
+                    isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen, 
+                    color: Color(0xFF0D47A1)
+                  ),
+                  tooltip: isFullScreen ? 'Exit full screen' : 'Expand to full screen',
+                  onPressed: () {
+                    if (isFullScreen) {
+                      Navigator.of(context).pop();
+                    } else {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => FullScreenPanelView(
+                            panelType: PanelType.logs,
+                            socket: socket,
+                            logs: logs,
+                            isLoading: isLoading,
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ),
+
               // Reset logs button (positioned on the right)
               Positioned(
                 right: 0,

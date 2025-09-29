@@ -18,7 +18,6 @@ from google.adk.artifacts import InMemoryArtifactService
 from google.adk.sessions import InMemorySessionService
 from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import SseConnectionParams
-from agent.prompt import root_prompt
 import datetime
 import os
 import logging
@@ -44,7 +43,11 @@ class OperationsAgent:
         self.session_service = InMemorySessionService()
         self.artifact_service = InMemoryArtifactService()
 
+        from agent.subagents.metrics_agent import metrics_agent
+        from agent.subagents.topology_agent import topology_agent
         import descriptions
+        from agent.prompt import root_prompt
+        
         self.root_agent = LlmAgent(
             name="OperationsAgent",
             description=descriptions.description,
@@ -55,9 +58,10 @@ class OperationsAgent:
                     connection_params=SseConnectionParams(
                         url=os.getenv("AGENT_MCP_TOOLS_ADDRESS", "http://127.0.0.1:8080/sse")
                     ),
-                    tool_filter=["getNetworkDesign","getLocations","getServiceDefinitions","getServices", "get_node_path", "fetch_metrics_by_time_window"]
+                    tool_filter=["getNetworkDesign","getLocations","getServiceDefinitions","getServices"]
                 )
             ],
+            sub_agents=[metrics_agent, topology_agent]
         )
 
         self.runner = Runner(

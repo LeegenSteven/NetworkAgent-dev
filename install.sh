@@ -1114,7 +1114,7 @@ DeployLogCapture()
 ############################################################
 # Build and deploy the liveness probe for UERANSIM         #
 ############################################################
-FaultCapture()
+DeployFaultCapture()
 {
     # Create the Cloud Run service that receives the eventarc
     # events from pub/pub
@@ -1634,7 +1634,7 @@ InstallAll()
     Networkagent
 
     echo "Deploying the fault notification service"
-    FaultCapture    
+    DeployFaultCapture    
 
     # Display demo information summary
     DisplayDemoInfo
@@ -1845,7 +1845,7 @@ if [[ -z $func_calls ]]; then
             func_calls="CheckGCPEnv SetDemoEnv DeployLogCapture"
             ;;
           f) 
-            func_calls="CheckGCPEnv SetDemoEnv FaultCapture"
+            func_calls="CheckGCPEnv SetDemoEnv DeployFaultCapture"
             ;;
           n) 
             AGENT_NAMES=$OPTARG

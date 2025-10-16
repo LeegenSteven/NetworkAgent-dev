@@ -12,3 +12,4 @@ scikit-learn==1.7.2
 pandas==2.3.2
 numpy==2.3.3
 a2a-sdk==0.2.16
+ag-ui-protocol==0.1.9

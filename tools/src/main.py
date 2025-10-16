@@ -33,7 +33,7 @@ import tools.logs_query
 import tools.metrics
 import tools.spanner
 
-sse_app = networkagent_mcp.http_app(transport="sse")
+sse_app = networkagent_mcp.http_app(transport="sse", stateless_http=True)
 
 async def main():
     """Starts the server."""

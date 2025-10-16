@@ -1295,7 +1295,7 @@ Networkagent()
         --update-env-vars GOOGLE_CLOUD_LOCATION=$GOOGLE_REGION \
         --update-env-vars GOOGLE_GENAI_USE_VERTEXAI=1 \
         --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
-        --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL \
+        --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL/sse \
         --allow-unauthenticated 
 
         # Check if allUsers access is already granted. 
@@ -1341,7 +1341,7 @@ Networkagent()
         --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
         --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
         --update-env-vars SUPERVISOR_URL=$SUPERVISOR_URL \
-        --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL \
+        --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL/sse \
         --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
         --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
         --allow-unauthenticated 

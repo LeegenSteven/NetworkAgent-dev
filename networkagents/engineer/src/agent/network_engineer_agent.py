@@ -123,7 +123,7 @@ class NetworkEngineerAgent:
         self.mcpClient = MultiServerMCPClient(
             {
                 "networkagent": {
-                    "url": f"{agent_mcp_tool_address}/sse",
+                    "url": f"{agent_mcp_tool_address}",
                     "transport": "sse",
                 }
             }

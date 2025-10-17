@@ -12,17 +12,47 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from google.adk.agents import LlmAgent
+from google.adk.agents import LlmAgent, SequentialAgent
 from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import SseConnectionParams
+from pydantic import BaseModel, Field
+from typing import List
 import os
-from .topology_prompt import topology_prompt
+import logging
+from .topology_prompt import search_prompt, format_prompt
 
-topology_agent=LlmAgent(
-    name="TopologySubAgent",
-    description="Sub agent responsible for gatheric network topology information",
+logger = logging.getLogger(__name__)
+
+class Node(BaseModel):
+    """A ComputeInstance Node"""
+    id: str = Field(description="id of the computeinstance")
+    name: str = Field(description="name of the computeinstance")
+    status: str = Field(description="the computeinstance status")
+
+class Edge(BaseModel):
+    """A directed connection between Nodes"""
+    start: Node = Field(description="a compute instance ")
+    end: Node = Field(description="a compute instance")
+
+class Network(BaseModel):
+    """A network of nodes and edges"""
+    nodes: List[Node] = Field(description = "array of nodes")
+    edges: List[Edge] = Field(description = "array of edges")
+
+format_agent=LlmAgent(
+    name="TopologyFormatSubAgent",
+    description="Sub agent responsible for formatting topology information",
     model="gemini-2.0-flash",
-    instruction=topology_prompt,
+    instruction=format_prompt,
+    output_schema=Network
+)
+
+search_agent=LlmAgent(
+    name="TopologySearchSubAgent",
+    description="Sub agent responsible for gatheric network topology information",
+    model="gemini-2.5-flash",
+    instruction=search_prompt,
+    output_key='topology',
     tools=[
         MCPToolset(
             connection_params=SseConnectionParams(
@@ -32,3 +62,10 @@ topology_agent=LlmAgent(
         )
     ],
 )
+
+topology_agent=SequentialAgent(
+    name="TopologySubAgent",
+    description="Sub agent responsible for gatheric network topology information",
+    sub_agents=[search_agent, format_agent]
+)
+

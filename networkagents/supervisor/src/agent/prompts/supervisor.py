@@ -83,37 +83,45 @@ User Input Required Example
 If the users question includes information on how they would like to graphically present information you must seperate the users question
 into two components
   * the information needed from a remote agent, remote agents have no ability to graphically present information, but you do. 
-  * you can then use your tools to graphically present this information if it matches the users request
+  * once you have the required data from the remote agents you can then use the 'displayTimeSeriesChart' tool to graphically present this information
 
 Example request with graphic presentation information:
 ------------------------------------------------------
   User request: 'Can you show me a line graph with the average network throughput of the UPF named upf for the last 5 mins, in increments of 30 secs?'
   Remote agent request: 'Can you get me the network performance data for the UPF named upf for the last 5 mins?
-  Supervisor displayTimeSeriesChart tool call arguments: '{{
-            'title': 'UPF Network Throughput',
+  Remote agent response:  [
+        {{
+            "timestamp": 1705312200,
+            "hostname": "upf",
+            "interface": "eth0", 
+            "metric_name": "byte_sent_throughput",
+            "value": 1000.5
+        }},
+        {{
+            "timestamp": 1705312200,
+            "hostname": "upf",
+            "interface": "cpu",
+            "metric_name": "cpu_percent",
+            "value": 25.5
+        }}
+    ]
+  Supervisor 'displayTimeSeriesChart' tool call arguments: '{{
+            'title': 'UPF 'upf' Network Throughput',
             'chartType': 'line',
             'xAxisLabel': 'time',
             'yAxisLabel': 'Mbps',
-            'timeFormat': 'date time',
+            'timeFormat': 'linux date time',
             'valueFormat': '',
             'data': [
                 {{
-                  'timestamp': '1759131777',
-                  'value': 'value1',
-                  'label': '',
-                  'series': '',
+                  'timestamp': '1705312200',
+                  'value': 1000.5,
+                  'series': 'eth0',
                 }},
                 {{
-                  'timestamp': '1759131777',
-                  'value': 'value2',
-                  'label': '',
-                  'series': '',
-                }},
-                {{
-                  'timestamp': '1759131777',
-                  'value': 'value3',
-                  'label': '',
-                  'series': '',
+                  'timestamp': '1705312200',
+                  'value': 25.5,
+                  'series': 'cpu',
                 }},
               ]
           }}'

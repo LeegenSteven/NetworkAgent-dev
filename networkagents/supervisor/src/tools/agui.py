@@ -207,7 +207,7 @@ chartTool = Tool(
     Useful to visualise network performance data. 
 
     This tool presents time series information as graphical charts in the User Interface. 
-    Supports line charts, area charts, bar charts, and scatter plots for time-based data.
+    It supports line charts, area charts, bar charts, and scatter plots for time-based data.
     """,
     parameters={
         "type": "object",

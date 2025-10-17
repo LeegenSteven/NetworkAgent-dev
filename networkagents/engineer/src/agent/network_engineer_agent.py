@@ -118,7 +118,7 @@ class NetworkEngineerAgent:
         Initialise the MCP tools with retry logic to ensure successful loading
         """
         logger.info("loading tools")
-        agent_mcp_tool_address = os.getenv("AGENT_MCP_TOOLS_ADDRESS", "http://127.0.0.1:8080")
+        agent_mcp_tool_address = os.getenv("AGENT_MCP_TOOLS_ADDRESS", "http://127.0.0.1:8080/sse")
 
         self.mcpClient = MultiServerMCPClient(
             {

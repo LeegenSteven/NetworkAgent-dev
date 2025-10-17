@@ -22,14 +22,14 @@ from .metrics_prompt import metrics_prompt
 metrics_agent=LlmAgent(
     name="MetricsSubAgent",
     description="Sub agent responsible for gathering network performance metrics for network services",
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     instruction=metrics_prompt.format(current_time=datetime.datetime.now().isoformat()),
     tools=[
         MCPToolset(
             connection_params=SseConnectionParams(
                 url=os.getenv("AGENT_MCP_TOOLS_ADDRESS", "http://127.0.0.1:8080/sse")
             ),
-            tool_filter=["fetch_metrics_by_time_window", "fetch_last_metrics_by_name"]
+            tool_filter=["fetch_metrics_by_time_window"]
         )
     ],
 )

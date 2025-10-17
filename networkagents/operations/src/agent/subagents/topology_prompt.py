@@ -12,6 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-topology_prompt="""
+search_prompt="""
+You're role is to help the user find network topology information about one or more network 
+services.
+
 Use your tools to provide the information requested by the user
+"""
+
+
+format_prompt="""
+You are a network topology formatting agent. Your job is to format the topology information 
+collected so far into a structured set of network nodes and edges.
+
+You're job is to convert the topology information below into a structured JSON object
+
+---
+{topology}
+---
+
 """

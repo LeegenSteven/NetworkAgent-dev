@@ -332,6 +332,27 @@ Create()
             exit 1
         fi
 
+        echo "########################################"
+        echo "Waiting for service account to be available..."
+        echo "########################################"
+        max_attempts=10
+        attempt=0
+        while [ $attempt -lt $max_attempts ]; do
+            if gcloud iam service-accounts describe $GOOGLE_SERVICE_ACCOUNT > /dev/null 2>&1; then
+                echo "Service account $GOOGLE_SERVICE_ACCOUNT is ready!"
+                break
+            fi
+            attempt=$((attempt + 1))
+            echo "Waiting for service account to be available... (attempt $attempt/$max_attempts)"
+            sleep 10
+        done
+
+        if [ $attempt -eq $max_attempts ]; then
+            echo "**ERROR** Service account $GOOGLE_SERVICE_ACCOUNT is not available after $max_attempts attempts"
+            echo "Please check your GCP project permissions and try again"
+            exit 1
+        fi
+
         echo "Granting permissions to the GKE Cluster service account..."
         for role in "roles/editor" "roles/container.admin" "roles/compute.admin" \
             "roles/compute.networkAdmin" "roles/iam.serviceAccountAdmin" "roles/monitoring.metricWriter" \

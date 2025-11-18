@@ -246,7 +246,8 @@ Create()
     echo "########################################"
     echo "Grant GCP permissions to GCP user: $GOOGLE_USER"
     echo "########################################"
-    for role in "roles/logging.logWriter" "roles/spanner.databaseReader"; do
+    for role in "roles/logging.logWriter" "roles/spanner.databaseReader" \
+                "roles/artifactregistry.admin"; do
         echo "$role"
         gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="user:$GOOGLE_USER" --role="$role" --no-user-output-enabled
         # roles/spanner.databaseReader needed for the COlab Notebook to access the graph database

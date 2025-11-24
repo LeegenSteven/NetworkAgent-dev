@@ -29,6 +29,8 @@ from utils.error_handler import (
     ErrorSeverity,
     create_error_status_event
 )
+from agent_library.trace.trace_context import TracingContext
+import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +47,38 @@ class LogsAgentExecutor(AgentExecutor):
         Handler for 'message/stream' requests.
         """
         logger.info("on execute")
-        task = None
-        
+
+        query = context.get_user_input()
+        task = context.current_task
+
+        # Set the trace ID to the A2A context_id for cross-agent correlation
+        TracingContext.set_trace_id(context.context_id)
+
+        # check message exists
+        if not context.message:
+            raise LogsAgentError(
+                message='No message provided',
+                severity=ErrorSeverity.ERROR
+            )
+
+        if not task:
+            logger.info("Creating new task!!")
+            task = new_task(context.message)
+            await event_queue.enqueue_event(task)
+
+        logger.info("start stream %s, with id %s", query, task.context_id)
+        await event_queue.enqueue_event(
+            TaskStatusUpdateEvent(
+                status=TaskStatus(
+                    state=TaskState.submitted,
+                    timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat()                    
+                ),
+                final=False,
+                context_id=task.context_id,
+                task_id=task.id,
+            )
+        )
+
         try:
             agent = await LogsAgent.get_instance()
 
@@ -64,7 +96,7 @@ class LogsAgentExecutor(AgentExecutor):
                 task = new_task(context.message)
                 await event_queue.enqueue_event(task)
 
-            logger.info("start stream %s, with id %s", query, task.contextId)
+            logger.info("start stream %s, with id %s", query, task.context_id)
             
             try:
                 agent = await LogsAgent.get_instance()
@@ -94,13 +126,13 @@ class LogsAgentExecutor(AgentExecutor):
                                     state=TaskState.completed,
                                     message=new_agent_text_message(
                                         event.content.parts[0].text,
-                                        task.contextId,
+                                        task.context_id,
                                         task.id,
                                     ),
                                 ),
                                 final=True,
-                                contextId=task.contextId,
-                                taskId=task.id,
+                                context_id=task.context_id,
+                                task_id=task.id,
                             )
                         )
 
@@ -113,7 +145,7 @@ class LogsAgentExecutor(AgentExecutor):
                 )
                 error_event = create_error_status_event(
                     error=error,
-                    context_id=task.contextId,
+                    context_id=task.context_id,
                     task_id=task.id,
                     final=True
                 )
@@ -125,7 +157,7 @@ class LogsAgentExecutor(AgentExecutor):
             if task:
                 error_event = create_error_status_event(
                     error=e,
-                    context_id=task.contextId,
+                    context_id=task.context_id,
                     task_id=task.id,
                     final=True
                 )
@@ -142,7 +174,7 @@ class LogsAgentExecutor(AgentExecutor):
             if task:
                 error_event = create_error_status_event(
                     error=error,
-                    context_id=task.contextId,
+                    context_id=task.context_id,
                     task_id=task.id,
                     final=True
                 )
@@ -181,13 +213,13 @@ class LogsAgentExecutor(AgentExecutor):
                         state=TaskState.cancelled,
                         message=new_agent_text_message(
                             "Task cancellation requested. Note that some operations may continue in the background.",
-                            task.contextId,
+                            task.context_id,
                             task.id,
                         ),
                     ),
                     final=True,
-                    contextId=task.contextId,
-                    taskId=task.id,
+                    context_id=task.context_id,
+                    task_id=task.id,
                 )
             )
         except LogsAgentError as e:
@@ -195,7 +227,7 @@ class LogsAgentExecutor(AgentExecutor):
             if task:
                 error_event = create_error_status_event(
                     error=e,
-                    context_id=task.contextId,
+                    context_id=task.context_id,
                     task_id=task.id,
                     final=True
                 )
@@ -212,7 +244,7 @@ class LogsAgentExecutor(AgentExecutor):
             if task:
                 error_event = create_error_status_event(
                     error=error,
-                    context_id=task.contextId,
+                    context_id=task.context_id,
                     task_id=task.id,
                     final=True
                 )

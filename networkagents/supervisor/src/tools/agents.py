@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from utils.k8s import get_credentials
+from agent_library import get_credentials
 import google.cloud.run as run_v2
 import os
 
@@ -33,7 +33,7 @@ async def get_available_agents(project_id=os.getenv("GOOGLE_PROJECT"),
         A list of dictionaries, where each dictionary contains 'name' and 'url'
         for the matching Cloud Run services.
     """
-    credentials = get_credentials()
+    credentials,_ = get_credentials()
     logger.debug(credentials)
     client = run_v2.ServicesClient(credentials=credentials)
     parent = f"projects/{project_id}/locations/{location}"

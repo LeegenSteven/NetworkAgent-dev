@@ -17,7 +17,20 @@ from ag_ui.core import Tool
 # UI tool to get feedback
 approvalTool = Tool(
     name="requestTaskApproval",
-    description="Request user approval for one or more tasks before proceeding. Displays tasks with details and importance levels for user confirmation.",
+    description="""
+        Request user approval for one or more tasks before proceeding. Displays tasks with details and importance levels for user confirmation.
+
+        The response from the tool is a dictionary representing the users decision. 
+
+        Below is the structure of the response from the tool.
+        {
+            'approved': <boolean decision from the user on whether to proceed or not>,
+            'timestamp': <current time>,
+            'tasks': <list of tasks to approve>,
+        }
+
+        The 'approved' value determines whether to proceed or not. 
+    """,
     parameters={
         "type": "object",
         "properties": {

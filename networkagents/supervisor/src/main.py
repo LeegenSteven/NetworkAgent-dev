@@ -18,10 +18,12 @@ from aiohttp import web
 import aiohttp_cors
 import logging
 import os
+import json
 from tools.topology import build_graph, spanner_connect
 from tools.metrics import fetch_all_last_metrics
 from tools.service_performance import get_active_users, get_average_performance_by_service_type
 from tools.logs import fetch_log_entries
+from tools.traces import TraceStreamListener
 from endpoints.socketendpoint import clients_state, view_to_edge_label_map
 
 
@@ -52,6 +54,9 @@ cors = aiohttp_cors.setup(app, defaults={
         allow_methods="*"
     )
 })
+
+# Global trace listener instance
+trace_listener = None
 
 async def send_topology_updates():
     """Background task that periodically sends topology and logs updates to all connected clients."""
@@ -97,6 +102,8 @@ async def send_topology_updates():
         await asyncio.sleep(5)
 
 async def init():
+    global trace_listener
+    
     runner = web.AppRunner(app)
     await runner.setup()
 
@@ -110,12 +117,28 @@ async def init():
     
     # Start the background task for topology updates
     asyncio.create_task(send_topology_updates())
+    
+    # Trace listener was already initialized before SocketEndpoint creation
+    # Just log confirmation
+    if trace_listener:
+        logger.info(f"✓ Trace stream listener ready: {trace_listener} (will start when clients enable traces)")
+    else:
+        logger.error("Could not initialize trace listener")
 
 if __name__ == "__main__":
     logger.info("starting network agent...")
     
     import endpoints
+    
+    # Create SocketEndpoint first
     socketEndpoint = endpoints.SocketEndpoint(sio)
+    
+    # Initialize trace_listener with the socket endpoint
+    # Store it on the socket endpoint so handlers can access it
+    trace_listener = TraceStreamListener(socketEndpoint)
+    socketEndpoint.trace_listener = trace_listener
+    logger.info(f"Initialized trace_listener and attached to SocketEndpoint: {trace_listener}")
+    
     restEndpoint = endpoints.RestEndpoint(app, cors)
 
     loop=asyncio.new_event_loop()

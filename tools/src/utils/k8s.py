@@ -58,7 +58,7 @@ def external_service_account():
         auth-provider:
           name: gcp
           config:
-            scopes: https://www.googleapis.com/auth/cloud-platform
+            scopes: "https://www.googleapis.com/auth/cloud-platform"
     """
 
     logger.debug(CONFIG)
@@ -82,7 +82,7 @@ def get_credentials():
     """
     global credentials
     if credentials == None:
-      credentials = google.auth.load_credentials_from_file(os.getenv("GOOGLE_APPLICATION_CREDENTIALS","/agent/networkagent.json"))[0]
+      credentials, _ = google.auth.load_credentials_from_file(os.getenv("GOOGLE_APPLICATION_CREDENTIALS","/agent/networkagent.json"), scopes=["https://www.googleapis.com/auth/cloud-platform"])
     return credentials
 
 

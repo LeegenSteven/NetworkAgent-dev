@@ -158,7 +158,7 @@ async def getClusterFeatureDetails(namespace, name):
 # Get client for the network automation cluster
 #################################################
 async def getExternalCluster():
-    credentials =google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/tools/networkagent.json"))[0]
+    credentials, _ =google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/tools/networkagent.json"))
     cluster_manager_client = ClusterManagerClient(credentials=credentials)
 
     GOOGLE_PROJECT = os.getenv("GOOGLE_PROJECT")
@@ -193,7 +193,7 @@ async def getExternalCluster():
         auth-provider:
           name: gcp
           config:
-            scopes: https://www.googleapis.com/auth/cloud-platform
+            scopes: "https://www.googleapis.com/auth/cloud-platform"
     """
 
     logger.debug(CONFIG)
@@ -206,5 +206,3 @@ async def getExternalCluster():
     apiclient = kubernetes.client.ApiClient(configuration=configuration)
 
     return apiclient
-
-

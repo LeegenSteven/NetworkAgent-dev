@@ -52,7 +52,7 @@ class RemoteAgentConnections:
 
     async def create_client(self):
         logger.info("creating client for %s with address %s", self.card.name, self.address)
-        self.agent_client = await A2AClient.get_client_from_agent_card_url(httpx_client=httpx.AsyncClient(), base_url=self.address)
+        self.agent_client = A2AClient(httpx_client=httpx.AsyncClient(timeout=30.0), agent_card=self.card)
         # the discovered card address is the internal address of the server, make sure to update with the external address or is not reachable
         self.agent_client.url=self.address
 

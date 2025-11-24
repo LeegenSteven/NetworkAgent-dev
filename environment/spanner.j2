@@ -113,3 +113,19 @@ spec:
            DESTINATION KEY (to_id) REFERENCES NetworkNode(id)
            LABEL Manages
     )"
+  - "CREATE TABLE AgentTrace (
+       id STRING(36) NOT NULL,
+       event_type STRING(MAX) NOT NULL,
+       trace_id STRING(MAX) NOT NULL,
+       span_id STRING(MAX) NOT NULL,
+       parent_span_id STRING(MAX),
+       operation_name STRING(MAX) NOT NULL,
+       timestamp TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
+       details JSON
+    ) PRIMARY KEY(id)"
+  - "CREATE CHANGE STREAM AgentTraceStream
+       FOR AgentTrace
+       OPTIONS (
+         retention_period = '7d',
+         value_capture_type = 'NEW_ROW'
+       )"

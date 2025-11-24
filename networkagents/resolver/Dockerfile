@@ -13,8 +13,12 @@
 # limitations under the License.
 
 FROM python:3.13.2
-ADD ./requirements.txt /
+ADD resolver/requirements.txt /
 RUN pip install -r /requirements.txt
-ADD ./src/ /agent
+
+ADD lib/ /lib/
+RUN pip install /lib
+
+ADD resolver/src/ /agent
 WORKDIR /agent
 CMD ["python3", "main.py"]

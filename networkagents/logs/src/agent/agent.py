@@ -23,6 +23,8 @@ from descriptions import description
 import os
 import datetime
 import logging
+from agent_library.agentmiddleware.adk import ADKAgent
+from agent_library.trace.trace_plugin import TracePlugin
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +47,6 @@ class LogsAgent:
         self.session_service = InMemorySessionService()
         self.artifact_service = InMemoryArtifactService()
 
-        import descriptions
         self.root_agent = LlmAgent(
             name="LogsAgent",
             description=description,
@@ -61,9 +62,19 @@ class LogsAgent:
             ],
         )
 
+        self.app_name = "LogsAgent"
+        # Initialize ADKAgent wrapper for AG-UI protocol support
+        # Let ADKAgent manage its own session and artifact services
+        self.adk_agent = ADKAgent(
+            adk_agent=self.root_agent,
+            app_name=self.app_name,
+            use_in_memory_services=True
+        )
+
         self.runner = Runner(
             app_name="LogsAgent",
             agent=self.root_agent,
             artifact_service=self.artifact_service,
             session_service=self.session_service,
-        )        
+            plugins=[TracePlugin()]
+        )   

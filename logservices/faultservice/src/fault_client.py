@@ -28,6 +28,10 @@ from a2a.types import (
     MessageSendParams,
 )
 
+# Import tracing components from shared library
+import sys
+sys.path.insert(0, '/app/networkagents/lib/src')
+
 logger = logging.getLogger(__name__)
 
 ######################################################################
@@ -123,7 +127,7 @@ class FaultClient:
 
     async def send_incident_to_resolver(self, incident_data):
         """
-        Send incident data to the resolver agent.
+        Send incident data to the resolver agent.        
         """
         # create a task id for the resolver agent
         incidentid = uuid4().hex
@@ -137,6 +141,7 @@ class FaultClient:
 
         # Create a message with data part - don't specify task_id to let A2A framework create a new task
         send_payload = await self.create_send_message_payload(incident_data['jsonPayload'], context_id=incidentid, task_id=None)
+        
         params = MessageSendParams(**send_payload)
                 
         logger.info(f"Request parameters: {params}")

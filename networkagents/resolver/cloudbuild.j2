@@ -15,7 +15,7 @@
 steps:
 - name: 'gcr.io/cloud-builders/docker'
   script: |
-    docker build -t {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/resolveragent:latest .
+    docker build -t {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/resolveragent:latest -f resolver/Dockerfile .
   automapSubstitutions: true
 images:
 - '{{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/resolveragent:latest'

@@ -13,9 +13,9 @@
 # limitations under the License.
 
 import logging
+import datetime
 from agent.agent import OperationsAgent
 from typing_extensions import override
-from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events.event_queue import EventQueue
 from a2a.types import (
     TaskState,
@@ -29,11 +29,15 @@ from utils.error_handler import (
     ErrorSeverity,
     create_error_status_event
 )
+from a2a.server.agent_execution import AgentExecutor, RequestContext
+from agent_library.trace.trace_context import TracingContext
 
 logger = logging.getLogger(__name__)
 
 class OperationsAgentExecutor(AgentExecutor):
-    """Operations AgentExecutor Example."""
+    """
+    Operations AgentExecutor.
+    """
 
     @override
     async def execute(
@@ -42,17 +46,19 @@ class OperationsAgentExecutor(AgentExecutor):
         event_queue: EventQueue,
     ) -> None:
         """
-        Handler for 'message/stream' requests.
+        The main execution logic.
         """
         logger.info("on execute")
         task = None
         
         try:
-            agent = await OperationsAgent.get_instance()
-
             query = context.get_user_input()
             task = context.current_task
 
+            # Set the trace ID to the A2A context_id for cross-agent correlation
+            TracingContext.set_trace_id(context.context_id)
+
+            # check message exists
             if not context.message:
                 raise OperationsAgentError(
                     message='No message provided',
@@ -64,10 +70,22 @@ class OperationsAgentExecutor(AgentExecutor):
                 task = new_task(context.message)
                 await event_queue.enqueue_event(task)
 
-            logger.info("start stream %s, with id %s", query, task.contextId)
+            logger.info("start stream %s, with id %s", query, task.context_id)
+            await event_queue.enqueue_event(
+                TaskStatusUpdateEvent(
+                    status=TaskStatus(
+                        state=TaskState.submitted,
+                        timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat()                    
+                    ),
+                    final=False,
+                    context_id=task.context_id,
+                    task_id=task.id,
+                )
+            )
             
             try:
                 agent = await OperationsAgent.get_instance()
+
                 session = await agent.session_service.get_session(app_name="OperationsAgent", user_id="agent", session_id=context.context_id)
                 if session is None:
                     logger.info("creating new session")
@@ -94,16 +112,18 @@ class OperationsAgentExecutor(AgentExecutor):
                                     state=TaskState.completed,
                                     message=new_agent_text_message(
                                         event.content.parts[0].text,
-                                        task.contextId,
+                                        task.context_id,
                                         task.id,
                                     ),
                                 ),
                                 final=True,
-                                contextId=task.contextId,
-                                taskId=task.id,
+                                context_id=task.context_id,
+                                task_id=task.id,
                             )
                         )
 
+                return
+            
             except Exception as e:
                 # Handle any exceptions that occur during streaming
                 error = OperationsAgentError(
@@ -113,7 +133,7 @@ class OperationsAgentExecutor(AgentExecutor):
                 )
                 error_event = create_error_status_event(
                     error=error,
-                    context_id=task.contextId,
+                    context_id=task.context_id,
                     task_id=task.id,
                     final=True
                 )
@@ -125,7 +145,7 @@ class OperationsAgentExecutor(AgentExecutor):
             if task:
                 error_event = create_error_status_event(
                     error=e,
-                    context_id=task.contextId,
+                    context_id=task.context_id,
                     task_id=task.id,
                     final=True
                 )
@@ -142,7 +162,7 @@ class OperationsAgentExecutor(AgentExecutor):
             if task:
                 error_event = create_error_status_event(
                     error=error,
-                    context_id=task.contextId,
+                    context_id=task.context_id,
                     task_id=task.id,
                     final=True
                 )
@@ -181,13 +201,13 @@ class OperationsAgentExecutor(AgentExecutor):
                         state=TaskState.cancelled,
                         message=new_agent_text_message(
                             "Task cancellation requested. Note that some operations may continue in the background.",
-                            task.contextId,
+                            task.context_id,
                             task.id,
                         ),
                     ),
                     final=True,
-                    contextId=task.contextId,
-                    taskId=task.id,
+                    context_id=task.context_id,
+                    task_id=task.id,
                 )
             )
         except OperationsAgentError as e:
@@ -195,9 +215,9 @@ class OperationsAgentExecutor(AgentExecutor):
             if task:
                 error_event = create_error_status_event(
                     error=e,
-                    context_id=task.contextId,
+                    context_id=task.context_id,
                     task_id=task.id,
-                    final=True
+                    is_final=True
                 )
                 await event_queue.enqueue_event(error_event)
             # Re-raise the error
@@ -212,7 +232,7 @@ class OperationsAgentExecutor(AgentExecutor):
             if task:
                 error_event = create_error_status_event(
                     error=error,
-                    context_id=task.contextId,
+                    context_id=task.context_id,
                     task_id=task.id,
                     final=True
                 )

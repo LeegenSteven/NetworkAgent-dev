@@ -126,6 +126,6 @@ def create_error_status_event(
             ),
         ),
         final=final,
-        contextId=context_id,
-        taskId=task_id,
+        context_id=context_id,
+        task_id=task_id,
     )

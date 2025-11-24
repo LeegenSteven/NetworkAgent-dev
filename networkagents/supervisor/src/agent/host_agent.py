@@ -19,7 +19,7 @@ from typing import Any
 import logging
 import os
 import agent.prompts.supervisor as prompts
-from utils.k8s import get_credentials
+from agent_library.credentials.creds import get_credentials
 import datetime
 from a2a.client import A2ACardResolver
 from a2a.types import (
@@ -41,7 +41,7 @@ from utils.error_handler import (
 )
 
 from .remote_agent_connection import RemoteAgentConnections
-from middleware.adk import ADKAgent
+from agent_library.agentmiddleware.adk import ADKAgent
 from ag_ui.core import RunAgentInput
 
 logger = logging.getLogger(__name__)
@@ -57,14 +57,10 @@ class HostAgent:
     # static agent instance
     _instance = None
 
-    # current session id
-    _session_id = None
-
     @classmethod
     async def get_instance(cls):
         if HostAgent._instance is None:
             HostAgent._instance = cls()
-            HostAgent._session_id = uuid4().hex
             await HostAgent._instance.load_remote_agents()
         return HostAgent._instance
 
@@ -72,7 +68,7 @@ class HostAgent:
         """
         Init agent and runner
         """
-        self.credentials = get_credentials()
+        self.credentials,self.projectid = get_credentials()
 
         self.app_name = "host_network_agent"
 
@@ -123,6 +119,7 @@ class HostAgent:
                             card_resolver = A2ACardResolver(httpx_client=httpx_client,base_url=address)
                             card = await card_resolver.get_agent_card()
                             card.url=address
+                            logger.info("CARD INFO----------------")
                             logger.info(card)
                             remote_connection = RemoteAgentConnections(self, card, address)
                             await remote_connection.create_client()
@@ -162,19 +159,22 @@ class HostAgent:
         Returns:
             Gemini agent with list of remote agents and task to route
         """
-        return Agent(
+        # Create the base agent
+        base_agent = Agent(
             model='gemini-2.0-flash',
             name=self.app_name,
             instruction=self.root_instruction,
             description=(
                 'This agent orchestrates the decomposition of the user request into'
-                ' tasks that can be performed by the child agents.'
+                'tasks that can be performed by the child agents.'
             ),
             tools=[
                 self.list_remote_agents,
                 self.send_task,
             ],
         )
+                
+        return base_agent
 
     def root_instruction(self, context: ReadonlyContext) -> str:
         """
@@ -505,7 +505,7 @@ class HostAgent:
                 context_id=session_id,  # This should be the thread_id for conversation continuity
                 task_id=task_id
             )
-
+            
             request = SendStreamingMessageRequest(
                 id = str(uuid4()),
                 params=MessageSendParams(**send_payload)

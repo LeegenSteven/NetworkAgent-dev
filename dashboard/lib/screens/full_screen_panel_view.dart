@@ -6,18 +6,19 @@ import '../models/log_entry.dart';
 import '../widgets/agui_chat_panel.dart';
 import '../widgets/log_widget.dart';
 import '../widgets/performance/performance_graph_widget.dart';
+import '../widgets/trace/trace_widget.dart';
 import '../appstate.dart';
 
 class FullScreenPanelView extends StatelessWidget {
   final PanelType panelType;
-  final io.Socket socket;
+  final io.Socket? socket;
   final List<LogEntry>? logs;
   final bool? isLoading;
 
   const FullScreenPanelView({
     super.key,
     required this.panelType,
-    required this.socket,
+    this.socket,
     this.logs,
     this.isLoading,
   });
@@ -95,13 +96,13 @@ class FullScreenPanelView extends StatelessWidget {
   Widget _buildPanelContent() {
     switch (panelType) {
       case PanelType.chat:
-        return AGUIChatPanel(socket: socket, isFullScreen: true);
+        return AGUIChatPanel(socket: socket!, isFullScreen: true);
       case PanelType.logs:
         return Consumer<Appstate>(
           builder: (context, appState, child) {
             return LogWidget(
               logs: logs ?? appState.logs,
-              socket: socket,
+              socket: socket!,
               isLoading: isLoading ?? appState.isLoadingLogs,
               isFullScreen: true,
             );
@@ -111,12 +112,14 @@ class FullScreenPanelView extends StatelessWidget {
         return Consumer<Appstate>(
           builder: (context, appState, child) {
             return PerformanceGraphWidget(
-              socket: socket,
+              socket: socket!,
               isLoading: isLoading ?? appState.isLoadingMetrics,
               isFullScreen: true,
             );
           },
         );
+      case PanelType.trace:
+        return const TraceWidget(isFullScreen: true);
     }
   }
 }

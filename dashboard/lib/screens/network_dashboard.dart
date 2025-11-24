@@ -7,6 +7,7 @@ import '../widgets/agui_chat_panel.dart';
 import '../widgets/topology/network_topology.dart';
 import '../widgets/markdown_drawer.dart';
 import '../widgets/log_widget.dart';
+import '../widgets/trace/trace_widget.dart';
 import '../widgets/performance/performance_graph_widget.dart';
 import 'settings_screen.dart';
 import 'notification_screen.dart';
@@ -25,9 +26,11 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
   // Widget display state
   bool _showChat = false; // Chat is hidden by default
   bool _showLogs = false;
+  bool _showTrace = false;
   
-  // Control the horizontal split view ratio (chat vs. topology+logs)
-  double _horizontalSplitRatio = 0.3; // 30% for chat, 70% for network topology + logs
+  // Control the horizontal split view ratios
+  double _chatPanelRatio = 0.3; // 30% for chat panel
+  double _tracePanelRatio = 0.3; // 30% for trace panel
   static const double _minHorizontalSplitRatio = 0.2;
   static const double _maxHorizontalSplitRatio = 0.8;
   
@@ -132,6 +135,14 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
   void _toggleChat() {
     setState(() {
       _showChat = !_showChat;
+    });
+  }
+
+  void _toggleTrace() {
+    final appState = Provider.of<Appstate>(context, listen: false);
+    setState(() {
+      _showTrace = !_showTrace;
+      appState.toggleTraces(_showTrace);
     });
   }
   
@@ -240,6 +251,15 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
             onPressed: () => _toggleChat(),
             tooltip: 'Toggle Chat',
           ),
+          // Trace toggle button
+          IconButton(
+            icon: Icon(
+              Icons.analytics,
+              color: _showTrace ? Colors.amber : Colors.white,
+            ),
+            onPressed: () => _toggleTrace(),
+            tooltip: 'Toggle Trace',
+          ),
           // Performance graph toggle button
           Consumer<Appstate>(
             builder: (context, appState, child) {
@@ -292,17 +312,17 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
           // Left panel - Chat (only shown if _showChat is true)
           if (_showChat) ...[
             SizedBox(
-              width: MediaQuery.of(context).size.width * _horizontalSplitRatio,
+              width: MediaQuery.of(context).size.width * _chatPanelRatio,
               child: AGUIChatPanel(socket: appState.socket!),
             ),
             
-            // Horizontal resizable divider
+            // Horizontal resizable divider for chat panel
             GestureDetector(
               behavior: HitTestBehavior.translucent,
               onHorizontalDragUpdate: (details) {
                 setState(() {
-                  _horizontalSplitRatio += details.delta.dx / MediaQuery.of(context).size.width;
-                  _horizontalSplitRatio = _horizontalSplitRatio.clamp(_minHorizontalSplitRatio, _maxHorizontalSplitRatio);
+                  _chatPanelRatio += details.delta.dx / MediaQuery.of(context).size.width;
+                  _chatPanelRatio = _chatPanelRatio.clamp(_minHorizontalSplitRatio, _maxHorizontalSplitRatio);
                 });
               },
               child: Container(
@@ -322,7 +342,7 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
             ),
           ],
           
-          // Right panel - Network Topology and Logs
+          // Main panel - Network Topology and Logs
           Expanded(
             child: Column(
               children: [
@@ -421,6 +441,39 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
               ],
             ),
           ),
+          
+          // Right panel - Trace (only shown if _showTrace is true)
+          if (_showTrace) ...[
+            // Horizontal resizable divider for trace panel
+            GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragUpdate: (details) {
+                setState(() {
+                  _tracePanelRatio -= details.delta.dx / MediaQuery.of(context).size.width;
+                  _tracePanelRatio = _tracePanelRatio.clamp(_minHorizontalSplitRatio, _maxHorizontalSplitRatio);
+                });
+              },
+              child: Container(
+                width: 8,
+                color: const Color(0xFFE3F2FD), // Light blue background
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 2,
+                      height: 30,
+                      color: const Color(0xFF90CAF9), // Slightly darker blue for the handle
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+            SizedBox(
+              width: MediaQuery.of(context).size.width * _tracePanelRatio,
+              child: const TraceWidget(),
+            ),
+          ],
         ],
       ),
     );

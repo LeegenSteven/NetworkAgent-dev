@@ -2,6 +2,7 @@ enum PanelType {
   chat,
   logs,
   performance,
+  trace,
 }
 
 extension PanelTypeExtension on PanelType {
@@ -13,6 +14,8 @@ extension PanelTypeExtension on PanelType {
         return 'System Logs';
       case PanelType.performance:
         return 'Performance Graphs';
+      case PanelType.trace:
+        return 'Agent Traces';
     }
   }
 }

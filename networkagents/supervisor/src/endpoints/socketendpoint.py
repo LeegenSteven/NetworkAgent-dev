@@ -216,6 +216,56 @@ class SocketEndpoint:
                 await self.sio.emit('logs_update', {'error': f"Error fetching logs: {str(e)}"}, room=sid)
 
         @self.sio.event
+        async def get_traces(sid, data):
+            logger.info(f"========== get_traces called for {sid}: {data} ==========")
+            try:
+                # Get current state to detect transitions
+                old_enabled = clients_state.get(sid, {}).get('traces', {}).get('enabled', False)
+                logger.info(f"Old trace enabled state for {sid}: {old_enabled}")
+                
+                # Update the client's trace preference
+                if sid not in clients_state: clients_state[sid] = {}
+                clients_state[sid]['traces'] = data
+                logger.info(f"Updated client state for {sid}: {clients_state[sid]}")
+                
+                enabled = data.get('enabled', False)
+                logger.info(f"New trace enabled state: {enabled}")
+                
+                # Access trace_listener from self (attached in main.py)
+                trace_listener = getattr(self, 'trace_listener', None)
+                logger.info(f"trace_listener object: {trace_listener}")
+                
+                # Manage listener based on client count
+                if enabled and not old_enabled:
+                    # Client enabled traces
+                    logger.info("Client is ENABLING traces (transition from disabled to enabled)")
+                    if trace_listener:
+                        logger.info("Calling trace_listener.add_client()...")
+                        await trace_listener.add_client()
+                        logger.info("✓ trace_listener.add_client() completed")
+                    else:
+                        logger.error("❌ trace_listener is None!")
+                    
+                    # Don't fetch historical traces - only send new traces from now on
+                    logger.info("✓ Trace streaming enabled - will receive new traces from current time forward")
+                    
+                elif not enabled and old_enabled:
+                    # Client disabled traces
+                    logger.info("Client is DISABLING traces (transition from enabled to disabled)")
+                    if trace_listener:
+                        logger.info("Calling trace_listener.remove_client()...")
+                        await trace_listener.remove_client()
+                        logger.info("✓ trace_listener.remove_client() completed")
+                else:
+                    logger.info(f"No state transition (enabled={enabled}, old_enabled={old_enabled})")
+                
+                logger.info(f"========== Traces {'enabled' if enabled else 'disabled'} for {sid} ==========")
+                
+            except Exception as e:
+                logger.error(f"❌ Error handling get_traces: {e}", exc_info=True)
+                await self.sio.emit('traces_update', {'error': f"Error enabling traces: {str(e)}"}, room=sid)
+
+        @self.sio.event
         async def reset_logs(sid):
             logger.info(f"reset_logs for {sid}")
             try:
@@ -230,14 +280,41 @@ class SocketEndpoint:
                 logger.error(f"Error handling reset_logs: {e}")
                 await self.sio.emit('logs_update', {'error': f"Error resetting logs: {str(e)}"}, room=sid)
 
+        @self.sio.event
+        async def reset_traces(sid, data):
+            logger.info(f"========== reset_traces called for {sid}: {data} ==========")
+            try:
+                # Access trace_listener from self (attached in main.py)
+                trace_listener = getattr(self, 'trace_listener', None)
+                
+                if trace_listener:
+                    timestamp = data.get('timestamp')
+                    logger.info(f"Resetting trace listener cursor to timestamp: {timestamp}")
+                    await trace_listener.reset_cursor(timestamp=timestamp)
+                    logger.info("✓ Trace cursor reset - new events will be fetched from the specified time")
+                else:
+                    logger.error("❌ trace_listener is None!")
+                
+                logger.info(f"========== Trace cursor reset for {sid} ==========")
+                
+            except Exception as e:
+                logger.error(f"❌ Error handling reset_traces: {e}", exc_info=True)
+
         # reset_chat handler removed - AG-UI chat panel manages thread IDs directly
             
         @self.sio.event
         async def disconnect(sid):
             logger.info("disconnected from %s", sid)
 
-            # Remove client from logs tracking
+            # Check if this client had traces enabled
             if sid in clients_state:
+                if clients_state[sid].get('traces', {}).get('enabled', False):
+                    # Access trace_listener from self (attached in main.py)
+                    trace_listener = getattr(self, 'trace_listener', None)
+                    if trace_listener:
+                        await trace_listener.remove_client()
+                        logger.info(f"Removed disconnected client {sid} from trace listener")
+                
                 del clients_state[sid]
 
             # remove the sid/sio from the agent session

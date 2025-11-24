@@ -53,6 +53,10 @@ class Appstate extends ChangeNotifier {
   // Incidents state
   final List<Incident> _incidents = [];
   bool _isLoadingIncidents = false;
+
+  // Trace widget state
+  final List<Map<String, dynamic>> _traceEvents = [];
+  bool _isTracesEnabled = false;
   
   // Getters
   io.Socket? get socket => _socket;
@@ -72,6 +76,7 @@ class Appstate extends ChangeNotifier {
   List<PushNotification> get pushNotifications => List.unmodifiable(_pushNotifications);
   List<Incident> get incidents => List.unmodifiable(_incidents);
   bool get isLoadingIncidents => _isLoadingIncidents;
+  List<Map<String, dynamic>> get traceEvents => _traceEvents;
   
   Appstate() {
     _connectToServer();
@@ -91,6 +96,17 @@ class Appstate extends ChangeNotifier {
       
       // Request initial topology data when connected
       _socket!.emit('get_topology', {'view': NetworkTopologyWidget.defaultView});
+      
+      // Reset trace cursor to current time to avoid receiving old events
+      final currentTimestamp = DateTime.now().toUtc().toIso8601String();
+      _socket!.emit('reset_traces', {'timestamp': currentTimestamp});
+      print('Reset trace cursor to current time: $currentTimestamp');
+      
+      // Re-enable traces if they were previously enabled
+      if (_isTracesEnabled) {
+        print('Re-enabling traces after reconnection');
+        _socket!.emit('get_traces', {'enabled': true});
+      }
       
       // Initialize the list of remote agents from REST API
       try {
@@ -160,6 +176,13 @@ class Appstate extends ChangeNotifier {
     _socket!.on('push_notification', (data) {
       if (data != null) {
         _addPushNotification(data);
+      }
+    });
+    
+    // Listen for trace updates
+    _socket!.on('trace_update', (data) {
+      if (data != null) {
+        _addTraceEvent(data);
       }
     });
     
@@ -575,6 +598,58 @@ class Appstate extends ChangeNotifier {
     }
   }
   
+  // Add a trace event from server data
+  void _addTraceEvent(dynamic data) {
+    try {
+      if (data is Map<String, dynamic>) {
+        // Create a new list to ensure the UI rebuilds correctly
+        final updatedTraceEvents = List<Map<String, dynamic>>.from(_traceEvents);
+        updatedTraceEvents.add(data);
+        _traceEvents.clear();
+        _traceEvents.addAll(updatedTraceEvents);
+        
+        print('Received trace event: ${data['event_type']} - ${data['operation_name']}');
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Error adding trace event: $e');
+    }
+  }
+  
+  // Toggle traces visibility
+  void toggleTraces(bool showTraces) {
+    _isTracesEnabled = showTraces;
+    
+    if (_socket != null && _socket!.connected) {
+      if (showTraces) {
+        // Request traces from server
+        _socket!.emit('get_traces', {'enabled': true});
+        print('Enabled trace streaming from server');
+      } else {
+        // Notify server to stop sending traces
+        _socket!.emit('get_traces', {'enabled': false});
+        print('Disabled trace streaming from server');
+      }
+    }
+    
+    notifyListeners();
+  }
+  
+  // Clear all trace events
+  void clearTraces() {
+    _traceEvents.clear();
+    print('Cleared all trace events');
+    
+    // Get the current timestamp in UTC and send it to the backend
+    final timestamp = DateTime.now().toUtc().toIso8601String();
+    if (_socket != null && _socket!.connected) {
+      _socket!.emit('reset_traces', {'timestamp': timestamp});
+      print('Requested backend to reset trace cursor to $timestamp');
+    }
+    
+    notifyListeners();
+  }
+  
   // Update metrics from server data
   void _updateMetrics(dynamic metricsData) {
     try {
@@ -809,6 +884,7 @@ class Appstate extends ChangeNotifier {
       _socket!.off('logs_update');
       _socket!.off('all_last_metrics_update');
       _socket!.off('push_notification');
+      _socket!.off('trace_update');
       _socket!.disconnect();
     }
     super.dispose();

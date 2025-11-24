@@ -1,8 +1,20 @@
-# src/event_translator.py
+# Copyright 2024-2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 """Event translator for converting ADK events to AG-UI protocol events."""
 
-from typing import AsyncGenerator, Optional, Dict, Any , List
+from typing import AsyncGenerator, Optional, Dict, Any , List, TYPE_CHECKING
 import uuid
 
 from google.genai import types
@@ -16,10 +28,8 @@ from ag_ui.core import (
 )
 import json
 from google.adk.events import Event as ADKEvent
-
 import logging
 logger = logging.getLogger(__name__)
-
 
 class EventTranslator:
     """Translates Google ADK events to AG-UI protocol events.
@@ -29,7 +39,9 @@ class EventTranslator:
     """
     
     def __init__(self):
-        """Initialize the event translator."""
+        """
+        Initialize the event translator.
+        """
         # Track tool call IDs for consistency 
         self._active_tool_calls: Dict[str, str] = {}  # Tool call ID -> Tool call ID (for consistency)
         # Track streaming message state
@@ -410,7 +422,7 @@ class EventTranslator:
         Yields:
             Tool result events (only for user-facing tools, not internal supervisor tools)
         """
-        
+        logger.debug(f"translate function response --- {function_response}")
         # List of internal supervisor tools that should not emit TOOL_CALL_RESULT events to UI
         # These tools are processed internally by the supervisor's LLM
         internal_supervisor_tools = ['list_remote_agents']
@@ -424,7 +436,7 @@ class EventTranslator:
             if tool_name in internal_supervisor_tools:
                 logger.debug(f"Skipping ToolCallResultEvent for internal supervisor tool: {tool_name} (id: {tool_call_id})")
                 continue
-                
+            
             # Only emit ToolCallResultEvent for tool_call_ids which are not long_running_tool
             # this is because long running tools are handle by the frontend
             if tool_call_id not in self.long_running_tool_ids:

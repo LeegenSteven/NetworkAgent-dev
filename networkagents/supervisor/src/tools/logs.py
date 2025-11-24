@@ -14,7 +14,7 @@
 
 import logging
 import json
-from utils.k8s import get_credentials
+from agent_library import get_credentials
 from google.cloud import spanner
 
 SPANNER_INSTANCE = 'networktopology-instance'
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Connect to Spanner database
 def spanner_connect():
-  credentials = get_credentials()
+  credentials, _ = get_credentials()
   logger.debug(credentials)
   spanner_client = spanner.Client(credentials=credentials)
   instance = spanner_client.instance(SPANNER_INSTANCE)

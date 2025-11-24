@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import datetime
 from agent.agent import TestAgent
 from typing_extensions import override
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -30,6 +31,7 @@ from utils.error_handler import (
     ErrorSeverity,
     create_error_status_event
 )
+from agent_library.trace.trace_context import TracingContext
 
 logger = logging.getLogger(__name__)
 
@@ -45,89 +47,73 @@ class TestAgentExecutor(AgentExecutor):
         """
         Handler for 'message/stream' requests.
         """
+
         logger.info("on execute")
-        task = None
-        
+        query = context.get_user_input()
+        task = context.current_task
+
+        # Set the trace ID to the A2A context_id for cross-agent correlation
+        TracingContext.set_trace_id(context.context_id)
+
+        # check message exists
+        if not context.message:
+            raise TestAgentError(
+                message='No message provided',
+                severity=ErrorSeverity.ERROR
+            )
+
+        # create a task if it doesnt exist
+        if not task:
+            logger.info("Creating new task!!")
+            task = new_task(context.message)
+            await event_queue.enqueue_event(task)
+
+        logger.info("start stream %s, with id %s", query, task.context_id)
         try:
-            agent = await TestAgent.get_instance()
+            agent = await TestAgent.get_instance()         
 
-            query = context.get_user_input()
-            task = context.current_task
-
-            if not context.message:
-                raise TestAgentError(
-                    message='No message provided',
-                    severity=ErrorSeverity.ERROR
+            session = await agent.session_service.get_session(app_name="TestAgent", user_id="agent", session_id=context.context_id)
+            if session is None:
+                logger.info("creating new session")
+                session = await agent.session_service.create_session(
+                    app_name="TestAgent",
+                    user_id="agent",
+                    session_id=context.context_id
                 )
 
-            if not task:
-                logger.info("Creating new task!!")
-                task = new_task(context.message)
-                await event_queue.enqueue_event(task)
+            content = types.Content(
+                role='user', parts=[types.Part.from_text(text=query)]
+            )
 
-            logger.info("start stream %s, with id %s", query, task.contextId)
-            
-            try:
+            async for event in agent.runner.run_async(user_id="agent", session_id=context.context_id, new_message=content):
+                logger.info("ADK RUNNER EVENT")
+                logger.info(event)
 
-                agent = await TestAgent.get_instance()
-                session = await agent.session_service.get_session(app_name="TestAgent", user_id="agent", session_id=context.context_id)
-                if session is None:
-                    logger.info("creating new session")
-                    session = await agent.session_service.create_session(
-                        app_name="TestAgent",
-                        user_id="agent",
-                        session_id=context.context_id
-                    )
+                if event.content.parts and event.content.parts[0].text:
+                    logger.info(f'** {event.author}: {event.content.parts[0].text}')
 
-                content = types.Content(
-                    role='user', parts=[types.Part.from_text(text=query)]
-                )
-
-                async for event in agent.runner.run_async(user_id="agent", session_id=context.context_id, new_message=content):
-                    logger.info("ADK RUNNER EVENT")
-                    logger.info(event)
-
-                    if event.content.parts and event.content.parts[0].text:
-                        logger.info(f'** {event.author}: {event.content.parts[0].text}')
-
-                        await event_queue.enqueue_event(
-                            TaskStatusUpdateEvent(
-                                status=TaskStatus(
-                                    state=TaskState.completed,
-                                    message=new_agent_text_message(
-                                        event.content.parts[0].text,
-                                        task.contextId,
-                                        task.id,
-                                    ),
+                    await event_queue.enqueue_event(
+                        TaskStatusUpdateEvent(
+                            status=TaskStatus(
+                                state=TaskState.completed,
+                                message=new_agent_text_message(
+                                    event.content.parts[0].text,
+                                    task.context_id,
+                                    task.id,
                                 ),
-                                final=True,
-                                contextId=task.contextId,
-                                taskId=task.id,
-                            )
+                            ),
+                            final=True,
+                            context_id=task.context_id,
+                            task_id=task.id,
                         )
-
-            except Exception as e:
-                # Handle any exceptions that occur during streaming
-                error = TestAgentError(
-                    message=f"Error during agent streaming: {str(e)}",
-                    severity=ErrorSeverity.ERROR,
-                    original_exception=e
-                )
-                error_event = create_error_status_event(
-                    error=error,
-                    context_id=task.contextId,
-                    task_id=task.id,
-                    final=True
-                )
-                await event_queue.enqueue_event(error_event)
-                logger.error(f"Error during agent streaming: {str(e)}", exc_info=True)
+                    )
                 
         except TestAgentError as e:
             # If we have a task, report the error through the event queue
             if task:
                 error_event = create_error_status_event(
                     error=e,
-                    context_id=task.contextId,
+                    context_id=task.context_id,
                     task_id=task.id,
                     final=True
                 )
@@ -144,7 +130,7 @@ class TestAgentExecutor(AgentExecutor):
             if task:
                 error_event = create_error_status_event(
                     error=error,
-                    context_id=task.contextId,
+                    context_id=task.context_id,
                     task_id=task.id,
                     final=True
                 )
@@ -183,13 +169,13 @@ class TestAgentExecutor(AgentExecutor):
                         state=TaskState.cancelled,
                         message=new_agent_text_message(
                             "Task cancellation requested. Note that some operations may continue in the background.",
-                            task.contextId,
+                            task.context_id,
                             task.id,
                         ),
                     ),
                     final=True,
-                    contextId=task.contextId,
-                    taskId=task.id,
+                    context_id=task.context_id,
+                    task_id=task.id,
                 )
             )
         except TestAgentError as e:
@@ -197,7 +183,7 @@ class TestAgentExecutor(AgentExecutor):
             if task:
                 error_event = create_error_status_event(
                     error=e,
-                    context_id=task.contextId,
+                    context_id=task.context_id,
                     task_id=task.id,
                     final=True
                 )
@@ -214,7 +200,7 @@ class TestAgentExecutor(AgentExecutor):
             if task:
                 error_event = create_error_status_event(
                     error=error,
-                    context_id=task.contextId,
+                    context_id=task.context_id,
                     task_id=task.id,
                     final=True
                 )

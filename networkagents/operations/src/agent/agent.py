@@ -21,6 +21,8 @@ from google.adk.tools.mcp_tool.mcp_session_manager import SseConnectionParams
 import datetime
 import os
 import logging
+from agent_library.agentmiddleware.adk import ADKAgent
+from agent_library.trace.trace_plugin import TracePlugin
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +63,16 @@ class OperationsAgent:
                     tool_filter=["getNetworkDesign","getLocations","getServiceDefinitions","getServices"]
                 )
             ],
-            sub_agents=[metrics_agent, topology_agent]
+            sub_agents=[metrics_agent, topology_agent],
+        )
+
+        self.app_name = "OperationsAgent"
+        # Initialize ADKAgent wrapper for AG-UI protocol support
+        # Let ADKAgent manage its own session and artifact services
+        self.adk_agent = ADKAgent(
+            adk_agent=self.root_agent,
+            app_name=self.app_name,
+            use_in_memory_services=True
         )
 
         self.runner = Runner(
@@ -69,4 +80,5 @@ class OperationsAgent:
             agent=self.root_agent,
             artifact_service=self.artifact_service,
             session_service=self.session_service,
+            plugins=[TracePlugin()]
         )        

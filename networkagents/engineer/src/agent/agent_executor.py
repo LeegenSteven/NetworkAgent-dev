@@ -30,6 +30,7 @@ from utils.error_handler import (
     ErrorSeverity,
     create_error_status_event,
 )
+from agent_library.trace.trace_context import TracingContext
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ class EngineerAgentExecutor(AgentExecutor):
                 "name": "Network Engineer Agent",
                 "state": "input_required",
                 "task_id": task.id,
-                "context_id": task.contextId,
+                "context_id": task.context_id,
                 "content": event['content'],
                 "input_data": task.metadata['input_data']
             }
@@ -77,8 +78,11 @@ class EngineerAgentExecutor(AgentExecutor):
         """
         Handler for 'message/stream' requests.
         """
-        logger.info("A2A EXECUTE")
-        logger.info(context)
+        logger.debug("A2A EXECUTE")
+        logger.debug(context)
+
+        # Set the trace ID to the A2A context_id for cross-agent correlation
+        TracingContext.set_trace_id(context.context_id)
 
         config = context.configuration
         is_streaming = False            
@@ -94,6 +98,11 @@ class EngineerAgentExecutor(AgentExecutor):
                     message='No message provided',
                     severity=ErrorSeverity.ERROR
                 )
+
+            if not task:
+                logger.info("Creating new task!!")
+                task = new_task(context.message)
+                await event_queue.enqueue_event(task)
 
             # check if this is a background task or chat based
             # if message part has text message its chat, if data its background received from another agent
@@ -125,107 +134,131 @@ class EngineerAgentExecutor(AgentExecutor):
 
                 await event_queue.enqueue_event(task)
 
-            logger.info("Processing continuation for task %s, with id %s", query_text, task.contextId)
-            async for event in agent.stream(query_text, task.contextId):
+            logger.info("Processing continuation for task %s, with id %s", query_text, task.context_id)
+            async for event in agent.stream(query_text, task.context_id):
                 logger.info("in main event stream")
                 logger.info(event)
 
-                # Check if the event contains an error
-                if 'error' in event:
-                    error = event['error']
-                    error_event = create_error_status_event(
-                        error=error,
-                        context_id=task.contextId,
-                        task_id=task.id,
-                        final=event.get('is_task_complete', False)
-                    )
-                    await event_queue.enqueue_event(error_event)
-                    
-                    # If this is a critical error that should end the task
-                    if error.severity in [ErrorSeverity.ERROR, ErrorSeverity.CRITICAL] and event.get('is_task_complete', False):
-                        return
-                elif event['is_task_complete']:
-                    await event_queue.enqueue_event(
-                        TaskStatusUpdateEvent(
-                            status=TaskStatus(
-                                state=TaskState.completed,
-                                message=new_agent_text_message(
-                                    event['content'],
-                                    task.contextId,
-                                    task.id,
-                                ),
-                            ),
-                            final=True,
-                            contextId=task.contextId,
-                            taskId=task.id,
+                try:
+                    # Check if the event contains an error
+                    if 'error' in event:
+                        error = event['error']
+                        error_event = create_error_status_event(
+                            error=error,
+                            context_id=task.context_id,
+                            task_id=task.id,
+                            final=event.get('is_task_complete', False)
                         )
-                    )
-                elif event['require_user_input']:
+                        await event_queue.enqueue_event(error_event)
+                        
+                        # If this is a critical error that should end the task
+                        if error.severity in [ErrorSeverity.ERROR, ErrorSeverity.CRITICAL] and event.get('is_task_complete', False):
+                            return
+                    elif event['is_task_complete']:
+                        await event_queue.enqueue_event(
+                            TaskStatusUpdateEvent(
+                                status=TaskStatus(
+                                    state=TaskState.completed,
+                                    message=new_agent_text_message(
+                                        event['content'],
+                                        task.context_id,
+                                        task.id,
+                                    ),
+                                ),
+                                final=True,
+                                context_id=task.context_id,
+                                taskId=task.id,
+                            )
+                        )
+                    elif event['require_user_input']:
 
-                    # if background send event to supervisor
-                    if background_task:
-                        await self.send_notification(task, event)
+                        # if background send event to supervisor
+                        if background_task:
+                            await self.send_notification(task, event)
 
-                    # send back to user chat
-                    await event_queue.enqueue_event(
-                        TaskStatusUpdateEvent(
-                            status=TaskStatus(
-                                state=TaskState.input_required,
-                                message=new_agent_text_message(
-                                    event['content'],
-                                    task.contextId,
-                                    task.id,
+                        # send back to user chat
+                        await event_queue.enqueue_event(
+                            TaskStatusUpdateEvent(
+                                status=TaskStatus(
+                                    state=TaskState.input_required,
+                                    message=new_agent_text_message(
+                                        event['content'],
+                                        task.context_id,
+                                        task.id,
+                                    ),
                                 ),
-                            ),
-                            final=True,
-                            contextId=task.contextId,
-                            taskId=task.id,
+                                final=True,
+                                context_id=task.context_id,
+                                taskId=task.id,
+                            )
                         )
-                    )
-                else:
-                    await event_queue.enqueue_event(
-                        TaskStatusUpdateEvent(
-                            status=TaskStatus(
-                                state=TaskState.working,
-                                message=new_agent_text_message(
-                                    event['content'],
-                                    task.contextId,
-                                    task.id,
+                    else:
+                        await event_queue.enqueue_event(
+                            TaskStatusUpdateEvent(
+                                status=TaskStatus(
+                                    state=TaskState.working,
+                                    message=new_agent_text_message(
+                                        event['content'],
+                                        task.context_id,
+                                        task.id,
+                                    ),
                                 ),
-                            ),
-                            final=False,
-                            contextId=task.contextId,
-                            taskId=task.id,
+                                final=False,
+                                context_id=task.context_id,
+                                taskId=task.id,
+                            )
                         )
-                    )
+                except Exception as queue_error:
+                    logger.warning(f"Failed to enqueue event: {queue_error}")
+                    # If we can't enqueue events, we should probably stop processing to avoid more errors
+                    # Check if the error indicates the queue is closed/unavailable
+                    error_str = str(queue_error).lower()
+                    if "closed" in error_str or "shutdown" in error_str:
+                        logger.info("Event queue appears closed, stopping execution loop.")
+                        break
         except EngineerAgentError as e:
             # If we have a task, report the error through the event queue
             if task:
-                error_event = create_error_status_event(
-                    error=e,
-                    context_id=task.contextId,
-                    task_id=task.id,
-                    final=True
-                )
-                await event_queue.enqueue_event(error_event)
-            # Re-raise for the decorator to handle
+                try:
+                    error_event = create_error_status_event(
+                        error=e,
+                        context_id=task.context_id,
+                        task_id=task.id,
+                        final=True
+                    )
+                    await event_queue.enqueue_event(error_event)
+                except Exception as queue_error:
+                    logger.warning(f"Failed to enqueue error event: {queue_error}")
+            
+            # Truncate message if needed before re-raising
+            if len(e.message) > 1000:
+                e.message = e.message[:1000] + "... [truncated]"
             raise
+
         except Exception as e:
             # Convert generic exceptions to EngineerAgentError and handle
+            error_msg = str(e)
+            if len(error_msg) > 1000:
+                error_msg = error_msg[:1000] + "... [truncated]"
+
             error = EngineerAgentError(
-                message=f"Error during agent streaming: {str(e)}",
+                message=f"Error during agent streaming: {error_msg}",
                 severity=ErrorSeverity.ERROR,
                 original_exception=e
             )
             if task:
-                error_event = create_error_status_event(
-                    error=error,
-                    context_id=task.contextId,
-                    task_id=task.id,
-                    final=True
-                )
-                await event_queue.enqueue_event(error_event)
-            logger.error(f"Error during agent streaming: {str(e)}", exc_info=True)
+                try:
+                    error_event = create_error_status_event(
+                        error=error,
+                        context_id=task.context_id,
+                        task_id=task.id,
+                        final=True
+                    )
+                    await event_queue.enqueue_event(error_event)
+                except Exception as queue_error:
+                    logger.warning(f"Failed to enqueue error event: {queue_error}")
+
+            logger.error(f"Error during agent streaming: {error_msg}", exc_info=True)
             # Re-raise for the decorator to handle
             raise error
 
@@ -259,12 +292,12 @@ class EngineerAgentExecutor(AgentExecutor):
                         state=TaskState.cancelled,
                         message=new_agent_text_message(
                             "Task cancellation requested. Note that some operations may continue in the background.",
-                            task.contextId,
+                            task.context_id,
                             task.id,
                         ),
                     ),
                     final=True,
-                    contextId=task.contextId,
+                    context_id=task.context_id,
                     taskId=task.id,
                 )
             )
@@ -273,7 +306,7 @@ class EngineerAgentExecutor(AgentExecutor):
             if task:
                 error_event = create_error_status_event(
                     error=e,
-                    context_id=task.contextId,
+                    context_id=task.context_id,
                     task_id=task.id,
                     final=True
                 )
@@ -290,7 +323,7 @@ class EngineerAgentExecutor(AgentExecutor):
             if task:
                 error_event = create_error_status_event(
                     error=error,
-                    context_id=task.contextId,
+                    context_id=task.context_id,
                     task_id=task.id,
                     final=True
                 )

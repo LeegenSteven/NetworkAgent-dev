@@ -63,7 +63,7 @@ class EngineerAgentClient:
             self.agent_card.url = self.address
             logger.info(f"Connected to agent: {self.agent_card.name}")
 
-        self.agent_client = await A2AClient.get_client_from_agent_card_url(httpx_client=httpx.AsyncClient(timeout=60.0), base_url=self.address)
+        self.agent_client = await A2AClient(httpx_client=httpx.AsyncClient(timeout=60.0), agent_card=self.agent_card)
         # the discovered card address is the internal address of the server, make sure to update with the external address or is not reachable
         self.agent_client.url=self.address
 

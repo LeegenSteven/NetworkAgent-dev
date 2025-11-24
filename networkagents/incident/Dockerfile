@@ -3,11 +3,11 @@ FROM node:18 AS build
 
 WORKDIR /agent
 
-COPY frontend/package.json ./
-COPY frontend/package-lock.json ./
+COPY incident/frontend/package.json ./
+COPY incident/frontend/package-lock.json ./
 RUN npm install
 
-COPY frontend/ ./
+COPY incident/frontend/ ./
 RUN npm run build
 
 # Stage 2: Create the final image
@@ -17,10 +17,14 @@ WORKDIR /agent
 
 COPY --from=build /agent/build ./frontend/build
 RUN apt update && apt install git -y
-COPY requirements.txt .
+
+ADD lib/ /lib/
+RUN pip install /lib
+
+COPY incident/requirements.txt .
 RUN pip install -r requirements.txt
 
-COPY src/ ./src/
+COPY incident/src/ ./src/
 
 EXPOSE 8080
 

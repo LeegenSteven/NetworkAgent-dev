@@ -30,7 +30,7 @@ from langgraph.graph import StateGraph, END, START
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import AnyMessage, HumanMessage, ToolMessage, AIMessage
 from langgraph.types import interrupt, Command
-from utils.k8s import get_credentials
+from agent_library.credentials.creds import get_credentials
 from utils.error_handler import (
     EngineerAgentError,
     ToolError,
@@ -39,14 +39,9 @@ from utils.error_handler import (
     ErrorSeverity
 )
 import agent.prompts.network_engineer as network_engineer_prompts
+from agent_library.trace.trace_plugin import TracePlugin
 
 logger = logging.getLogger(__name__)
-
-if logger.getEffectiveLevel() == logging.DEBUG:
-  from langchain.globals import set_debug, set_verbose
-  set_debug(True)
-  set_verbose(False)
-
 
 class Plan(BaseModel):
     """Plan to follow in future"""
@@ -66,6 +61,7 @@ class NetworkEngineerAgentState(TypedDict):
     steps: List[str]
     past_steps: Annotated[List[Tuple], operator.add]
     response: str
+    trace_manager: Any  # TraceManager instance for hierarchical tracing
 
 class NetworkEngineerAgent:
 
@@ -83,7 +79,10 @@ class NetworkEngineerAgent:
     def __init__(self):
         logger.debug("loading networkagent credentials from path = %s", os.getcwd())
 
-        self.credentials = get_credentials()
+        self.credentials, self.project = get_credentials()
+
+        # init the trace publisher
+        self.trace_publisher=TracePlugin()
 
         self.network_service_definitions=None
 
@@ -118,7 +117,8 @@ class NetworkEngineerAgent:
         Initialise the MCP tools with retry logic to ensure successful loading
         """
         logger.info("loading tools")
-        agent_mcp_tool_address = os.getenv("AGENT_MCP_TOOLS_ADDRESS", "http://127.0.0.1:8080")
+        agent_mcp_tool_address = os.getenv("AGENT_MCP_TOOLS_ADDRESS", "http://127.0.0.1:8080/sse")
+        logger.info(f"address is {agent_mcp_tool_address}")
 
         self.mcpClient = MultiServerMCPClient(
             {
@@ -164,76 +164,90 @@ class NetworkEngineerAgent:
                      collectively deliver the users objective
         """
 
-        logger.info("building the plan")
+        logger.info("building the plan")  
+        
+        try:
+            if 'objective' in state:
+                logger.info("objective %s", state['objective'])
 
-        if 'objective' in state:
-            logger.info("objective %s", state['objective'])
+                # run discovery tools
+                network_design = ""
+                network_services = ""
+                network_service_instances = ""
+                network_locations = ""
+                        
+                try:
 
-            # run discovery tools
-            network_design = ""
-            network_services = ""
-            network_service_instances = ""
-            network_locations = ""
+                    self.trace_publisher.handle_start('BEFORE_TOOL', 'EngineerAgent', {"tool_name": "getNetworkDesign", "tool_args": {}})
+                    network_design = await self.tools_by_name["getNetworkDesign"].ainvoke({})
+                    self.trace_publisher.handle_end('AFTER_TOOL', 'EngineerAgent', {"result": network_design})
+
+                    # network_services = await self.tools_by_name["getServiceDefinitions"].ainvoke({})
+                    self.trace_publisher.handle_start('BEFORE_TOOL', 'EngineerAgent', {"tool_name": "getServices", "tool_args": {}})
+                    network_service_instances = await self.tools_by_name["getServices"].ainvoke({})
+                    self.trace_publisher.handle_end('AFTER_TOOL', 'EngineerAgent', {"result": network_service_instances})
+
+                    self.trace_publisher.handle_start('BEFORE_TOOL', 'EngineerAgent', {"tool_name": "getLocations", "tool_args": {}})
+                    network_locations = await self.tools_by_name["getLocations"].ainvoke({})
+                    self.trace_publisher.handle_end('AFTER_TOOL', 'EngineerAgent', {"result": network_locations})
+
+                except asyncio.exceptions.CancelledError as e:
+                    logger.warning(f"Error running tools: {str(e)}")
+                    raise ToolError(
+                        message="Failed to run tool",
+                        tool_name="discover crds and locations tools",
+                        severity=ErrorSeverity.ERROR,
+                        original_exception=e
+                    )
+                except Exception as e:
+                    logger.warning(f"Error running tools: {str(e)}")
+                    raise ToolError(
+                        message="Failed to run tool",
+                        tool_name="discover crds and locations tools",
+                        severity=ErrorSeverity.ERROR,
+                        original_exception=e
+                    )
+
+                prompt = ChatPromptTemplate(
+                    [
+                        ("system", network_engineer_prompts.planner_prompt), 
+                        ("placeholder", "{messages}")
+                    ]
+                ).partial(current_time=datetime.now())
+
+                try:
+                    self.trace_publisher.handle_start('BEFORE_MODEL', 'EngineerAgent', {"system_instruction": network_engineer_prompts.planner_prompt, "model_version": "gemini-2.5-flash"})
+                    model = ChatVertexAI(
+                        model_name="gemini-2.5-flash",
+                        temperature=0,
+                        credentials=self.credentials,
+                        project=os.getenv("GOOGLE_PROJECT"),
+                        location="global"
+                    )
+                    model = model.bind_tools(self.tools)
+                    model = model.with_structured_output(Plan)
+
+                    runnable = prompt | model
+                    steps = await runnable.ainvoke({
+                        "messages": [HumanMessage(content=state['objective'])] + state['context'],
+                        "network_design": network_design,
+                        "network_service_instances": network_service_instances,
+                        "network_service_descriptors": self.network_service_definitions, 
+                        "network_locations": network_locations
+                    })
                     
-            try:
-
-                network_design = await self.tools_by_name["getNetworkDesign"].ainvoke({})
-                # network_services = await self.tools_by_name["getServiceDefinitions"].ainvoke({})
-                network_service_instances = await self.tools_by_name["getServices"].ainvoke({})
-                network_locations = await self.tools_by_name["getLocations"].ainvoke({})
-
-            except asyncio.exceptions.CancelledError as e:
-                logger.warning(f"Error running tools: {str(e)}")
-                raise ToolError(
-                    message="Failed to run tool",
-                    tool_name="discover crds and locations tools",
-                    severity=ErrorSeverity.ERROR,
-                    original_exception=e
-                )
-            except Exception as e:
-                logger.warning(f"Error running tools: {str(e)}")
-                raise ToolError(
-                    message="Failed to run tool",
-                    tool_name="discover crds and locations tools",
-                    severity=ErrorSeverity.ERROR,
-                    original_exception=e
-                )
-
-            prompt = ChatPromptTemplate(
-                [
-                    ("system", network_engineer_prompts.planner_prompt), 
-                    ("placeholder", "{messages}")
-                ]
-            ).partial(current_time=datetime.now())
-
-            try:
-                model = ChatVertexAI(
-                    model_name="gemini-2.5-flash",
-                    temperature=0,
-                    credentials=self.credentials,
-                    project=os.getenv("GOOGLE_PROJECT"),
-                    location="global"
-                )
-                model = model.bind_tools(self.tools)
-                model = model.with_structured_output(Plan)
-
-                runnable = prompt | model
-                steps = runnable.invoke({
-                    "messages": [HumanMessage(content=state['objective'])] + state['context'],
-                    "network_design": network_design,
-                    "network_service_instances": network_service_instances,
-                    "network_service_descriptors": self.network_service_definitions, 
-                    "network_locations": network_locations
-                })
-                return steps
-            except Exception as e:
-                logger.error(f"Error in LLM planning: {str(e)}")
-                raise PlanningError(
-                    message="Failed to generate plan with LLM",
-                    severity=ErrorSeverity.ERROR,
-                    details={"objective": state.get('objective', 'Unknown')},
-                    original_exception=e
-                )
+                    self.trace_publisher.handle_end('AFTER_MODEL', 'EngineerAgent', {"text": str(steps)})
+                    return steps
+                except Exception as e:
+                    logger.error(f"Error in LLM planning: {str(e)}")
+                    raise PlanningError(
+                        message="Failed to generate plan with LLM",
+                        severity=ErrorSeverity.ERROR,
+                        details={"objective": state.get('objective', 'Unknown')},
+                        original_exception=e
+                    )
+        except Exception as e:
+            raise
 
 
     async def confirm_plan(self, state: NetworkEngineerAgentState):
@@ -247,18 +261,26 @@ class NetworkEngineerAgent:
             - context: Human message with the users response
         """
         logger.info("confirm_plan node - confirming the plan with the user")
+        
+        try:
+            if 'steps' in state:
+                logger.info("sending interrupt")
 
-        if 'steps' in state:
-            logger.info("sending interrupt")
+                # finish the agent trace event
+                self.trace_publisher.handle_end('AFTER_AGENT', 'EngineerAgent')
 
-            response = interrupt(
-                {
-                    "plan_confirmation": "You can amend this plan or execute by responding yes/no.",
-                    "planned_steps": state["steps"]
-                }
-            )
+                response = interrupt(
+                    {
+                        "plan_confirmation": "You can amend this plan or execute by responding yes/no.",
+                        "planned_steps": state["steps"]
+                    }
+                )
+                
 
-            return {'context': HumanMessage(content=response)}
+                return {'context': HumanMessage(content=response)}
+                
+        except Exception as e:
+            raise
 
     async def plan_complete_decision(self, state: NetworkEngineerAgentState):
         """
@@ -273,7 +295,42 @@ class NetworkEngineerAgent:
 
         if 'steps' in state:
             last_message = state['context'][-1].content
+            
+            # Check if the message is a JSON response from the approval widget
             try:
+                # Try to parse as JSON
+                if isinstance(last_message, str) and last_message.strip().startswith('{'):
+                    approval_data = json.loads(last_message)
+                    
+                    # Check if it has the expected structure from the widget
+                    if isinstance(approval_data, dict) and 'approved' in approval_data:
+                        logger.info(f"Received structured approval response: {approval_data}")
+                        
+                        if approval_data['approved'] is True:
+                            logger.info("Plan confirmed via widget")
+                            return 'execute_step'
+                        else:
+                            logger.info("Plan cancelled via widget")
+                            return 'response_summary'
+            except json.JSONDecodeError:
+                # Not a valid JSON, proceed to LLM interpretation
+                logger.debug("Message is not JSON, falling back to LLM interpretation")
+            except Exception as e:
+                logger.warning(f"Error checking for JSON approval: {e}")
+                # Fall back to LLM
+            
+            # Check for simple text responses to avoid LLM call
+            if isinstance(last_message, str):
+                cleaned_message = last_message.strip().lower()
+                if cleaned_message in ['yes', 'y', 'approve', 'approved', 'confirm', 'confirmed']:
+                    logger.info(f"Plan confirmed via text: {cleaned_message}")
+                    return 'execute_step'
+                elif cleaned_message in ['no', 'n', 'deny', 'denied', 'cancel', 'cancelled']:
+                    logger.info(f"Plan cancelled via text: {cleaned_message}")
+                    return 'response_summary'
+
+            try:
+                self.trace_publisher.handle_start('BEFORE_MODEL', 'EngineerAgent', {"system_instruction": "decide to re-plan or not based on human feed back", "user_feedback": last_message, "model_version": "gemini-2.5-flash"})
                 model = ChatVertexAI(
                     model_name="gemini-2.5-flash",
                     temperature=0,
@@ -284,6 +341,7 @@ class NetworkEngineerAgent:
                 model = model.with_structured_output(PlanConfirmationResponse)
                 plan_decision = await model.ainvoke(last_message)
                 logger.info(f"Planning decision from the user is {plan_decision}.")
+                self.trace_publisher.handle_end('AFTER_MODEL', 'EngineerAgent', {"text": str(plan_decision)})
 
                 if plan_decision.decision == 'confirmed':
                     return 'execute_step'
@@ -291,8 +349,7 @@ class NetworkEngineerAgent:
                     return 'response_summary'
                 elif plan_decision.decision == 'amend':
                     return 'build_plan'
-
-                return 'response_summary'            
+                return 'response_summary'
             except Exception as e:
                 logger.error(f"Error in LLM planning: {str(e)}")
                 raise PlanningError(
@@ -314,13 +371,9 @@ class NetworkEngineerAgent:
         logger.info("executing step")
 
         try:
-
             if 'steps' not in state:
                 logger.info("no planned steps found")
-                raise ExecutionError(
-                    message="No planned steps found for execution",
-                    severity=ErrorSeverity.ERROR
-                )
+                raise ExecutionError(message="No planned steps found for execution", severity=ErrorSeverity.ERROR)
 
             steps = state["steps"]
             past_steps = state['past_steps']
@@ -346,6 +399,8 @@ class NetworkEngineerAgent:
                 )
 
             try:
+                self.trace_publisher.handle_start('BEFORE_MODEL', 'EngineerAgent', {"system_instruction": network_engineer_prompts.execute_step_prompt, "step": this_step, "model_version": "gemini-2.5-flash"})
+
                 prompt = ChatPromptTemplate(
                     [
                         ("system", network_engineer_prompts.execute_step_prompt), 
@@ -362,10 +417,12 @@ class NetworkEngineerAgent:
                 model = model.bind_tools(self.tools)
 
                 runnable = prompt | model
-                response = runnable.invoke({
+                response = await runnable.ainvoke({
                     "messages": [HumanMessage(content=this_step)],
                     "network_service_descriptors": self.network_service_definitions
                 })
+
+                self.trace_publisher.handle_end('AFTER_MODEL', 'EngineerAgent', {"text": response.content})
 
                 return {"context": response}
 
@@ -385,7 +442,6 @@ class NetworkEngineerAgent:
                 severity=ErrorSeverity.ERROR,
                 original_exception=e
             )
-
 
     async def should_run_tool(self, state: NetworkEngineerAgentState):
         """
@@ -416,6 +472,7 @@ class NetworkEngineerAgent:
             - context: Add a ToolMessage with tool details
         """
         logger.info("running the tool")
+        
         outputs = []
         tool_result = {}
         
@@ -423,12 +480,16 @@ class NetworkEngineerAgent:
             for tool_call in state["context"][-1].tool_calls:
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
+                tool_call_id = tool_call["id"]
                 
                 logger.info(f"calling tool {tool_name}")
                 logger.info(json.dumps(tool_args, indent=3))
-                
+
+                self.trace_publisher.handle_start('BEFORE_TOOL', 'EngineerAgent', {"tool_name": tool_name, "tool_args": tool_args})
+
                 try:
                     if tool_name not in self.tools_by_name:
+                        self.trace_publisher.handle_end('AFTER_TOOL', 'EngineerAgent', {"error": f"Tool '{tool_name}' not found"})
                         raise ToolError(
                             message=f"Tool '{tool_name}' not found",
                             tool_name=tool_name,
@@ -443,40 +504,32 @@ class NetworkEngineerAgent:
                             name=tool_name,
                             tool_call_id=tool_call["id"],
                         )
-                    )
+                    )                                                            
+                    self.trace_publisher.handle_end('AFTER_TOOL', 'EngineerAgent', {"result": tool_result})
+                    
                 except asyncio.exceptions.CancelledError as e:
                     logger.warning(f"Error running tools: {str(e)}")
-                    raise ToolError(
-                        message="Failed to run tool",
-                        tool_name="discover crds and locations tools",
-                        severity=ErrorSeverity.ERROR,
-                        original_exception=e
-                    )
+                    self.trace_publisher.handle_end('AFTER_TOOL', 'EngineerAgent', {"error": str(e)})
+                    raise ToolError(message="Failed to run tool", tool_name="discover crds and locations tools", severity=ErrorSeverity.ERROR, original_exception=e)
                 except Exception as e:
-                    # Convert other exceptions to ToolError
-                    error = ToolError(
-                        message=f"Error executing tool {tool_name}: {str(e)}",
-                        tool_name=tool_name,
-                        tool_args=tool_args,
-                        severity=ErrorSeverity.ERROR,
-                        original_exception=e
-                    )
-                    logger.error(f"Error executing tool {tool_name}: {str(e)}", exc_info=True)
-                    outputs.append(
-                        ToolMessage(
-                            content=json.dumps({"error": error.message, "details": error.details}),
-                            name=tool_name,
-                            tool_call_id=tool_call["id"],
-                        )
-                    )
+                    # Truncate tool args if too large
+                    safe_tool_args = tool_args
+                    if len(str(safe_tool_args)) > 1000:
+                        safe_tool_args = {"truncated": "Tool args too large to display"}
+
+                    error_msg = str(e)
+                    if len(error_msg) > 1000:
+                        error_msg = error_msg[:1000] + "... [truncated]"
+
+                    error = ToolError(message=f"Error executing tool {tool_name}: {error_msg}", tool_name=tool_name, tool_args=safe_tool_args, severity=ErrorSeverity.ERROR, original_exception=e)
+                    self.trace_publisher.handle_end('AFTER_TOOL', 'EngineerAgent', {"error": error_msg})
+                    logger.error(f"Error executing tool {tool_name}: {error_msg}", exc_info=True)                        
+                    outputs.append(ToolMessage(content=json.dumps({"error": error.message, "details": error.details}), name=tool_name, tool_call_id=tool_call_id))
                     raise error
         except Exception as e:
             logger.error(f"Unexpected error in tool_node: {str(e)}")
-            error = ExecutionError(
-                message=f"Unexpected error in tool execution: {str(e)}",
-                severity=ErrorSeverity.ERROR,
-                original_exception=e
-            )
+            self.trace_publisher.handle_end('AFTER_TOOL', 'EngineerAgent', {"error": str(e)})
+            error = ExecutionError(message=f"Unexpected error in tool execution: {str(e)}", severity=ErrorSeverity.ERROR, original_exception=e)
             
         # Determine which steps are not complete
         steps = state.get("steps", [])
@@ -493,12 +546,8 @@ class NetworkEngineerAgent:
         
         logger.info(f"Completed step: {run_step}")
         
-        result = {
-            "past_steps": [(run_step, tool_result)],
-            "context": outputs
-        }
+        result = {"past_steps": [(run_step, tool_result)], "context": outputs}
         
-        # If we caught an error earlier, re-raise it now that we've updated the state
         if 'error' in locals():
             raise error
             
@@ -535,8 +584,10 @@ class NetworkEngineerAgent:
         or give a dumb objective that didnt make sense.
         """
         logger.info("summarise plan execution")
-
+        
         try:
+            self.trace_publisher.handle_start('BEFORE_MODEL', 'EngineerAgent', {"system_instruction": network_engineer_prompts.summary_prompt, "user_feedback": "keep the response concise", "model_version": "gemini-2.5-flash"})
+
             prompt = ChatPromptTemplate(
                 [
                     ("system", network_engineer_prompts.summary_prompt), 
@@ -560,15 +611,12 @@ class NetworkEngineerAgent:
                                       "steps": steps, 
                                       "past_steps": past_steps})
 
+            self.trace_publisher.handle_end('AFTER_MODEL', 'EngineerAgent', {"text": response.content})
 
             return {'response': response.content}
         except Exception as e:
             logger.error(f"Error in response summary: {str(e)}")
-            raise ExecutionError(
-                message="Failed to generate response summary",
-                severity=ErrorSeverity.ERROR,
-                original_exception=e
-            )
+            raise ExecutionError(message="Failed to generate response summary", severity=ErrorSeverity.ERROR, original_exception=e)
 
     async def format_plan_confirmation_interrupt(self, confirmation, steps):
         """
@@ -710,7 +758,9 @@ class NetworkEngineerAgent:
         }
 
         logger.info("langgraph stream started with %s and thread id %s", query, sessionId)
+        self.trace_publisher.handle_start('BEFORE_AGENT', 'EngineerAgent', {"agent_name": "EngineerAgent", "instruction": query})
 
+        success = False
         try:
             state = self.networkAgentApp.get_state(config)
             
@@ -725,6 +775,7 @@ class NetworkEngineerAgent:
                                 yield event
                         except EngineerAgentError as e:
                             logger.error(f"Error in stream (interrupt mode) parse_events: {e.message}")
+                            self.trace_publisher.handle_end('AFTER_AGENT', 'EngineerAgent')
                             yield {
                                 'is_task_complete': e.severity in [ErrorSeverity.ERROR, ErrorSeverity.CRITICAL],
                                 'require_user_input': False,
@@ -733,6 +784,7 @@ class NetworkEngineerAgent:
                             }
                         except Exception as e:
                             logger.error(f"Unexpected error in stream (interrupt mode): {str(e)}", exc_info=True)
+                            self.trace_publisher.handle_end('AFTER_AGENT', 'EngineerAgent')
                             error = EngineerAgentError(
                                 message=f"Unexpected error in stream processing: {str(e)}",
                                 severity=ErrorSeverity.ERROR,
@@ -751,12 +803,16 @@ class NetworkEngineerAgent:
                         severity=ErrorSeverity.ERROR,
                         original_exception=e
                     )
+                    self.trace_publisher.handle_end('AFTER_AGENT', 'EngineerAgent')
                     yield {
                         'is_task_complete': True,
                         'require_user_input': False,
                         'error': error,
-                        'content': f"[ERROR] Error in stream processing (interrupt mode): {str(e)}"
-                    }
+                            'content': f"[ERROR] Error in stream processing (interrupt mode): {str(e)}"
+                        }
+                    success = True
+
+                self.trace_publisher.handle_end('AFTER_AGENT', 'EngineerAgent')
                 return
 
             try:
@@ -769,6 +825,7 @@ class NetworkEngineerAgent:
                             yield event
                     except EngineerAgentError as e:
                         logger.error(f"Error in stream parse_events: {e.message}")
+                        self.trace_publisher.handle_end('AFTER_AGENT', 'EngineerAgent')
                         yield {
                             'is_task_complete': e.severity in [ErrorSeverity.ERROR, ErrorSeverity.CRITICAL],
                             'require_user_input': False,
@@ -782,12 +839,15 @@ class NetworkEngineerAgent:
                             severity=ErrorSeverity.ERROR,
                             original_exception=e
                         )
+                        self.trace_publisher.handle_end('AFTER_AGENT', 'EngineerAgent')
                         yield {
                             'is_task_complete': True,
                             'require_user_input': False,
                             'error': error,
                             'content': f"[ERROR] Unexpected error in stream processing: {str(e)}"
                         }
+
+                success = True
             except Exception as e:
                 logger.error(f"Error in stream: {str(e)}", exc_info=True)
                 error = EngineerAgentError(
@@ -795,6 +855,7 @@ class NetworkEngineerAgent:
                     severity=ErrorSeverity.ERROR,
                     original_exception=e
                 )
+                self.trace_publisher.handle_end('AFTER_AGENT', 'EngineerAgent')
                 yield {
                     'is_task_complete': True,
                     'require_user_input': False,
@@ -808,9 +869,10 @@ class NetworkEngineerAgent:
                 severity=ErrorSeverity.CRITICAL,
                 original_exception=e
             )
+            self.trace_publisher.handle_end('AFTER_AGENT', 'EngineerAgent')
             yield {
                 'is_task_complete': True,
                 'require_user_input': False,
                 'error': error,
-                'content': f"[CRITICAL] Critical error in stream processing: {str(e)}"
-            }
+                    'content': f"[CRITICAL] Critical error in stream processing: {str(e)}"
+                }

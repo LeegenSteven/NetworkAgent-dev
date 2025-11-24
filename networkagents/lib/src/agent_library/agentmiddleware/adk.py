@@ -1,14 +1,27 @@
+# Copyright 2024-2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from typing import Optional, Dict, Callable, Any, AsyncGenerator, List
 import json
 import asyncio
 import inspect
-
+import os
 from ag_ui.core import (
     RunAgentInput, BaseEvent, EventType,
     RunStartedEvent, RunFinishedEvent, RunErrorEvent,
     ToolCallEndEvent, SystemMessage,ToolCallResultEvent
 )
-
 from google.adk import Runner
 from google.adk.agents import BaseAgent, RunConfig as ADKRunConfig
 from google.adk.agents.run_config import StreamingMode
@@ -18,7 +31,6 @@ from google.adk.memory import BaseMemoryService, InMemoryMemoryService
 from google.adk.auth.credential_service.base_credential_service import BaseCredentialService
 from google.adk.auth.credential_service.in_memory_credential_service import InMemoryCredentialService
 from google.genai import types
-
 from .event_translator import EventTranslator
 from .session_manager import SessionManager
 from .execution_state import ExecutionState
@@ -64,7 +76,7 @@ class ADKAgent:
         max_concurrent_executions: int = 10,
         
         # Session cleanup configuration
-        cleanup_interval_seconds: int = 300  # 5 minutes default
+        cleanup_interval_seconds: int = 300,  # 5 minutes default        
     ):
         """Initialize the ADKAgent.
         
@@ -140,7 +152,7 @@ class ADKAgent:
         
         # Cleanup is managed by the session manager
         # Will start when first async operation runs
-
+        
     def _get_session_metadata(self, session_id: str) -> Optional[Dict[str, str]]:
         """Get session metadata (app_name, user_id) for a session ID efficiently.
 
@@ -332,7 +344,7 @@ class ADKAgent:
             session_service=self._session_manager._session_service,
             artifact_service=self._artifact_service,
             memory_service=self._memory_service,
-            credential_service=self._credential_service
+            credential_service=self._credential_service,
         )
     
     async def run(self, input: RunAgentInput) -> AsyncGenerator[BaseEvent, None]:
@@ -591,6 +603,8 @@ class ADKAgent:
         Yields:
             AG-UI events from the execution
         """
+        agent_name = None
+        
         try:
             # Emit RUN_STARTED
             logger.debug(f"Emitting RUN_STARTED for thread {input.thread_id}, run {input.run_id}")
@@ -599,7 +613,7 @@ class ADKAgent:
                 thread_id=input.thread_id,
                 run_id=input.run_id
             )
-            
+               
             # Check concurrent execution limit
             async with self._execution_lock:
                 if len(self._active_executions) >= self._max_concurrent:
@@ -673,7 +687,7 @@ class ADKAgent:
             )
             
         except Exception as e:
-            logger.error(f"Error in new execution: {e}", exc_info=True)
+            logger.error(f"Error in new execution: {e}", exc_info=True)            
             yield RunErrorEvent(
                 type=EventType.RUN_ERROR,
                 message=str(e),
@@ -900,7 +914,8 @@ class ADKAgent:
                 )
                     parts.append(updated_function_response_part)
                 new_message = types.Content(parts=parts, role='user')
-            # Create event translator
+
+            # Create event translator 
             event_translator = EventTranslator()
             
             # Run ADK agent

@@ -115,7 +115,7 @@ class ResolverAgentClient:
 
     def get_credentials(self):
         try:
-            credentials=google.auth.load_credentials_from_file("../src/networkagent.json")[0]
+            credentials, _=google.auth.load_credentials_from_file("../src/networkagent.json")
             logger.info(f"Successfully loaded application default credentials")
             return credentials
         except Exception as e:

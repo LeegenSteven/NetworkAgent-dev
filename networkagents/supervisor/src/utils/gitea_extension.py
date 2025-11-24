@@ -16,7 +16,7 @@ import logging
 import kubernetes
 import json
 from gitea import *
-from utils.k8s import get_client
+from agent_library import get_client
 
 logger = logging.getLogger(__name__)
 

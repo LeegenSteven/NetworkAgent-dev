@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 # get GCP auth token
 ##########################################################
 def token(*scopes):
-    credentials = google.auth.load_credentials_from_file("/operator/networkagent.json")[0]
+    credentials, _ = google.auth.load_credentials_from_file("/operator/networkagent.json")
     scopes = [f'https://www.googleapis.com/auth/{s}' for s in scopes]
     scoped = googleapiclient._auth.with_scopes(credentials, scopes)
     googleapiclient._auth.refresh_credentials(scoped)
@@ -63,7 +63,7 @@ def get_api_client(endpoint, certificate):
 ##########################################################
 async def getClusterIP(name):
     logger.debug("get cluster external ip for %s", name)
-    credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/operator/networkagent.json"))[0]
+    credentials, _ = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/operator/networkagent.json"))
     cluster_manager_client = ClusterManagerClient(credentials=credentials)
     GOOGLE_PROJECT = os.getenv("GOOGLE_PROJECT")
     GOOGLE_REGION = os.getenv("GOOGLE_REGION")
@@ -76,7 +76,7 @@ async def getClusterIP(name):
 ################################################################
 async def getAutomationClusterIP():
     logger.debug("get cluster external ip for networkautomation")
-    credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/operator/networkagent.json"))[0]
+    credentials, _ = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/operator/networkagent.json"))
     cluster_manager_client = ClusterManagerClient(credentials=credentials)
     GOOGLE_PROJECT = os.getenv("GOOGLE_PROJECT")
     GOOGLE_ZONE = os.getenv("GOOGLE_ZONE")
@@ -89,7 +89,7 @@ async def getAutomationClusterIP():
 ##########################################################
 async def getClusterDetails(clustername):
   logger.debug("get cluster details for %s", clustername)
-  credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/operator/networkagent.json"))[0]
+  credentials, _ = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/operator/networkagent.json"))
   cluster_manager_client = ClusterManagerClient(credentials=credentials)
   GOOGLE_PROJECT = os.getenv("GOOGLE_PROJECT")
   GOOGLE_REGION = os.getenv("GOOGLE_REGION")
@@ -102,7 +102,7 @@ async def getClusterDetails(clustername):
 ##########################################################
 async def getAutomationClusterDetails():
   logger.debug("get cluster details for networkautomation")
-  credentials = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/operator/networkagent.json"))[0]
+  credentials, _ = google.auth.load_credentials_from_file(os.getenv("NETWORK_AGENT_FILE","/operator/networkagent.json"))
   cluster_manager_client = ClusterManagerClient(credentials=credentials)
   GOOGLE_PROJECT = os.getenv("GOOGLE_PROJECT")
   GOOGLE_ZONE = os.getenv("GOOGLE_ZONE")

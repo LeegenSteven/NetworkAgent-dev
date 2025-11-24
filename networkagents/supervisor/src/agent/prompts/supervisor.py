@@ -78,7 +78,12 @@ User Input Required Example
                 }},
                 ]
            }}'
-
+ * requestTaskApproval tool call example response: '{{
+            'approved': 'true',
+            'timestamp': <current time>,
+            'tasks': <list of tasks to approve from arguments>,
+        }}
+ * The user approves the tasks
 
 If the users question includes information on how they would like to graphically present information you must seperate the users question
 into two components

@@ -22,6 +22,7 @@ from agent.prompts import root_prompt
 from descriptions import description
 import os
 import logging
+from agent_library.trace.trace_plugin import TracePlugin
 
 logger = logging.getLogger(__name__)
 
@@ -65,4 +66,5 @@ class TestAgent:
             agent=self.root_agent,
             artifact_service=self.artifact_service,
             session_service=self.session_service,
-        )        
+            plugins=[TracePlugin()]
+        ) 

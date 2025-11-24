@@ -71,10 +71,10 @@ if __name__ == "__main__":
     logger.info("starting network engineer agent server...")
 
     # init the agent class
-    httpx_client = httpx.AsyncClient
+    httpx_client = httpx.AsyncClient()
     push_notification_store = InMemoryPushNotificationConfigStore()
     push_notification_sender = BasePushNotificationSender(
-        httpx_client=httpx_client,  
+        httpx_client=httpx_client,
         config_store=push_notification_store)
     
     request_handler = DefaultRequestHandler(

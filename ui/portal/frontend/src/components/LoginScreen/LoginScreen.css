@@ -1,0 +1,142 @@
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background-color: var(--background-color);
+}
+
+.login-card {
+  padding: 2.5rem;
+  border-radius: 12px;
+  background-color: var(--white);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  max-width: 400px;
+  width: 100%;
+}
+
+.logo-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 2rem;
+}
+
+.portal-logo {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.login-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-color);
+  margin: 0;
+}
+
+.login-card h2 {
+  margin-bottom: 2rem;
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+.input-group {
+  position: relative;
+  margin-bottom: 1.5rem;
+  text-align: left;
+}
+
+.input-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.input-wrapper {
+  position: relative;
+}
+
+.input-wrapper i {
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #aaa;
+}
+
+.input-wrapper input {
+  width: 100%;
+  padding: 0.75rem 0.75rem 0.75rem 40px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 16px;
+  transition: border-color 0.3s;
+}
+
+.input-wrapper input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.input-wrapper .fa-eye,
+.input-wrapper .fa-eye-slash {
+  left: auto;
+  right: 15px;
+  cursor: pointer;
+}
+
+.error-message {
+  color: var(--primary-color);
+  font-weight: 600;
+  margin-bottom: 1rem;
+  font-size: 14px;
+}
+
+.login-button {
+  width: 100%;
+  padding: 0.75rem;
+  border: none;
+  border-radius: 4px;
+  background-color: var(--primary-color);
+  color: var(--white);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  height: 48px;
+  transition: background-color 0.3s;
+}
+
+.login-button:hover {
+  background-color: var(--primary-hover);
+}
+
+.login-button:disabled {
+  background-color: #e6e6e6;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.loader {
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top: 3px solid var(--white);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  animation: spin 1s linear infinite;
+  margin: auto;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}

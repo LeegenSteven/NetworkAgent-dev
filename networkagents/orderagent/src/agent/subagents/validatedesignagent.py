@@ -20,7 +20,7 @@ from .validatedesignprompt import validate_design_prompt
 
 validate_design_agent = LlmAgent(
     name="ValidateDesignAgent",
-    model="gemini-2.0-flash",
+    model="gemini-2.5-pro",
     instruction=validate_design_prompt,
     description="Validate that the generated change requests has enough information to be executable.",
     tools=[
@@ -28,7 +28,8 @@ validate_design_agent = LlmAgent(
             connection_params=SseConnectionParams(
                 url=os.getenv("AGENT_MCP_TOOLS_ADDRESS", "http://127.0.0.1:8080/sse")
             ),
-            tool_filter=['getServiceDefinitions']
+            tool_filter=['getServiceDefinitions', 'getNetworkDesign']
         )
     ],
+    output_key="validation_result"
 )

@@ -57,6 +57,7 @@ class PlanConfirmationResponse(BaseModel):
 
 class NetworkEngineerAgentState(TypedDict):
     objective: str
+    preapproved: bool
     context: Annotated[list[AnyMessage], add_messages]
     steps: List[str]
     past_steps: Annotated[List[Tuple], operator.add]
@@ -260,8 +261,12 @@ class NetworkEngineerAgent:
         Returns:
             - context: Human message with the users response
         """
-        logger.info("confirm_plan node - confirming the plan with the user")
-        
+        logger.debug("confirm_plan node - confirming the plan with the user")
+
+        if state['preapproved']:
+            logger.info("Plan automatically confirmed")
+            return {'context': HumanMessage(content="yes")}
+
         try:
             if 'steps' in state:
                 logger.info("sending interrupt")
@@ -278,7 +283,8 @@ class NetworkEngineerAgent:
                 
 
                 return {'context': HumanMessage(content=response)}
-                
+                logger.info(f"Plan confirmation response: {response}")
+
         except Exception as e:
             raise
 
@@ -745,7 +751,7 @@ class NetworkEngineerAgent:
                 'content': f"[ERROR] Error parsing events: {str(e)}"
             }
 
-    async def stream(self, query: str, sessionId: str) -> AsyncIterable[dict[str, Any]]:
+    async def stream(self, query: str,preapproved: bool, sessionId: str) -> AsyncIterable[dict[str, Any]]:
         """
         Bridge between A2A stream and langgraph stream
         """
@@ -816,7 +822,7 @@ class NetworkEngineerAgent:
                 return
 
             try:
-                async for chunk in self.networkAgentApp.astream({"objective": query}, config=config, stream_mode="updates"):
+                async for chunk in self.networkAgentApp.astream({"objective": query, 'preapproved': preapproved}, config=config, stream_mode="updates"):
                     try:
                         event = await self.parse_events(chunk)
                         if event is not None:

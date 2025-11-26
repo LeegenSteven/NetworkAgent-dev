@@ -107,6 +107,8 @@ class EngineerAgentExecutor(AgentExecutor):
             # check if this is a background task or chat based
             # if message part has text message its chat, if data its background received from another agent
             background_task=False
+            # if preapproved then no interrupt will be raised for user approval
+            preapproved=False
             query_text = ""
             query_data = None
 
@@ -123,6 +125,8 @@ class EngineerAgentExecutor(AgentExecutor):
                     return
 
                 query_text = query_data['objective']
+                if 'preapproved' in query_data and query_data['preapproved']==True:
+                    preapproved = True
 
             if not task:
                 logger.info("Creating new task!!")
@@ -135,9 +139,9 @@ class EngineerAgentExecutor(AgentExecutor):
                 await event_queue.enqueue_event(task)
 
             logger.info("Processing continuation for task %s, with id %s", query_text, task.context_id)
-            async for event in agent.stream(query_text, task.context_id):
-                logger.info("in main event stream")
-                logger.info(event)
+            async for event in agent.stream(query_text, preapproved, task.context_id):
+                logger.debug("in main event stream")
+                logger.debug(event)
 
                 try:
                     # Check if the event contains an error

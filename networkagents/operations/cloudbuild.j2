@@ -15,7 +15,7 @@
 steps:
 - name: 'gcr.io/cloud-builders/docker'
   script: |
-    docker build -t {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/operationsagent:latest -f operations/Dockerfile .
+    docker build -t {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/operationsagent:latest -f networkagents/operations/Dockerfile .
   automapSubstitutions: true
 images:
 - '{{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/{{GOOGLE_REPO}}/operationsagent:latest'

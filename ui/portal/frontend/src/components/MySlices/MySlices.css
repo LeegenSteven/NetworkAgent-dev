@@ -1,0 +1,335 @@
+.my-slices-container {
+  background-color: white;
+  border-radius: 8px;
+  padding: 30px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.status-section {
+  margin-bottom: 30px;
+}
+
+.map-widget {
+  margin-bottom: 30px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.map-title {
+  color: #333;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+.map-container {
+  display: flex;
+  gap: 20px;
+  align-items: stretch;
+}
+
+.map-view {
+  flex: 1;
+  height: 200px;
+  background: linear-gradient(135deg, #e8f4f8 0%, #d4f1f4 50%, #beeef3 100%);
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  position: relative;
+  overflow: hidden;
+}
+
+.coverage-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.coverage-zone {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.7;
+}
+
+.active-zone {
+  width: 80px;
+  height: 80px;
+  background: radial-gradient(circle, rgba(226, 0, 116, 0.3) 0%, rgba(226, 0, 116, 0.1) 70%, transparent 100%);
+  top: 60px;
+  left: 120px;
+  border: 2px solid #e20074;
+}
+
+.secondary-zone {
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, rgba(0, 123, 255, 0.2) 0%, rgba(0, 123, 255, 0.05) 70%, transparent 100%);
+  top: 40px;
+  left: 200px;
+  border: 2px dashed #007bff;
+}
+
+.zone-marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.zone-marker.primary {
+  border-left: 3px solid #e20074;
+}
+
+.zone-marker.secondary {
+  border-left: 3px solid #007bff;
+}
+
+.marker-icon {
+  margin-right: 4px;
+}
+
+.marker-label {
+  font-weight: 500;
+  color: #333;
+}
+
+.map-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.map-control-btn {
+  width: 30px;
+  height: 30px;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.2s;
+}
+
+.map-control-btn:hover {
+  background-color: #f5f5f5;
+}
+
+.map-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 150px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #666;
+}
+
+.legend-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.legend-color.active {
+  background: linear-gradient(45deg, #e20074, #ff6bb3);
+}
+
+.legend-color.potential {
+  background: linear-gradient(45deg, #007bff, #66b3ff);
+}
+
+.status-title {
+  color: #333;
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 25px;
+}
+
+.status-active {
+  color: #28a745;
+  font-weight: 600;
+}
+
+.metrics-row {
+  display: flex;
+  justify-content: space-around;
+  gap: 40px;
+  margin-bottom: 40px;
+}
+
+.metric-card {
+  text-align: center;
+  flex: 1;
+}
+
+.circular-progress {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 15px;
+}
+
+.progress-ring {
+  transform: rotate(-90deg);
+}
+
+.progress-ring__circle {
+  transition: stroke-dasharray 0.35s;
+  transform-origin: 50% 50%;
+}
+
+.progress-content {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.progress-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #333;
+  line-height: 1;
+}
+
+.progress-total {
+  font-size: 12px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.progress-label-small {
+  font-size: 10px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.metric-label {
+  color: #666;
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.charts-section {
+  display: flex;
+  gap: 30px;
+  margin-bottom: 30px;
+}
+
+.chart-card {
+  flex: 1;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  background: white;
+}
+
+.chart-card h3 {
+  color: #333;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+.chart-placeholder {
+  height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #fafafa;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.chart-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.slice-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 20px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.slice-details {
+  font-size: 14px;
+  color: #666;
+}
+
+.slice-details p {
+  margin: 5px 0;
+}
+
+.slice-details strong {
+  color: #333;
+}
+
+.manage-slice-btn {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.manage-slice-btn:hover {
+  background-color: #0056b3;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .metrics-row {
+    flex-direction: column;
+    gap: 20px;
+  }
+  
+  .charts-section {
+    flex-direction: column;
+  }
+  
+  .slice-info {
+    flex-direction: column;
+    gap: 15px;
+    text-align: center;
+  }
+}

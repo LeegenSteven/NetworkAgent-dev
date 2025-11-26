@@ -13,12 +13,12 @@
 # limitations under the License.
 
 FROM python:3.13.2
-ADD supervisor/requirements.txt /
+ADD networkagents/supervisor/requirements.txt /
 RUN pip install -r /requirements.txt
 
 ADD lib/ /lib/
 RUN pip install /lib
 
-ADD supervisor/src/ /agent
+ADD networkagents/supervisor/src/ /agent
 WORKDIR /agent
 CMD ["python3", "main.py"]

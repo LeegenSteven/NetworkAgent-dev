@@ -129,3 +129,10 @@ spec:
          retention_period = '7d',
          value_capture_type = 'NEW_ROW'
        )"
+  - "CREATE TABLE Orders (
+       id STRING(36) NOT NULL,
+       timestamp TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
+       customer STRING(MAX) NOT NULL,
+       status STRING(MAX) NOT NULL,
+       details JSON
+    ) PRIMARY KEY(id)"

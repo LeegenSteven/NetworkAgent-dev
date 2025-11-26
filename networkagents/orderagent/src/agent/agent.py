@@ -50,7 +50,7 @@ class OrderAgent:
         self.root_agent = SequentialAgent(
             name=self.app_name,
             description=descriptions.description,
-            sub_agents=[network_design_agent],#, validate_design_agent, execute_design_agent]
+            sub_agents=[network_design_agent,validate_design_agent,execute_design_agent]
         )
 
         # Initialize ADKAgent wrapper for AG-UI protocol support

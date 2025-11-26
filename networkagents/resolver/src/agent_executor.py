@@ -88,6 +88,10 @@ class ResolverAgentExecutor(AgentExecutor):
             logger.debug(doc)
             await toolset.close()
 
+            if not doc or not getattr(doc, "content", None):
+                logger.error("Operating procedures document is empty")
+                raise Exception("Operating procedures document is empty")
+
             logger.info("adding incident data to state")
             initial_state={
                 "incident_data": incident_data,

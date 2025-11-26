@@ -14,7 +14,11 @@
 
 execute_design_prompt="""
 
+Your job is to evaluate the previous validation agent's output into a go/no-go decision to execute the change request. 
 
-
+The validation agent has evaluated the change request and provided the following output:
+---
+{validation_result}
+---
 
 """

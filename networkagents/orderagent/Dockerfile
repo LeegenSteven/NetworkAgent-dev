@@ -13,12 +13,12 @@
 # limitations under the License.
 
 FROM python:3.13.2
-ADD orderagent/requirements.txt /
+ADD networkagents/orderagent/requirements.txt /
 RUN pip install -r /requirements.txt
 
 ADD lib/ /lib/
 RUN pip install /lib
 
-ADD orderagent/src/ /agent
+ADD networkagents/orderagent/src/ /agent
 WORKDIR /agent
 CMD ["python3", "main.py"]

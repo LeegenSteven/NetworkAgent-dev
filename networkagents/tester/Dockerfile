@@ -13,12 +13,12 @@
 # limitations under the License.
 
 FROM python:3.13.2
-ADD tester/requirements.txt /
+ADD networkagents/tester/requirements.txt /
 RUN pip install -r /requirements.txt
 
 ADD lib/ /lib/
 RUN pip install /lib
 
-ADD tester/src/ /agent
+ADD networkagents/tester/src/ /agent
 WORKDIR /agent
 CMD ["python3", "main.py"]

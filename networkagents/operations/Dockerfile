@@ -17,10 +17,10 @@ FROM python:3.13.2
 ADD lib/ /lib/
 RUN pip install /lib
 
-ADD operations/requirements.txt /
+ADD networkagents/operations/requirements.txt /
 RUN pip install -r /requirements.txt
 
-ADD operations/src/ /agent
+ADD networkagents/operations/src/ /agent
 
 WORKDIR /agent
 CMD ["python3", "main.py"]

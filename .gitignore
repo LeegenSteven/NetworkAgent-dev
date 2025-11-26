@@ -107,5 +107,5 @@ local.properties
 **/linux/flutter/generated_plugins.cmake
 
 # Python library
-networkagents/lib/build
+lib/build
 **/*egg-info

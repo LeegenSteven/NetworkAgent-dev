@@ -16,7 +16,7 @@
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeAddress
 metadata:
-  name: network_vm_address
+  name: network-vm-address
   namespace: {{GOOGLE_NAMESPACE}}
 spec:
   description: network vm internal address
@@ -25,6 +25,7 @@ spec:
   purpose: GCE_ENDPOINT
   subnetworkRef:
     external: "https://www.googleapis.com/compute/v1/projects/{{ GOOGLE_PROJECT }}/regions/{{ GOOGLE_REGION }}/subnetworks/mgmt-subnet"
+
 ---
 apiVersion: compute.cnrm.cloud.google.com/v1beta1
 kind: ComputeInstance
@@ -33,7 +34,7 @@ metadata:
     cnrm.cloud.google.com/allow-stopping-for-update: "false"
     cnrm.cloud.google.com/state-into-spec: absent
     cnrm.cloud.google.com/management-conflict-prevention-policy: resource
-  name: network_vm
+  name: network-vm
   namespace: {{GOOGLE_NAMESPACE}}
 spec:
   machineType: e2-standard-2
@@ -51,8 +52,10 @@ spec:
         external: https://www.googleapis.com/compute/v1/projects/{{ GOOGLE_PROJECT }}/regions/{{ GOOGLE_REGION }}/subnetworks/mgmt-subnet
       networkIpRef:
         kind: ComputeAddress
-        name: network_vm_address
+        name: network-vm-address
         namespace: {{GOOGLE_NAMESPACE}}
+      accessConfig:
+        - {}
   canIpForward: true
   metadata:
     - key: ssh-keys

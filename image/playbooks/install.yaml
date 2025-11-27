@@ -21,17 +21,17 @@
       import_role:
         name: base
 
-    # - name: build free5gc images
-    #   import_role:
-    #     name: free5gc
+    - name: build free5gc images
+      import_role:
+        name: free5gc
 
-    # - name: install metric collector
-    #   import_role:
-    #     name: metricscollector
+    - name: install metric collector
+      import_role:
+        name: metricscollector
 
-    # - name: install wireguard
-    #   import_role:
-    #     name: wireguard
+    - name: install wireguard
+      import_role:
+        name: wireguard
 
     - name: install vyos
       import_role:

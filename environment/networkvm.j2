@@ -12,3 +12,48 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeAddress
+metadata:
+  name: network_vm_address
+  namespace: {{GOOGLE_NAMESPACE}}
+spec:
+  description: network vm internal address
+  location: {{ GOOGLE_REGION }}
+  addressType: INTERNAL
+  purpose: GCE_ENDPOINT
+  subnetworkRef:
+    external: "https://www.googleapis.com/compute/v1/projects/{{ GOOGLE_PROJECT }}/regions/{{ GOOGLE_REGION }}/subnetworks/mgmt-subnet"
+---
+apiVersion: compute.cnrm.cloud.google.com/v1beta1
+kind: ComputeInstance
+metadata:
+  annotations:
+    cnrm.cloud.google.com/allow-stopping-for-update: "false"
+    cnrm.cloud.google.com/state-into-spec: absent
+    cnrm.cloud.google.com/management-conflict-prevention-policy: resource
+  name: network_vm
+  namespace: {{GOOGLE_NAMESPACE}}
+spec:
+  machineType: e2-standard-2
+  zone: {{ GOOGLE_ZONE }}
+  bootDisk:
+    initializeParams:
+      size: 200
+      type: pd-ssd
+      sourceImageRef:
+        external: projects/{{ GOOGLE_PROJECT }}/global/images/networkagent
+  networkInterface:
+    - networkRef:
+        external: https://www.googleapis.com/compute/v1/projects/{{ GOOGLE_PROJECT }}/regions/{{ GOOGLE_REGION }}/networks/mgmt
+      subnetworkRef:
+        external: https://www.googleapis.com/compute/v1/projects/{{ GOOGLE_PROJECT }}/regions/{{ GOOGLE_REGION }}/subnetworks/mgmt-subnet
+      networkIpRef:
+        kind: ComputeAddress
+        name: network_vm_address
+        namespace: {{GOOGLE_NAMESPACE}}
+  canIpForward: true
+  metadata:
+    - key: ssh-keys
+      value: "{{ GOOGLE_VM_USER }}:{{ GOOGLE_SSH_KEY }}"

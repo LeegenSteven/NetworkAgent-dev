@@ -10,11 +10,11 @@ launch.json
 **/google-compute
 **/google-compute.pub
 **/environment/monitoring.yaml
-**/environment/networks.yaml
 **/environment/configconnector.yaml
 **/environment/bigquery.yaml
 **/environment/spanner.yaml
 **/environment/logsink.yaml
+**/environment/networkvm.yaml
 **/tools/deployment.yaml
 **/tools/cloudbuild.yaml
 **/deployment.yaml

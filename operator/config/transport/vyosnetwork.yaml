@@ -1,0 +1,2238 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: vyosnetworks.guardian.dev
+  labels:
+    type: network
+spec:
+  scope: Namespaced
+  group: guardian.dev
+  names:
+    kind: VyOSNetwork
+    plural: vyosnetworks
+    singular: vyosnetwork
+    shortNames:
+      - vnet
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: |
+            VyOSNetwork defines a complete telco network topology as a single source of truth. 
+            
+            The VyOSNetwork operator decomposes this resource into individual VyOSRouter and LinuxNetwork custom resources, enabling centralized 
+            network management with distributed execution. This resource contains all network segments, router definitions, routing protocols, 
+            QoS policies, and security configurations needed to deploy a complete telco virtual transport network.
+            
+          required:
+            - spec
+          properties:
+            spec:
+              type: object
+              required:
+                - description
+                - networks
+              properties:
+                description:
+                  type: string
+                  description: "Description of the network"
+                networks:
+                  type: array
+                  description: |
+                    Network segments and subnets. 
+
+                    A single network of type 'management' must be defined to facilitate operator-router communication. 
+                    The management network should not have a vlan assigned.
+                  items:
+                    type: object
+                    required:
+                      - name
+                      - subnet
+                    properties:
+                      name:
+                        type: string
+                        maxLength: 15
+                        description: "Network segment name"
+                      subnet:
+                        type: string
+                        pattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}\/[0-9]{1,2}$'
+                        description: "Network subnet in CIDR notation"
+                      gateway:
+                        type: string
+                        pattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+                        description: "Optional gateway IP address for the network"
+                      ipv6_subnet:
+                        type: string
+                        pattern: '^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}\/[0-9]{1,3}$'
+                        description: "Optional IPv6 subnet in CIDR notation (e.g., fd00:10:1::/64)"
+                      description:
+                        type: string
+                        description: "Network description"
+                      vlan:
+                        type: integer
+                        minimum: 1
+                        maximum: 4094
+                        description: "VLAN ID"
+                      vrf:
+                        type: string
+                        description: "VRF name for this network"
+                      mtu:
+                        type: integer
+                        minimum: 576
+                        maximum: 9000
+                        default: 1500
+                        description: "Maximum transmission unit"
+                      network_type:
+                        type: string
+                        enum: ["p2p", "multi-access", "loopback", "management"]
+                        description: |
+                          Network topology type, affects routing protocol behavior and interface configuration.
+                          
+                          Topology Types and Use Cases:
+                          
+                          - "p2p": Point-to-point link between exactly two routers
+                            * Used for: Core interconnects, PE-P links, PE-CE links
+                            * Routing: OSPF uses point-to-point network type (no DR/BDR election)
+                            * Characteristics: Direct connection, no broadcast domain
+                            * Examples: MPLS core links, dedicated customer connections
+                            
+                          - "multi-access": Broadcast domain supporting multiple devices
+                            * Used for: Customer LANs, access networks, shared segments
+                            * Routing: Typically not included in IGP (customer-facing)
+                            * Characteristics: Shared medium, multiple MAC addresses
+                            * Examples: Customer LAN networks, WiFi networks, switch-connected segments
+                            
+                          - "loopback": Virtual interfaces for router identification
+                            * Used for: Router IDs, BGP peering endpoints, MPLS LSR-IDs
+                            * Routing: Always advertised in OSPF area 0.0.0.0
+                            * Characteristics: Always up, /32 host routes
+                            * Examples: BGP next-hop addresses, MPLS tunnel endpoints
+                            
+                          - "management": Out-of-band management network (required)
+                            * Used for: Operator access, monitoring, configuration
+                            * Routing: Excluded from IGP, uses static routes
+                            * Characteristics: Must be first interface (eth0), no VLAN allowed
+                            * Examples: SSH access, SNMP monitoring, configuration management
+                            
+                          Network Design Guidelines:
+                          - Use "p2p" for all provider core and customer uplink connections
+                          - Use "multi-access" for customer LAN segments where devices connect
+                          - Always define one "management" network for operational access
+                          - "loopback" networks are automatically created for router IDs
+                        default: "p2p"
+                      bandwidth:
+                        type: string
+                        pattern: '^[0-9]+[kmg]?bit$'
+                        description: "Network bandwidth limit"
+                      connected_routers:
+                        type: array
+                        description: "Routers connected to this network"
+                        items:
+                          type: object
+                          required:
+                            - router_name
+                            - interface
+                            - ip_address
+                          properties:
+                            router_name:
+                              type: string
+                              description: "Router name"
+                            interface:
+                              type: string
+                              pattern: '^(eth[0-9]+|lo)$'
+                              description: "Interface name"
+                            ip_address:
+                              type: string
+                              pattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+                              description: "Interface IP address"
+                routers:
+                  type: array
+                  description: |
+                    Router definitions.
+                    The management interface must be the first interface in the list.
+                  items:
+                    type: object
+                    required:
+                      - name
+                      - hostname
+                      - router_id
+                      - type
+                      - role
+                    properties:
+                      name:
+                        type: string
+                        description: "Router name"
+                      hostname:
+                        type: string
+                        pattern: '^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$'
+                        description: "Router hostname"
+                      router_id:
+                        type: string
+                        pattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+                        description: "Router ID (IPv4 address)"
+                      type:
+                        type: string
+                        enum: ["core", "edge", "access", "cpe", "external"]
+                        description: |
+                          Router's functional type in the network hierarchy, determines routing and forwarding capabilities.
+                          
+                          Network Design Implications:
+                          - "core": Backbone routers providing high-speed transit between network regions
+                            * Runs IGP (OSPF) and MPLS for label switching in the provider core
+                            * No customer-facing interfaces or VRFs
+                            * Focus on throughput, reliability, and label forwarding
+                            
+                          - "edge": Provider Edge routers at network boundary connecting customers
+                            * Terminates customer connections and implements traffic isolation
+                            * Implements VRFs for multi-tenant separation
+                            * Runs both IGP (for core connectivity) and BGP (for customer routing)
+                            * Handles MPLS L3VPN label imposition/disposition
+                            
+                          - "cpe": Customer premises equipment at customer sites
+                            * Connects customer LAN to provider network via PE router
+                            * Typically uses eBGP peering with provider
+                            * Single AS boundary point for customer traffic
+                            * No MPLS or VRF capabilities
+                            
+                          - "access": Access layer aggregation (future use)
+                          - "external": External peering points (future use)
+                          
+                          Decision Criteria:
+                          - Use "core" for routers that only forward traffic between other provider routers
+                          - Use "edge" when router connects to customers and needs traffic isolation
+                          - Use "cpe" for customer-owned/managed equipment
+                      role:
+                        type: string
+                        enum: ["p-router", "pe-router", "aggregation", "customer-edge", "gateway"]
+                        description: |
+                          Specific functional role within the router type, determines protocol configuration and network services.
+                          
+                          Roles and Network Functions:
+                          - "p-router": Provider router (label switching only)
+                            * Core transit function with MPLS label switching
+                            * Runs IGP (OSPF) for reachability
+                            * No customer interfaces, no BGP typically
+                            * May act as Route Reflector when route_reflector: true is set
+                            
+                          - "pe-router": Provider Edge (MPLS L3VPN termination)
+                            * Customer-facing router with VRF instances
+                            * Terminates MPLS L3VPN tunnels
+                            * Runs eBGP with customer devices (PE-CE sessions)
+                            * Runs iBGP with other PEs via Route Reflectors
+                            * Requires vrfs[] configuration with Route Distinguisher and Route Targets
+                            
+                          - "customer-edge": CPE device connecting to PE
+                            * Customer premises router connecting to provider network
+                            * Runs eBGP session with PE router (different AS)
+                            * Advertises customer routes to provider
+                            * Receives default route or specific routes from provider
+                            
+                          - "aggregation": Traffic aggregation function (future)
+                          - "gateway": Gateway services (future)
+                          
+                          Special Configuration:
+                          When route_reflector: true is set on a "p-router", it acts as a BGP Route Reflector
+                          for VPNv4 routes, eliminating the need for full-mesh iBGP between PE routers.
+                      image:
+                        type: string
+                        description: "VyOS container image"
+                        default: "vyos:1.5"
+                      interfaces:
+                        type: array
+                        description: "Router interfaces"
+                        items:
+                          type: object
+                          required:
+                            - name
+                            - network
+                          properties:
+                            name:
+                              type: string
+                              pattern: '^(eth[0-9]+|lo)$'
+                              description: "Interface name"
+                            network:
+                              type: string
+                              maxLength: 15
+                              description: "Connected network name"
+                            description:
+                              type: string
+                              description: "Interface description"
+                            vrf:
+                              type: string
+                              description: "VRF assignment"
+                            enabled:
+                              type: boolean
+                              default: true
+                              description: "Interface enabled state"
+                            bandwidth:
+                              type: string
+                              pattern: '^[0-9]+[kmg]?bit$'
+                              description: "Interface port capacity (e.g., '1gbit', '100mbit')"
+                      vrfs:
+                        type: array
+                        description: |
+                          VRF (Virtual Routing and Forwarding) instances for multi-tenant traffic isolation.
+                          
+                          Each VRF maintains separate routing tables, allowing multiple customers to use
+                          overlapping IP address spaces without conflicts. Traffic in one VRF cannot leak
+                          to another VRF unless explicitly configured via route import/export policies.
+                          
+                          Key Concepts:
+                          - Route Distinguisher (RD): Makes routes globally unique across VRFs
+                          - Route Targets (RT): Control which routes are shared between VRFs
+                          - Table ID: Unique routing table identifier for this VRF
+                          
+                          Common Topology Patterns:
+                          
+                          Hub-and-Spoke L3VPN:
+                          - Spoke VRFs: Export to hub RT, import from hub RT only
+                            * rt_export: ["65035:1011"], rt_import: ["65035:1030"]
+                          - Hub VRF: Export to spoke RT, import from both hub and spoke RTs
+                            * rt_export: ["65035:1030"], rt_import: ["65035:1011", "65035:1030"]
+                          - Result: Spokes can only communicate via hub, not directly with each other
+                          
+                          Full-Mesh L3VPN:
+                          - All VRFs use same RT for both export and import
+                            * rt_export: ["65035:100"], rt_import: ["65035:100"]
+                          - Result: All sites can communicate directly with each other
+                          
+                          Partial-Mesh L3VPN:
+                          - Different RT combinations create selective connectivity
+                          - Example: Regional hubs with local spokes
+                          
+                          IMPORTANT: When using RD/RT values, be aware of BGP capability negotiation
+                          limitations between PE and CPE routers. The operator includes automatic
+                          workarounds for known issues.
+                        items:
+                          type: object
+                          required:
+                            - name
+                            - table
+                          properties:
+                            name:
+                              type: string
+                              description: "VRF name"
+                            table:
+                              type: integer
+                              minimum: 1
+                              maximum: 4294967295
+                              description: "Routing table ID"
+                            rd:
+                              type: string
+                              pattern: '^([0-9]+:[0-9]+|([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]+)$'
+                              description: |
+                                Route distinguisher in one of two formats:
+                                - ASN:value (e.g., 65001:100)
+                                - IP:value (e.g., 10.50.50.1:1011)
+                                
+                                The IP:value format is typically used in hub-and-spoke topologies where each PE
+                                uses its loopback IP as the unique identifier.
+                                
+                                WARNING: Configuring RD may cause VPN capability negotiation issues with CPE routers.
+                                The operator includes automatic workarounds, but BGP sessions may require manual intervention.
+                                See 'Known Limitations' section for details.
+                            rt_export:
+                              type: array
+                              items:
+                                type: string
+                                pattern: '^[0-9]+:[0-9]+$'
+                              description: |
+                                Route target export values in format ASN:value (e.g., ['100:100']).
+                                Used for MPLS L3VPN route distribution between PE routers.
+                                Typically single value for most PEs: ['65035:1011']
+                            rt_import:
+                              type: array
+                              items:
+                                type: string
+                                pattern: '^[0-9]+:[0-9]+$'
+                              description: |
+                                Route target import values in format ASN:value (e.g., ['100:100']).
+                                Used for MPLS L3VPN route distribution between PE routers.
+                                Hub PEs require multiple imports: ['65035:1011', '65035:1030']
+                                Spoke PEs typically single import: ['65035:1030']
+                            description:
+                              type: string
+                              description: "VRF description"
+                      protocols:
+                        type: object
+                        description: "Routing protocols configuration"
+                        properties:
+                          ospf:
+                            type: object
+                            description: |
+                              OSPF (Open Shortest Path First) Interior Gateway Protocol configuration.
+                              
+                              OSPF provides fast-converging link-state routing within the provider network,
+                              essential for MPLS core connectivity and PE router reachability.
+                              
+                              Network Design Role:
+                              - Provides IGP connectivity between P routers, PE routers, and Route Reflectors
+                              - Advertises loopback addresses used for BGP peering and MPLS LSR-IDs
+                              - Excludes customer-facing interfaces and management networks
+                              - Uses interface-based configuration (not network statements)
+                              
+                              Typical Usage:
+                              - P routers: OSPF on all core-facing interfaces for label switching paths
+                              - PE routers: OSPF on core-facing interfaces, excludes VRF interfaces
+                              - Route Reflectors: OSPF for reachability to PE routers
+                              - CPE routers: Generally not used (customer uses BGP to PE)
+                              
+                              Area Design:
+                              - Single area (0.0.0.0) is common for MPLS core networks
+                              - Multi-area designs for large networks with hierarchical topology
+                              - All routers' loopback interfaces automatically join area 0.0.0.0
+                            properties:
+                              enabled:
+                                type: boolean
+                                default: false
+                                description: |
+                                  Enable OSPF routing protocol.
+                                  
+                                  Set to true for:
+                                  - P routers (core transit)
+                                  - PE routers (need reachability to other PEs)
+                                  - Route Reflectors (need reachability to PE clients)
+                                  
+                                  Set to false for:
+                                  - CPE routers (use BGP to provider instead)
+                              areas:
+                                type: array
+                                items:
+                                  type: string
+                                  pattern: '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'
+                                description: |
+                                  OSPF areas this router participates in (dotted decimal format).
+                                  
+                                  Area Assignment:
+                                  - ["0.0.0.0"]: Backbone area - most common for MPLS core
+                                  - ["0.0.0.1", "0.0.0.2"]: Multi-area design for large networks
+                                  
+                                  Interface Assignment Rules:
+                                  - Loopback interface: Always assigned to area 0.0.0.0
+                                  - Management interface (eth0): Automatically excluded
+                                  - VRF interfaces: Automatically excluded from global OSPF
+                                  - Core interfaces: Assigned to areas listed here
+                                  - Point-to-point network type used for all core links
+                              passive_interfaces:
+                                type: array
+                                items:
+                                  type: string
+                                description: |
+                                  Interfaces that participate in OSPF but don't send Hello packets.
+                                  
+                                  Use Cases:
+                                  - Stub networks where no OSPF neighbors exist
+                                  - One-way advertisement of connected subnets
+                                  - Security: Prevent OSPF adjacency formation on specific interfaces
+                                  
+                                  Examples:
+                                  - ["eth3"]: Make eth3 passive (advertise subnet but no hellos)
+                                  - ["lo"]: Make loopback passive (though this is rarely needed)
+                          bgp:
+                            type: object
+                            description: |
+                              BGP (Border Gateway Protocol) configuration for inter-AS routing and MPLS L3VPN.
+                              
+                              BGP serves multiple critical functions in the network:
+                              - Inter-AS routing between provider and customer networks
+                              - MPLS L3VPN route distribution via VPNv4 address-family
+                              - Route reflection to eliminate full-mesh iBGP requirements
+                              - VRF-aware routing for multi-tenant customer isolation
+                              
+                              Network Design Roles:
+                              
+                              Route Reflectors (P routers with route_reflector: true):
+                              - Eliminate need for full-mesh iBGP between PE routers
+                              - Reflect VPNv4 routes between PE routers for L3VPN
+                              - Use loopback addresses for stable peering
+                              - Typically deployed in redundant pairs
+                              
+                              PE Routers (Provider Edge):
+                              - Global BGP: iBGP to Route Reflectors for VPNv4 route exchange
+                              - VRF BGP: eBGP to customer CPE routers for customer route learning
+                              - Automatic VPNv4 address-family activation for MPLS L3VPN
+                              - Route import/export controlled by VRF Route Targets
+                              
+                              CPE Routers (Customer Edge):
+                              - eBGP to PE router (different AS number)
+                              - Advertises customer routes to provider
+                              - Receives default route or specific routes from provider
+                              - Single AS boundary for customer network
+                            properties:
+                              enabled:
+                                type: boolean
+                                default: false
+                                description: |
+                                  Enable BGP routing protocol.
+                                  
+                                  Set to true for:
+                                  - Route Reflectors (P routers): Reflect VPNv4 routes between PEs
+                                  - PE routers: iBGP to RRs + eBGP to customers
+                                  - CPE routers: eBGP to provider PE router
+                                  
+                                  Set to false for:
+                                  - P routers (non-RR): Only do label switching, no BGP needed
+                              as_number:
+                                type: integer
+                                minimum: 1
+                                maximum: 4294967295
+                                description: |
+                                  BGP Autonomous System number.
+                                  
+                                  AS Number Assignment:
+                                  - Provider AS: Same AS for all P routers, PE routers, and Route Reflectors
+                                  - Customer AS: Different AS for each customer (or customer site)
+                                  
+                                  Common Ranges:
+                                  - Private AS: 64512-65534, 4200000000-4294967294
+                                  - Public AS: Assigned by RIR (ARIN, RIPE, etc.)
+                                  
+                                  Examples:
+                                  - Provider network: AS 65001
+                                  - Customer A: AS 65035
+                                  - Customer B: AS 65036
+                              route_reflector:
+                                type: boolean
+                                default: false
+                                description: |
+                                  Enable BGP Route Reflector functionality.
+                                  
+                                  Route Reflector Design:
+                                  - Eliminates need for full-mesh iBGP between PE routers
+                                  - Reflects VPNv4 routes between PE router clients
+                                  - Uses cluster-id (typically router-id) for loop prevention
+                                  - Typically deployed in redundant pairs for high availability
+                                  
+                                  Set to true for:
+                                  - P routers designated as Route Reflectors
+                                  - Routers with role "p-router" that need to reflect routes
+                                  
+                                  Set to false for:
+                                  - PE routers (they are RR clients)
+                                  - Regular P routers (transit only)
+                                  - CPE routers (customer equipment)
+                              neighbors:
+                                type: array
+                                description: |
+                                  Global BGP neighbors (non-VRF) for provider core routing.
+                                  
+                                  Neighbor Types:
+                                  - iBGP neighbors: Same AS, typically PE-to-RR or RR-to-PE sessions
+                                  - eBGP neighbors: Different AS, typically for external peering
+                                  
+                                  Addressing:
+                                  - iBGP: Use loopback addresses for stability
+                                  - eBGP: Use directly connected interface addresses
+                                items:
+                                  type: object
+                                  required:
+                                    - peer
+                                    - remote_as
+                                  properties:
+                                    peer:
+                                      type: string
+                                      pattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+                                      description: |
+                                        BGP neighbor IP address.
+                                        
+                                        Address Selection:
+                                        - iBGP (same AS): Use neighbor's loopback address
+                                        - eBGP (different AS): Use directly connected interface address
+                                        
+                                        Examples:
+                                        - "10.0.0.1" - Route Reflector loopback
+                                        - "10.0.0.7" - PE router loopback
+                                        - "192.168.1.2" - External peer interface
+                                    remote_as:
+                                      type: integer
+                                      minimum: 1
+                                      maximum: 4294967295
+                                      description: |
+                                        Remote neighbor's AS number.
+                                        
+                                        Session Types:
+                                        - Same AS as local router: iBGP session
+                                        - Different AS: eBGP session
+                                        
+                                        Examples:
+                                        - 65001: iBGP within provider network
+                                        - 65035: eBGP to customer network
+                                    description:
+                                      type: string
+                                      description: |
+                                        Human-readable neighbor description.
+                                        
+                                        Good descriptions include:
+                                        - Router role and location
+                                        - Session purpose
+                                        - Customer or peer identification
+                                        
+                                        Examples:
+                                        - "RR1 - Route Reflector"
+                                        - "PE1 - Provider Edge"
+                                        - "Customer A - Main Site"
+                                    route_reflector_client:
+                                      type: boolean
+                                      default: false
+                                      description: |
+                                        Mark this neighbor as a Route Reflector client.
+                                        
+                                        Set to true when:
+                                        - This router is a Route Reflector (route_reflector: true)
+                                        - The neighbor is a PE router that should receive reflected routes
+                                        - Building hub-and-spoke BGP topology
+                                        
+                                        Set to false when:
+                                        - This router is not a Route Reflector
+                                        - The neighbor is another Route Reflector (peer relationship)
+                                        - The neighbor is an external peer
+                              vrfs:
+                                type: array
+                                description: |
+                                  BGP neighbors within VRF contexts for customer routing.
+                                  
+                                  VRF BGP is used for:
+                                  - PE-to-CPE eBGP sessions (customer routing)
+                                  - Customer route learning and advertisement
+                                  - Multi-tenant isolation via separate VRF routing tables
+                                  - Automatic default route advertisement to customers
+                                  
+                                  The operator automatically:
+                                  - Activates neighbors in ipv4-unicast address-family
+                                  - Redistributes connected routes into VRF BGP
+                                  - Advertises default route to eBGP neighbors (CPE routers)
+                                  - Applies AS-override for customer route reflection
+                                items:
+                                  type: object
+                                  required:
+                                    - name
+                                  properties:
+                                    name:
+                                      type: string
+                                      description: |
+                                        VRF name (must match a VRF defined in vrfs[] section).
+                                        
+                                        This creates a separate BGP instance within the VRF,
+                                        isolated from global BGP and other VRF BGP instances.
+                                    neighbors:
+                                      type: array
+                                      description: |
+                                        BGP neighbors for this VRF (typically PE-to-CPE eBGP sessions).
+                                        
+                                        Customer Routing Design:
+                                        - PE advertises default route to CPE (automatic)
+                                        - CPE advertises customer routes to PE
+                                        - Connected routes automatically redistributed
+                                        - AS-override prevents AS-path loops
+                                        
+                                        The operator automatically configures:
+                                        - ipv4-unicast address-family activation
+                                        - default-originate for eBGP neighbors
+                                        - connected route redistribution
+                                        - AS-override for customer route reflection
+                                      items:
+                                        type: object
+                                        required:
+                                          - peer
+                                          - remote_as
+                                        properties:
+                                          peer:
+                                            type: string
+                                            pattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+                                            description: |
+                                              Customer BGP neighbor IP address.
+                                              
+                                              This is typically:
+                                              - CPE router's interface IP on the PE-CE link
+                                              - Must be in the same subnet as PE's VRF interface
+                                              - Used for eBGP session establishment
+                                              
+                                              Examples:
+                                              - "10.50.50.2" - CPE interface on PE-CE link
+                                              - "10.80.80.2" - Hub CPE interface
+                                              - "192.168.1.2" - Customer router interface
+                                          remote_as:
+                                            type: integer
+                                            minimum: 1
+                                            maximum: 4294967295
+                                            description: |
+                                              Customer's AS number (must be different from provider AS).
+                                              
+                                              Customer AS Assignment:
+                                              - Each customer typically has unique AS
+                                              - Can use private AS ranges
+                                              - Must be different from provider AS for eBGP
+                                              
+                                              Examples:
+                                              - 65035: Customer A AS
+                                              - 65036: Customer B AS
+                                              - 4200000001: Private 4-byte AS
+                                          description:
+                                            type: string
+                                            description: |
+                                              Customer neighbor description.
+                                              
+                                              Good descriptions include:
+                                              - Customer name and site identification
+                                              - Service type or connection purpose
+                                              - Contact information if relevant
+                                              
+                                              Examples:
+                                              - "Customer A - Main Site CPE"
+                                              - "Customer B - Branch Office"
+                                              - "ACME Corp - Data Center Connection"
+                          mpls:
+                            type: object
+                            description: |
+                              MPLS (Multiprotocol Label Switching) configuration for label-switched paths.
+                              
+                              MPLS provides the foundation for advanced services like L3VPN by creating
+                              label-switched paths (LSPs) through the provider network core.
+                              
+                              Network Design Role:
+                              - Creates label-switched paths between PE routers for L3VPN tunnels
+                              - Enables traffic engineering and QoS through label forwarding
+                              - Provides fast switching in the provider core (P routers)
+                              - Uses LDP (Label Distribution Protocol) for automatic label distribution
+                              
+                              MPLS Architecture:
+                              - P routers: Label switching only (no VPN awareness)
+                              - PE routers: Label imposition/disposition + VPN termination
+                              - LSR-ID: Uses loopback address for stable label switching
+                              - Label range: Configurable local label space
+                              
+                              Typical Usage:
+                              - P routers: MPLS + LDP on all core interfaces
+                              - PE routers: MPLS + LDP on core-facing interfaces (not customer-facing)
+                              - Route Reflectors: MPLS + LDP for VPNv4 route reflection
+                              - CPE routers: No MPLS (customer equipment)
+                            properties:
+                              enabled:
+                                type: boolean
+                                default: false
+                                description: |
+                                  Enable MPLS label switching on this router.
+                                  
+                                  Set to true for:
+                                  - P routers: Core label switching functionality
+                                  - PE routers: L3VPN label imposition/disposition
+                                  - Route Reflectors: VPNv4 route reflection with labels
+                                  
+                                  Set to false for:
+                                  - CPE routers: Customer equipment doesn't need MPLS
+                                  - Management-only routers: No data plane forwarding
+                              ldp_interfaces:
+                                type: array
+                                items:
+                                  type: string
+                                description: |
+                                  Interfaces where LDP (Label Distribution Protocol) is enabled.
+                                  
+                                  LDP Interface Selection:
+                                  - Include all core-facing interfaces (P-to-P, P-to-PE, PE-to-P)
+                                  - Exclude customer-facing interfaces (PE-to-CPE)
+                                  - Exclude management interfaces (eth0)
+                                  - Include interfaces participating in MPLS forwarding
+                                  
+                                  Interface Types:
+                                  - Core links: ["eth1", "eth2", "eth3"] - between provider routers
+                                  - Uplink interfaces: ["eth1"] - PE router to core
+                                  - All provider interfaces: ["eth1", "eth2", "eth3", "eth4"] - P router
+                                  
+                                  Examples:
+                                  - P router: ["eth1", "eth2", "eth3"] - all core interfaces
+                                  - PE router: ["eth1"] - uplink to core only
+                                  - Route Reflector: ["eth1", "eth2"] - connections to P routers
+                          static:
+                            type: object
+                            description: |
+                              Static routing configuration for manually defined routes.
+                              
+                              Static routes are useful for:
+                              - Routing traffic via management interfaces
+                              - Backup routes with specific metrics
+                              - Routes to networks not advertised by dynamic protocols
+                              - Simple point-to-point connections
+                              
+                              Example usage:
+                              ```yaml
+                              protocols:
+                                static:
+                                  routes:
+                                    - destination: "192.168.1.0/24"
+                                      next_hop: "192.168.122.1"
+                                      description: "Route via management gateway"
+                                    - destination: "10.10.10.0/24"
+                                      next_hop: "192.168.1.2"
+                                      distance: 10
+                                      description: "Backup route with higher metric"
+                              ```
+                            properties:
+                              routes:
+                                type: array
+                                description: |
+                                  List of static routes to configure on this router.
+                                  Routes are processed in the order they appear in the list.
+                                items:
+                                  type: object
+                                  required:
+                                    - destination
+                                    - next_hop
+                                  properties:
+                                    destination:
+                                      type: string
+                                      pattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}\/[0-9]{1,2}$'
+                                      description: |
+                                        Destination network in CIDR notation.
+                                        
+                                        Examples:
+                                        - "192.168.1.0/24" - Route to entire /24 network
+                                        - "10.0.0.0/8" - Route to entire Class A network
+                                        - "172.16.0.0/16" - Route to entire Class B network
+                                        - "0.0.0.0/0" - Default route (though this is auto-configured via management interface)
+                                    next_hop:
+                                      type: string
+                                      pattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+                                      description: |
+                                        Next hop IP address where traffic should be forwarded.
+                                        
+                                        This should be:
+                                        - A directly connected router's IP address
+                                        - The gateway IP of a connected network
+                                        - An IP address reachable via a directly connected interface
+                                        
+                                        Examples:
+                                        - "192.168.122.1" - Management network gateway
+                                        - "192.168.1.2" - Peer router on interconnect network
+                                        - "10.1.1.254" - Gateway on LAN network
+                                    vrf:
+                                      type: string
+                                      description: |
+                                        Optional: VRF name to install this route in.
+                                        
+                                        Use this for inter-site VRF routing when:
+                                        - Creating routes between PE routers for customer VRFs
+                                        - Routing customer traffic across the core without MPLS VPNv4
+                                        - Building VRF-aware L3VPN with static routes
+                                        
+                                        If specified, the route will be installed in the VRF routing table instead 
+                                        of the global routing table.
+                                        
+                                        Examples:
+                                        - "CUSTOMER-A" - Route for Customer A's VRF
+                                        - "CUSTOMER-B" - Route for Customer B's VRF
+                                        - "MGMT-VRF" - Route in management VRF
+                                        
+                                        Note: The VRF must be defined in the router's vrfs list.
+                                    interface:
+                                      type: string
+                                      pattern: '^(eth[0-9]+|lo)$'
+                                      description: |
+                                        Optional: Specify the outbound interface for this route.
+                                        
+                                        Use this when:
+                                        - The next_hop is on a point-to-point link
+                                        - You want to force traffic out a specific interface
+                                        - The next_hop is not directly connected but reachable via this interface
+                                        
+                                        Examples:
+                                        - "eth0" - Management interface
+                                        - "eth1" - LAN interface  
+                                        - "eth2" - Interconnect interface
+                                        
+                                        Note: If specified, both next_hop and interface will be configured in VyOS.
+                                    distance:
+                                      type: integer
+                                      minimum: 1
+                                      maximum: 255
+                                      default: 1
+                                      description: |
+                                        Administrative distance (metric) for this route.
+                                        Lower values have higher priority.
+                                        
+                                        Common values:
+                                        - 1 (default) - Highest priority static route
+                                        - 10 - High priority backup route
+                                        - 50 - Medium priority route
+                                        - 100 - Low priority route
+                                        - 254 - Lowest priority (backup of last resort)
+                                        
+                                        For reference, dynamic protocol distances:
+                                        - OSPF: 110
+                                        - BGP: 200
+                                        
+                                        Use higher distances for backup routes that should only be used
+                                        when dynamic protocols are unavailable.
+                                    description:
+                                      type: string
+                                      description: |
+                                        Human-readable description of this route's purpose.
+                                        
+                                        Good descriptions help with:
+                                        - Network documentation
+                                        - Troubleshooting
+                                        - Understanding route purpose during maintenance
+                                        
+                                        Examples:
+                                        - "Route to interconnect network via management gateway"
+                                        - "Backup path to remote site"
+                                        - "Route to external services via DMZ"
+                                        - "Management access to monitoring servers"
+                      services:
+                        type: object
+                        description: |
+                          Network services provided by this router for connected devices and networks.
+                          
+                          Router services enable:
+                          - Automatic IP address assignment via DHCP
+                          - Network address translation for internet connectivity
+                          - DNS resolution and network bootstrapping
+                          - Device identification and network management
+                          
+                          Service Deployment Patterns:
+                          - Customer Edge (CPE) routers: DHCP for LAN devices, NAT for internet access
+                          - Provider Edge (PE) routers: Limited services, focus on L3VPN termination
+                          - Core (P) routers: No services, pure transit functionality
+                          - Access routers: DHCP pools for customer device assignment
+                        properties:
+                          dhcp:
+                            type: array
+                            description: |
+                              DHCP (Dynamic Host Configuration Protocol) server configurations for automatic IP assignment.
+                              
+                              DHCP Service provides:
+                              - Automatic IP address assignment to connected devices
+                              - Network configuration distribution (gateway, DNS, etc.)
+                              - Centralized IP address management and conflict prevention
+                              - Device identification and network access control
+                              
+                              Typical Use Cases:
+                              - CPE routers: Serve IP addresses to customer LAN devices
+                              - Access routers: Provide IP pools for customer equipment
+                              - Branch routers: Local device connectivity and management
+                              - WiFi access points: Wireless device IP assignment
+                              
+                              Network Design Considerations:
+                              - Each DHCP scope serves one network segment
+                              - Gateway should be the router's interface IP on that network
+                              - DNS servers enable internet and internal name resolution
+                              - Static mappings ensure consistent IPs for servers/infrastructure
+                            items:
+                              type: object
+                              required:
+                                - network
+                                - gateway
+                              properties:
+                                network:
+                                  type: string
+                                  pattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}\/[0-9]{1,2}$'
+                                  description: |
+                                    Network subnet for DHCP scope in CIDR notation.
+                                    
+                                    Network Selection:
+                                    - Must match a connected network segment on this router
+                                    - Typically customer LAN networks or access segments
+                                    - Should not overlap with other DHCP scopes
+                                    - Size determines maximum number of assignable addresses
+                                    
+                                    Examples:
+                                    - "192.168.1.0/24" - Standard /24 LAN (254 addresses)
+                                    - "10.1.1.0/24" - Private network segment
+                                    - "172.16.10.0/24" - Branch office LAN
+                                gateway:
+                                  type: string
+                                  pattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+                                  description: |
+                                    Default gateway IP address distributed to DHCP clients.
+                                    
+                                    Gateway Configuration:
+                                    - Should be this router's interface IP on the DHCP network
+                                    - Provides internet and inter-network connectivity for clients
+                                    - Must be within the DHCP network subnet
+                                    - Typically the first or last usable IP in the subnet
+                                    
+                                    Examples:
+                                    - "192.168.1.1" - Gateway for 192.168.1.0/24 network
+                                    - "10.1.1.254" - Gateway at end of range
+                                    - "172.16.10.1" - Gateway at beginning of range
+                                dns_servers:
+                                  type: array
+                                  items:
+                                    type: string
+                                    pattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+                                  description: |
+                                    DNS server IP addresses distributed to DHCP clients.
+                                    
+                                    DNS Configuration:
+                                    - Enables domain name resolution for client devices
+                                    - Can include public DNS servers (8.8.8.8, 1.1.1.1)
+                                    - May include internal DNS servers for local domains
+                                    - Order determines resolution priority
+                                    
+                                    Common Configurations:
+                                    - ["8.8.8.8", "8.8.4.4"] - Google public DNS
+                                    - ["1.1.1.1", "1.0.0.1"] - Cloudflare public DNS
+                                    - ["192.168.1.1"] - Router as DNS forwarder
+                                    - ["10.0.0.10", "8.8.8.8"] - Internal + public DNS
+                                range:
+                                  type: object
+                                  required:
+                                    - start
+                                    - end
+                                  description: |
+                                    IP address range for dynamic DHCP assignment.
+                                    
+                                    Range Design:
+                                    - Defines pool of addresses available for dynamic assignment
+                                    - Should exclude static IPs (gateway, servers, infrastructure)
+                                    - Leave room for future static assignments
+                                    - Consider network growth and device density
+                                  properties:
+                                    start:
+                                      type: string
+                                      pattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+                                      description: |
+                                        First IP address in the DHCP assignment range.
+                                        
+                                        Range Planning:
+                                        - Should be within the DHCP network subnet
+                                        - Typically starts after reserved static addresses
+                                        - Leave lower addresses for infrastructure (gateway, servers)
+                                        - Must be lower than the end address
+                                        
+                                        Examples:
+                                        - "192.168.1.100" - Start after .1-.99 reserved for static
+                                        - "10.1.1.10" - Start after .1-.9 reserved
+                                        - "172.16.10.50" - Mid-range start for balanced allocation
+                                    end:
+                                      type: string
+                                      pattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+                                      description: |
+                                        Last IP address in the DHCP assignment range.
+                                        
+                                        Range Sizing:
+                                        - Should be within the DHCP network subnet
+                                        - Determines maximum concurrent DHCP clients
+                                        - Leave upper addresses for future static assignments
+                                        - Must be higher than the start address
+                                        
+                                        Examples:
+                                        - "192.168.1.200" - 101 addresses (.100-.200)
+                                        - "10.1.1.250" - Large range for high device density
+                                        - "172.16.10.100" - Smaller range with room for growth
+                                static_mappings:
+                                  type: array
+                                  description: |
+                                    Static DHCP reservations for devices requiring consistent IP addresses.
+                                    
+                                    Static Mapping Use Cases:
+                                    - Servers requiring consistent IP addresses
+                                    - Network infrastructure (printers, cameras, IoT devices)
+                                    - Devices referenced by IP in configurations
+                                    - Network monitoring and management systems
+                                    
+                                    Benefits:
+                                    - Combines DHCP convenience with static IP reliability
+                                    - Centralized IP address management
+                                    - Automatic network configuration distribution
+                                    - Device identification via MAC address binding
+                                  items:
+                                    type: object
+                                    required:
+                                      - name
+                                      - ip
+                                      - mac
+                                    properties:
+                                      name:
+                                        type: string
+                                        description: |
+                                          Descriptive name for this static DHCP mapping.
+                                          
+                                          Naming Conventions:
+                                          - Use descriptive names indicating device function
+                                          - Include location or department information
+                                          - Avoid spaces, use hyphens or underscores
+                                          - Keep names consistent across the network
+                                          
+                                          Examples:
+                                          - "file-server" - Main file server
+                                          - "printer-accounting" - Accounting department printer
+                                          - "camera-lobby" - Security camera in lobby
+                                          - "wifi-ap-floor2" - WiFi access point on floor 2
+                                      ip:
+                                        type: string
+                                        pattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+                                        description: |
+                                          Static IP address to assign to this device.
+                                          
+                                          IP Assignment Guidelines:
+                                          - Must be within the DHCP network subnet
+                                          - Should be outside the dynamic range to avoid conflicts
+                                          - Use logical numbering scheme for device types
+                                          - Document assignments for network management
+                                          
+                                          Examples:
+                                          - "192.168.1.10" - Server in reserved range
+                                          - "10.1.1.5" - Infrastructure device
+                                          - "172.16.10.250" - High-numbered static assignment
+                                      mac:
+                                        type: string
+                                        pattern: '^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$'
+                                        description: |
+                                          MAC address of the device to receive this static IP.
+                                          
+                                          MAC Address Format:
+                                          - Six groups of two hexadecimal digits
+                                          - Separated by colons (e.g., "aa:bb:cc:dd:ee:ff")
+                                          - Case insensitive but lowercase preferred
+                                          - Must be unique across all static mappings
+                                          
+                                          Finding MAC Addresses:
+                                          - Network interface cards have printed MAC addresses
+                                          - Use "ipconfig /all" (Windows) or "ifconfig" (Linux/Mac)
+                                          - Check device network settings or labels
+                                          - DHCP server logs show MAC addresses of requesting devices
+                                          
+                                          Examples:
+                                          - "00:1a:2b:3c:4d:5e" - Typical network interface
+                                          - "aa:bb:cc:dd:ee:ff" - Example format
+                          nat:
+                            type: object
+                            description: |
+                              Network Address Translation (NAT) configuration for IP address translation.
+                              
+                              NAT Service provides:
+                              - Translation between private and public IP addresses
+                              - Internet connectivity for private network devices
+                              - IP address conservation and network security
+                              - Traffic flow control and connection tracking
+                              
+                              Common NAT Scenarios:
+                              - CPE routers: Translate customer LAN to provider network
+                              - Branch routers: Enable internet access for local devices
+                              - Access routers: Provide connectivity for customer networks
+                              - Gateway routers: Connect private networks to public internet
+                              
+                              NAT Types:
+                              - Source NAT: Translate outbound traffic source addresses
+                              - Destination NAT: Translate inbound traffic destinations
+                              - Masquerade: Dynamic source NAT using interface IP
+                            properties:
+                              source:
+                                type: array
+                                description: |
+                                  Source NAT rules for translating outbound traffic addresses.
+                                  
+                                  Source NAT enables:
+                                  - Private network devices to access external networks
+                                  - IP address hiding and network security
+                                  - Multiple devices sharing single public IP
+                                  - Traffic aggregation and bandwidth management
+                                  
+                                  Rule Processing:
+                                  - Rules processed in numerical order
+                                  - First matching rule applies to traffic
+                                  - Translation applied to matching packets
+                                  - Connection tracking maintains session state
+                                items:
+                                  type: object
+                                  required:
+                                    - rule
+                                    - outbound_interface
+                                  properties:
+                                    rule:
+                                      type: integer
+                                      minimum: 1
+                                      maximum: 9999
+                                      description: |
+                                        NAT rule number determining processing order.
+                                        
+                                        Rule Numbering:
+                                        - Lower numbers processed first
+                                        - Use increments of 10 for easy insertion
+                                        - Group related rules in number ranges
+                                        - Reserve low numbers for critical translations
+                                        
+                                        Examples:
+                                        - 10: Primary LAN to internet translation
+                                        - 20: Guest network translation
+                                        - 100: DMZ network translation
+                                    source:
+                                      type: string
+                                      description: |
+                                        Source network or IP address to translate.
+                                        
+                                        Source Specification:
+                                        - Single IP: "192.168.1.10"
+                                        - Network: "192.168.1.0/24"
+                                        - Any source: "0.0.0.0/0" or omit field
+                                        - Interface name: Use connected network
+                                        
+                                        Common Patterns:
+                                        - "192.168.1.0/24" - Entire LAN network
+                                        - "10.0.0.0/8" - Large private network
+                                        - "172.16.0.0/16" - Branch office network
+                                    outbound_interface:
+                                      type: string
+                                      description: |
+                                        Interface through which translated traffic exits.
+                                        
+                                        Interface Selection:
+                                        - Typically the WAN or uplink interface
+                                        - Interface connecting to external network
+                                        - Must have connectivity to translation destination
+                                        - Interface IP used for masquerade translation
+                                        
+                                        Examples:
+                                        - "eth0" - Primary WAN interface
+                                        - "eth1" - Secondary uplink
+                                        - "ppp0" - PPP connection interface
+                                    translation:
+                                      type: string
+                                      enum: ["masquerade", "address"]
+                                      default: "masquerade"
+                                      description: |
+                                        Type of address translation to perform.
+                                        
+                                        Translation Types:
+                                        - "masquerade": Use outbound interface IP address
+                                          * Dynamic translation using interface IP
+                                          * Handles interface IP changes automatically
+                                          * Most common for internet connectivity
+                                          * Suitable for DHCP or dynamic IP interfaces
+                                          
+                                        - "address": Use specific static IP address
+                                          * Translate to predetermined IP address
+                                          * Requires static IP configuration
+                                          * Used for specific routing requirements
+                                          * Suitable for fixed IP assignments
+                                        
+                                        Selection Guidelines:
+                                        - Use "masquerade" for dynamic WAN connections
+                                        - Use "address" for static IP requirements
+                                        - "masquerade" is more flexible and common
+                      qos_policies:
+                        type: array
+                        description: |
+                          QoS policy applications to specific router interfaces for traffic shaping and prioritization.
+                          
+                          QoS Policy Application enables:
+                          - Interface-specific bandwidth management and traffic shaping
+                          - Directional traffic control (inbound vs outbound)
+                          - Service level enforcement at network boundaries
+                          - Customer SLA compliance and traffic prioritization
+                          
+                          Application Patterns:
+                          - Customer interfaces: Apply customer-specific bandwidth limits
+                          - Core interfaces: Prioritize control plane and critical traffic
+                          - Uplink interfaces: Shape traffic to match contracted bandwidth
+                          - Access interfaces: Manage congestion and ensure fair sharing
+                          
+                          Policy Reference:
+                          - References QoS policies defined in the global qos.policies section
+                          - Each interface can have different policies for inbound/outbound traffic
+                          - Policies are applied at the interface level for granular control
+                        items:
+                          type: object
+                          required:
+                            - policy_name
+                            - interface
+                          properties:
+                            policy_name:
+                              type: string
+                              description: |
+                                Name of the QoS policy to apply (must exist in global qos.policies section).
+                                
+                                Policy Selection Guidelines:
+                                - Choose policies that match interface capacity and requirements
+                                - Consider traffic patterns and service level agreements
+                                - Use descriptive policy names that indicate bandwidth or service tier
+                                
+                                Common Policy Applications:
+                                - Customer interfaces: "customer-100mbps", "premium-service"
+                                - Core interfaces: "core-10gbps", "backbone-qos"
+                                - Uplink interfaces: "provider-uplink", "internet-gateway"
+                                - Access interfaces: "branch-office", "wifi-access"
+                                
+                                Examples:
+                                - "customer-100mbps" - 100 Mbps customer uplink policy
+                                - "core-1gbps" - 1 Gbps core interface policy
+                                - "premium-service" - High-priority service class policy
+                            interface:
+                              type: string
+                              description: |
+                                Router interface name where the QoS policy will be applied.
+                                
+                                Interface Selection:
+                                - Must match an interface defined in the router's interfaces section
+                                - Typically applied to customer-facing or uplink interfaces
+                                - Can be applied to any interface requiring traffic management
+                                
+                                Common Interface Types:
+                                - Customer interfaces: "eth2", "eth3" - PE router customer connections
+                                - Uplink interfaces: "eth1" - Connection to provider core
+                                - Access interfaces: "eth4", "eth5" - Branch or access connections
+                                - Management interfaces: Generally excluded from QoS policies
+                                
+                                Examples:
+                                - "eth2" - Customer connection interface
+                                - "eth1" - Core uplink interface
+                                - "eth3" - Secondary customer interface
+                            direction:
+                              type: string
+                              enum: ["in", "out"]
+                              default: "out"
+                              description: |
+                                Traffic direction for QoS policy application.
+                                
+                                Direction Types:
+                                - "out": Outbound traffic leaving the interface (egress)
+                                  * Most common QoS application
+                                  * Controls traffic sent to customers or upstream
+                                  * Shapes bandwidth and applies prioritization
+                                  * Used for SLA enforcement and congestion management
+                                  
+                                - "in": Inbound traffic entering the interface (ingress)
+                                  * Less common but useful for specific scenarios
+                                  * Controls traffic received from customers or peers
+                                  * Can limit incoming traffic rates
+                                  * Used for DDoS protection and rate limiting
+                                
+                                Application Guidelines:
+                                - Use "out" for customer bandwidth limits and SLA enforcement
+                                - Use "in" for protecting against traffic floods or abuse
+                                - Most deployments use "out" direction for standard QoS
+                                - Consider both directions for comprehensive traffic management
+                      firewall_policies:
+                        type: array
+                        description: |
+                          Firewall policy applications to specific router interfaces for traffic filtering and security.
+                          
+                          Firewall Policy Application enables:
+                          - Interface-specific traffic filtering and access control
+                          - Directional security policies (inbound, outbound, local)
+                          - Network boundary protection and threat mitigation
+                          - Granular security control at different network layers
+                          
+                          Security Architecture:
+                          - Customer interfaces: Filter customer traffic and prevent abuse
+                          - Core interfaces: Protect routing protocols and infrastructure
+                          - Management interfaces: Restrict administrative access
+                          - External interfaces: Block threats and unauthorized access
+                          
+                          Policy Reference:
+                          - References firewall policies defined in the global security.firewall.policies section
+                          - Each interface can have different policies for different traffic directions
+                          - Policies provide layered security with stateful connection tracking
+                        items:
+                          type: object
+                          required:
+                            - policy_name
+                            - interface
+                          properties:
+                            policy_name:
+                              type: string
+                              description: |
+                                Name of the firewall policy to apply (must exist in global security.firewall.policies section).
+                                
+                                Policy Selection Guidelines:
+                                - Choose policies appropriate for interface function and risk level
+                                - Consider traffic patterns and security requirements
+                                - Use descriptive policy names that indicate purpose or protection level
+                                
+                                Common Policy Applications:
+                                - Customer interfaces: "customer-inbound", "customer-protection"
+                                - Core interfaces: "core-protection", "routing-security"
+                                - Management interfaces: "management-access", "admin-only"
+                                - External interfaces: "internet-filter", "external-threats"
+                                
+                                Examples:
+                                - "customer-inbound" - Filter customer traffic entering network
+                                - "management-access" - Restrict management interface access
+                                - "core-protection" - Protect core routing infrastructure
+                            interface:
+                              type: string
+                              description: |
+                                Router interface name where the firewall policy will be applied.
+                                
+                                Interface Selection:
+                                - Must match an interface defined in the router's interfaces section
+                                - Apply policies based on interface function and security requirements
+                                - Consider traffic patterns and threat vectors for each interface
+                                
+                                Security Interface Types:
+                                - Customer interfaces: Require filtering for abuse prevention
+                                - Core interfaces: Need protection for routing protocols
+                                - Management interfaces: Require strict access control
+                                - External interfaces: Need comprehensive threat protection
+                                
+                                Examples:
+                                - "eth0" - Management interface (restrict admin access)
+                                - "eth1" - Core uplink (protect routing protocols)
+                                - "eth2" - Customer interface (filter customer traffic)
+                            direction:
+                              type: string
+                              enum: ["in", "out", "local"]
+                              description: |
+                                Traffic direction for firewall policy application.
+                                
+                                Direction Types:
+                                - "in": Inbound traffic entering the interface (ingress filtering)
+                                  * Filters traffic coming from external sources
+                                  * Protects the router and internal networks
+                                  * Blocks malicious traffic before it enters the network
+                                  * Most common for customer and external interfaces
+                                  
+                                - "out": Outbound traffic leaving the interface (egress filtering)
+                                  * Filters traffic being sent to external destinations
+                                  * Prevents data exfiltration and unauthorized communications
+                                  * Controls what internal systems can access externally
+                                  * Used for compliance and data loss prevention
+                                  
+                                - "local": Traffic destined for the router itself (local filtering)
+                                  * Protects router management and control plane
+                                  * Filters access to router services (SSH, SNMP, etc.)
+                                  * Critical for router security and administrative access
+                                  * Applied to management and administrative traffic
+                                
+                                Application Guidelines:
+                                - Use "in" for protecting against external threats and customer abuse
+                                - Use "out" for controlling outbound access and compliance
+                                - Use "local" for protecting router management and services
+                                - Consider multiple directions for comprehensive security coverage
+                                
+                                Common Patterns:
+                                - Customer interfaces: "in" direction to filter customer traffic
+                                - Management interfaces: "local" direction to control admin access
+                                - Core interfaces: "in" and "local" to protect routing infrastructure
+                                - External interfaces: All directions for comprehensive protection
+                qos:
+                  type: object
+                  description: |
+                    Quality of Service (QoS) policies for traffic prioritization and bandwidth management.
+                    
+                    QoS enables differentiated service levels for different types of traffic, ensuring
+                    critical applications receive appropriate network resources while managing congestion.
+                    
+                    Network Design Applications:
+                    - Customer SLA enforcement: Guarantee bandwidth for premium services
+                    - Application prioritization: Voice/video over data traffic
+                    - Congestion management: Fair queuing during network overload
+                    - Traffic shaping: Rate limiting and burst control
+                    
+                    QoS Implementation:
+                    - Applied per-interface with directional control (in/out)
+                    - Uses hierarchical token bucket (HTB) for bandwidth allocation
+                    - DSCP marking for end-to-end QoS signaling
+                    - Priority queuing with guaranteed bandwidth percentages
+                    
+                    Common Use Cases:
+                    - Customer uplinks: Enforce contracted bandwidth limits
+                    - Core interfaces: Prioritize control plane traffic
+                    - Service differentiation: Premium vs standard service tiers
+                  properties:
+                    policies:
+                      type: array
+                      description: |
+                        QoS policy definitions that can be applied to router interfaces.
+                        
+                        Policy Design Principles:
+                        - Total bandwidth defines the interface rate limit
+                        - Class bandwidth percentages should sum to 100% or less
+                        - Higher priority classes get preferential treatment during congestion
+                        - DSCP marking enables end-to-end QoS across network domains
+                      items:
+                        type: object
+                        required:
+                          - name
+                          - bandwidth
+                        properties:
+                          name:
+                            type: string
+                            description: |
+                              Unique QoS policy name for reference in router configurations.
+                              
+                              Naming Conventions:
+                              - Descriptive names indicating purpose or service level
+                              - Include bandwidth or service tier information
+                              - Use consistent naming across the network
+                              
+                              Examples:
+                              - "customer-100mbps" - Customer uplink policy
+                              - "core-10gbps" - Core interface policy
+                              - "premium-service" - High-priority service class
+                          bandwidth:
+                            type: string
+                            pattern: '^[0-9]+[kmg]?bit$'
+                            description: |
+                              Total interface bandwidth limit for this QoS policy.
+                              
+                              This sets the maximum rate for the interface and serves as the
+                              basis for calculating class bandwidth allocations.
+                              
+                              Bandwidth Units:
+                              - "100mbit" - 100 Megabits per second
+                              - "1gbit" - 1 Gigabit per second
+                              - "10gbit" - 10 Gigabits per second
+                              - "500kbit" - 500 Kilobits per second
+                              
+                              Design Considerations:
+                              - Should match or be less than physical interface capacity
+                              - Account for protocol overhead (typically 5-10%)
+                              - Consider burst traffic patterns and buffering
+                          classes:
+                            type: array
+                            description: |
+                              Traffic classes within this QoS policy, each with specific bandwidth and priority.
+                              
+                              Class Design Guidelines:
+                              - Create classes for different service types (voice, video, data)
+                              - Assign appropriate DSCP markings for each class
+                              - Ensure bandwidth percentages don't exceed 100% total
+                              - Use priority levels to handle congestion scenarios
+                            items:
+                              type: object
+                              required:
+                                - name
+                                - priority
+                                - bandwidth
+                              properties:
+                                name:
+                                  type: string
+                                  description: |
+                                    Traffic class name describing the type of traffic or service level.
+                                    
+                                    Common Class Names:
+                                    - "voice" - Real-time voice traffic (highest priority)
+                                    - "video" - Video conferencing and streaming
+                                    - "critical-data" - Business-critical applications
+                                    - "standard-data" - Regular data traffic
+                                    - "bulk-data" - File transfers, backups
+                                    - "best-effort" - Default/unclassified traffic
+                                priority:
+                                  type: integer
+                                  minimum: 1
+                                  maximum: 7
+                                  description: |
+                                    Priority level for this traffic class (1 = highest, 7 = lowest).
+                                    
+                                    Priority Guidelines:
+                                    - 1-2: Real-time traffic (voice, video)
+                                    - 3-4: Business-critical applications
+                                    - 5-6: Standard data traffic
+                                    - 7: Best-effort/bulk traffic
+                                    
+                                    During congestion, higher priority classes are served first,
+                                    but all classes receive their guaranteed bandwidth allocation.
+                                bandwidth:
+                                  type: string
+                                  pattern: '^[0-9]+%$'
+                                  description: |
+                                    Guaranteed bandwidth percentage for this traffic class.
+                                    
+                                    Bandwidth Allocation:
+                                    - Percentage of total policy bandwidth
+                                    - Guaranteed minimum during congestion
+                                    - Can burst above allocation when bandwidth available
+                                    - All class percentages should sum to ≤100%
+                                    
+                                    Typical Allocations:
+                                    - Voice: 10-20% (small but guaranteed)
+                                    - Video: 20-40% (higher bandwidth needs)
+                                    - Critical Data: 20-30% (business applications)
+                                    - Standard Data: 30-50% (general traffic)
+                                    - Best Effort: 10-20% (remaining capacity)
+                                dscp:
+                                  type: string
+                                  enum: ["ef", "af11", "af12", "af13", "af21", "af22", "af23", "af31", "af32", "af33", "af41", "af42", "af43", "cs1", "cs2", "cs3", "cs4", "cs5", "cs6", "cs7", "be"]
+                                  description: |
+                                    DSCP (Differentiated Services Code Point) marking for this traffic class.
+                                    
+                                    DSCP enables end-to-end QoS by marking packets with service level indicators
+                                    that downstream devices can use for traffic prioritization.
+                                    
+                                    Common DSCP Values:
+                                    - "ef" (Expedited Forwarding): Voice traffic, lowest latency
+                                    - "af41", "af42", "af43": Video traffic (Class 4, different drop precedence)
+                                    - "af31", "af32", "af33": Critical data (Class 3)
+                                    - "af21", "af22", "af23": Standard data (Class 2)
+                                    - "af11", "af12", "af13": Bulk data (Class 1)
+                                    - "cs1"-"cs7": Class Selector values (legacy compatibility)
+                                    - "be" (Best Effort): Default/unclassified traffic
+                                    
+                                    AF Classes (Assured Forwarding):
+                                    - Higher class numbers = higher priority
+                                    - Lower drop precedence numbers = less likely to be dropped
+                                    - Example: af41 > af31 > af21 > af11 (priority order)
+                mpls:
+                  type: object
+                  description: |
+                    Global MPLS (Multiprotocol Label Switching) configuration for the entire network.
+                    
+                    This section defines network-wide MPLS settings that apply across all routers,
+                    providing the foundation for advanced services like L3VPN through label-switched paths.
+                    
+                    Network-Wide MPLS Design:
+                    - Establishes consistent label distribution protocol (LDP) settings
+                    - Defines global label space allocation for all routers
+                    - Configures L3VPN service definitions that span multiple PE routers
+                    - Ensures consistent MPLS behavior across the provider network
+                    
+                    Relationship to Router-Level MPLS:
+                    - Global settings provide defaults and network-wide policies
+                    - Individual routers enable MPLS via protocols.mpls.enabled
+                    - Router-specific LDP interfaces defined in protocols.mpls.ldp_interfaces
+                    - L3VPN services defined here are implemented on PE routers with matching VRFs
+                    
+                    When to Use:
+                    - Provider networks offering L3VPN services to customers
+                    - Networks requiring traffic engineering and QoS through label forwarding
+                    - Multi-site customer connectivity with traffic isolation
+                  properties:
+                    enabled:
+                      type: boolean
+                      default: false
+                      description: |
+                        Enable MPLS globally across the network.
+                        
+                        Global MPLS Enablement:
+                        - Activates MPLS forwarding plane across all participating routers
+                        - Enables LDP label distribution between routers
+                        - Required for L3VPN services and advanced traffic engineering
+                        
+                        Set to true when:
+                        - Deploying L3VPN services for customer connectivity
+                        - Implementing traffic engineering across the core
+                        - Providing differentiated services with label-based forwarding
+                        
+                        Set to false for:
+                        - Simple IP-only networks without advanced services
+                        - Networks using only traditional routing protocols
+                    ldp:
+                      type: object
+                      description: |
+                        Label Distribution Protocol (LDP) global configuration.
+                        
+                        LDP automatically distributes labels between routers, creating the
+                        label-switched paths necessary for MPLS forwarding.
+                      properties:
+                        router_id_interface:
+                          type: string
+                          default: "loopback"
+                          description: |
+                            Interface type to use for LDP router identification across all routers.
+                            
+                            Router ID Selection:
+                            - "loopback": Use loopback interface IP (most common, provides stability)
+                            - Loopback addresses remain reachable even if physical interfaces fail
+                            - Ensures consistent LDP neighbor relationships
+                            
+                            Network Design Impact:
+                            - All routers should use the same interface type for consistency
+                            - Loopback addresses must be advertised via IGP (OSPF)
+                            - Router IDs become the endpoints for label-switched paths
+                        label_range:
+                          type: object
+                          description: |
+                            Global label space allocation for all routers in the network.
+                            
+                            Label Management:
+                            - Defines the range of labels available for local allocation
+                            - Each router allocates labels from this range for its local routes
+                            - Prevents label conflicts and ensures efficient label space usage
+                          properties:
+                            min:
+                              type: integer
+                              minimum: 16
+                              default: 16
+                              description: |
+                                Minimum label value for local allocation.
+                                
+                                Label Space Considerations:
+                                - Labels 0-15 are reserved for special purposes
+                                - Label 16 is typically the first available for general use
+                                - Consistent across all routers for operational simplicity
+                            max:
+                              type: integer
+                              maximum: 1048575
+                              default: 1048575
+                              description: |
+                                Maximum label value for local allocation.
+                                
+                                Label Space Design:
+                                - 1048575 is the maximum 20-bit MPLS label value
+                                - Provides large label space for extensive networks
+                                - Allows for future growth and service expansion
+                    l3vpn:
+                      type: array
+                      description: |
+                        Layer 3 VPN service definitions for multi-site customer connectivity.
+                        
+                        L3VPN Services provide:
+                        - Secure, isolated connectivity between customer sites
+                        - Scalable multi-tenant architecture using VRFs
+                        - Flexible topology control through Route Target policies
+                        - End-to-end service provisioning across multiple PE routers
+                        
+                        Service Architecture:
+                        - Each L3VPN service spans multiple PE routers
+                        - Customer sites connect to PE routers via VRFs
+                        - Route Targets control which sites can communicate
+                        - BGP VPNv4 distributes customer routes between PE routers
+                        
+                        Relationship to Router VRFs:
+                        - L3VPN services defined here are implemented via router VRFs
+                        - PE routers create VRFs that match these service definitions
+                        - Route Distinguisher and Route Targets must align between service and VRF
+                      items:
+                        type: object
+                        required:
+                          - name
+                          - rd
+                          - rt_export
+                          - rt_import
+                        properties:
+                          name:
+                            type: string
+                            description: |
+                              L3VPN service name for identification and management.
+                              
+                              Service Naming Conventions:
+                              - Use descriptive names that identify the customer or service type
+                              - Include service tier or SLA information if applicable
+                              - Maintain consistency across network documentation
+                              
+                              Examples:
+                              - "customer-a-vpn" - Basic customer VPN service
+                              - "enterprise-gold-vpn" - Premium enterprise service
+                              - "branch-office-connectivity" - Multi-site office network
+                          rd:
+                            type: string
+                            pattern: '^[0-9]+:[0-9]+$'
+                            description: |
+                              Route Distinguisher for this L3VPN service in ASN:value format.
+                              
+                              Route Distinguisher Purpose:
+                              - Makes customer routes globally unique across the MPLS network
+                              - Prevents route conflicts between customers using overlapping IP space
+                              - Required for BGP VPNv4 route distribution
+                              
+                              Format Guidelines:
+                              - ASN:value format (e.g., "65001:100")
+                              - Use provider AS number as the ASN portion
+                              - Use unique value for each L3VPN service
+                              - Must match RD values in corresponding PE router VRFs
+                              
+                              Examples:
+                              - "65001:100" - Service 100 in AS 65001
+                              - "65001:200" - Service 200 in AS 65001
+                          rt_export:
+                            type: string
+                            pattern: '^[0-9]+:[0-9]+$'
+                            description: |
+                              Route Target export value for this L3VPN service.
+                              
+                              Export Route Target Function:
+                              - Tags routes exported from this service's VRFs
+                              - Controls which other services can import these routes
+                              - Enables flexible topology design (hub-spoke, full-mesh, etc.)
+                              
+                              Topology Design Patterns:
+                              - Hub-and-Spoke: Hub exports to spoke RT, spokes export to hub RT
+                              - Full-Mesh: All services use same RT for export and import
+                              - Partial-Mesh: Selective RT assignments for specific connectivity
+                              
+                              Examples:
+                              - "65001:1000" - Hub service exports
+                              - "65001:2000" - Spoke service exports
+                          rt_import:
+                            type: string
+                            pattern: '^[0-9]+:[0-9]+$'
+                            description: |
+                              Route Target import value for this L3VPN service.
+                              
+                              Import Route Target Function:
+                              - Specifies which routes this service will accept
+                              - Controls connectivity between different L3VPN services
+                              - Implements network topology policies
+                              
+                              Connectivity Control:
+                              - Services import routes tagged with matching RT values
+                              - Multiple RT imports enable complex topologies
+                              - RT import policies determine reachability between sites
+                              
+                              Examples:
+                              - "65001:1000" - Import routes from hub service
+                              - "65001:2000" - Import routes from spoke services
+                          description:
+                            type: string
+                            description: |
+                              Human-readable description of this L3VPN service.
+                              
+                              Service Documentation:
+                              - Describe the business purpose and customer requirements
+                              - Include SLA information and service characteristics
+                              - Document connectivity requirements and topology
+                              
+                              Examples:
+                              - "Customer A multi-site VPN with hub-spoke topology"
+                              - "Enterprise gold service with full-mesh connectivity"
+                              - "Branch office network with centralized internet access"
+                routing:
+                  type: object
+                  description: |
+                    Global routing protocol configurations that apply network-wide.
+                    
+                    These settings establish network-wide routing policies and defaults that
+                    complement the per-router protocol configurations. They provide consistency
+                    and coordination across the entire network topology.
+                    
+                    Relationship to Router-Level Protocols:
+                    - Global settings provide network-wide defaults and policies
+                    - Individual routers implement protocols via their protocols section
+                    - Global configurations ensure consistent behavior across all routers
+                    - Used for network-wide route reflector hierarchies and external peering
+                  properties:
+                    ospf:
+                      type: object
+                      description: |
+                        Global OSPF configuration for network-wide Interior Gateway Protocol settings.
+                        
+                        Provides network-wide OSPF policies that ensure consistent IGP behavior
+                        across all participating routers in the provider network.
+                      properties:
+                        router_id_source:
+                          type: string
+                          default: "loopback"
+                          description: |
+                            Default interface type for OSPF router ID selection across all routers.
+                            
+                            Router ID Consistency:
+                            - Ensures all routers use the same method for router ID selection
+                            - "loopback" provides stable, always-up router identification
+                            - Router IDs must be unique across the entire OSPF domain
+                            - Used for LSA origination and SPF calculations
+                        areas:
+                          type: array
+                          description: |
+                            Network-wide OSPF area definitions and hierarchy.
+                            
+                            Area Design provides:
+                            - Hierarchical routing with backbone area (0.0.0.0) at the core
+                            - Scalability through area-based LSA flooding control
+                            - Summarization opportunities at area boundaries
+                            - Fault isolation between different network regions
+                          items:
+                            type: object
+                            required:
+                              - area_id
+                              - type
+                            properties:
+                              area_id:
+                                type: string
+                                pattern: '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'
+                                description: |
+                                  OSPF area identifier in dotted decimal notation.
+                                  
+                                  Area ID Guidelines:
+                                  - "0.0.0.0": Backbone area (required for multi-area designs)
+                                  - "0.0.0.1", "0.0.0.2": Standard areas for network regions
+                                  - Area IDs should reflect network hierarchy and geography
+                                  
+                                  Examples:
+                                  - "0.0.0.0" - Backbone area for core network
+                                  - "0.0.0.1" - Regional area for eastern sites
+                                  - "0.0.0.2" - Regional area for western sites
+                              type:
+                                type: string
+                                enum: ["backbone", "standard", "stub", "nssa"]
+                                description: |
+                                  OSPF area type determining routing behavior and LSA types.
+                                  
+                                  Area Types and Characteristics:
+                                  - "backbone": Area 0.0.0.0, connects all other areas
+                                    * Required for multi-area OSPF designs
+                                    * All area border routers must connect to backbone
+                                    * Carries inter-area routing information
+                                    
+                                  - "standard": Regular OSPF area with full LSA flooding
+                                    * Receives all LSA types including external routes
+                                    * Provides full routing table visibility
+                                    * Most flexible but highest memory/CPU usage
+                                    
+                                  - "stub": Area that blocks external LSAs (Type 5)
+                                    * Reduces routing table size and memory usage
+                                    * Uses default route for external destinations
+                                    * Cannot contain ASBRs (external route originators)
+                                    
+                                  - "nssa": Not-So-Stubby Area, allows limited external routes
+                                    * Blocks Type 5 LSAs but allows Type 7 (NSSA external)
+                                    * Useful for areas with limited external connectivity
+                                    * Provides compromise between stub and standard areas
+                              description:
+                                type: string
+                                description: |
+                                  Human-readable description of this OSPF area's purpose and coverage.
+                                  
+                                  Good descriptions include:
+                                  - Geographic or logical coverage area
+                                  - Business function or network role
+                                  - Special characteristics or requirements
+                                  
+                                  Examples:
+                                  - "Backbone area connecting all regional sites"
+                                  - "Eastern region covering branch offices 1-10"
+                                  - "Data center area with high-speed core links"
+                    bgp:
+                      type: object
+                      description: |
+                        Global BGP configuration for network-wide Border Gateway Protocol settings.
+                        
+                        Establishes network-wide BGP policies including AS number assignment,
+                        route reflector hierarchy, and external peering relationships.
+                      properties:
+                        as_number:
+                          type: integer
+                          minimum: 1
+                          maximum: 4294967295
+                          description: |
+                            Provider network's BGP Autonomous System number.
+                            
+                            AS Number Assignment:
+                            - Single AS number used across all provider routers
+                            - P routers, PE routers, and Route Reflectors share this AS
+                            - Different from customer AS numbers (creates eBGP sessions)
+                            - Must be consistent across the entire provider network
+                            
+                            AS Number Ranges:
+                            - Private AS: 64512-65534 (16-bit), 4200000000-4294967294 (32-bit)
+                            - Public AS: Assigned by Regional Internet Registry (RIR)
+                            
+                            Examples:
+                            - 65001: Private AS for provider network
+                            - 65000: Common choice for MPLS provider networks
+                        router_id_source:
+                          type: string
+                          default: "loopback"
+                          description: |
+                            Default interface type for BGP router ID selection across all routers.
+                            
+                            BGP Router ID Consistency:
+                            - Ensures stable BGP session establishment
+                            - "loopback" provides always-available router identification
+                            - Must be unique across all BGP speakers in the AS
+                            - Used for BGP session establishment and route selection
+                        route_reflectors:
+                          type: array
+                          items:
+                            type: string
+                            pattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+                          description: |
+                            Network-wide Route Reflector IP addresses for iBGP hierarchy.
+                            
+                            Route Reflector Design:
+                            - Eliminates full-mesh iBGP requirement between PE routers
+                            - Typically deployed in redundant pairs for high availability
+                            - Uses loopback addresses for stable peering
+                            - Reflects VPNv4 routes between PE router clients
+                            
+                            Deployment Guidelines:
+                            - List all Route Reflector loopback addresses
+                            - Ensure redundancy with multiple RRs
+                            - Consider geographic distribution for large networks
+                            
+                            Examples:
+                            - ["10.0.0.1", "10.0.0.2"] - Redundant RR pair
+                            - ["10.0.0.1"] - Single RR for smaller networks
+                        external_peers:
+                          type: array
+                          description: |
+                            Network-wide external BGP peering relationships.
+                            
+                            External Peering provides:
+                            - Connectivity to other autonomous systems
+                            - Internet transit and peering arrangements
+                            - Inter-provider connectivity for services
+                            - Customer AS peering (though typically done per-router)
+                          items:
+                            type: object
+                            required:
+                              - peer
+                              - as_number
+                            properties:
+                              peer:
+                                type: string
+                                pattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+                                description: |
+                                  External BGP peer IP address.
+                                  
+                                  Peering Address Types:
+                                  - Internet exchange point (IXP) peering addresses
+                                  - Direct interconnect addresses with other providers
+                                  - Transit provider peering addresses
+                                  - Customer AS peering (for large enterprise customers)
+                                  
+                                  Examples:
+                                  - "192.0.2.1" - IXP peering address
+                                  - "203.0.113.2" - Direct provider interconnect
+                              as_number:
+                                type: integer
+                                minimum: 1
+                                maximum: 4294967295
+                                description: |
+                                  External peer's Autonomous System number.
+                                  
+                                  Peer AS Types:
+                                  - Transit providers: Large public AS numbers
+                                  - Internet exchanges: Various member AS numbers
+                                  - Enterprise customers: Private or public AS numbers
+                                  - Other service providers: Public AS numbers
+                                  
+                                  Examples:
+                                  - 174: Cogent Communications (transit provider)
+                                  - 3356: Level 3 Communications (transit provider)
+                                  - 65100: Large enterprise customer private AS
+                              description:
+                                type: string
+                                description: |
+                                  Human-readable description of this external peering relationship.
+                                  
+                                  Good descriptions include:
+                                  - Peer organization name and relationship type
+                                  - Business purpose of the peering
+                                  - Geographic location or exchange point
+                                  
+                                  Examples:
+                                  - "Cogent Communications - Transit Provider"
+                                  - "ACME Corp - Enterprise Customer"
+                                  - "Regional IX - Peering Exchange"
+                security:
+                  type: object
+                  description: |
+                    Network-wide security policies for traffic filtering and access control.
+                    
+                    Security policies provide:
+                    - Centralized firewall rule definitions
+                    - Consistent security posture across all routers
+                    - Reusable policy templates for different interface types
+                    - Network-wide threat protection and access control
+                    
+                    Policy Application:
+                    - Policies defined here are applied to router interfaces
+                    - Each router references policies by name in firewall_policies
+                    - Directional control (in/out/local) specified per interface
+                    - Stateful connection tracking for advanced filtering
+                  properties:
+                    firewall:
+                      type: object
+                      description: |
+                        Firewall policy definitions for network traffic filtering.
+                        
+                        Firewall policies enable:
+                        - Layer 3/4 traffic filtering based on IP addresses and ports
+                        - Stateful connection tracking for security
+                        - Protocol-specific filtering (TCP, UDP, ICMP)
+                        - Default deny with explicit allow rules
+                      properties:
+                        policies:
+                          type: array
+                          description: |
+                            Firewall policy definitions that can be applied to router interfaces.
+                            
+                            Policy Design Principles:
+                            - Default deny approach with explicit allow rules
+                            - Stateful connection tracking for established sessions
+                            - Least privilege access control
+                            - Logging and monitoring capabilities
+                          items:
+                            type: object
+                            required:
+                              - name
+                              - default_action
+                            properties:
+                              name:
+                                type: string
+                                description: |
+                                  Unique firewall policy name for reference in router configurations.
+                                  
+                                  Naming Conventions:
+                                  - Descriptive names indicating purpose or interface type
+                                  - Include direction or traffic type information
+                                  - Use consistent naming across the network
+                                  
+                                  Examples:
+                                  - "customer-inbound" - Customer traffic filtering
+                                  - "management-access" - Management interface protection
+                                  - "core-protection" - Core network security
+                              default_action:
+                                type: string
+                                enum: ["accept", "drop", "reject"]
+                                description: |
+                                  Default action for traffic not matching any specific rules.
+                                  
+                                  Action Types:
+                                  - "accept": Allow traffic to pass (permissive default)
+                                  - "drop": Silently discard traffic (secure default)
+                                  - "reject": Actively reject with ICMP response
+                                  
+                                  Security Best Practices:
+                                  - Use "drop" for most security policies (default deny)
+                                  - Use "accept" only for trusted internal interfaces
+                                  - Use "reject" when you want to inform legitimate users
+                              rules:
+                                type: array
+                                description: |
+                                  Ordered list of firewall rules processed sequentially.
+                                  
+                                  Rule Processing:
+                                  - Rules processed in numerical order (lowest first)
+                                  - First matching rule determines action
+                                  - Remaining rules skipped after match
+                                  - Default action applied if no rules match
+                                items:
+                                  type: object
+                                  required:
+                                    - number
+                                    - action
+                                  properties:
+                                    number:
+                                      type: integer
+                                      minimum: 1
+                                      maximum: 9999
+                                      description: |
+                                        Rule number determining processing order (lowest first).
+                                        
+                                        Numbering Best Practices:
+                                        - Use increments of 10 (10, 20, 30) for easy insertion
+                                        - Reserve low numbers (1-99) for critical allow rules
+                                        - Use high numbers (9000+) for logging/monitoring rules
+                                        - Group related rules in number ranges
+                                    action:
+                                      type: string
+                                      enum: ["accept", "drop", "reject"]
+                                      description: |
+                                        Action to take when traffic matches this rule.
+                                        
+                                        Rule Actions:
+                                        - "accept": Allow matching traffic to pass
+                                        - "drop": Silently discard matching traffic
+                                        - "reject": Actively reject with ICMP response
+                                    protocol:
+                                      type: string
+                                      enum: ["tcp", "udp", "icmp", "all"]
+                                      description: |
+                                        IP protocol to match for this rule.
+                                        
+                                        Protocol Types:
+                                        - "tcp": TCP connections (HTTP, SSH, BGP, etc.)
+                                        - "udp": UDP datagrams (DNS, SNMP, etc.)
+                                        - "icmp": ICMP messages (ping, traceroute, etc.)
+                                        - "all": All IP protocols (broad matching)
+                                    ports:
+                                      type: array
+                                      items:
+                                        type: integer
+                                        minimum: 1
+                                        maximum: 65535
+                                      description: |
+                                        TCP/UDP port numbers to match (ignored for ICMP).
+                                        
+                                        Common Ports:
+                                        - [22]: SSH management access
+                                        - [80, 443]: HTTP/HTTPS web traffic
+                                        - [179]: BGP routing protocol
+                                        - [161, 162]: SNMP monitoring
+                                        - [53]: DNS queries
+                                    source:
+                                      type: string
+                                      description: |
+                                        Source IP address or network in CIDR notation.
+                                        
+                                        Source Matching:
+                                        - Single IP: "192.168.1.10"
+                                        - Network: "192.168.1.0/24"
+                                        - Any source: "0.0.0.0/0" or omit field
+                                        
+                                        Examples:
+                                        - "10.0.0.0/8" - Private network range
+                                        - "192.168.100.0/24" - Management network
+                                        - "203.0.113.5" - Specific external host
+                                    destination:
+                                      type: string
+                                      description: |
+                                        Destination IP address or network in CIDR notation.
+                                        
+                                        Destination Matching:
+                                        - Single IP: "10.0.0.1"
+                                        - Network: "10.0.0.0/24"
+                                        - Any destination: "0.0.0.0/0" or omit field
+                                        
+                                        Examples:
+                                        - "10.0.0.1" - Route Reflector address
+                                        - "192.168.0.0/16" - Customer network range
+                                        - "0.0.0.0/0" - Any destination (internet)
+                                    state:
+                                      type: array
+                                      items:
+                                        type: string
+                                        enum: ["established", "related", "new", "invalid"]
+                                      description: |
+                                        Connection state tracking for stateful filtering.
+                                        
+                                        Connection States:
+                                        - "established": Existing connections (return traffic)
+                                        - "related": Related connections (FTP data, ICMP errors)
+                                        - "new": New connection attempts
+                                        - "invalid": Malformed or suspicious packets
+                                        
+                                        Common Patterns:
+                                        - ["established", "related"]: Allow return traffic
+                                        - ["new"]: Allow new connection attempts
+                                        - ["invalid"]: Typically used with "drop" action
+                                    description:
+                                      type: string
+                                      description: |
+                                        Human-readable description of this rule's purpose.
+                                        
+                                        Good descriptions include:
+                                        - Business justification for the rule
+                                        - Source and destination identification
+                                        - Service or application being protected/allowed
+                                        
+                                        Examples:
+                                        - "Allow SSH access from management network"
+                                        - "Block invalid connection attempts"
+                                        - "Allow BGP peering with Route Reflectors"
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: ["Pending", "Validating", "Decomposing", "Creating", "Ready", "Failed", "Updating"]
+                  description: "Network deployment phase"
+                message:
+                  type: string
+                  description: "Status message"
+                routers:
+                  type: array
+                  items:
+                    type: string
+                  description: "Associated router names"
+                networks:
+                  type: array
+                  items:
+                    type: string
+                  description: "Created docker network names"
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Routers
+          type: integer
+          jsonPath: .status.routers[*]
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

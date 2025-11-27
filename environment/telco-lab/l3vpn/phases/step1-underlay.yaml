@@ -1,0 +1,812 @@
+apiVersion: guardian.dev/v1
+kind: VyOSNetwork
+metadata:
+  name: l3vpn-hub-spoke
+  namespace: default
+  labels:
+    type: telco-lab
+    environment: lab
+    topology: hub-spoke
+spec:
+  description: "L3VPN Hub-and-Spoke MPLS Network Underlay"
+  
+  # Network segments - Core MPLS backbone
+  networks:
+    # Core P router interconnections
+    - name: p1-p2
+      subnet: "172.16.30.0/24"
+      description: "P1 to P2 link"
+      vlan: 301
+      network_type: "p2p"
+      bandwidth: "10gbit"
+      connected_routers:
+        - router_name: "p1"
+          interface: "eth1"
+          ip_address: "172.16.30.1"
+        - router_name: "p2"
+          interface: "eth1"
+          ip_address: "172.16.30.2"
+    
+    - name: p1-p3
+      subnet: "172.16.40.0/24"
+      description: "P1 to P3 link"
+      vlan: 302
+      network_type: "p2p"
+      bandwidth: "10gbit"
+      connected_routers:
+        - router_name: "p1"
+          interface: "eth2"
+          ip_address: "172.16.40.1"
+        - router_name: "p3"
+          interface: "eth2"
+          ip_address: "172.16.40.2"
+    
+    - name: p2-p4
+      subnet: "172.16.60.0/24"
+      description: "P2 to P4 link"
+      vlan: 303
+      network_type: "p2p"
+      bandwidth: "10gbit"
+      connected_routers:
+        - router_name: "p2"
+          interface: "eth2"
+          ip_address: "172.16.60.1"
+        - router_name: "p4"
+          interface: "eth2"
+          ip_address: "172.16.60.2"
+    
+    - name: p3-p4
+      subnet: "172.16.50.0/24"
+      description: "P3 to P4 link"
+      vlan: 304
+      network_type: "p2p"
+      bandwidth: "10gbit"
+      connected_routers:
+        - router_name: "p3"
+          interface: "eth3"
+          ip_address: "172.16.50.1"
+        - router_name: "p4"
+          interface: "eth3"
+          ip_address: "172.16.50.2"
+    
+    # P to RR links
+    - name: p1-rr1
+      subnet: "172.16.10.0/24"
+      description: "P1 to RR1 link"
+      vlan: 305
+      network_type: "p2p"
+      bandwidth: "10gbit"
+      connected_routers:
+        - router_name: "p1"
+          interface: "eth4"
+          ip_address: "172.16.10.1"
+        - router_name: "rr1"
+          interface: "eth2"
+          ip_address: "172.16.10.2"
+    
+    - name: p2-rr1
+      subnet: "172.16.20.0/24"
+      description: "P2 to RR1 link"
+      vlan: 306
+      network_type: "p2p"
+      bandwidth: "10gbit"
+      connected_routers:
+        - router_name: "p2"
+          interface: "eth3"
+          ip_address: "172.16.20.1"
+        - router_name: "rr1"
+          interface: "eth1"
+          ip_address: "172.16.20.2"
+    
+    - name: p3-rr2
+      subnet: "172.16.70.0/24"
+      description: "P3 to RR2 link"
+      vlan: 307
+      network_type: "p2p"
+      bandwidth: "10gbit"
+      connected_routers:
+        - router_name: "p3"
+          interface: "eth4"
+          ip_address: "172.16.70.1"
+        - router_name: "rr2"
+          interface: "eth2"
+          ip_address: "172.16.70.2"
+    
+    - name: p4-rr2
+      subnet: "172.16.80.0/24"
+      description: "P4 to RR2 link"
+      vlan: 308
+      network_type: "p2p"
+      bandwidth: "10gbit"
+      connected_routers:
+        - router_name: "p4"
+          interface: "eth1"
+          ip_address: "172.16.80.1"
+        - router_name: "rr2"
+          interface: "eth1"
+          ip_address: "172.16.80.2"
+    
+    # P to PE links
+    - name: p1-pe1
+      subnet: "172.16.90.0/24"
+      description: "P1 to PE1 (Spoke) link"
+      vlan: 309
+      network_type: "p2p"
+      bandwidth: "10gbit"
+      connected_routers:
+        - router_name: "p1"
+          interface: "eth3"
+          ip_address: "172.16.90.1"
+        - router_name: "pe1"
+          interface: "eth1"
+          ip_address: "172.16.90.2"
+    
+    - name: p1-pe2
+      subnet: "172.16.100.0/24"
+      description: "P1 to PE2 (Hub) link"
+      vlan: 310
+      network_type: "p2p"
+      bandwidth: "10gbit"
+      connected_routers:
+        - router_name: "p1"
+          interface: "eth5"
+          ip_address: "172.16.100.1"
+        - router_name: "pe2"
+          interface: "eth1"
+          ip_address: "172.16.100.2"
+    
+    - name: p3-pe2
+      subnet: "172.16.110.0/24"
+      description: "P3 to PE2 (Hub) link"
+      vlan: 311
+      network_type: "p2p"
+      bandwidth: "10gbit"
+      connected_routers:
+        - router_name: "p3"
+          interface: "eth1"
+          ip_address: "172.16.110.1"
+        - router_name: "pe2"
+          interface: "eth2"
+          ip_address: "172.16.110.2"
+    
+    - name: p4-pe3
+      subnet: "172.16.140.0/24"
+      description: "P4 to PE3 (Spoke) link"
+      vlan: 312
+      network_type: "p2p"
+      bandwidth: "10gbit"
+      connected_routers:
+        - router_name: "p4"
+          interface: "eth4"
+          ip_address: "172.16.140.1"
+        - router_name: "pe3"
+          interface: "eth1"
+          ip_address: "172.16.140.2"
+    
+    # PE to CE links (customer-facing)
+    - name: pe1-ce1-spoke
+      subnet: "10.50.50.0/24"
+      description: "PE1 (Spoke) to CE1-SPOKE"
+      vlan: 401
+      vrf: "BLUE_SPOKE"
+      network_type: "p2p"
+      bandwidth: "1gbit"
+      connected_routers:
+        - router_name: "pe1"
+          interface: "eth2"
+          ip_address: "10.50.50.1"
+        - router_name: "ce1-spoke"
+          interface: "eth1"
+          ip_address: "10.50.50.2"
+    
+    - name: pe2-ce1-hub
+      subnet: "10.80.80.0/24"
+      description: "PE2 (Hub) to CE1-HUB"
+      vlan: 402
+      vrf: "BLUE_HUB"
+      network_type: "p2p"
+      bandwidth: "1gbit"
+      connected_routers:
+        - router_name: "pe2"
+          interface: "eth3"
+          ip_address: "10.80.80.1"
+        - router_name: "ce1-hub"
+          interface: "eth1"
+          ip_address: "10.80.80.2"
+    
+    - name: pe3-ce2-spoke
+      subnet: "10.60.60.0/24"
+      description: "PE3 (Spoke) to CE2-SPOKE"
+      vlan: 403
+      vrf: "BLUE_SPOKE"
+      network_type: "p2p"
+      bandwidth: "1gbit"
+      connected_routers:
+        - router_name: "pe3"
+          interface: "eth2"
+          ip_address: "10.60.60.1"
+        - router_name: "ce2-spoke"
+          interface: "eth1"
+          ip_address: "10.60.60.2"
+    
+    # Spoke LAN networks for devices
+    - name: lan-spoke1
+      subnet: "10.100.1.0/24"
+      gateway: "10.100.1.1"
+      description: "LAN network for spoke1 devices"
+      network_type: "multi-access"
+      connected_routers:
+        - router_name: "ce1-spoke"
+          interface: "eth2"
+          ip_address: "10.100.1.1"
+    
+    - name: lan-spoke2
+      subnet: "10.100.3.0/24"
+      gateway: "10.100.3.1"
+      description: "LAN network for spoke2 devices"
+      network_type: "multi-access"
+      connected_routers:
+        - router_name: "ce2-spoke"
+          interface: "eth2"
+          ip_address: "10.100.3.1"
+    
+    # Hub LAN network for devices
+    - name: lan-hub
+      subnet: "10.100.2.0/24"
+      gateway: "10.100.2.1"
+      description: "LAN network for hub devices"
+      network_type: "multi-access"
+      connected_routers:
+        - router_name: "ce1-hub"
+          interface: "eth2"
+          ip_address: "10.100.2.1"
+    
+    # Management network
+    - name: management
+      subnet: "192.168.122.0/24"
+      gateway: "192.168.122.1"
+      description: "Out-of-band management network"
+      network_type: "management"
+      connected_routers:
+        - router_name: "rr1"
+          interface: "eth0"
+          ip_address: "192.168.122.10"
+        - router_name: "rr2"
+          interface: "eth0"
+          ip_address: "192.168.122.11"
+        - router_name: "p1"
+          interface: "eth0"
+          ip_address: "192.168.122.13"
+        - router_name: "p2"
+          interface: "eth0"
+          ip_address: "192.168.122.14"
+        - router_name: "p3"
+          interface: "eth0"
+          ip_address: "192.168.122.15"
+        - router_name: "p4"
+          interface: "eth0"
+          ip_address: "192.168.122.16"
+        - router_name: "pe1"
+          interface: "eth0"
+          ip_address: "192.168.122.17"
+        - router_name: "pe2"
+          interface: "eth0"
+          ip_address: "192.168.122.18"
+        - router_name: "pe3"
+          interface: "eth0"
+          ip_address: "192.168.122.20"
+        - router_name: "ce1-spoke"
+          interface: "eth0"
+          ip_address: "192.168.122.30"
+        - router_name: "ce1-hub"
+          interface: "eth0"
+          ip_address: "192.168.122.31"
+        - router_name: "ce2-spoke"
+          interface: "eth0"
+          ip_address: "192.168.122.32"
+    
+    # Loopback network
+    - name: loopbacks
+      subnet: "10.0.0.0/24"
+      description: "Loopback interfaces for router IDs"
+      network_type: "loopback"
+  
+  # Router definitions
+  routers:
+    # Route Reflector 1
+    - name: "rr1"
+      hostname: "rr1"
+      router_id: "10.0.0.1"
+      type: "core"
+      role: "p-router"
+      image: "vyos:1.5"
+      interfaces:
+        - name: "eth0"
+          network: "management"
+          description: "Management interface"
+        - name: "eth1"
+          network: "p2-rr1"
+          description: "Link to P2"
+        - name: "eth2"
+          network: "p1-rr1"
+          description: "Link to P1"
+        - name: "lo"
+          network: "loopbacks"
+          description: "Router ID"
+      protocols:
+        ospf:
+          enabled: true
+          areas: ["0.0.0.0"]
+        bgp:
+          enabled: true
+          as_number: 65001
+          route_reflector: true
+          neighbors:
+            - peer: "10.0.0.7"
+              remote_as: 65001
+              route_reflector_client: true
+              description: "PE1 (Spoke) RR Client"
+            - peer: "10.0.0.8"
+              remote_as: 65001
+              route_reflector_client: true
+              description: "PE2 (Hub) RR Client"
+            - peer: "10.0.0.10"
+              remote_as: 65001
+              route_reflector_client: true
+              description: "PE3 (Spoke) RR Client"
+        mpls:
+          enabled: true
+          ldp_interfaces: ["eth1", "eth2"]
+        static:
+          routes:
+            - destination: "192.168.1.0/24"
+              next_hop: "192.168.122.4"
+              description: "Route to interconnect network via management gateway"
+    
+    # Route Reflector 2
+    - name: "rr2"
+      hostname: "rr2"
+      router_id: "10.0.0.2"
+      type: "core"
+      role: "p-router"
+      image: "vyos:1.5"
+      interfaces:
+        - name: "eth0"
+          network: "management"
+          description: "Management interface"
+        - name: "eth1"
+          network: "p4-rr2"
+          description: "Link to P4"
+        - name: "eth2"
+          network: "p3-rr2"
+          description: "Link to P3"
+        - name: "lo"
+          network: "loopbacks"
+          description: "Router ID"
+      protocols:
+        ospf:
+          enabled: true
+          areas: ["0.0.0.0"]
+        bgp:
+          enabled: true
+          as_number: 65001
+          route_reflector: true
+          neighbors:
+            - peer: "10.0.0.7"
+              remote_as: 65001
+              route_reflector_client: true
+              description: "PE1 (Spoke) RR Client"
+            - peer: "10.0.0.8"
+              remote_as: 65001
+              route_reflector_client: true
+              description: "PE2 (Hub) RR Client"
+            - peer: "10.0.0.10"
+              remote_as: 65001
+              route_reflector_client: true
+              description: "PE3 (Spoke) RR Client"
+        mpls:
+          enabled: true
+          ldp_interfaces: ["eth1", "eth2"]
+        static:
+          routes:
+            - destination: "192.168.1.0/24"
+              next_hop: "192.168.122.4"
+              description: "Route to interconnect network via management gateway"
+    
+    # Provider Router 1
+    - name: "p1"
+      hostname: "p1"
+      router_id: "10.0.0.3"
+      type: "core"
+      role: "p-router"
+      image: "vyos:1.5"
+      interfaces:
+        - name: "eth0"
+          network: "management"
+          description: "Management interface"
+        - name: "eth1"
+          network: "p1-p2"
+          description: "Link to P2"
+        - name: "eth2"
+          network: "p1-p3"
+          description: "Link to P3"
+        - name: "eth3"
+          network: "p1-pe1"
+          description: "Link to PE1 (Spoke)"
+        - name: "eth4"
+          network: "p1-rr1"
+          description: "Link to RR1"
+        - name: "eth5"
+          network: "p1-pe2"
+          description: "Link to PE2 (Hub)"
+        - name: "lo"
+          network: "loopbacks"
+          description: "Router ID"
+      protocols:
+        ospf:
+          enabled: true
+          areas: ["0.0.0.0"]
+        mpls:
+          enabled: true
+          ldp_interfaces: ["eth1", "eth2", "eth3", "eth4", "eth5"]
+        static:
+          routes:
+            - destination: "192.168.1.0/24"
+              next_hop: "192.168.122.4"
+              description: "Route to interconnect network via management gateway"
+    
+    # Provider Router 2
+    - name: "p2"
+      hostname: "p2"
+      router_id: "10.0.0.4"
+      type: "core"
+      role: "p-router"
+      image: "vyos:1.5"
+      interfaces:
+        - name: "eth0"
+          network: "management"
+          description: "Management interface"
+        - name: "eth1"
+          network: "p1-p2"
+          description: "Link to P1"
+        - name: "eth2"
+          network: "p2-p4"
+          description: "Link to P4"
+        - name: "eth3"
+          network: "p2-rr1"
+          description: "Link to RR1"
+        - name: "lo"
+          network: "loopbacks"
+          description: "Router ID"
+      protocols:
+        ospf:
+          enabled: true
+          areas: ["0.0.0.0"]
+        mpls:
+          enabled: true
+          ldp_interfaces: ["eth1", "eth2", "eth3"]
+        static:
+          routes:
+            - destination: "192.168.1.0/24"
+              next_hop: "192.168.122.4"
+              description: "Route to interconnect network via management gateway"
+    
+    # Provider Router 3
+    - name: "p3"
+      hostname: "p3"
+      router_id: "10.0.0.5"
+      type: "core"
+      role: "p-router"
+      image: "vyos:1.5"
+      interfaces:
+        - name: "eth0"
+          network: "management"
+          description: "Management interface"
+        - name: "eth1"
+          network: "p3-pe2"
+          description: "Link to PE2 (Hub)"
+        - name: "eth2"
+          network: "p1-p3"
+          description: "Link to P1"
+        - name: "eth3"
+          network: "p3-p4"
+          description: "Link to P4"
+        - name: "eth4"
+          network: "p3-rr2"
+          description: "Link to RR2"
+        - name: "lo"
+          network: "loopbacks"
+          description: "Router ID"
+      protocols:
+        ospf:
+          enabled: true
+          areas: ["0.0.0.0"]
+        mpls:
+          enabled: true
+          ldp_interfaces: ["eth1", "eth2", "eth3", "eth4"]
+        static:
+          routes:
+            - destination: "192.168.1.0/24"
+              next_hop: "192.168.122.4"
+              description: "Route to interconnect network via management gateway"
+    
+    # Provider Router 4
+    - name: "p4"
+      hostname: "p4"
+      router_id: "10.0.0.6"
+      type: "core"
+      role: "p-router"
+      image: "vyos:1.5"
+      interfaces:
+        - name: "eth0"
+          network: "management"
+          description: "Management interface"
+        - name: "eth1"
+          network: "p4-rr2"
+          description: "Link to RR2"
+        - name: "eth2"
+          network: "p2-p4"
+          description: "Link to P2"
+        - name: "eth3"
+          network: "p3-p4"
+          description: "Link to P3"
+        - name: "eth4"
+          network: "p4-pe3"
+          description: "Link to PE3 (Spoke)"
+        - name: "lo"
+          network: "loopbacks"
+          description: "Router ID"
+      protocols:
+        ospf:
+          enabled: true
+          areas: ["0.0.0.0"]
+        mpls:
+          enabled: true
+          ldp_interfaces: ["eth1", "eth2", "eth3", "eth4"]
+        static:
+          routes:
+            - destination: "192.168.1.0/24"
+              next_hop: "192.168.122.4"
+              description: "Route to interconnect network via management gateway"
+    
+    # Provider Edge Router 1 (Spoke)
+    - name: "pe1"
+      hostname: "pe1"
+      router_id: "10.0.0.7"
+      type: "edge"
+      role: "pe-router"
+      image: "vyos:1.5"
+      interfaces:
+        - name: "eth0"
+          network: "management"
+          description: "Management interface"
+        - name: "eth1"
+          network: "p1-pe1"
+          description: "Link to P1"
+        - name: "eth2"
+          network: "pe1-ce1-spoke"
+          description: "Link to CE1-SPOKE"
+          vrf: "BLUE_SPOKE"
+        - name: "lo"
+          network: "loopbacks"
+          description: "Router ID"
+      protocols:
+        ospf:
+          enabled: true
+          areas: ["0.0.0.0"]
+        bgp:
+          enabled: true
+          as_number: 65001
+          neighbors:
+            - peer: "10.0.0.1"
+              remote_as: 65001
+              description: "RR1"
+            - peer: "10.0.0.2"
+              remote_as: 65001
+              description: "RR2"
+        mpls:
+          enabled: true
+          ldp_interfaces: ["eth1"]
+        static:
+          routes:
+            - destination: "192.168.1.0/24"
+              next_hop: "192.168.122.4"
+              description: "Route to interconnect network via management gateway"
+    
+    # Provider Edge Router 2 (Hub)
+    - name: "pe2"
+      hostname: "pe2"
+      router_id: "10.0.0.8"
+      type: "edge"
+      role: "pe-router"
+      image: "vyos:1.5"
+      interfaces:
+        - name: "eth0"
+          network: "management"
+          description: "Management interface"
+        - name: "eth1"
+          network: "p1-pe2"
+          description: "Link to P1"
+        - name: "eth2"
+          network: "p3-pe2"
+          description: "Link to P3"
+        - name: "eth3"
+          network: "pe2-ce1-hub"
+          description: "Link to CE1-HUB"
+          vrf: "BLUE_HUB"
+        - name: "lo"
+          network: "loopbacks"
+          description: "Router ID"
+      protocols:
+        ospf:
+          enabled: true
+          areas: ["0.0.0.0"]
+        bgp:
+          enabled: true
+          as_number: 65001
+          neighbors:
+            - peer: "10.0.0.1"
+              remote_as: 65001
+              description: "RR1"
+            - peer: "10.0.0.2"
+              remote_as: 65001
+              description: "RR2"
+        mpls:
+          enabled: true
+          ldp_interfaces: ["eth1", "eth2"]
+        static:
+          routes:
+            - destination: "192.168.1.0/24"
+              next_hop: "192.168.122.4"
+              description: "Route to interconnect network via management gateway"
+    
+    # Provider Edge Router 3 (Spoke)
+    - name: "pe3"
+      hostname: "pe3"
+      router_id: "10.0.0.10"
+      type: "edge"
+      role: "pe-router"
+      image: "vyos:1.5"
+      interfaces:
+        - name: "eth0"
+          network: "management"
+          description: "Management interface"
+        - name: "eth1"
+          network: "p4-pe3"
+          description: "Link to P4"
+        - name: "eth2"
+          network: "pe3-ce2-spoke"
+          description: "Link to CE2-SPOKE"
+          vrf: "BLUE_SPOKE"
+        - name: "lo"
+          network: "loopbacks"
+          description: "Router ID"
+      protocols:
+        ospf:
+          enabled: true
+          areas: ["0.0.0.0"]
+        bgp:
+          enabled: true
+          as_number: 65001
+          neighbors:
+            - peer: "10.0.0.1"
+              remote_as: 65001
+              description: "RR1"
+            - peer: "10.0.0.2"
+              remote_as: 65001
+              description: "RR2"
+        mpls:
+          enabled: true
+          ldp_interfaces: ["eth1"]
+        static:
+          routes:
+            - destination: "192.168.1.0/24"
+              next_hop: "192.168.122.4"
+              description: "Route to interconnect network via management gateway"
+    
+    # Customer Edge 1 - Spoke Site
+    - name: "ce1-spoke"
+      hostname: "ce1-spoke"
+      router_id: "10.0.0.80"
+      type: "cpe"
+      role: "customer-edge"
+      image: "vyos:1.5"
+      interfaces:
+        - name: "eth0"
+          network: "management"
+          description: "Management interface"
+        - name: "eth1"
+          network: "pe1-ce1-spoke"
+          description: "Link to PE1 (Spoke)"
+        - name: "eth2"
+          network: "lan-spoke1"
+          description: "LAN interface for spoke1 devices"
+        - name: "lo"
+          network: "loopbacks"
+          description: "Router ID"
+      protocols:
+        static:
+          routes:
+            - destination: "192.168.1.0/24"
+              next_hop: "192.168.122.4"
+              description: "Route to interconnect network via management gateway"
+    
+    # Customer Edge 1 - Hub Site
+    - name: "ce1-hub"
+      hostname: "ce1-hub"
+      router_id: "10.0.0.100"
+      type: "cpe"
+      role: "customer-edge"
+      image: "vyos:1.5"
+      interfaces:
+        - name: "eth0"
+          network: "management"
+          description: "Management interface"
+        - name: "eth1"
+          network: "pe2-ce1-hub"
+          description: "Link to PE2 (Hub)"
+        - name: "eth2"
+          network: "lan-hub"
+          description: "LAN interface for hub devices"
+        - name: "lo"
+          network: "loopbacks"
+          description: "Router ID"
+      protocols:
+        static:
+          routes:
+            - destination: "192.168.1.0/24"
+              next_hop: "192.168.122.4"
+              description: "Route to interconnect network via management gateway"
+    
+    # Customer Edge 2 - Spoke Site
+    - name: "ce2-spoke"
+      hostname: "ce2-spoke"
+      router_id: "10.0.0.90"
+      type: "cpe"
+      role: "customer-edge"
+      image: "vyos:1.5"
+      interfaces:
+        - name: "eth0"
+          network: "management"
+          description: "Management interface"
+        - name: "eth1"
+          network: "pe3-ce2-spoke"
+          description: "Link to PE3 (Spoke)"
+        - name: "eth2"
+          network: "lan-spoke2"
+          description: "LAN interface for spoke2 devices"
+        - name: "lo"
+          network: "loopbacks"
+          description: "Router ID"
+      protocols:
+        static:
+          routes:
+            - destination: "192.168.1.0/24"
+              next_hop: "192.168.122.4"
+              description: "Route to interconnect network via management gateway"
+  
+  # MPLS L3VPN configuration
+  mpls:
+    enabled: true
+    ldp:
+      router_id_interface: "loopback"
+      label_range:
+        min: 16
+        max: 1048575
+  
+  # Routing configuration
+  routing:
+    ospf:
+      router_id_source: "loopback"
+      areas:
+        - area_id: "0.0.0.0"
+          type: "backbone"
+          description: "MPLS backbone area"
+    
+    bgp:
+      as_number: 65001
+      router_id_source: "loopback"
+      route_reflectors:
+        - "10.0.0.1"  # RR1
+        - "10.0.0.2"  # RR2
+

@@ -13,7 +13,7 @@ The following virtual infrastructure can be deployed to instantiate the 5G netwo
 * __Radio Sites:__ [Running Radio simulators](https://github.com/aligungr/UERANSIM)
     * GCP network per radio "site"
     * UERANSIM gNB Radio Network Simulator VNF is attached to the cellsite network. UE simulators can establish sessions and test traffic routed through the 5G network to the internet services above. 
-* __Transport Services:__ [Connecting all sites](/docs/connectivityservices.md)
+* __Transport Services:__ [Connecting all sites](/docs/l3vpn.md)
     * Wireguard VNFs create a set of tunnels in a mesh or point to point configuration between GCP networks.
 
 Once deployed test traffic can be run from the simulated UEs across the network to the Internet. 

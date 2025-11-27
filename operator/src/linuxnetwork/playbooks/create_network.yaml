@@ -1,0 +1,108 @@
+---
+- hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Create native Linux bridge network (brctl)
+      command: brctl addbr {{ network_name }}
+      register: network_result
+      ignore_errors: yes # Ignore errors if the bridge already exists
+
+    - name: Bring up the bridge
+      command: ip link set {{ network_name }} up
+      when: network_type != 'management'
+
+    - name: Apply bandwidth limit to bridge interface using tc
+      when: 
+        - network_type != 'management'
+        - bandwidth is defined
+        - bandwidth != ''
+      shell: |
+        set -e
+        BRIDGE="{{ network_name }}"
+        BANDWIDTH="{{ bandwidth }}"
+        
+        # Remove existing qdisc if present
+        tc qdisc del dev $BRIDGE root 2>/dev/null || true
+        
+        # Add HTB (Hierarchical Token Bucket) qdisc
+        tc qdisc add dev $BRIDGE root handle 1: htb default 10
+        
+        # Create root class with bandwidth limit
+        tc class add dev $BRIDGE parent 1: classid 1:1 htb rate $BANDWIDTH
+        
+        # Create default class for all traffic
+        tc class add dev $BRIDGE parent 1:1 classid 1:10 htb rate $BANDWIDTH
+        
+        # Add fair queueing for traffic within the limit
+        tc qdisc add dev $BRIDGE parent 1:10 handle 10: sfq perturb 10
+        
+        echo "Applied ${BANDWIDTH} bandwidth limit to bridge ${BRIDGE}"
+      register: tc_result
+      
+    - name: Display TC configuration result
+      when: 
+        - bandwidth is defined
+        - bandwidth != ''
+        - tc_result is defined
+      debug:
+        msg: "{{ tc_result.stdout }}"
+
+    - name: add host interface to management network bridge
+      when: network_type == 'management'
+      shell: |
+        set -e
+
+        BRIDGE_NAME="{{ network_name }}"
+        INTERFACE_NAME="{{ ansible_default_ipv4.interface }}"
+        GATEWAY="{{ ansible_default_ipv4.gateway }}"
+        IP_ADDR=$(ip addr show $INTERFACE_NAME | grep 'inet ' | awk '{print $2}')
+
+        # nmcli stop managing the interface to prevent conflicts
+        nmcli device set $INTERFACE_NAME managed no || true
+
+        # Set iptables FORWARD policy to ACCEPT
+        iptables -P FORWARD ACCEPT
+
+        # Bring down the interface
+        ip link set dev $INTERFACE_NAME down
+
+        # Bring down the bridge if it exists
+        ip link set dev $BRIDGE_NAME down
+
+        # Remove IP address from the interface
+        ip addr flush dev $INTERFACE_NAME
+
+        # Add the interface to the bridge
+        brctl addif $BRIDGE_NAME $INTERFACE_NAME
+
+        # Reassign the IP address from the interface to the bridge
+        ip addr add $IP_ADDR dev $BRIDGE_NAME
+
+        # Bring up the interface
+        ip link set dev $INTERFACE_NAME up
+
+        # Bring up the bridge
+        ip link set dev $BRIDGE_NAME up
+
+        # make default route via bridge
+        ip route add default via $GATEWAY dev $BRIDGE_NAME
+
+    - name: Return ip address of the default interface
+      set_fact:
+        interface_ip: "{{ ansible_default_ipv4.address }}"
+
+    - name: Return default IPv4 interface
+      set_fact:
+        default_interface: "{{ ansible_default_ipv4.interface }}"
+
+    - name: Return default gateway
+      set_fact:
+        default_gateway: "{{ ansible_default_ipv4.gateway }}"
+
+  handlers:
+    - name: restart docker
+      systemd:
+        name: docker
+        state: restarted

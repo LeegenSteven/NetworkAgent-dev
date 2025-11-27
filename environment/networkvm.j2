@@ -57,6 +57,8 @@ spec:
       accessConfig:
         - {}
   canIpForward: true
+  metadataStartupScript: sudo apt-get update; sudo apt-get install -yq python3-pip;  
   metadata:
     - key: ssh-keys
-      value: "{{ GOOGLE_VM_USER }}:{{ GOOGLE_SSH_KEY }}"
+      value: |
+        {{ GOOGLE_VM_USER }}:{{ GOOGLE_SSH_KEY }}

@@ -413,7 +413,7 @@ Create()
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_PROJECT_NUMBER -E GOOGLE_SERVICE_ACCOUNT environment/logsink.j2 >  environment/logsink.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_SPANNER_DATABASE -E GOOGLE_SPANNER_INSTANCE -E GOOGLE_NAMESPACE environment/spanner.j2 >  environment/spanner.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/configconnector.j2 > environment/configconnector.yaml
-    jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_VM_USER -E GOOGLE_SSH_KEY environment/networkvm.j2 > environment/networkvm.yaml
+    jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_VM_USER -E GOOGLE_SSH_KEY -E GOOGLE_NAMESPACE environment/networkvm.j2 > environment/networkvm.yaml
 
     echo "#######################################################"
     echo "generating networkagent and operator yaml files"

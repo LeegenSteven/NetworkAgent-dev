@@ -27,14 +27,6 @@ from google.genai import types
 from resolveragents.agent import IncidentAgent
 import os
 import logging
-from ag_ui.core import (
-    BaseEvent, EventType,
-    TextMessageStartEvent, TextMessageContentEvent, TextMessageEndEvent,
-    ToolCallStartEvent, ToolCallArgsEvent, ToolCallEndEvent,
-    ToolCallResultEvent, StateSnapshotEvent, StateDeltaEvent,
-    CustomEvent
-)
-from agent_library.agentmiddleware.utils import convert_to_run_agent_input
 import datetime
 from agent_library.trace.trace_context import TracingContext
 
@@ -75,6 +67,10 @@ class ResolverAgentExecutor(AgentExecutor):
             incident_data = root_message.data
             logger.info(incident_data)
 
+            content = types.Content(
+                role='user', parts=[types.Part.from_text(text="New network incident reported")]
+            )
+
             # Get the agent instance (already wrapped) and session service
             agent = await IncidentAgent.get_instance()
 
@@ -88,21 +84,28 @@ class ResolverAgentExecutor(AgentExecutor):
             logger.debug(doc)
             await toolset.close()
 
-            if not doc or not getattr(doc, "content", None):
+            if doc is None or 'content' not in doc:
                 logger.error("Operating procedures document is empty")
                 raise Exception("Operating procedures document is empty")
 
             logger.info("adding incident data to state")
-            initial_state={
-                "incident_data": incident_data,
-                "operating_procedures_doc": doc.content[0].text
-            }
 
-            agent_input = await convert_to_run_agent_input(task.context_id, task.id, "New Fault", initial_state)
+            await agent.session_service.create_session(
+                app_name="IncidentSupervisorAgent",
+                user_id="agent",
+                session_id=context.context_id,
+                state={
+                    "incident_data": incident_data,
+                    "operating_procedures_doc": doc['content'][0]['text']
+                }
+            )
 
-            async for event in agent.run_agui(agent_input):
-                logger.debug("ADK RUNNER EVENT")
-                logger.debug(event)
+            async for event in agent.runner.run_async(user_id="agent", session_id=context.context_id, new_message=content):
+                logger.info("ADK RUNNER EVENT")
+                logger.info(event)
+
+                # if event.content.parts and event.content.parts[0].text:
+                #     logger.info(f'** {event.author}: {event.content.parts[0].text}')
 
             status_event = TaskStatusUpdateEvent(
                 status=TaskStatus(

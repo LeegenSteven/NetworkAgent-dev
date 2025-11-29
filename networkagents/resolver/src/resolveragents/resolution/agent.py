@@ -44,7 +44,7 @@ async def create_client():
         agent_card.url = engineer_url
         logger.info(f"Connected to agent: {agent_card.name}")
 
-    agent_client = await A2AClient.get_client_from_agent_card_url(httpx_client=httpx.AsyncClient(timeout=60.0), base_url=engineer_url)
+    agent_client = A2AClient(httpx_client=httpx.AsyncClient(timeout=60.0), agent_card=agent_card)
     agent_client.url=engineer_url
     return agent_client
 
@@ -56,7 +56,7 @@ def create_send_message_payload(text: str) -> dict[str, Any]:
     payload: dict[str, Any] = {
         'message': {
             'role': 'user',
-            'parts': [{'kind': 'data', 'data': {'objective': text }}],
+            'parts': [{'kind': 'data', 'data': {'objective': text ,'preapproved': False}}],
             'messageId': uuid4().hex,
         },
     }

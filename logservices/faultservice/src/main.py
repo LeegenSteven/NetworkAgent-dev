@@ -59,6 +59,37 @@ def decode_pubsub_message(message_data):
 ######################################################################
 # Process the fault event
 ######################################################################
+
+# Global dictionary to store locks for each correlation key
+correlation_locks = {}
+# Lock to protect the correlation_locks dictionary itself
+locks_lock = asyncio.Lock()
+
+def get_correlation_key(log_entry):
+    """Extract a unique correlation key from the log entry."""
+    json_payload = log_entry.get('jsonPayload', {})
+    labels = log_entry.get('labels', {})
+    python_logger = labels.get('python_logger')
+
+    if python_logger == 'UERANSIMHEALTH':
+        process_name = json_payload.get('process_name')
+        hostname = json_payload.get('hostname')
+        if process_name and hostname:
+            return f"UERANSIMHEALTH:{process_name}:{hostname}"
+    elif python_logger == 'CRITICALSERVICEERROR':
+        node = json_payload.get('node')
+        userid = json_payload.get('userid')
+        if node and userid:
+            return f"CRITICALSERVICEERROR:{node}:{userid}"
+    return None
+
+async def get_lock_for_key(key):
+    """Get or create a lock for the given key."""
+    async with locks_lock:
+        if key not in correlation_locks:
+            correlation_locks[key] = asyncio.Lock()
+        return correlation_locks[key]
+
 async def process_fault_event(event_data):
     logger.info("process fault event")
     """Process the fault event and extract relevant information."""
@@ -77,14 +108,30 @@ async def process_fault_event(event_data):
             logger.info(f"JSON Payload: {json_payload}")
             logger.info(f"=== END FAULT EVENT ===")
             
-            # Check of this error has already triggered an incident
-            incident_exists = await correlate_incident(log_entry)
-            if incident_exists:
-                logger.info("Incident already open, not sending to resolver.")
+            # Get correlation key
+            correlation_key = get_correlation_key(log_entry)
+            
+            if correlation_key:
+                lock = await get_lock_for_key(correlation_key)
+                async with lock:
+                    # Check of this error has already triggered an incident
+                    incident_exists = await correlate_incident(log_entry)
+                    if incident_exists:
+                        logger.info(f"Incident already open for {correlation_key}, not sending to resolver.")
+                    else:
+                        logger.info(f"No open incident found for {correlation_key}, sending to resolver.")
+                        agent = await FaultClient.get_instance()
+                        await agent.send_incident_to_resolver(log_entry)
             else:
-                logger.info("No open incident found, sending to resolver.")
-                agent = await FaultClient.get_instance()
-                await agent.send_incident_to_resolver(log_entry)                
+                # Fallback for events without a correlation key (shouldn't happen for known types)
+                logger.warning("No correlation key found, processing without lock.")
+                incident_exists = await correlate_incident(log_entry)
+                if incident_exists:
+                    logger.info("Incident already open, not sending to resolver.")
+                else:
+                    logger.info("No open incident found, sending to resolver.")
+                    agent = await FaultClient.get_instance()
+                    await agent.send_incident_to_resolver(log_entry)
         else:
             # Handle plain text log entries
             logger.info(f"=== FAULT EVENT (TEXT) ===")

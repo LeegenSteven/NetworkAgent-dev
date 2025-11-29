@@ -76,14 +76,14 @@ async def update_database(callback_context: CallbackContext) -> Optional[types.C
         
         result = await tools[0].run_async(args={"id": incident['incident_id'], 
                                                 "strategy": strategy if strategy is not None else {}, 
-                                                "root_cause": root_cause, 
-                                                "resolution": resolution
+                                                "root_cause": root_cause if root_cause is not None else "", 
+                                                "resolution": resolution if resolution is not None else ""
                                                 }, 
                                           tool_context=None)
         logger.info(f"Tool execution result: {result}")
         
         await toolset.close()
-        return result
+        return None
         
     except Exception as e:
         logger.error(f"Error calling MCP tool: {e}")

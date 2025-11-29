@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../appstate.dart';
 import '../widgets/notifications/agent_request_notifications_widget.dart';
 import '../widgets/notifications/incident_notifications_widget.dart';
+import '../widgets/trace/trace_widget.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -11,8 +12,15 @@ class NotificationScreen extends StatefulWidget {
   State<NotificationScreen> createState() => _NotificationScreenState();
 }
 
-class _NotificationScreenState extends State<NotificationScreen> with SingleTickerProviderStateMixin {
+class _NotificationScreenState extends State<NotificationScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
+
+  // Trace widget state
+  bool _showTrace = false;
+  double _tracePanelRatio = 0.3;
+  static const double _minHorizontalSplitRatio = 0.2;
+  static const double _maxHorizontalSplitRatio = 0.8;
 
   @override
   void initState() {
@@ -50,26 +58,45 @@ class _NotificationScreenState extends State<NotificationScreen> with SingleTick
               const SizedBox(width: 12),
               const Text(
                 'Notifications',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ],
           ),
         ),
         actions: [
+          // Trace toggle button
+          IconButton(
+            icon: Icon(
+              Icons.analytics,
+              color: _showTrace ? Colors.amber : Colors.white,
+            ),
+            onPressed: () {
+              final appState = Provider.of<Appstate>(context, listen: false);
+              setState(() {
+                _showTrace = !_showTrace;
+                appState.toggleTraces(_showTrace);
+              });
+            },
+            tooltip: 'Toggle Trace',
+          ),
           // Clear all notifications button (only for agent requests tab)
           Consumer<Appstate>(
             builder: (context, appState, child) {
               return IconButton(
-                icon: const Icon(Icons.clear_all),
-                onPressed: _tabController.index == 0 ? () {
-                  appState.clearAllNotifications();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('All agent requests cleared')),
-                  );
-                } : null,
-                tooltip: _tabController.index == 0 ? 'Clear All Agent Requests' : null,
+                icon: const Icon(Icons.clear_all, color: Colors.white),
+                onPressed: _tabController.index == 0
+                    ? () {
+                        appState.clearAllNotifications();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('All agent requests cleared'),
+                          ),
+                        );
+                      }
+                    : null,
+                tooltip: _tabController.index == 0
+                    ? 'Clear All Agent Requests'
+                    : null,
               );
             },
           ),
@@ -93,7 +120,10 @@ class _NotificationScreenState extends State<NotificationScreen> with SingleTick
                       if (requestCount > 0) ...[
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.red,
                             borderRadius: BorderRadius.circular(10),
@@ -126,7 +156,10 @@ class _NotificationScreenState extends State<NotificationScreen> with SingleTick
                       if (incidentCount > 0) ...[
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.orange,
                             borderRadius: BorderRadius.circular(10),
@@ -149,11 +182,60 @@ class _NotificationScreenState extends State<NotificationScreen> with SingleTick
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: const [
-          AgentRequestNotificationsWidget(),
-          IncidentNotificationsWidget(),
+      body: Row(
+        children: [
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: const [
+                AgentRequestNotificationsWidget(),
+                IncidentNotificationsWidget(),
+              ],
+            ),
+          ),
+
+          // Right panel - Trace (only shown if _showTrace is true)
+          if (_showTrace) ...[
+            // Horizontal resizable divider for trace panel
+            MouseRegion(
+              cursor: SystemMouseCursors.resizeColumn,
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onHorizontalDragUpdate: (details) {
+                  setState(() {
+                    _tracePanelRatio -=
+                        details.delta.dx / MediaQuery.of(context).size.width;
+                    _tracePanelRatio = _tracePanelRatio.clamp(
+                      _minHorizontalSplitRatio,
+                      _maxHorizontalSplitRatio,
+                    );
+                  });
+                },
+                child: Container(
+                  width: 8,
+                  color: const Color(0xFFE3F2FD), // Light blue background
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 2,
+                        height: 30,
+                        color: const Color(
+                          0xFF90CAF9,
+                        ), // Slightly darker blue for the handle
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            Container(
+              width: MediaQuery.of(context).size.width * _tracePanelRatio,
+              color: Colors.white,
+              child: const TraceWidget(),
+            ),
+          ],
         ],
       ),
     );

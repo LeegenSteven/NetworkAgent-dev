@@ -21,7 +21,7 @@ class _TraceWidgetState extends State<TraceWidget> {
   final Map<String, ScrollController> _scrollControllers = {};
   final Map<String, double> _maxCanvasWidths = {};
   int _previousEventCount = 0;
-  Map<String, Rect> _eventPositions = {};
+  final Map<String, Map<String, Rect>> _traceEventPositions = {};
 
   @override
   void initState() {
@@ -44,6 +44,7 @@ class _TraceWidgetState extends State<TraceWidget> {
     }
     super.dispose();
   }
+  // ... (keeping existing methods) ...
 
   void _scrollToEnd(String traceId) {
     // Schedule scroll to end after build completes
@@ -530,22 +531,25 @@ class _TraceWidgetState extends State<TraceWidget> {
                                     onTapUp: (details) {
                                       final localPosition =
                                           details.localPosition;
-                                      for (final entry
-                                          in _eventPositions.entries) {
-                                        if (entry.value.contains(
-                                          localPosition,
-                                        )) {
-                                          final event = events.firstWhere(
-                                            (e) => e.spanId == entry.key,
-                                          );
-                                          showDialog(
-                                            context: context,
-                                            builder: (context) =>
-                                                TraceDetailsDialog(
-                                                  event: event,
-                                                ),
-                                          );
-                                          break;
+                                      final positions =
+                                          _traceEventPositions[traceId];
+                                      if (positions != null) {
+                                        for (final entry in positions.entries) {
+                                          if (entry.value.contains(
+                                            localPosition,
+                                          )) {
+                                            final event = events.firstWhere(
+                                              (e) => e.spanId == entry.key,
+                                            );
+                                            showDialog(
+                                              context: context,
+                                              builder: (context) =>
+                                                  TraceDetailsDialog(
+                                                    event: event,
+                                                  ),
+                                            );
+                                            break;
+                                          }
                                         }
                                       }
                                     },
@@ -562,7 +566,8 @@ class _TraceWidgetState extends State<TraceWidget> {
                                         traceStartTime: traceStartTime,
                                         traceDuration: traceDuration,
                                         onLayout: (positions) {
-                                          _eventPositions = positions;
+                                          _traceEventPositions[traceId] =
+                                              positions;
                                         },
                                       ),
                                     ),

@@ -56,7 +56,7 @@ class TestAgent:
                     connection_params=SseConnectionParams(
                         url=os.getenv("AGENT_MCP_TOOLS_ADDRESS", "http://127.0.0.1:8080/sse")
                     ),
-                    tool_filter=["getRunningTests","runTest","deleteTest"]
+                    tool_filter=["getRunningTests","runTest","deleteTest", "getServices"]
                 )
             ],
         )

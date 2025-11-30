@@ -47,21 +47,29 @@ class _TraceWidgetState extends State<TraceWidget> {
   // ... (keeping existing methods) ...
 
   void _scrollToEnd(String traceId) {
-    // Schedule scroll to end after build completes
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final controller = _scrollControllers[traceId];
-      if (controller != null && controller.hasClients) {
-        final maxScroll = controller.position.maxScrollExtent;
-        final currentScroll = controller.offset;
+    final controller = _scrollControllers[traceId];
+    bool shouldScroll = true;
 
-        // Only scroll if we are already near the end (sticky scrolling)
-        // or if we haven't scrolled at all yet
-        const tolerance = 20.0;
-        if (maxScroll - currentScroll <= tolerance || currentScroll == 0.0) {
-          controller.jumpTo(maxScroll);
+    // Check if we should scroll based on current position (before layout update)
+    if (controller != null && controller.hasClients) {
+      final currentScroll = controller.offset;
+      const tolerance = 20.0;
+
+      // With reverse: true, 0.0 is the rightmost edge (latest events).
+      // We sticky scroll if we are close to 0.0.
+      shouldScroll = currentScroll <= tolerance;
+    }
+
+    if (shouldScroll) {
+      // Schedule scroll to end after build completes
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final controller = _scrollControllers[traceId];
+        if (controller != null && controller.hasClients) {
+          // Jump to 0.0 which is the rightmost edge
+          controller.jumpTo(0.0);
         }
-      }
-    });
+      });
+    }
   }
 
   List<ProcessedTraceEvent> _processTraceEvents(
@@ -238,7 +246,6 @@ class _TraceWidgetState extends State<TraceWidget> {
 
     // Calculate width for each root span group
     const double pixelsPerMs = 0.05; // 0.05 pixels per millisecond
-    const double minSegmentWidth = 200.0; // Minimum width for each segment
     const double segmentPadding = 50.0; // Padding between segments
 
     double totalWidth = 0.0;
@@ -246,79 +253,197 @@ class _TraceWidgetState extends State<TraceWidget> {
     for (final group in rootSpanGroups.values) {
       if (group.isEmpty) continue;
 
-      // Find the earliest start and latest end time in this group
+      // Find the earliest start time in this group
       final groupStart = group
           .map((e) => e.startTime)
           .reduce((a, b) => a.isBefore(b) ? a : b);
-      final groupEnd = group
-          .map((e) => e.endTime)
-          .reduce((a, b) => a.isAfter(b) ? a : b);
 
-      final groupDuration = groupEnd.difference(groupStart).inMilliseconds;
-      final groupWidth = (groupDuration * pixelsPerMs).clamp(
-        minSegmentWidth,
-        double.infinity,
-      );
+      // Calculate the max visual width needed for this group
+      // This accounts for both the time duration AND the indentation AND the text label
+      double maxVisualRight = 0.0;
+
+      for (final event in group) {
+        final startOffset =
+            event.startTime.difference(groupStart).inMilliseconds * pixelsPerMs;
+        final durationWidth = event.duration.inMilliseconds * pixelsPerMs;
+        final indentation = event.level * 20.0;
+
+        // The visual right edge is start + duration + indentation
+        // We ensure minimum width of 5.0 for visibility
+        final barWidth = durationWidth < 5.0 ? 5.0 : durationWidth;
+        final barRight = startOffset + indentation + barWidth;
+
+        // Calculate text width
+        final labelText = _getLabelText(event);
+        final textPainter = TextPainter(
+          text: TextSpan(
+            text: labelText,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+          textDirection: TextDirection.ltr,
+        );
+        textPainter.layout();
+
+        // Text is either inside the bar or outside to the right
+        // If it fits inside, visual right is barRight
+        // If it's outside, visual right is barRight + padding + textWidth
+        const double textPadding = 5.0;
+        double visualRight = barRight;
+
+        if (textPainter.width + (textPadding * 2) > barWidth) {
+          visualRight = barRight + textPadding + textPainter.width;
+        }
+
+        if (visualRight > maxVisualRight) {
+          maxVisualRight = visualRight;
+        }
+      }
+
+      // Ensure minimum segment width
+      final groupWidth = maxVisualRight < 200.0 ? 200.0 : maxVisualRight;
 
       totalWidth += groupWidth + segmentPadding;
     }
 
     // Add extra buffer for text drawn outside bars
-    return totalWidth + 50.0;
+    // We subtract segmentPadding because the loop adds it after every group,
+    // but we don't need that much space after the last group.
+    return totalWidth - segmentPadding + 20.0;
   }
 
-  double _calculateCanvasHeight(List<ProcessedTraceEvent> events) {
+  Map<String, int> _calculateEventRows(List<ProcessedTraceEvent> events) {
+    final rows = <String, int>{};
+    final rowMaxPixel = <int, double>{}; // Row -> Max X pixel used
+    final lastSiblingRow = <String, int>{}; // ParentId -> Last assigned row
+    const double pixelsPerMs = 0.05;
+    const double textPadding = 5.0;
+
+    // Sort by start time
+    final sortedEvents = List<ProcessedTraceEvent>.from(events)
+      ..sort((a, b) => a.startTime.compareTo(b.startTime));
+
+    if (sortedEvents.isEmpty) return rows;
+
+    final traceStart = sortedEvents.first.startTime;
+
+    for (final event in sortedEvents) {
+      final startPixel =
+          event.startTime.difference(traceStart).inMilliseconds * pixelsPerMs;
+      final durationPixel = event.duration.inMilliseconds * pixelsPerMs;
+      final barWidth = durationPixel < 5.0 ? 5.0 : durationPixel;
+
+      // Calculate text width
+      final labelText = _getLabelText(event);
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: labelText,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      textPainter.layout();
+
+      // Calculate visual end pixel (including text)
+      // Indentation is added later in painter, but we need to account for it here?
+      // Wait, painter adds indentation: left = currentX + indentation + eventStart.
+      // But currentX depends on group.
+      // Assuming single group for simplicity of row collision (or that collision only matters within group).
+      // Actually, if we just track "visual end" relative to trace start, it works globally.
+      // Indentation: event.level * 20.0.
+      final indentation = event.level * 20.0;
+      double endPixel = startPixel + indentation + barWidth;
+
+      if (textPainter.width + (textPadding * 2) > barWidth) {
+        endPixel =
+            startPixel +
+            indentation +
+            barWidth +
+            textPadding +
+            textPainter.width;
+      }
+
+      // Add a small buffer between items
+      endPixel += 10.0;
+
+      int row;
+      if (event.eventType == 'AGENT') {
+        // Agents are strictly aligned to hierarchy level
+        row = event.level;
+      } else {
+        // Tools are sequenced and collision-avoidant
+        final parentId = event.parentSpanId ?? 'root';
+
+        // Start at least at level
+        int minRow = event.level;
+
+        // Enforce sequencing (staircase) under parent
+        if (lastSiblingRow.containsKey(parentId)) {
+          minRow = lastSiblingRow[parentId]! + 1;
+        }
+
+        // Find first available row >= minRow
+        row = minRow;
+        while (true) {
+          final maxPixel = rowMaxPixel[row] ?? -1.0;
+          if (maxPixel < startPixel + indentation) {
+            // Found a free row
+            break;
+          }
+          row++;
+        }
+
+        lastSiblingRow[parentId] = row;
+      }
+
+      rows[event.spanId] = row;
+
+      // Update max pixel for this row
+      final currentMax = rowMaxPixel[row] ?? -1.0;
+      if (endPixel > currentMax) {
+        rowMaxPixel[row] = endPixel;
+      }
+    }
+    return rows;
+  }
+
+  double _calculateCanvasHeight(
+    List<ProcessedTraceEvent> events,
+    Map<String, int> rowIndices,
+  ) {
     if (events.isEmpty) return 40.0;
 
-    final rootSpanGroups = <String, List<ProcessedTraceEvent>>{};
-
-    for (final event in events) {
-      if (event.parentSpanId == null) {
-        rootSpanGroups[event.spanId] = [];
+    int maxRow = 0;
+    for (final row in rowIndices.values) {
+      if (row > maxRow) {
+        maxRow = row;
       }
     }
 
-    for (final event in events) {
-      String rootSpanId = event.spanId;
-      String? currentId = event.spanId;
+    return (maxRow + 1) * 40.0;
+  }
 
-      while (currentId != null) {
-        final parentEvent = events.firstWhere(
-          (e) => e.spanId == currentId,
-          orElse: () => event,
-        );
+  String _getLabelText(ProcessedTraceEvent event) {
+    String baseText = event.operationName;
 
-        if (parentEvent.parentSpanId == null) {
-          rootSpanId = parentEvent.spanId;
-          break;
+    if (event.details != null) {
+      if (event.eventType.contains('MODEL')) {
+        if (event.details!.containsKey('model_version')) {
+          baseText = event.details!['model_version'];
         }
-
-        final parent = events.firstWhere(
-          (e) => e.spanId == parentEvent.parentSpanId,
-          orElse: () => parentEvent,
-        );
-
-        if (parent.spanId == parentEvent.spanId) {
-          rootSpanId = parentEvent.spanId;
-          break;
+      } else if (event.eventType.contains('TOOL')) {
+        if (event.details!.containsKey('tool_name')) {
+          baseText = event.details!['tool_name'];
         }
-
-        currentId = parent.spanId;
-      }
-
-      if (rootSpanGroups.containsKey(rootSpanId)) {
-        rootSpanGroups[rootSpanId]!.add(event);
+      } else if (event.eventType.contains('AGENT')) {
+        if (event.details!.containsKey('agent_name')) {
+          baseText = event.details!['agent_name'];
+        }
       }
     }
 
-    int maxGroupSize = 0;
-    for (final group in rootSpanGroups.values) {
-      if (group.length > maxGroupSize) {
-        maxGroupSize = group.length;
-      }
-    }
-
-    return (maxGroupSize > 0 ? maxGroupSize : 1) * 40.0;
+    return event.isInProgress
+        ? '$baseText (in progress...)'
+        : '$baseText (${event.duration.inMilliseconds}ms)';
   }
 
   @override
@@ -520,12 +645,16 @@ class _TraceWidgetState extends State<TraceWidget> {
                           Padding(
                             padding: const EdgeInsets.all(16.0),
                             child: SizedBox(
-                              height: _calculateCanvasHeight(events),
+                              height: _calculateCanvasHeight(
+                                events,
+                                _calculateEventRows(events),
+                              ),
                               child: Scrollbar(
                                 controller: controller,
                                 thumbVisibility: true,
                                 child: SingleChildScrollView(
                                   scrollDirection: Axis.horizontal,
+                                  reverse: true,
                                   controller: controller,
                                   child: GestureDetector(
                                     onTapUp: (details) {
@@ -559,12 +688,16 @@ class _TraceWidgetState extends State<TraceWidget> {
                                           traceId,
                                           events,
                                         ),
-                                        _calculateCanvasHeight(events),
+                                        _calculateCanvasHeight(
+                                          events,
+                                          _calculateEventRows(events),
+                                        ),
                                       ),
                                       painter: GanttChartPainter(
                                         events: events,
                                         traceStartTime: traceStartTime,
                                         traceDuration: traceDuration,
+                                        rowIndices: _calculateEventRows(events),
                                         onLayout: (positions) {
                                           _traceEventPositions[traceId] =
                                               positions;

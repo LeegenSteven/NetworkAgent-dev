@@ -99,11 +99,6 @@ class EngineerAgentExecutor(AgentExecutor):
                     severity=ErrorSeverity.ERROR
                 )
 
-            if not task:
-                logger.info("Creating new task!!")
-                task = new_task(context.message)
-                await event_queue.enqueue_event(task)
-
             # check if this is a background task or chat based
             # if message part has text message its chat, if data its background received from another agent
             background_task=False

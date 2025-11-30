@@ -90,22 +90,7 @@
   color: #666;
 }
 
-.map-placeholder {
-  margin-top: 15px;
-  background-color: #f8f8f8;
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  height: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  color: #666;
-}
 
-.map-marker {
-  font-size: 16px;
-}
 
 .duration-buttons {
   display: flex;
@@ -212,5 +197,40 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.coordinates-display {
+  margin-top: 15px;
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 4px;
+  padding: 10px;
+}
+
+.coordinates-display h4 {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  color: #495057;
+}
+
+.coordinates-list {
+  max-height: 100px;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.coordinate-item {
+  display: flex;
+  gap: 10px;
+  padding: 2px 0;
+  color: #6c757d;
+}
+
+.coord-label {
+  font-weight: 600;
+  color: #343a40;
 }

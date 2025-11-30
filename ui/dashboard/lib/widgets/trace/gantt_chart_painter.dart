@@ -5,12 +5,14 @@ class GanttChartPainter extends CustomPainter {
   final List<ProcessedTraceEvent> events;
   final DateTime traceStartTime;
   final Duration traceDuration;
+  final Map<String, int> rowIndices;
   final Function(Map<String, Rect>) onLayout;
 
   GanttChartPainter({
     required this.events,
     required this.traceStartTime,
     required this.traceDuration,
+    required this.rowIndices,
     required this.onLayout,
   });
 
@@ -54,12 +56,12 @@ class GanttChartPainter extends CustomPainter {
       final groupStart = group
           .map((e) => e.startTime)
           .reduce((a, b) => a.isBefore(b) ? a : b);
-      final groupEnd = group
-          .map((e) => e.endTime)
-          .reduce((a, b) => a.isAfter(b) ? a : b);
 
       // Sort events hierarchically (DFS pre-order)
       final sortedGroup = _sortEventsHierarchically(group);
+
+      // Calculate the max visual width needed for this group to update currentX correctly
+      double maxVisualRight = 0.0;
 
       // Position events within this group
       for (int i = 0; i < sortedGroup.length; i++) {
@@ -80,18 +82,46 @@ class GanttChartPainter extends CustomPainter {
           5.0,
           double.infinity,
         ); // Minimum 5px width
-        final double top = i * rowHeight + (rowHeight - barHeight) / 2;
+
+        // Vertical position is based on pre-calculated row index
+        final int rowIndex = rowIndices[event.spanId] ?? 0;
+        final double top = rowIndex * rowHeight + (rowHeight - barHeight) / 2;
 
         final rect = Rect.fromLTWH(left, top, width, barHeight);
         eventPositions[event.spanId] = rect;
+
+        // Track max visual width
+        // Calculate text width to ensure next group doesn't overlap
+        final labelText = _getLabelText(event);
+        final textPainter = TextPainter(
+          text: TextSpan(
+            text: labelText,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+          textDirection: TextDirection.ltr,
+        );
+        textPainter.layout();
+
+        const double textPadding = 5.0;
+        double visualRight = indentation + eventStart + width;
+
+        // If text doesn't fit in bar, it extends to the right
+        if (textPainter.width + (textPadding * 2) > width) {
+          visualRight =
+              indentation +
+              eventStart +
+              width +
+              textPadding +
+              textPainter.width;
+        }
+
+        if (visualRight > maxVisualRight) {
+          maxVisualRight = visualRight;
+        }
       }
 
       // Move X position for next root span group
-      final groupDuration = groupEnd.difference(groupStart).inMilliseconds;
-      final groupWidth = (groupDuration * pixelsPerMs).clamp(
-        200.0,
-        double.infinity,
-      );
+      final groupWidth = maxVisualRight < 200.0 ? 200.0 : maxVisualRight;
       currentX += groupWidth + segmentPadding;
     }
     onLayout(eventPositions);

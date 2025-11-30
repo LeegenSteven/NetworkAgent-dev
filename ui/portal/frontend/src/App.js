@@ -47,6 +47,12 @@ function App() {
     };
   }, [theme]);
 
+  useEffect(() => {
+    if (process.env.REACT_APP_DEBUG === 'true') {
+      handleLogin({ username: 'admin' });
+    }
+  }, []);
+
   const handleLogin = (userData) => {
     setUser(userData);
     setIsLoggedIn(true);

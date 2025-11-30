@@ -1,18 +1,34 @@
 import React, { useState } from 'react';
 import './OrderSlice.css';
 import Dialog from '../Dialog/Dialog';
+import MapSelection from '../MapSelection/MapSelection';
+
+const CITY_COORDINATES = {
+  'Leverkusen': { lat: 51.0459, lng: 6.9867 },
+  'Berlin': { lat: 52.5200, lng: 13.4050 },
+  'Munich': { lat: 48.1351, lng: 11.5820 },
+  'Hamburg': { lat: 53.5511, lng: 9.9937 }
+};
 
 const OrderSlice = ({ onNavigate }) => {
   const [sliceType, setSliceType] = useState('eMBB');
   const [bandwidth, setBandwidth] = useState(250);
   const [geographicArea, setGeographicArea] = useState('Leverkusen');
   const [duration, setDuration] = useState('1 day, week');
+  const [mapCenter, setMapCenter] = useState(CITY_COORDINATES['Leverkusen']);
+  const [coverageArea, setCoverageArea] = useState(null);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogConfig, setDialogConfig] = useState({ title: '', message: '', type: 'success' });
   const [isOrdering, setIsOrdering] = useState(false);
 
   const estimatedPrice = 450;
+
+  const handleAreaChange = (e) => {
+    const city = e.target.value;
+    setGeographicArea(city);
+    setMapCenter(CITY_COORDINATES[city]);
+  };
 
   const handlePlaceOrder = () => {
     setIsOrdering(true);
@@ -21,6 +37,7 @@ const OrderSlice = ({ onNavigate }) => {
       bandwidth,
       geographicArea,
       duration,
+      coverageArea
     };
 
     fetch('/order', {
@@ -66,8 +83,8 @@ const OrderSlice = ({ onNavigate }) => {
 
   return (
     <div className="order-slice-container">
-      <Dialog 
-        isOpen={dialogOpen} 
+      <Dialog
+        isOpen={dialogOpen}
         onClose={handleDialogClose}
         title={dialogConfig.title}
         message={dialogConfig.message}
@@ -75,7 +92,7 @@ const OrderSlice = ({ onNavigate }) => {
       />
       <div className="configure-section">
         <h2>Configure Your 5G Slice</h2>
-        
+
         <div className="form-group">
           <label>Slice Type:</label>
           <select value={sliceType} onChange={(e) => setSliceType(e.target.value)} className="form-select">
@@ -88,16 +105,16 @@ const OrderSlice = ({ onNavigate }) => {
         <div className="form-group">
           <label>Bandwidth (Mbps):</label>
           <div className="bandwidth-control">
-            <input 
-              type="range" 
-              min="10" 
-              max="1000" 
-              value={bandwidth} 
+            <input
+              type="range"
+              min="10"
+              max="1000"
+              value={bandwidth}
               onChange={(e) => setBandwidth(e.target.value)}
               className="bandwidth-slider"
             />
             <div className="bandwidth-values">
-              <span>250</span>
+              <span>{bandwidth}</span>
               <span>10 - 1.0k</span>
             </div>
           </div>
@@ -105,16 +122,26 @@ const OrderSlice = ({ onNavigate }) => {
 
         <div className="form-group">
           <label>Geographic Area</label>
-          <select value={geographicArea} onChange={(e) => setGeographicArea(e.target.value)} className="form-select">
+          <select value={geographicArea} onChange={handleAreaChange} className="form-select">
             <option value="Leverkusen">Leverkusen</option>
             <option value="Berlin">Berlin</option>
             <option value="Munich">Munich</option>
             <option value="Hamburg">Hamburg</option>
           </select>
-          <div className="map-placeholder">
-            <div className="map-marker">📍</div>
-            <span>01-90</span>
-          </div>
+          <MapSelection center={mapCenter} onAreaSelected={setCoverageArea} />
+          {coverageArea && (
+            <div className="coordinates-display">
+              <h4>Selected Area Coordinates:</h4>
+              <div className="coordinates-list">
+                {coverageArea.map((coord, index) => (
+                  <div key={index} className="coordinate-item">
+                    <span className="coord-label">Point {index + 1}:</span>
+                    <span>{coord.lat.toFixed(6)}, {coord.lng.toFixed(6)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="form-group">
@@ -125,13 +152,13 @@ const OrderSlice = ({ onNavigate }) => {
             <option value="1 month">1 month</option>
           </select>
           <div className="duration-buttons">
-            <button className="duration-btn">1 hour</button>
-            <button className="duration-btn">1 month</button>
+            <button className="duration-btn" onClick={() => setDuration('1 hour')}>1 hour</button>
+            <button className="duration-btn" onClick={() => setDuration('1 month')}>1 month</button>
           </div>
         </div>
 
-        <button 
-          className="place-order-btn" 
+        <button
+          className="place-order-btn"
           onClick={handlePlaceOrder}
           disabled={isOrdering}
         >

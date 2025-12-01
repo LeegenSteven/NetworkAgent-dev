@@ -19,110 +19,109 @@ class NetworkDashboard extends StatefulWidget {
   State<NetworkDashboard> createState() => _NetworkDashboardState();
 }
 
-class _NetworkDashboardState extends State<NetworkDashboard> with TickerProviderStateMixin {
+class _NetworkDashboardState extends State<NetworkDashboard>
+    with TickerProviderStateMixin {
   // Global key for the scaffold to access the drawer
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  
+
   // Widget display state
   bool _showChat = false; // Chat is hidden by default
   bool _showLogs = false;
   bool _showTrace = false;
-  
+
   // Control the horizontal split view ratios
   double _chatPanelRatio = 0.3; // 30% for chat panel
   double _tracePanelRatio = 0.3; // 30% for trace panel
   static const double _minHorizontalSplitRatio = 0.2;
   static const double _maxHorizontalSplitRatio = 0.8;
-  
+
   // Control the vertical split view ratio (topology vs. logs)
   double _verticalSplitRatio = 0.7; // 70% for topology, 30% for logs
   static const double _minVerticalSplitRatio = 0.3;
   static const double _maxVerticalSplitRatio = 0.9;
-  
+
   // Animation controllers for notification vibration
   late AnimationController _vibrationController;
   late Animation<double> _vibrationAnimation;
   late AnimationController _intervalController;
-  
+
   @override
   void initState() {
     super.initState();
-    
+
     // Initialize animation controllers
     _vibrationController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
-    
-    _vibrationAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.3,
-    ).animate(CurvedAnimation(
-      parent: _vibrationController,
-      curve: Curves.easeInOut,
-    ));
-    
+
+    _vibrationAnimation = Tween<double>(begin: 1.0, end: 1.3).animate(
+      CurvedAnimation(parent: _vibrationController, curve: Curves.easeInOut),
+    );
+
     _intervalController = AnimationController(
       duration: const Duration(seconds: 3),
       vsync: this,
     );
-    
+
     // Start the interval animation that triggers vibration every 3 seconds
     _intervalController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         final appState = Provider.of<Appstate>(context, listen: false);
-        final hasAnyAlerts = appState.pushNotifications.isNotEmpty || appState.incidents.isNotEmpty;
-        
+        final hasAnyAlerts =
+            appState.pushNotifications.isNotEmpty ||
+            appState.incidents.any((i) => !i.hasResolution);
+
         if (hasAnyAlerts) {
           _triggerVibration();
         }
-        
+
         _intervalController.reset();
         _intervalController.forward();
       }
     });
-    
+
     // Load incidents on startup
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final appState = Provider.of<Appstate>(context, listen: false);
       appState.refreshIncidents();
-      
+
       // Start the interval timer
       _intervalController.forward();
     });
   }
-  
+
   void _triggerVibration() {
     _vibrationController.reset();
     _vibrationController.forward().then((_) {
       _vibrationController.reverse();
     });
   }
-  
+
   @override
   void dispose() {
     _vibrationController.dispose();
     _intervalController.dispose();
     super.dispose();
   }
-  
+
   void _toggleLogs() {
     final appState = Provider.of<Appstate>(context, listen: false);
     setState(() {
       _showLogs = !_showLogs;
       appState.toggleLogs(_showLogs);
-      
+
       // If logs are being shown, hide performance graph
       if (_showLogs && appState.showPerformanceGraph) {
         appState.togglePerformanceGraph();
       }
     });
   }
-  
+
   void _togglePerformanceGraph() {
     final appState = Provider.of<Appstate>(context, listen: false);
     appState.togglePerformanceGraph();
-    
+
     // If performance graph is being shown, hide logs
     if (appState.showPerformanceGraph && _showLogs) {
       setState(() {
@@ -131,7 +130,7 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
       });
     }
   }
-  
+
   void _toggleChat() {
     setState(() {
       _showChat = !_showChat;
@@ -145,9 +144,10 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
       appState.toggleTraces(_showTrace);
     });
   }
-  
+
   // Markdown content for the drawer
-  String get _markdownContent => '''
+  String get _markdownContent =>
+      '''
 # Network Agent Resources
 
 * [GCP project ${EnvironmentConfig.gcpProject}](https://console.cloud.google.com/home/dashboard?project=${EnvironmentConfig.gcpProject})
@@ -160,7 +160,7 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<Appstate>(context);
-    
+
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
@@ -170,9 +170,11 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
         leading: Consumer<Appstate>(
           builder: (context, appState, child) {
             final notificationCount = appState.pushNotifications.length;
-            final incidentCount = appState.incidents.length;
+            final incidentCount = appState.incidents
+                .where((i) => !i.hasResolution)
+                .length;
             final hasAnyAlerts = notificationCount > 0 || incidentCount > 0;
-            
+
             return AnimatedBuilder(
               animation: _vibrationAnimation,
               builder: (context, child) {
@@ -186,10 +188,13 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
                     onPressed: () {
                       // Navigate to the notification screen
                       Navigator.of(context).push(
-                        MaterialPageRoute(builder: (context) => const NotificationScreen()),
+                        MaterialPageRoute(
+                          builder: (context) => const NotificationScreen(),
+                        ),
                       );
                     },
-                    tooltip: 'Notifications & Incidents (${notificationCount + incidentCount})',
+                    tooltip:
+                        'Notifications & Incidents (${notificationCount + incidentCount})',
                   ),
                 );
               },
@@ -237,7 +242,9 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
                 appState.isConnected ? 'Connected' : 'Disconnected',
                 style: TextStyle(
                   fontSize: 12,
-                  color: appState.isConnected ? Colors.green[100] : Colors.red[100],
+                  color: appState.isConnected
+                      ? Colors.green[100]
+                      : Colors.red[100],
                 ),
               ),
             ),
@@ -266,7 +273,9 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
               return IconButton(
                 icon: Icon(
                   Icons.show_chart,
-                  color: appState.showPerformanceGraph ? Colors.amber : Colors.white,
+                  color: appState.showPerformanceGraph
+                      ? Colors.amber
+                      : Colors.white,
                 ),
                 onPressed: () => _togglePerformanceGraph(),
                 tooltip: 'Toggle Performance Graphs',
@@ -315,14 +324,18 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
               width: MediaQuery.of(context).size.width * _chatPanelRatio,
               child: AGUIChatPanel(socket: appState.socket!),
             ),
-            
+
             // Horizontal resizable divider for chat panel
             GestureDetector(
               behavior: HitTestBehavior.translucent,
               onHorizontalDragUpdate: (details) {
                 setState(() {
-                  _chatPanelRatio += details.delta.dx / MediaQuery.of(context).size.width;
-                  _chatPanelRatio = _chatPanelRatio.clamp(_minHorizontalSplitRatio, _maxHorizontalSplitRatio);
+                  _chatPanelRatio +=
+                      details.delta.dx / MediaQuery.of(context).size.width;
+                  _chatPanelRatio = _chatPanelRatio.clamp(
+                    _minHorizontalSplitRatio,
+                    _maxHorizontalSplitRatio,
+                  );
                 });
               },
               child: Container(
@@ -334,29 +347,32 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
                     Container(
                       width: 2,
                       height: 30,
-                      color: const Color(0xFF90CAF9), // Slightly darker blue for the handle
+                      color: const Color(
+                        0xFF90CAF9,
+                      ), // Slightly darker blue for the handle
                     ),
                   ],
                 ),
               ),
             ),
           ],
-          
+
           // Main panel - Network Topology and Logs
           Expanded(
             child: Column(
               children: [
                 // Main content area - Always show Network Topology
                 Expanded(
-                  flex: (_verticalSplitRatio * 100).round(), // Convert ratio to flex units
-                  child: appState.hasReceivedTopology 
+                  flex: (_verticalSplitRatio * 100)
+                      .round(), // Convert ratio to flex units
+                  child: appState.hasReceivedTopology
                       ? Consumer<Appstate>(
                           // Listen to topology changes only - filter and layout changes are handled internally
                           builder: (context, appState, child) {
                             // Create a key based only on the topology to avoid excessive rebuilds
                             final topologyKey = ValueKey(
                               'topology-${appState.topology.nodes.length}-'
-                              '${appState.topology.connections.length}'
+                              '${appState.topology.connections.length}',
                             );
                             return NetworkTopologyWidget(
                               key: topologyKey,
@@ -365,29 +381,30 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
                           },
                         )
                       : Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const CircularProgressIndicator(),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'Waiting for network topology data...',
-                                  style: TextStyle(
-                                    color: Colors.grey[700],
-                                    fontStyle: FontStyle.italic,
-                                  ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const CircularProgressIndicator(),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Waiting for network topology data...',
+                                style: TextStyle(
+                                  color: Colors.grey[700],
+                                  fontStyle: FontStyle.italic,
                                 ),
-                              ],
-                            ),
-                          )
+                              ),
+                            ],
+                          ),
+                        ),
                 ),
-                
+
                 // Show the vertical divider and bottom panel when logs or performance graph are enabled
                 Consumer<Appstate>(
                   builder: (context, appState, child) {
                     if (_showLogs || appState.showPerformanceGraph) {
                       return Expanded(
-                        flex: ((1 - _verticalSplitRatio) * 100).round(), // Convert ratio to flex units
+                        flex: ((1 - _verticalSplitRatio) * 100)
+                            .round(), // Convert ratio to flex units
                         child: Column(
                           children: [
                             // Vertical resizable divider
@@ -396,30 +413,41 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
                               onVerticalDragUpdate: (details) {
                                 setState(() {
                                   // Calculate the new ratio based on the drag
-                                  final totalHeight = MediaQuery.of(context).size.height;
-                                  _verticalSplitRatio += details.delta.dy / totalHeight;
-                                  _verticalSplitRatio = _verticalSplitRatio.clamp(_minVerticalSplitRatio, _maxVerticalSplitRatio);
+                                  final totalHeight = MediaQuery.of(
+                                    context,
+                                  ).size.height;
+                                  _verticalSplitRatio +=
+                                      details.delta.dy / totalHeight;
+                                  _verticalSplitRatio = _verticalSplitRatio
+                                      .clamp(
+                                        _minVerticalSplitRatio,
+                                        _maxVerticalSplitRatio,
+                                      );
                                 });
                               },
                               child: Container(
                                 height: 8,
-                                color: const Color(0xFFE3F2FD), // Light blue background
+                                color: const Color(
+                                  0xFFE3F2FD,
+                                ), // Light blue background
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Container(
                                       width: 30,
                                       height: 2,
-                                      color: const Color(0xFF90CAF9), // Slightly darker blue for the handle
+                                      color: const Color(
+                                        0xFF90CAF9,
+                                      ), // Slightly darker blue for the handle
                                     ),
                                   ],
                                 ),
                               ),
                             ),
-                            
+
                             // Bottom panel - show either logs or performance graph
                             Expanded(
-                              child: _showLogs 
+                              child: _showLogs
                                   ? LogWidget(
                                       logs: appState.logs,
                                       socket: appState.socket!,
@@ -441,7 +469,7 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
               ],
             ),
           ),
-          
+
           // Right panel - Trace (only shown if _showTrace is true)
           if (_showTrace) ...[
             // Horizontal resizable divider for trace panel
@@ -449,8 +477,12 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
               behavior: HitTestBehavior.translucent,
               onHorizontalDragUpdate: (details) {
                 setState(() {
-                  _tracePanelRatio -= details.delta.dx / MediaQuery.of(context).size.width;
-                  _tracePanelRatio = _tracePanelRatio.clamp(_minHorizontalSplitRatio, _maxHorizontalSplitRatio);
+                  _tracePanelRatio -=
+                      details.delta.dx / MediaQuery.of(context).size.width;
+                  _tracePanelRatio = _tracePanelRatio.clamp(
+                    _minHorizontalSplitRatio,
+                    _maxHorizontalSplitRatio,
+                  );
                 });
               },
               child: Container(
@@ -462,13 +494,15 @@ class _NetworkDashboardState extends State<NetworkDashboard> with TickerProvider
                     Container(
                       width: 2,
                       height: 30,
-                      color: const Color(0xFF90CAF9), // Slightly darker blue for the handle
+                      color: const Color(
+                        0xFF90CAF9,
+                      ), // Slightly darker blue for the handle
                     ),
                   ],
                 ),
               ),
             ),
-            
+
             SizedBox(
               width: MediaQuery.of(context).size.width * _tracePanelRatio,
               child: const TraceWidget(),

@@ -30,6 +30,8 @@ function App() {
     root.style.setProperty('--primary-light', theme.colors.primaryLight);
     root.style.setProperty('--border-color', theme.colors.border);
     root.style.setProperty('--header-background', theme.colors.headerBackground);
+    root.style.setProperty('--button-color', theme.colors.button);
+    root.style.setProperty('--slider-color', theme.colors.slider);
 
     // Listen for 'connect' event
     socket.on('connect', () => {
@@ -68,7 +70,7 @@ function App() {
       <header className="header">
         <div className="header-content">
           <div className="logo-section" onClick={() => setActiveTab('home')} style={{ cursor: 'pointer' }}>
-            <img src={theme.assets.logo} alt={theme.text.title} className="telekom-logo" />
+            <img src={theme.assets.headerLogo} alt={theme.text.title} className="telekom-logo" />
             <span className="portal-title">{theme.text.title}</span>
           </div>
           <nav className="nav-tabs">

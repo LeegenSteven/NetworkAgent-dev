@@ -44,7 +44,7 @@ const LoginScreen = ({ onLogin, theme }) => {
     <div className="login-container">
       <div className="login-card">
         <div className="logo-section">
-          <img src={theme ? theme.assets.logo : "/dt-icon.png"} alt="Logo" className="portal-logo" />
+          <img src={theme ? theme.assets.loginLogo : "/dt-icon.png"} alt="Logo" className="portal-logo" />
           <h1 className="login-title">{theme ? theme.text.loginTitle : "5G Slice Portal"}</h1>
         </div>
         <h2>Sign In</h2>

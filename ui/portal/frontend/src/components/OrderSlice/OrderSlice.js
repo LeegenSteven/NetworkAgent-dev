@@ -3,19 +3,17 @@ import './OrderSlice.css';
 import Dialog from '../Dialog/Dialog';
 import MapSelection from '../MapSelection/MapSelection';
 
-const CITY_COORDINATES = {
-  'Leverkusen': { lat: 51.0459, lng: 6.9867 },
-  'Berlin': { lat: 52.5200, lng: 13.4050 },
-  'Munich': { lat: 48.1351, lng: 11.5820 },
-  'Hamburg': { lat: 53.5511, lng: 9.9937 }
-};
 
-const OrderSlice = ({ onNavigate }) => {
+
+const OrderSlice = ({ onNavigate, theme }) => {
+  const cities = theme.cities || {};
+  const defaultCity = Object.keys(cities)[0];
+
   const [sliceType, setSliceType] = useState('eMBB');
   const [bandwidth, setBandwidth] = useState(250);
-  const [geographicArea, setGeographicArea] = useState('Leverkusen');
+  const [geographicArea, setGeographicArea] = useState(defaultCity);
   const [duration, setDuration] = useState('1 day, week');
-  const [mapCenter, setMapCenter] = useState(CITY_COORDINATES['Leverkusen']);
+  const [mapCenter, setMapCenter] = useState(cities[defaultCity]);
   const [coverageArea, setCoverageArea] = useState(null);
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -27,7 +25,7 @@ const OrderSlice = ({ onNavigate }) => {
   const handleAreaChange = (e) => {
     const city = e.target.value;
     setGeographicArea(city);
-    setMapCenter(CITY_COORDINATES[city]);
+    setMapCenter(cities[city]);
   };
 
   const handlePlaceOrder = () => {
@@ -123,10 +121,9 @@ const OrderSlice = ({ onNavigate }) => {
         <div className="form-group">
           <label>Geographic Area</label>
           <select value={geographicArea} onChange={handleAreaChange} className="form-select">
-            <option value="Leverkusen">Leverkusen</option>
-            <option value="Berlin">Berlin</option>
-            <option value="Munich">Munich</option>
-            <option value="Hamburg">Hamburg</option>
+            {Object.keys(cities).map((city) => (
+              <option key={city} value={city}>{city}</option>
+            ))}
           </select>
           <MapSelection center={mapCenter} onAreaSelected={setCoverageArea} />
           {coverageArea && (
@@ -186,7 +183,7 @@ const OrderSlice = ({ onNavigate }) => {
         </div>
         <div className="estimated-price">
           <span>Estimated Price:</span>
-          <span className="price">€{estimatedPrice}</span>
+          <span className="price">{theme.currency || '€'}{estimatedPrice}</span>
         </div>
       </div>
     </div>

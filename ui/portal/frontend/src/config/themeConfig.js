@@ -12,14 +12,24 @@ export const themes = {
             primaryLight: 'rgba(226, 0, 116, 0.1)',
             border: '#e20074',
             headerBackground: '#e20074',
+            button: '#e20074',
+            slider: '#e20074',
         },
         assets: {
-            logo: '/dt-icon.png',
+            loginLogo: '/dt-icon.png',
+            headerLogo: '/dt-icon.png',
         },
         text: {
             title: '5G Slice Order Portal',
-            loginTitle: '5G Slice Portal',
-        }
+            loginTitle: '5G Slice Order Portal',
+        },
+        cities: {
+            'Leverkusen': { lat: 51.0459, lng: 6.9867 },
+            'Berlin': { lat: 52.5200, lng: 13.4050 },
+            'Munich': { lat: 48.1351, lng: 11.5820 },
+            'Hamburg': { lat: 53.5511, lng: 9.9937 }
+        },
+        currency: '€'
     },
     vodafone: {
         name: 'vodafone',
@@ -34,14 +44,24 @@ export const themes = {
             primaryLight: 'rgba(230, 0, 0, 0.1)',
             border: '#e60000',
             headerBackground: '#e60000',
+            button: '#e60000',
+            slider: '#e60000',
         },
         assets: {
-            logo: '/vodafone-icon.png',
+            loginLogo: '/vodafone-icon.png',
+            headerLogo: '/vodafone-icon.png',
         },
         text: {
-            title: 'Vodafone 5G Portal',
-            loginTitle: 'Vodafone 5G Portal',
-        }
+            title: '5G Slice Order Portal',
+            loginTitle: '5G Slice Order Portal',
+        },
+        cities: {
+            'Leverkusen': { lat: 51.0459, lng: 6.9867 },
+            'Berlin': { lat: 52.5200, lng: 13.4050 },
+            'Munich': { lat: 48.1351, lng: 11.5820 },
+            'Hamburg': { lat: 53.5511, lng: 9.9937 }
+        },
+        currency: '€'
     },
     o2: {
         name: 'o2',
@@ -56,14 +76,24 @@ export const themes = {
             primaryLight: 'rgba(3, 43, 90, 0.1)',
             border: '#032b5a',
             headerBackground: 'linear-gradient(90deg, #0019a5 0%, #032b5a 100%)',
+            button: '#032b5a',
+            slider: '#032b5a',
         },
         assets: {
-            logo: '/o2-icon.png',
+            loginLogo: '/vmo2-logo.svg',
+            headerLogo: '/o2-logo.svg',
         },
         text: {
-            title: 'O2 5G Portal',
-            loginTitle: 'O2 5G Portal',
-        }
+            title: '5G Slice Order Portal',
+            loginTitle: '5G Slice Order Portal',
+        },
+        cities: {
+            'London': { lat: 51.5074, lng: -0.1278 },
+            'Manchester': { lat: 53.4808, lng: -2.2426 },
+            'Birmingham': { lat: 52.4862, lng: -1.8904 },
+            'Glasgow': { lat: 55.8642, lng: -4.2518 }
+        },
+        currency: '£'
     }
 };
 

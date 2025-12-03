@@ -125,7 +125,7 @@ async def init():
                           path=os.path.join(basedir, '..', 'frontend', 'build', 'static'),
                           name='static')
     app.router.add_get(
-        '/{filename:(asset-manifest.json|dt-icon.png|vodafone-icon.png|o2-icon.png|favicon.ico|logo192.png|logo512.png|manifest.json|robots.txt)}',
+        '/{filename:(asset-manifest.json|dt-icon.png|vodafone-icon.png|vmo2-logo.svg|o2-logo.svg|favicon.ico|logo192.png|logo512.png|manifest.json|robots.txt)}',
         serve_root_files,
     )
     app.router.add_get('/', serve_static_file)

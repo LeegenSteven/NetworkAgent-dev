@@ -1,0 +1,22 @@
+---
+- name: Build Device Docker Image
+  hosts: all
+  become: true
+  gather_facts: no
+
+  tasks:
+    - name: install base packages
+      import_role:
+        name: base
+
+    - name: install docker
+      import_role:
+        name: docker
+
+    - name: build device image
+      import_role:
+        name: device
+
+    - name: build vyos image
+      import_role:
+        name: vyos

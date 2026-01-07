@@ -1,0 +1,19 @@
+---
+# Default variables for VyOS Docker image build
+
+# Image configuration
+vyos_image_name: "vyos:1.5"
+vyos_build_dir: "/tmp/vyos-build"
+vyos_cleanup_build_dir: true
+vyos_force_rebuild: false
+
+# Test configuration
+vyos_run_tests: false
+vyos_test_network: "vyos-test"
+
+# Download configuration
+vyos_download_timeout: 1800  # 30 minutes
+
+# GitHub API for daily builds
+vyos_daily_builds_repo: "vyos/vyos-rolling-nightly-builds"
+vyos_github_api_url: "https://api.github.com/repos/{{ vyos_daily_builds_repo }}/releases/latest"

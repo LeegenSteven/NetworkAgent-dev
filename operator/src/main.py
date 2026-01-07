@@ -73,6 +73,7 @@ def legacy_import_modules():
         import vpn.mesh.lifecycle
         import vpn.utils.status
         import vpn.wireguard.lifecycle
+        import vyosvm.lifecycle
 
     if os.getenv("FREE5GC") is not None:
         logger.info("FREE5GC Lifecycle")

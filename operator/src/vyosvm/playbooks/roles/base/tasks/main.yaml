@@ -1,0 +1,7 @@
+- name: Install packages
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - bridge-utils
+    - python3-pip

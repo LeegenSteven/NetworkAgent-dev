@@ -413,7 +413,6 @@ Create()
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_PROJECT_NUMBER -E GOOGLE_SERVICE_ACCOUNT environment/logsink.j2 >  environment/logsink.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_SPANNER_DATABASE -E GOOGLE_SPANNER_INSTANCE -E GOOGLE_NAMESPACE environment/spanner.j2 >  environment/spanner.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/configconnector.j2 > environment/configconnector.yaml
-    jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_VM_USER -E GOOGLE_SSH_KEY -E GOOGLE_NAMESPACE environment/networkvm.j2 > environment/networkvm.yaml
 
     echo "#######################################################"
     echo "generating networkagent and operator yaml files"
@@ -827,7 +826,7 @@ Start()
     DeployLogCapture
 
     # start the network and git repos
-    # kubectl apply -f environment/networkvm.yaml
+    kubectl apply -f environment/networkvm.yaml
     # kubectl apply -f environment/bigquery.yaml
 
     DeployGit
@@ -903,7 +902,7 @@ Delete()
         environment/bigquery.yaml \
         environment/spanner.yaml \
         environment/configconnector.yaml \
-        environment/networkvm.yaml \
+        environment/logsink.yaml \
         \
         networkagent.json \
         google-compute*
@@ -933,6 +932,7 @@ Kill()
     
     kubectl delete -f environment/git.yaml
     # kubectl delete -f environment/bigquery.yaml
+    kubectl delete -f environment/networkvm.yaml
     kubectl delete -f environment/spanner.yaml
     # Sometimes kopf finalizers are not removed from the network resources
     # and the kubectl command below hangs for ever. So clear the finalizers after
@@ -1037,6 +1037,7 @@ DeployOperator()
 
     # load the crds
     kubectl apply -f config/gitea.yaml
+    kubectl apply -f config/vyosvm.yaml
     kubectl apply -f config/connectivity/
     kubectl apply -f config/free5gc/
 

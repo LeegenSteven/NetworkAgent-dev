@@ -14,7 +14,6 @@ launch.json
 **/environment/bigquery.yaml
 **/environment/spanner.yaml
 **/environment/logsink.yaml
-**/environment/networkvm.yaml
 **/tools/deployment.yaml
 **/tools/cloudbuild.yaml
 **/deployment.yaml

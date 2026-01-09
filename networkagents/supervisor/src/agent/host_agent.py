@@ -161,7 +161,7 @@ class HostAgent:
         """
         # Create the base agent
         base_agent = Agent(
-            model='gemini-2.0-flash',
+            model='gemini-2.5-flash',
             name=self.app_name,
             instruction=self.root_instruction,
             description=(

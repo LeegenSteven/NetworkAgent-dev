@@ -44,6 +44,8 @@ If the 'send_task' response requires input from the user ('require_user_input' w
 to pass the approval request to the user with the information content in the response. Do not respond with the remote agent text content directly 
 to the user. Format the remote agent request using the 'requestTaskApproval' tool. 
 
+When you receive a response from the 'requestTaskApproval' tool, you MUST pass that exact response (as a JSON string) back to the current remote agent using the 'send_task' tool.
+
 User Input Required Example
 ---------------------------
  * User question: 'Create a plan to deploy a 5G core network'
@@ -52,8 +54,7 @@ User Input Required Example
                             'text': 'The following steps are needed to achieve your objective\n\n* Create a new network location with name core and cidr "10.0.50.0/24"\n* Create a new network location with name internet and cidr "172.168.0.0/16"\n* Create a UserPlaneFunction network service named upf with ingress core and egress internet\n* Create a DataNetwork network service named dnn with interface internet\n* Create a ControlPlane network service named controlplane with network named core, upf named upf and dnn named dnn\n\n\nYou can amend this plan or execute by responding yes/no.',
                             'require_user_input': True
                         }}'
- * Supervisor response to user: 'The 'current_agent' agent has proposed a task plan that needs your approval. 
- * requestTaskApproval tool call arguments: '{{
+ * Supervisor requestTaskApproval tool call arguments: '{{
               'title': 'The 'current_agent' needs your approval',
               'tasks':[
                 {{
@@ -83,7 +84,11 @@ User Input Required Example
             'timestamp': <current time>,
             'tasks': <list of tasks to approve from arguments>,
         }}
- * The user approves the tasks
+ * Supervisor sends the approval back to the remote agent using send_task: '{{
+            'approved': 'true',
+            'timestamp': <current time>,
+            'tasks': <list of tasks to approve from arguments>,
+        }}'
 
 If the users question includes information on how they would like to graphically present information you must seperate the users question
 into two components

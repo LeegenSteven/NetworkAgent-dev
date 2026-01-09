@@ -124,7 +124,7 @@ class AGUISocketProvider with ChangeNotifier implements LlmProvider {
         if (remoteTask != null) {
           print('Send_task tool call completed: ${event.toolCallId}');
           // Mark the remote task as completed to stop the progress indicator
-          markRemoteTaskCompleted(event.toolCallId);
+          markRemoteTaskCompleted(event.toolCallId, event.content);
         }
       } else if (event is InputRequiredEvent) {
         // Handle input required events - agent needs user input
@@ -479,14 +479,14 @@ class AGUISocketProvider with ChangeNotifier implements LlmProvider {
   }
   
   /// Mark a remote task as completed
-  void markRemoteTaskCompleted(String toolCallId) {
+  void markRemoteTaskCompleted(String toolCallId, [String? content]) {
     final remoteTask = _activeRemoteTasks[toolCallId];
     if (remoteTask != null) {
       remoteTask.isCompleted = true;
       notifyListeners();
       
       // Update the chat message to show completion
-      _updateRemoteTaskMessage(toolCallId, true);
+      _updateRemoteTaskMessage(toolCallId, true, content);
       
       // Remove from active tasks after a delay to show completion state
       Future.delayed(const Duration(seconds: 2), () {
@@ -558,7 +558,7 @@ class AGUISocketProvider with ChangeNotifier implements LlmProvider {
   }
   
   /// Update the remote task message in chat history to show the result
-  void _updateRemoteTaskMessage(String toolCallId, bool completed) {
+  void _updateRemoteTaskMessage(String toolCallId, bool completed, [String? content]) {
     try {
       // Find the remote task message in history
       for (int i = _history.length - 1; i >= 0; i--) {
@@ -566,9 +566,35 @@ class AGUISocketProvider with ChangeNotifier implements LlmProvider {
         if (message.text?.contains('REMOTE_TASK:$toolCallId') == true) {
           // Replace the remote task with the result
           final remoteTask = _activeRemoteTasks[toolCallId];
-          final resultText = completed 
-              ? '✅ ${remoteTask?.agentName ?? 'agent'}.'
-              : '❌ **Remote Task Failed** to ${remoteTask?.agentName ?? 'agent'}.';
+          
+          String resultText;
+          if (completed) {
+            resultText = '✅ **${remoteTask?.agentName ?? 'Agent'}**';
+            
+            if (content != null && content.isNotEmpty) {
+               try {
+                   final decoded = jsonDecode(content);
+                   String? textContent;
+                   if (decoded is Map) {
+                       textContent = decoded['text'] ?? decoded['result'] ?? decoded['message'];
+                   }
+                   
+                   if (textContent != null && textContent.isNotEmpty) {
+                       resultText += '\n\n$textContent';
+                   } else if (decoded is! Map) {
+                       // If not a map but decoded (e.g. list or primitive), just append
+                       resultText += '\n\n$content';
+                   }
+               } catch (e) {
+                   // If not JSON, append if it looks like meaningful text
+                   if (content.trim().isNotEmpty) {
+                        resultText += '\n\n$content';
+                   }
+               }
+            }
+          } else {
+            resultText = '❌ **Remote Task Failed** to ${remoteTask?.agentName ?? 'agent'}.';
+          }
           
           // Create a new message with the result
           final resultMessage = ChatMessage.llm();

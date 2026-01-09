@@ -183,7 +183,9 @@ execute_step_prompt="""
 
     {network_service_descriptors}  
 
-    Make sure the spec for the network service or connectivity service you create complies with the CRDs above 
+    Make sure the spec for the network service or connectivity service you create complies with the CRDs above.
+
+    IMPORTANT: You must execute the tool corresponding to the step immediately. Do not ask for confirmation. Do not provide a text response, just call the tool.
 
 """
 

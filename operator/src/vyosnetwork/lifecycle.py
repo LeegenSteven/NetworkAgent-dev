@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 # VyOSNetwork Lifecycle Management
 #########################################################################
 
-@kopf.on.create('guardian.dev', 'v1', 'vyosnetwork')
+@kopf.on.create('google.dev', 'v1', 'vyosnetwork')
 async def create_vyosnetwork(body, spec, name, namespace, uid, logger, **kwargs):
     """Handle VyOSNetwork creation - decompose into VyOSRouter and DockerNetwork CRs"""
     logger.info(f"Creating VyOSNetwork: {name} in namespace: {namespace}")
@@ -65,7 +65,7 @@ async def create_vyosnetwork(body, spec, name, namespace, uid, logger, **kwargs)
         await update_status(name, namespace, "Failed", str(e))
         raise
 
-@kopf.on.update('guardian.dev', 'v1', 'vyosnetwork')
+@kopf.on.update('google.dev', 'v1', 'vyosnetwork')
 async def update_vyosnetwork(body, spec, name, namespace, uid, logger, **kwargs):
     """Handle VyOSNetwork updates - propagate changes to child resources"""
     logger.info(f"Updating VyOSNetwork: {name} in namespace: {namespace}")
@@ -90,13 +90,13 @@ async def update_vyosnetwork(body, spec, name, namespace, uid, logger, **kwargs)
         await update_status(name, namespace, "Failed", str(e))
         raise
 
-@kopf.on.delete('guardian.dev', 'v1', 'vyosnetwork')
+@kopf.on.delete('google.dev', 'v1', 'vyosnetwork')
 async def delete_vyosnetwork(body, spec, name, namespace, logger, **kwargs):
     """Handle VyOSNetwork deletion - child resources are automatically deleted via owner references"""
     logger.info(f"Deleting VyOSNetwork: {name} in namespace: {namespace}")
     # Child resources (VyOSRouter and DockerNetwork) will be automatically deleted
 
-@kopf.on.update('guardian.dev', 'v1', 'vyosrouter', field='status')
+@kopf.on.update('google.dev', 'v1', 'vyosrouter', field='status')
 async def on_vyosrouter_status_change(body, spec, name, namespace, old, new, logger, **kwargs):
     """Handle VyOSRouter status changes and update parent VyOSNetwork if needed"""
 
@@ -403,7 +403,7 @@ def generate_linux_networks(spec: Dict[str, Any], parent_name: str, parent_names
             continue
         
         linux_network_cr = {
-            'apiVersion': 'guardian.dev/v1',
+            'apiVersion': 'google.dev/v1',
             'kind': 'LinuxNetwork',
             'metadata': {
                 'name': network['name'],
@@ -414,7 +414,7 @@ def generate_linux_networks(spec: Dict[str, Any], parent_name: str, parent_names
                     'environment': 'lab'
                 },
                 'ownerReferences': [{
-                    'apiVersion': 'guardian.dev/v1',
+                    'apiVersion': 'google.dev/v1',
                     'kind': 'VyOSNetwork',
                     'name': parent_name,
                     'uid': parent_uid,
@@ -451,7 +451,7 @@ def generate_vyos_routers(spec: Dict[str, Any], parent_name: str, parent_namespa
     
     for router in routers:
         vyos_router_cr = {
-            'apiVersion': 'guardian.dev/v1',
+            'apiVersion': 'google.dev/v1',
             'kind': 'VyOSRouter',
             'metadata': {
                 'name': router['name'],
@@ -463,7 +463,7 @@ def generate_vyos_routers(spec: Dict[str, Any], parent_name: str, parent_namespa
                     'environment': 'lab'
                 },
                 'ownerReferences': [{
-                    'apiVersion': 'guardian.dev/v1',
+                    'apiVersion': 'google.dev/v1',
                     'kind': 'VyOSNetwork',
                     'name': parent_name,
                     'uid': parent_uid,
@@ -718,7 +718,7 @@ def generate_router_firewall_config(router: Dict[str, Any]) -> Dict[str, Any]:
 async def create_linux_network(network_cr: Dict[str, Any], namespace: str):
     """Create a LinuxNetwork custom resource"""
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-    api = client.resources.get(api_version='guardian.dev/v1', kind='LinuxNetwork')
+    api = client.resources.get(api_version='google.dev/v1', kind='LinuxNetwork')
     
     try:
         api.create(network_cr)
@@ -731,7 +731,7 @@ async def create_linux_network(network_cr: Dict[str, Any], namespace: str):
 async def create_vyos_router(router_cr: Dict[str, Any], namespace: str):
     """Create a VyOSRouter custom resource"""
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-    api = client.resources.get(api_version='guardian.dev/v1', kind='VyOSRouter')
+    api = client.resources.get(api_version='google.dev/v1', kind='VyOSRouter')
     
     try:
         api.create(router_cr)
@@ -747,7 +747,7 @@ async def update_status(name: str, namespace: str, phase: str, message: str,
     logger.info(f"Updating VyOSNetwork {name} status to {phase}: {message}")
 
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-    api = client.resources.get(api_version='guardian.dev/v1', kind='VyOSNetwork')
+    api = client.resources.get(api_version='google.dev/v1', kind='VyOSNetwork')
     
     resource = api.get(name=name, namespace=namespace)
     if not resource:
@@ -791,8 +791,8 @@ async def check_and_update_parent_network_status(parent_network_name: str, names
     try:
         # Get the parent VyOSNetwork
         client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-        vyosnetwork_api = client.resources.get(api_version='guardian.dev/v1', kind='VyOSNetwork')
-        vyosrouter_api = client.resources.get(api_version='guardian.dev/v1', kind='VyOSRouter')
+        vyosnetwork_api = client.resources.get(api_version='google.dev/v1', kind='VyOSNetwork')
+        vyosrouter_api = client.resources.get(api_version='google.dev/v1', kind='VyOSRouter')
         
         # Get the parent network
         try:

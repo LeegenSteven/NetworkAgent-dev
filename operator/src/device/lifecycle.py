@@ -5,6 +5,7 @@ from device.lifecycle_tasks import (
     create_device,
     delete_device,
 )
+from utils.compute import get_ip
 
 logger = logging.getLogger(__name__)
 
@@ -12,11 +13,16 @@ logger = logging.getLogger(__name__)
 # Device Lifecycle Management
 #########################################################################
 
-@kopf.on.create('guardian.dev', 'v1', 'device')
+@kopf.on.create('google.dev', 'v1', 'device')
 async def create_device_handler(body, spec, name, namespace, uid, logger, **kwargs):
     """Handle Device creation using Ansible"""
     logger.info(f"Creating Device: {name} in namespace: {namespace}")
     logger.info(f"spec {spec}")
+
+    networkvm_ip_address = await get_ip("automation", "networkvm")
+    if networkvm_ip_address is None:
+        raise kopf.TemporaryError("No ip address found on Network VM yet, temporary error - waiting", 10)
+    logger.info(f"network vm address = {networkvm_ip_address}")
 
     # Update status to indicate creation has started
     await update_status(name, namespace, "Creating", "Creating Device")
@@ -46,7 +52,7 @@ async def create_device_handler(body, spec, name, namespace, uid, logger, **kwar
         await update_status(name, namespace, "Creating", "Creating Device")
 
         # Create the Device using Ansible
-        result = await create_device(name, spec)
+        result = await create_device(networkvm_ip_address, name, spec)
 
         if result['success']:
             # Update status to ready with full details
@@ -64,14 +70,19 @@ async def create_device_handler(body, spec, name, namespace, uid, logger, **kwar
         await update_status(name, namespace, "Failed", str(e))
         raise
 
-@kopf.on.delete('guardian.dev', 'v1', 'device')
+@kopf.on.delete('google.dev', 'v1', 'device')
 async def delete_device_handler(body, spec, name, namespace, logger, **kwargs):
     """Handle Device deletion using Ansible"""
     logger.info(f"Deleting Device: {name} in namespace: {namespace}")
 
+    networkvm_ip_address = await get_ip("automation", "networkvm")
+    if networkvm_ip_address is None:
+        raise kopf.TemporaryError("No ip address found on Network VM yet, temporary error - waiting", 10)
+    logger.info(f"network vm address = {networkvm_ip_address}")
+
     try:
         # Delete the Device container using Ansible
-        result = await delete_device(name, spec)
+        result = await delete_device(networkvm_ip_address, name, spec)
         
         if result['success']:
             logger.info(f"Successfully deleted Device {name}")
@@ -103,7 +114,7 @@ async def check_linux_network_ready(network_name: str, namespace: str) -> bool:
         return False
         
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-    api = client.resources.get(api_version='guardian.dev/v1', kind='LinuxNetwork')
+    api = client.resources.get(api_version='google.dev/v1', kind='LinuxNetwork')
     
     try:
         network = api.get(name=network_name, namespace=namespace)
@@ -137,7 +148,7 @@ async def check_linux_network_ready(network_name: str, namespace: str) -> bool:
 async def update_status(name: str, namespace: str, phase: str, message: str):
     """Update the status of a Device resource"""
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-    api = client.resources.get(api_version='guardian.dev/v1', kind='Device')
+    api = client.resources.get(api_version='google.dev/v1', kind='Device')
 
     resource = api.get(name=name, namespace=namespace)
     resource_dict = resource.to_dict()

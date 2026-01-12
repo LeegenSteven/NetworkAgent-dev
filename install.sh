@@ -1038,8 +1038,10 @@ DeployOperator()
     # load the crds
     kubectl apply -f config/gitea.yaml
     kubectl apply -f config/vyosvm.yaml
+    kubectl apply -f config/device.yaml
     kubectl apply -f config/connectivity/
     kubectl apply -f config/free5gc/
+    kubectl apply -f config/transport/
 
     cd ..
 }

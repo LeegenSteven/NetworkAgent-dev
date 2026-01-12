@@ -135,7 +135,7 @@ async def _run_ansible_playbook(playbook: str, extravars: Dict[str, Any]) -> Dic
     """Run an Ansible playbook with the given extra variables"""
     
     # Get the Ansible semaphore for throttling
-    from main import get_ansible_semaphore
+    from utils.ansible import get_ansible_semaphore
     semaphore = get_ansible_semaphore()
     
     # Prepare host inventory

@@ -328,13 +328,6 @@ set nat source rule {{ nat_rule.rule }} translation address {{ nat_rule.address 
 set service ssh port {{ services.ssh.port | default(22) }}
 {% endif %}
 
-# Configure Telegraf Monitoring Service
-set service monitoring telegraf influxdb authentication organization 'trustengine'
-set service monitoring telegraf influxdb authentication token '{{ influxdb_token }}'
-set service monitoring telegraf influxdb bucket 'telegraf'
-set service monitoring telegraf influxdb port '{{ influxdb_port }}'
-set service monitoring telegraf influxdb url '{{ influxdb_url }}'
-
 commit
 save
 exit

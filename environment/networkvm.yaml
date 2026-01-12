@@ -16,4 +16,5 @@ apiVersion: google.dev/v1
 kind: VyosVM
 metadata:
   name: networkvm
+  namespace: automation
 spec:

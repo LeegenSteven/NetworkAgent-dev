@@ -4,59 +4,6 @@
   gather_facts: true
 
   tasks:
-    - name: Remove host interface from management network bridge
-      when: network_type == 'management'
-      shell: |
-        set -e
-
-        BRIDGE_NAME="{{ network_name }}"
-        INTERFACE_NAME="{{ parent_interface }}"
-        IP_ADDR="{{ interface_ip }}/24"
-
-        # Capture the current default gateway before deleting routes
-        GATEWAY="{{ default_gateway }}"
-
-        # Allow NetworkManager to manage the interface again
-        # Note: This may cause NetworkManager to reconfigure based on its profiles
-        # nmcli device set $INTERFACE_NAME managed yes || true
-
-        # Bring down the bridge
-        ip link set dev $BRIDGE_NAME down
-
-        # Bring down the interface
-        ip link set dev $INTERFACE_NAME down
-
-        # Remove the interface from the bridge
-        brctl delif $BRIDGE_NAME $INTERFACE_NAME
-
-        # Flush all IP addresses from both bridge and interface
-        ip addr flush dev $BRIDGE_NAME
-        ip addr flush dev $INTERFACE_NAME
-
-        # Reassign the IP address to the interface (must include subnet mask)
-        ip addr add $IP_ADDR dev $INTERFACE_NAME
-
-        # Bring up the interface
-        ip link set dev $INTERFACE_NAME up
-
-        # Restore the default gateway
-        ip route add default via $GATEWAY dev $INTERFACE_NAME
-
-
-    - name: Wait for interface to stabilize
-      when: network_type == 'management'
-      pause:
-        seconds: 2
-
-    - name: Re-gather facts to recognize restored interface
-      when: network_type == 'management'
-      setup:
-
-    - name: Verify default interface restored
-      when: network_type == 'management'
-      debug:
-        msg: "Default interface is now: {{ ansible_default_ipv4.interface }}"
-
     - name: Remove tc bandwidth limits from non-management bridge
       shell: |
         tc qdisc del dev {{ network_name }} root 2>/dev/null || true

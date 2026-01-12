@@ -6,6 +6,7 @@ from linuxnetwork.lifecycle_tasks import (
     delete_linux_network,
     get_network_status
 )
+from utils.compute import get_ip
 
 logger = logging.getLogger(__name__)
 
@@ -13,17 +14,23 @@ logger = logging.getLogger(__name__)
 # DockerNetwork Lifecycle Management
 #########################################################################
 
-@kopf.on.create('guardian.dev', 'v1', 'linuxnetwork')
+@kopf.on.create('google.dev', 'v1', 'linuxnetwork')
 async def create_linuxnetwork(body, spec, name, namespace, uid, logger, **kwargs):
     """Handle LinuxNetwork creation using Ansible"""
     logger.info(f"Creating LinuxNetwork: {name} in namespace: {namespace}")
     logger.info(f"spec {spec}")
+
+    ip_address = await get_ip("automation", "networkvm")
+    if ip_address is None:
+        raise kopf.TemporaryError("No ip address found on Network VM yet, temporary error - waiting", 10)
+    logger.info(f"network vm address = {ip_address}")
+
     try:
         # Update status to indicate creation has started
         await update_status(name, namespace, "Creating", "Creating Linux network")
 
         # Create the Linux network using Ansible
-        result = await create_linux_network(spec)
+        result = await create_linux_network(ip_address, spec)
 
         if result['success']:
             # if network_type == 'management' also add the default_interface to status
@@ -54,16 +61,21 @@ async def create_linuxnetwork(body, spec, name, namespace, uid, logger, **kwargs
         await update_status(name, namespace, "Failed", str(e))
         raise
 
-@kopf.on.delete('guardian.dev', 'v1', 'linuxnetwork')
+@kopf.on.delete('google.dev', 'v1', 'linuxnetwork')
 async def delete_linuxnetwork(body, spec, status, name, namespace, logger, **kwargs):
     """Handle LinuxNetwork deletion using Ansible"""
     logger.info(f"Deleting LinuxNetwork: {name} in namespace: {namespace}")
+
+    ip_address = await get_ip("automation", "networkvm")
+    if ip_address is None:
+        raise kopf.TemporaryError("No ip address found on Network VM yet, temporary error - waiting", 10)
+    logger.info(f"network vm address = {ip_address}")
 
     logger.info("TODO::make sure all dependent resources are deleted first")
 
     try:        
         # Delete the Docker network using Ansible
-        result = await delete_linux_network(spec, status)
+        result = await delete_linux_network(ip_address, spec, status)
         
         if result['success']:
             logger.info(f"Successfully deleted DockerNetwork {spec.get('network_name')}")
@@ -75,14 +87,20 @@ async def delete_linuxnetwork(body, spec, status, name, namespace, logger, **kwa
         logger.error(f"Error during DockerNetwork deletion {name}: {e}")
         # Don't raise error on delete failure
 
-# @kopf.on.field('guardian.dev', 'v1', 'linuxnetwork', field='status.phase')
+# @kopf.on.field('google.dev', 'v1', 'linuxnetwork', field='status.phase')
 async def monitor_linuxnetwork(old, new, body, spec, name, namespace, logger, **kwargs):
     """Monitor LinuxNetwork status and update accordingly"""
+
+    ip_address = await get_ip("automation", "networkvm")
+    if ip_address is None:
+        raise kopf.TemporaryError("No ip address found on Network VM yet, temporary error - waiting", 10)
+    logger.info(f"network vm address = {ip_address}")
+
     if new == "Ready":
         # Periodically check network status
         try:
             network_name = spec.get('name', name)
-            status = await get_network_status(network_name)
+            status = await get_network_status(ip_address, network_name)
             
             if not status['exists']:
                 await update_status(name, namespace, "Failed", "Linux network no longer exists")
@@ -98,7 +116,7 @@ async def monitor_linuxnetwork(old, new, body, spec, name, namespace, logger, **
 async def update_status(name: str, namespace: str, phase: str, message: str, extra_status: dict = None):
     """Update the status of a LinuxNetwork resource"""
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-    api = client.resources.get(api_version='guardian.dev/v1', kind='LinuxNetwork')
+    api = client.resources.get(api_version='google.dev/v1', kind='LinuxNetwork')
 
     resource = api.get(name=name, namespace=namespace)
     resource_dict = resource.to_dict()

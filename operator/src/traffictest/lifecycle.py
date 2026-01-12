@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # TrafficTest Lifecycle Management
 #########################################################################
 
-@kopf.on.create('guardian.dev', 'v1', 'traffictest')
+@kopf.on.create('google.dev', 'v1', 'traffictest')
 async def create_traffic_test_handler(body, spec, name, namespace, uid, logger, **kwargs):
     """Handle TrafficTest creation using Ansible"""
     logger.info(f"Creating TrafficTest: {name} in namespace: {namespace}")
@@ -85,7 +85,7 @@ async def create_traffic_test_handler(body, spec, name, namespace, uid, logger, 
         await update_status(name, namespace, "Failed", str(e))
         raise kopf.PermanentError(str(e))
 
-@kopf.on.delete('guardian.dev', 'v1', 'traffictest')
+@kopf.on.delete('google.dev', 'v1', 'traffictest')
 async def delete_traffic_test_handler(body, spec, name, namespace, logger, **kwargs):
     """Handle TrafficTest deletion using Ansible"""
     logger.info(f"Deleting TrafficTest: {name} in namespace: {namespace}")
@@ -195,7 +195,7 @@ async def check_device_ready(device_name: str, namespace: str) -> bool:
         return False, None
 
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-    api = client.resources.get(api_version='guardian.dev/v1', kind='Device')
+    api = client.resources.get(api_version='google.dev/v1', kind='Device')
     
     try:
         device = api.get(name=device_name, namespace=namespace)
@@ -229,7 +229,7 @@ async def check_device_ready(device_name: str, namespace: str) -> bool:
 async def update_status(name: str, namespace: str, phase: str, message: str, additional_data: dict = None):
     """Update the status of a TrafficTest resource"""
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-    api = client.resources.get(api_version='guardian.dev/v1', kind='TrafficTest')
+    api = client.resources.get(api_version='google.dev/v1', kind='TrafficTest')
 
     try:
         resource = api.get(name=name, namespace=namespace)

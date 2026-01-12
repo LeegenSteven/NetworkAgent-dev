@@ -3,7 +3,7 @@
 
 ---
 # Basic constant traffic test
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: TrafficTest
 metadata:
   name: constant-baseline
@@ -26,7 +26,7 @@ spec:
 
 ---
 # Daily usage pattern simulation
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: TrafficTest
 metadata:
   name: daily-usage-pattern
@@ -55,7 +55,7 @@ spec:
 
 ---
 # Business hours burst pattern
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: TrafficTest
 metadata:
   name: business-hours-burst
@@ -84,7 +84,7 @@ spec:
 
 ---
 # Realistic user arrival pattern (Poisson)
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: TrafficTest
 metadata:
   name: realistic-user-arrivals
@@ -111,7 +111,7 @@ spec:
 
 ---
 # High-frequency square wave for congestion testing
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: TrafficTest
 metadata:
   name: congestion-square-wave
@@ -138,7 +138,7 @@ spec:
 
 ---
 # UDP traffic test for jitter analysis
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: TrafficTest
 metadata:
   name: udp-jitter-test
@@ -162,7 +162,7 @@ spec:
 
 ---
 # Sawtooth pattern for gradual load increase
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: TrafficTest
 metadata:
   name: gradual-load-increase
@@ -190,7 +190,7 @@ spec:
 
 ---
 # Long-duration test for ML model training
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: TrafficTest
 metadata:
   name: ml-training-dataset

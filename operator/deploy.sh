@@ -15,8 +15,7 @@
 # limitations under the License.
 
 #/usr/bin/bash
-docker build . -t $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networkoperator:latest
-docker push $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/networkagent/networkoperator:latest
+gcloud builds submit --region=$GOOGLE_REGION --config ./cloudbuild.yaml
 
 kubectl delete -f deployment.yaml
 kubectl apply -f deployment.yaml

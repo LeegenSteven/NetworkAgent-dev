@@ -343,7 +343,7 @@ async def create_nat(namespace, network_name, region):
 # Create ComputeInstance
 ########################################################################
 # @throttled
-async def create_compute(namespace, parent_name, vm_name, external_ip, interfaces, project, region, zone, vpn=False, monitor=True,family="networkagent", release="networkagent",graph=True):
+async def create_compute(namespace, parent_name, vm_name, external_ip, interfaces, project, region, zone, vpn=False, monitor=True,family="networkagent", release="networkagent",graph=True, machine="e2-standard-2"):
   logger.debug(f"Create compute vm {vm_name} in ns {namespace}")
   compute_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeInstance")
 
@@ -473,7 +473,7 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
         route_script=route_script+f"sudo ip route add {route}.0/24 via {router_address};"
     logger.debug("Route script = %s", route_script)
 
-  machineType="e2-standard-2"
+  machineType=machine
   # select the machinetype based on the number of interfaces, there must be the same or more number of cores 
   # than the number of NICs
   if len(networkInterfaces)>2:

@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 # Ansible-based Device Management
 #########################################################################
 
-async def create_device(name: str, spec: Dict[str, Any]) -> Dict[str, Any]:
+async def create_device(networkvm_ip_address:str, name: str, spec: Dict[str, Any]) -> Dict[str, Any]:
     """Create a Device using Ansible"""
     logger.info(f"Creating Device: {name}")
 
@@ -42,7 +42,7 @@ async def create_device(name: str, spec: Dict[str, Any]) -> Dict[str, Any]:
     else:
         extravars['gateway'] = ''
 
-    result = await _run_ansible_playbook('device.yaml', extravars)
+    result = await _run_ansible_playbook(networkvm_ip_address, 'device.yaml', extravars)
     logger.info(f"Device creation result: {result}")
 
     if result['success']:
@@ -55,7 +55,7 @@ async def create_device(name: str, spec: Dict[str, Any]) -> Dict[str, Any]:
             'error': result.get('error', 'Unknown error during Device creation')
         }
 
-async def delete_device(name: str, spec: Dict[str, Any]) -> Dict[str, Any]:
+async def delete_device(networkvm_ip_address:str, name: str, spec: Dict[str, Any]) -> Dict[str, Any]:
     """Delete a Device container using Ansible"""
     logger.info(f"Deleting Device: {name}")
 
@@ -71,7 +71,7 @@ async def delete_device(name: str, spec: Dict[str, Any]) -> Dict[str, Any]:
     if vlan:
         extravars['vlan'] = vlan
 
-    result = await _run_ansible_playbook('device.yaml', extravars)
+    result = await _run_ansible_playbook(networkvm_ip_address,'device.yaml', extravars)
 
     return {
         'success': result['success'],
@@ -83,27 +83,26 @@ async def delete_device(name: str, spec: Dict[str, Any]) -> Dict[str, Any]:
 # Ansible Execution Helper
 #########################################################################
 
-async def _run_ansible_playbook(playbook: str, extravars: Dict[str, Any]) -> Dict[str, Any]:
+async def _run_ansible_playbook(networkvm_ip_address:str, playbook: str, extravars: Dict[str, Any]) -> Dict[str, Any]:
     """Run an Ansible playbook with the given extra variables"""
     
     # Get the Ansible semaphore for throttling
-    from main import get_ansible_semaphore
+    from utils.ansible import get_ansible_semaphore
     semaphore = get_ansible_semaphore()
     
     # Prepare host inventory
     hosts = {
         'hosts': {
-            'target': {
-                'ansible_host': os.getenv("HOST_IP_ADDRESS", "localhost"),
-                'ansible_user': os.getenv("VM_USER", "root"),
-                'ansible_password': os.getenv("VM_PASSWORD", ""),
-                'ansible_become_pass': os.getenv("VM_PASSWORD", ""),
-                'ansible_sudo_pass': os.getenv("VM_PASSWORD", ""),
+            "monitor": {
+                'ansible_host': networkvm_ip_address,
+                'ansible_user': os.getenv("GOOGLE_VM_USER"),
                 'ansible_connection': 'ssh',
+                'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
                 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'
             }
         }
     }
+    
     
     logger.info(f"Running Ansible playbook: {playbook}")
     logger.info(f"Extra vars: {extravars}")

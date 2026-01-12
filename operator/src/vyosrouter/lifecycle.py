@@ -9,6 +9,7 @@ from vyosrouter.lifecycle_tasks import (
     configure_vyos_router,
     check_linux_networks_ready
 )
+from utils.compute import *
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +17,15 @@ logger = logging.getLogger(__name__)
 # VyOSRouter Lifecycle Management
 #########################################################################
 
-@kopf.on.create('guardian.dev', 'v1', 'vyosrouter')
+@kopf.on.create('google.dev', 'v1', 'vyosrouter')
 async def create_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
     """Handle VyOSRouter creation using Ansible"""
     logger.info(f"Creating VyOSRouter: {name} in namespace: {namespace}")
+
+    ip_address = await get_ip("automation", "networkvm")
+    if ip_address is None:
+        raise kopf.TemporaryError("No ip address found on Network VM yet, temporary error - waiting", 10)
+    logger.info(f"network vm address = {ip_address}")
 
     # Update status to indicate pending
     await update_status(name, namespace, "Pending", "Validating and waiting for dependencies")
@@ -65,7 +71,7 @@ async def create_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
         await update_status(name, namespace, "Creating", "Creating VyOS router container")
         
         # Create the VyOS router container using Ansible
-        result = await create_vyos_router(router_config)
+        result = await create_vyos_router(ip_address, router_config)
         
         if result['success']:
             # Update status to configuring
@@ -76,7 +82,7 @@ async def create_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
             )
             
             # Configure the VyOS router
-            config_result = await configure_vyos_router(router_config)
+            config_result = await configure_vyos_router(ip_address, router_config)
             
             if config_result['success']:
                 # Initialize interface status from spec
@@ -108,11 +114,16 @@ async def create_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
         await update_status(name, namespace, "Failed", str(e))
         raise
 
-@kopf.on.update('guardian.dev', 'v1', 'vyosrouter')
+@kopf.on.update('google.dev', 'v1', 'vyosrouter')
 async def update_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
     """Handle VyOSRouter updates using Ansible"""
     logger.info(f"Updating VyOSRouter: {name} in namespace: {namespace}")
-    
+
+    ip_address = await get_ip("automation", "networkvm")
+    if ip_address is None:
+        raise kopf.TemporaryError("No ip address found on Network VM yet, temporary error - waiting", 10)
+    logger.info(f"network vm address = {ip_address}")
+
     try:
         await update_status(name, namespace, "Updating", "Updating VyOS router configuration")
         
@@ -131,7 +142,7 @@ async def update_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
         }
         
         # Update the VyOS router using Ansible
-        result = await update_vyos_router(router_config)
+        result = await update_vyos_router(ip_address, router_config)
         
         if result['success']:
             await update_status(name, namespace, "Running", "VyOS router updated successfully")
@@ -145,17 +156,22 @@ async def update_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
         await update_status(name, namespace, "Failed", str(e))
         raise
 
-@kopf.on.delete('guardian.dev', 'v1', 'vyosrouter')
+@kopf.on.delete('google.dev', 'v1', 'vyosrouter')
 async def delete_vyosrouter(body, spec, name, namespace, logger, **kwargs):
     """Handle VyOSRouter deletion using Ansible"""
     logger.info(f"Deleting VyOSRouter: {name} in namespace: {namespace}")
+
+    ip_address = await get_ip("automation", "networkvm")
+    if ip_address is None:
+        raise kopf.TemporaryError("No ip address found on Network VM yet, temporary error - waiting", 10)
+    logger.info(f"network vm address = {ip_address}")
     
     try:
         # Extract interfaces from spec for proper veth cleanup
         interfaces = spec.get('interfaces', [])
         
         # Delete the VyOS router container using Ansible
-        result = await delete_vyos_router(name, interfaces)
+        result = await delete_vyos_router(ip_address, name, interfaces)
         
         if result['success']:
             logger.info(f"Successfully deleted VyOSRouter {name}")
@@ -175,7 +191,7 @@ async def update_status(name: str, namespace: str, phase: str, message: str,
                        interfaces: Optional[list] = None):
     """Update the status of a VyOSRouter resource"""
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-    api = client.resources.get(api_version='guardian.dev/v1', kind='VyOSRouter')
+    api = client.resources.get(api_version='google.dev/v1', kind='VyOSRouter')
     
     resource = api.get(name=name, namespace=namespace)
     resource_dict = resource.to_dict()

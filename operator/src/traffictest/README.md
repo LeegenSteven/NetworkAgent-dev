@@ -110,7 +110,7 @@ spec:
 ### Basic Constant Traffic Test
 
 ```yaml
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: TrafficTest
 metadata:
   name: basic-test
@@ -126,7 +126,7 @@ spec:
 ### Daily Usage Pattern
 
 ```yaml
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: TrafficTest
 metadata:
   name: daily-pattern
@@ -149,7 +149,7 @@ spec:
 ### Business Hours Simulation
 
 ```yaml
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: TrafficTest
 metadata:
   name: business-hours
@@ -343,7 +343,7 @@ For traffic testing to work, containers must have:
 
 ```yaml
 # First create CPE devices
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: CustomerPremiseEquipment
 metadata:
   name: customer-a-device-1
@@ -354,7 +354,7 @@ spec:
 
 ---
 # Then test traffic between them
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: TrafficTest
 metadata:
   name: cpe-performance-test
@@ -374,7 +374,7 @@ spec:
 ### With VyOS Routers
 
 ```yaml
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: TrafficTest
 metadata:
   name: router-capacity-test

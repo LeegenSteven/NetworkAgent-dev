@@ -206,6 +206,9 @@ def register_network_services_phase():
             import vpn.utils.status
             import vpn.wireguard.lifecycle
             import vyosvm.lifecycle
+            import vyosnetwork.lifecycle
+            import vyosrouter.lifecycle
+            import linuxnetwork.lifecycle
         phase.add_module(load_vpn)
     
     if os.getenv("GITEA") is not None:

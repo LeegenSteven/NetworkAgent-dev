@@ -46,48 +46,9 @@
         - bandwidth is defined
         - bandwidth != ''
         - tc_result is defined
+        - tc_result.stdout is defined
       debug:
         msg: "{{ tc_result.stdout }}"
-
-    - name: add host interface to management network bridge
-      when: network_type == 'management'
-      shell: |
-        set -e
-
-        BRIDGE_NAME="{{ network_name }}"
-        INTERFACE_NAME="{{ ansible_default_ipv4.interface }}"
-        GATEWAY="{{ ansible_default_ipv4.gateway }}"
-        IP_ADDR=$(ip addr show $INTERFACE_NAME | grep 'inet ' | awk '{print $2}')
-
-        # nmcli stop managing the interface to prevent conflicts
-        nmcli device set $INTERFACE_NAME managed no || true
-
-        # Set iptables FORWARD policy to ACCEPT
-        iptables -P FORWARD ACCEPT
-
-        # Bring down the interface
-        ip link set dev $INTERFACE_NAME down
-
-        # Bring down the bridge if it exists
-        ip link set dev $BRIDGE_NAME down
-
-        # Remove IP address from the interface
-        ip addr flush dev $INTERFACE_NAME
-
-        # Add the interface to the bridge
-        brctl addif $BRIDGE_NAME $INTERFACE_NAME
-
-        # Reassign the IP address from the interface to the bridge
-        ip addr add $IP_ADDR dev $BRIDGE_NAME
-
-        # Bring up the interface
-        ip link set dev $INTERFACE_NAME up
-
-        # Bring up the bridge
-        ip link set dev $BRIDGE_NAME up
-
-        # make default route via bridge
-        ip route add default via $GATEWAY dev $BRIDGE_NAME
 
     - name: Return ip address of the default interface
       set_fact:

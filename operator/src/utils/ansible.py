@@ -13,9 +13,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import asyncio
 import logging
 logger = logging.getLogger(__name__)
+
+########################################################
+# Concurrency management in ansible
+########################################################
+ANSIBLE_CONCURRENCY_LIMIT = 3
+ansible_semaphore = asyncio.Semaphore(ANSIBLE_CONCURRENCY_LIMIT)
+
+# Max number of concurrent workers for handling requests
+MAX_WORKERS = 3
+
+def get_ansible_semaphore():
+    """Get the global semaphore for throttling ansible operations"""
+    return ansible_semaphore
 
 ########################################################
 # Ansible event handler

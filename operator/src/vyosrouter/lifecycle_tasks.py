@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 # Ansible-based VyOS Router Management
 #########################################################################
 
-async def create_vyos_router(router_config: Dict[str, Any]) -> Dict[str, Any]:
+async def create_vyos_router(ip_address:str, router_config: Dict[str, Any]) -> Dict[str, Any]:
     """Create a VyOS router container using Ansible"""
     logger.info(f"Creating VyOS router: {router_config['name']}")
     
@@ -34,7 +34,7 @@ async def create_vyos_router(router_config: Dict[str, Any]) -> Dict[str, Any]:
         'operation': 'create'
     }
     
-    result = await _run_ansible_playbook('router_management.yaml', extravars)
+    result = await _run_ansible_playbook(ip_address, 'router_management.yaml', extravars)
     
     if result['success']:
         return {
@@ -48,7 +48,7 @@ async def create_vyos_router(router_config: Dict[str, Any]) -> Dict[str, Any]:
             'error': result.get('error', 'Unknown error during router creation')
         }
 
-async def configure_vyos_router(router_config: Dict[str, Any]) -> Dict[str, Any]:
+async def configure_vyos_router(ip_address:str,router_config: Dict[str, Any]) -> Dict[str, Any]:
     """Configure a VyOS router using Ansible"""
     logger.info(f"Configuring VyOS router: {router_config['name']}")
     
@@ -69,14 +69,14 @@ async def configure_vyos_router(router_config: Dict[str, Any]) -> Dict[str, Any]
         'operation': 'configure'
     }
     
-    result = await _run_ansible_playbook('router_configuration.yaml', extravars)
+    result = await _run_ansible_playbook(ip_address, 'router_configuration.yaml', extravars)
     
     return {
         'success': result['success'],
         'error': result.get('error') if not result['success'] else None
     }
 
-async def update_vyos_router(router_config: Dict[str, Any]) -> Dict[str, Any]:
+async def update_vyos_router(ip_address:str, router_config: Dict[str, Any]) -> Dict[str, Any]:
     """Update a VyOS router configuration using Ansible"""
     logger.info(f"Updating VyOS router: {router_config['name']}")
     
@@ -97,14 +97,14 @@ async def update_vyos_router(router_config: Dict[str, Any]) -> Dict[str, Any]:
         'operation': 'update'
     }
     
-    result = await _run_ansible_playbook('router_configuration.yaml', extravars)
+    result = await _run_ansible_playbook(ip_address, 'router_configuration.yaml', extravars)
     
     return {
         'success': result['success'],
         'error': result.get('error') if not result['success'] else None
     }
 
-async def delete_vyos_router(router_name: str, interfaces: list = None) -> Dict[str, Any]:
+async def delete_vyos_router(ip_address:str, router_name: str, interfaces: list = None) -> Dict[str, Any]:
     """Delete a VyOS router container using Ansible"""
     logger.info(f"Deleting VyOS router: {router_name}")
     
@@ -114,7 +114,7 @@ async def delete_vyos_router(router_name: str, interfaces: list = None) -> Dict[
         'operation': 'delete'
     }
     
-    result = await _run_ansible_playbook('router_management.yaml', extravars)
+    result = await _run_ansible_playbook(ip_address, 'router_management.yaml', extravars)
     
     return {
         'success': result['success'],
@@ -125,23 +125,21 @@ async def delete_vyos_router(router_name: str, interfaces: list = None) -> Dict[
 # Ansible Execution Helper
 #########################################################################
 
-async def _run_ansible_playbook(playbook: str, extravars: Dict[str, Any]) -> Dict[str, Any]:
+async def _run_ansible_playbook(ip_address:str, playbook: str, extravars: Dict[str, Any]) -> Dict[str, Any]:
     """Run an Ansible playbook with the given extra variables"""
     
     # Get the Ansible semaphore for throttling
-    from main import get_ansible_semaphore
+    from utils.ansible import get_ansible_semaphore
     semaphore = get_ansible_semaphore()
     
     # Prepare host inventory
     hosts = {
         'hosts': {
-            'target': {
-                'ansible_host': os.getenv("HOST_IP_ADDRESS", "localhost"),
-                'ansible_user': os.getenv("VM_USER", "root"),
-                'ansible_password': os.getenv("VM_PASSWORD", ""),
-                'ansible_become_pass': os.getenv("VM_PASSWORD", ""),
-                'ansible_sudo_pass': os.getenv("VM_PASSWORD", ""),
+            "monitor": {
+                'ansible_host': ip_address,
+                'ansible_user': os.getenv("GOOGLE_VM_USER"),
                 'ansible_connection': 'ssh',
+                'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
                 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'
             }
         }
@@ -253,7 +251,7 @@ async def check_linux_networks_ready(interfaces: list, namespace: str) -> tuple[
         tuple: (all_ready: bool, not_ready_networks: list)
     """
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-    api = client.resources.get(api_version='guardian.dev/v1', kind='LinuxNetwork')
+    api = client.resources.get(api_version='google.dev/v1', kind='LinuxNetwork')
     
     not_ready_networks = []
     

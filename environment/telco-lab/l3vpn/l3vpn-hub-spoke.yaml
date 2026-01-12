@@ -1,8 +1,8 @@
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: VyOSNetwork
 metadata:
   name: l3vpn-hub-spoke
-  namespace: default
+  namespace: automation
   labels:
     type: telco-lab
     environment: lab
@@ -357,12 +357,7 @@ spec:
         mpls:
           enabled: true
           ldp_interfaces: ["eth1", "eth2"]
-        static:
-          routes:
-            - destination: "192.168.1.0/24"
-              next_hop: "192.168.122.4"
-              description: "Route to interconnect network via management gateway"
-    
+   
     # Route Reflector 2
     - name: "rr2"
       hostname: "rr2"
@@ -407,11 +402,6 @@ spec:
         mpls:
           enabled: true
           ldp_interfaces: ["eth1", "eth2"]
-        static:
-          routes:
-            - destination: "192.168.1.0/24"
-              next_hop: "192.168.122.4"
-              description: "Route to interconnect network via management gateway"
     
     # Provider Router 1
     - name: "p1"
@@ -449,11 +439,6 @@ spec:
         mpls:
           enabled: true
           ldp_interfaces: ["eth1", "eth2", "eth3", "eth4", "eth5"]
-        static:
-          routes:
-            - destination: "192.168.1.0/24"
-              next_hop: "192.168.122.4"
-              description: "Route to interconnect network via management gateway"
     
     # Provider Router 2
     - name: "p2"
@@ -485,11 +470,6 @@ spec:
         mpls:
           enabled: true
           ldp_interfaces: ["eth1", "eth2", "eth3"]
-        static:
-          routes:
-            - destination: "192.168.1.0/24"
-              next_hop: "192.168.122.4"
-              description: "Route to interconnect network via management gateway"
     
     # Provider Router 3
     - name: "p3"
@@ -524,11 +504,6 @@ spec:
         mpls:
           enabled: true
           ldp_interfaces: ["eth1", "eth2", "eth3", "eth4"]
-        static:
-          routes:
-            - destination: "192.168.1.0/24"
-              next_hop: "192.168.122.4"
-              description: "Route to interconnect network via management gateway"
     
     # Provider Router 4
     - name: "p4"
@@ -563,11 +538,6 @@ spec:
         mpls:
           enabled: true
           ldp_interfaces: ["eth1", "eth2", "eth3", "eth4"]
-        static:
-          routes:
-            - destination: "192.168.1.0/24"
-              next_hop: "192.168.122.4"
-              description: "Route to interconnect network via management gateway"
     
     # Provider Edge Router 1 (Spoke)
     - name: "pe1"
@@ -620,11 +590,6 @@ spec:
         mpls:
           enabled: true
           ldp_interfaces: ["eth1"]
-        static:
-          routes:
-            - destination: "192.168.1.0/24"
-              next_hop: "192.168.122.4"
-              description: "Route to interconnect network via management gateway"
     
     # Provider Edge Router 2 (Hub)
     - name: "pe2"
@@ -680,11 +645,6 @@ spec:
         mpls:
           enabled: true
           ldp_interfaces: ["eth1", "eth2"]
-        static:
-          routes:
-            - destination: "192.168.1.0/24"
-              next_hop: "192.168.122.4"
-              description: "Route to interconnect network via management gateway"
     
     # Provider Edge Router 3 (Spoke)
     - name: "pe3"
@@ -737,11 +697,6 @@ spec:
         mpls:
           enabled: true
           ldp_interfaces: ["eth1"]
-        static:
-          routes:
-            - destination: "192.168.1.0/24"
-              next_hop: "192.168.122.4"
-              description: "Route to interconnect network via management gateway"
     
     # Customer Edge 1 - Spoke Site
     - name: "ce1-spoke"
@@ -771,11 +726,6 @@ spec:
             - peer: "10.50.50.1"
               remote_as: 65001
               description: "PE1 BLUE_SPOKE VRF"
-        static:
-          routes:
-            - destination: "192.168.1.0/24"
-              next_hop: "192.168.122.4"
-              description: "Route to interconnect network via management gateway"
     
     # Customer Edge 1 - Hub Site
     - name: "ce1-hub"
@@ -805,11 +755,6 @@ spec:
             - peer: "10.80.80.1"
               remote_as: 65001
               description: "PE2 BLUE_HUB VRF"
-        static:
-          routes:
-            - destination: "192.168.1.0/24"
-              next_hop: "192.168.122.4"
-              description: "Route to interconnect network via management gateway"
     
     # Customer Edge 2 - Spoke Site
     - name: "ce2-spoke"
@@ -839,11 +784,6 @@ spec:
             - peer: "10.60.60.1"
               remote_as: 65001
               description: "PE3 BLUE_SPOKE VRF"
-        static:
-          routes:
-            - destination: "192.168.1.0/24"
-              next_hop: "192.168.122.4"
-              description: "Route to interconnect network via management gateway"
   
   # MPLS L3VPN configuration
   mpls:
@@ -871,33 +811,33 @@ spec:
         - "10.0.0.2"  # RR2
 
 ---
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: Device
 metadata:
   name: devhub
-  namespace: default
+  namespace: automation
 spec:
   network_name: "lan-hub"
   ip_address: "10.100.2.10"
   gateway: "10.100.2.1"
 
 ---
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: Device
 metadata:
   name: dev1
-  namespace: default
+  namespace: automation
 spec:
   network_name: "lan-spoke1"
   ip_address: "10.100.1.10"
   gateway: "10.100.1.1"
 
 ---
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: Device
 metadata:
   name: dev2
-  namespace: default
+  namespace: automation
 spec:
   network_name: "lan-spoke2"
   ip_address: "10.100.3.10"

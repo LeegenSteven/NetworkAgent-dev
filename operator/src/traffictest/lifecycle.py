@@ -8,6 +8,7 @@ from traffictest.lifecycle_tasks import (
     delete_traffic_test,
     get_traffic_test_status,
 )
+from utils.compute import get_ip
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,11 @@ async def create_traffic_test_handler(body, spec, name, namespace, uid, logger, 
     logger.info(f"Creating TrafficTest: {name} in namespace: {namespace}")
     logger.info(f"spec: {spec}")
     
+    ip_address = await get_ip("automation", "networkvm")
+    if ip_address is None:
+        raise kopf.TemporaryError("No ip address found on Network VM yet, temporary error - waiting", 10)
+    logger.info(f"network vm address = {ip_address}")
+
     try:
         # Validate required Devices exist and are ready
         source_device = spec.get('source_device')

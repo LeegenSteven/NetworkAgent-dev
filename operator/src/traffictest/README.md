@@ -103,7 +103,6 @@ spec:
 | `think_time` | 0 | Pause between requests (seconds) |
 | `metrics_enabled` | true | Enable metrics collection |
 | `metrics_interval` | 5 | Metrics sampling interval (seconds) |
-| `influxdb_bucket` | telegraf | InfluxDB bucket name |
 
 ## Usage Examples
 

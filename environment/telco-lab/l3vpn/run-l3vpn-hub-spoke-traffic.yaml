@@ -1,10 +1,10 @@
 ---
 # Basic constant traffic test
-apiVersion: guardian.dev/v1
+apiVersion: google.dev/v1
 kind: TrafficTest
 metadata:
   name: constant-baseline
-  namespace: default
+  namespace: automation
   labels:
     scenario: baseline
     pattern: constant

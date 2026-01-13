@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Metrics Collector for TrafficTest resource.
-Collects metrics from iperf3 results and sends them to InfluxDB.
+Collects metrics from iperf3 results.
 """
 
 import asyncio
@@ -13,17 +13,10 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 import sys
 
-try:
-    from influxdb_client import InfluxDBClient, Point, WritePrecision
-    from influxdb_client.client.write_api import SYNCHRONOUS
-except ImportError:
-    print("influxdb-client not available. Install with: pip install influxdb-client")
-    sys.exit(1)
-
 logger = logging.getLogger(__name__)
 
 class MetricsCollector:
-    """Collects and exports traffic metrics to InfluxDB"""
+    """Collects and exports traffic metrics"""
     
     def __init__(self, config: Dict[str, Any]):
         self.config = config
@@ -33,46 +26,6 @@ class MetricsCollector:
         self.protocol = config['protocol']
         self.pattern_type = config.get('pattern_type', 'constant')
         
-        # InfluxDB configuration - templated from Ansible variables
-        self.influxdb_url = "{{ influxdb_url }}"
-        self.influxdb_token = "{{ influxdb_token }}"
-        self.influxdb_org = "{{ influxdb_org }}"
-        self.influxdb_bucket = config.get('influxdb_bucket', "{{ influxdb_bucket | default('telegraf') }}")
-        
-        # Validate required configuration
-        if not self.influxdb_url:
-            raise ValueError("InfluxDB URL is required")
-        if not self.influxdb_token:
-            raise ValueError("InfluxDB token is required")
-        if not self.influxdb_org:
-            raise ValueError("InfluxDB organization is required")
-        
-        self.client = None
-        self.write_api = None
-        
-    def _connect_influxdb(self):
-        """Connect to InfluxDB"""
-        try:
-            self.client = InfluxDBClient(
-                url=self.influxdb_url,
-                token=self.influxdb_token,
-                org=self.influxdb_org
-            )
-            self.write_api = self.client.write_api(write_options=SYNCHRONOUS)
-            
-            # Test connection
-            health = self.client.health()
-            if health.status == "pass":
-                logger.info(f"Connected to InfluxDB at {self.influxdb_url}")
-                return True
-            else:
-                logger.error(f"InfluxDB health check failed: {health}")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Failed to connect to InfluxDB: {e}")
-            return False
-    
     def _parse_iperf3_result(self, result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Parse iperf3 JSON result and extract metrics"""
         try:
@@ -136,122 +89,36 @@ class MetricsCollector:
             logger.error(f"Error parsing iperf3 result: {e}")
             return None
     
-    def _create_influx_point(self, metrics: Dict[str, Any]) -> Point:
-        """Create InfluxDB point from metrics"""
-        point = Point("traffic_test") \
-            .tag("test_name", self.test_name) \
-            .tag("source_cpe", self.source_cpe) \
-            .tag("destination_cpe", self.destination_cpe) \
-            .tag("protocol", self.protocol) \
-            .tag("pattern_type", self.pattern_type) \
-            .time(metrics['timestamp'], WritePrecision.NS)
-        
-        # Add numeric fields
-        numeric_fields = [
-            'throughput_sent_bps', 'throughput_received_bps',
-            'packets_sent', 'packets_received', 'lost_packets',
-            'packet_loss_pct', 'retransmissions', 'jitter_ms',
-            'avg_bandwidth_bps', 'cpu_utilization_pct',
-            'active_connections', 'test_duration'
-        ]
-        
-        for field in numeric_fields:
-            if field in metrics and metrics[field] is not None:
-                point = point.field(field, float(metrics[field]))
-        
-        return point
-    
     def write_metrics(self, iperf3_results: List[Dict[str, Any]]) -> bool:
-        """Write metrics from iperf3 results to InfluxDB"""
-        if not self.client and not self._connect_influxdb():
-            logger.error("Cannot write metrics: InfluxDB connection failed")
-            return False
-        
+        """Process metrics from iperf3 results"""
         if not iperf3_results:
-            logger.warning("No iperf3 results to write")
+            logger.warning("No iperf3 results to process")
             return True
         
-        points = []
-        
+        count = 0
         for result in iperf3_results:
             metrics = self._parse_iperf3_result(result)
             if metrics:
-                point = self._create_influx_point(metrics)
-                points.append(point)
+                count += 1
+                logger.info(f"Processed metrics: {metrics}")
         
-        if not points:
-            logger.warning("No valid metrics to write")
-            return True
-        
-        try:
-            self.write_api.write(bucket=self.influxdb_bucket, record=points)
-            logger.info(f"Successfully wrote {len(points)} metric points to InfluxDB")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to write metrics to InfluxDB: {e}")
-            return False
+        return True
     
     def write_realtime_metrics(self, current_metrics: Dict[str, Any]) -> bool:
-        """Write real-time metrics during test execution"""
-        if not self.client and not self._connect_influxdb():
-            logger.error("Cannot write real-time metrics: InfluxDB connection failed")
-            return False
-        
-        try:
-            # Add timestamp if not present
-            if 'timestamp' not in current_metrics:
-                current_metrics['timestamp'] = datetime.now(timezone.utc)
-            
-            point = self._create_influx_point(current_metrics)
-            self.write_api.write(bucket=self.influxdb_bucket, record=point)
-            
-            logger.debug(f"Wrote real-time metrics: {current_metrics}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to write real-time metrics: {e}")
-            return False
+        """Process real-time metrics during test execution"""
+        logger.debug(f"Real-time metrics: {current_metrics}")
+        return True
     
     def write_test_status(self, phase: str, message: str, additional_data: Optional[Dict] = None) -> bool:
-        """Write test status information to InfluxDB"""
-        if not self.client and not self._connect_influxdb():
-            return False
-        
-        try:
-            point = Point("traffic_test_status") \
-                .tag("test_name", self.test_name) \
-                .tag("source_cpe", self.source_cpe) \
-                .tag("destination_cpe", self.destination_cpe) \
-                .tag("protocol", self.protocol) \
-                .tag("pattern_type", self.pattern_type) \
-                .field("phase", phase) \
-                .field("message", message) \
-                .time(datetime.now(timezone.utc), WritePrecision.NS)
-            
-            if additional_data:
-                for key, value in additional_data.items():
-                    if isinstance(value, (int, float)):
-                        point = point.field(key, value)
-                    else:
-                        point = point.field(key, str(value))
-            
-            self.write_api.write(bucket=self.influxdb_bucket, record=point)
-            logger.debug(f"Wrote test status: {phase} - {message}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to write test status: {e}")
-            return False
+        """Log test status information"""
+        logger.info(f"Test status: {phase} - {message}")
+        if additional_data:
+            logger.debug(f"Additional data: {additional_data}")
+        return True
     
     def close(self):
-        """Close InfluxDB connection"""
-        if self.client:
-            try:
-                self.client.close()
-                logger.info("Closed InfluxDB connection")
-            except Exception as e:
-                logger.error(f"Error closing InfluxDB connection: {e}")
+        """Cleanup resources"""
+        pass
 
 
 class RealtimeMetricsCollector:
@@ -280,13 +147,9 @@ class RealtimeMetricsCollector:
                     'test_duration': (current_time - traffic_generator.start_time).total_seconds() if traffic_generator.start_time else 0
                 }
                 
-                # Try to get more detailed metrics from running processes
-                # This is a simplified version - in practice, you might parse
-                # intermediate iperf3 output or use other monitoring tools
-                
                 self.current_metrics = metrics
                 
-                # Write to InfluxDB
+                # Process metrics
                 self.metrics_collector.write_realtime_metrics(metrics)
                 
                 await asyncio.sleep(self.interval)
@@ -336,11 +199,11 @@ async def main():
         success = collector.write_metrics(results.get('results', []))
         
         if success:
-            collector.write_test_status("Completed", "Metrics successfully written to InfluxDB")
-            print("Metrics successfully written to InfluxDB")
+            collector.write_test_status("Completed", "Metrics successfully processed")
+            print("Metrics successfully processed")
         else:
-            collector.write_test_status("Failed", "Failed to write metrics to InfluxDB")
-            print("Failed to write metrics to InfluxDB")
+            collector.write_test_status("Failed", "Failed to process metrics")
+            print("Failed to process metrics")
             sys.exit(1)
         
         collector.close()

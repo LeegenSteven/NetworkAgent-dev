@@ -59,7 +59,6 @@
                 "think_time": {{ think_time | int }},
                 "metrics_enabled": {{ metrics_enabled | default(true) | lower }},
                 "metrics_interval": {{ metrics_interval | int }},
-                "influxdb_bucket": "{{ influxdb_bucket }}"
               }
             dest: "{{ config_file }}"
             mode: '0644'

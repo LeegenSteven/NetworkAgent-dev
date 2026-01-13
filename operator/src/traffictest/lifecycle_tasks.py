@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # Ansible-based TrafficTest Management
 #########################################################################
 
-async def create_traffic_test(spec: Dict[str, Any]) -> Dict[str, Any]:
+async def create_traffic_test(networkvm_ip_address:str, spec: Dict[str, Any]) -> Dict[str, Any]:
     """Create a TrafficTest using Ansible"""
     logger.info(f"Creating TrafficTest: {spec.get('source_device')} -> {spec.get('destination_device')}")
 
@@ -36,7 +36,6 @@ async def create_traffic_test(spec: Dict[str, Any]) -> Dict[str, Any]:
     # Metrics configuration
     metrics_enabled = spec.get('metrics_enabled', True)
     metrics_interval = spec.get('metrics_interval', 5)
-    influxdb_bucket = spec.get('influxdb_bucket', 'telegraf')
 
     # Prepare extra variables for Ansible playbook
     extravars = {
@@ -57,14 +56,10 @@ async def create_traffic_test(spec: Dict[str, Any]) -> Dict[str, Any]:
         'think_time': think_time,
         'metrics_enabled': metrics_enabled,
         'metrics_interval': metrics_interval,
-        'influxdb_bucket': influxdb_bucket,
         'start_time': datetime.now(timezone.utc).isoformat(),
-        'influxdb_url': os.getenv('INFLUXDB_URL'),
-        'influxdb_token': os.getenv('INFLUXDB_TOKEN'),
-        'influxdb_org': os.getenv('INFLUXDB_ORG')
     }
 
-    result = await _run_ansible_playbook('traffic.yaml', extravars)
+    result = await _run_ansible_playbook(networkvm_ip_address,'traffic.yaml', extravars)
     logger.info(f"TrafficTest creation result: {result}")
 
     if result['success']:
@@ -79,7 +74,7 @@ async def create_traffic_test(spec: Dict[str, Any]) -> Dict[str, Any]:
             'error': result.get('error', 'Unknown error during TrafficTest creation')
         }
 
-async def delete_traffic_test(spec: Dict[str, Any]) -> Dict[str, Any]:
+async def delete_traffic_test(networkvm_ip_address:str,spec: Dict[str, Any]) -> Dict[str, Any]:
     """Delete a TrafficTest using Ansible"""
     logger.info(f"Deleting TrafficTest: {spec.get('source_device')} -> {spec.get('destination_device')}")
     
@@ -92,7 +87,7 @@ async def delete_traffic_test(spec: Dict[str, Any]) -> Dict[str, Any]:
         'end_time': datetime.now(timezone.utc).isoformat()
     }
 
-    result = await _run_ansible_playbook('traffic.yaml', extravars)
+    result = await _run_ansible_playbook(networkvm_ip_address,'traffic.yaml', extravars)
 
     return {
         'success': result['success'],
@@ -100,7 +95,7 @@ async def delete_traffic_test(spec: Dict[str, Any]) -> Dict[str, Any]:
         'end_time': extravars['end_time']
     }
 
-async def get_traffic_test_status(spec: Dict[str, Any]) -> Dict[str, Any]:
+async def get_traffic_test_status(networkvm_ip_address:str,spec: Dict[str, Any]) -> Dict[str, Any]:
     """Get current status of a TrafficTest using Ansible"""
     logger.info(f"Getting TrafficTest status: {spec.get('source_device')} -> {spec.get('destination_device')}")
     
@@ -112,7 +107,7 @@ async def get_traffic_test_status(spec: Dict[str, Any]) -> Dict[str, Any]:
         'port': spec.get('port', 5201)
     }
 
-    result = await _run_ansible_playbook('traffic.yaml', extravars)
+    result = await _run_ansible_playbook(networkvm_ip_address,'traffic.yaml', extravars)
 
     if result['success']:
         return {
@@ -131,7 +126,7 @@ async def get_traffic_test_status(spec: Dict[str, Any]) -> Dict[str, Any]:
 # Ansible Execution Helper
 #########################################################################
 
-async def _run_ansible_playbook(playbook: str, extravars: Dict[str, Any]) -> Dict[str, Any]:
+async def _run_ansible_playbook(networkvm_ip_address:str, playbook: str, extravars: Dict[str, Any]) -> Dict[str, Any]:
     """Run an Ansible playbook with the given extra variables"""
     
     # Get the Ansible semaphore for throttling
@@ -141,13 +136,11 @@ async def _run_ansible_playbook(playbook: str, extravars: Dict[str, Any]) -> Dic
     # Prepare host inventory
     hosts = {
         'hosts': {
-            'target': {
-                'ansible_host': os.getenv("HOST_IP_ADDRESS", "localhost"),
-                'ansible_user': os.getenv("VM_USER", "root"),
-                'ansible_password': os.getenv("VM_PASSWORD", ""),
-                'ansible_become_pass': os.getenv("VM_PASSWORD", ""),
-                'ansible_sudo_pass': os.getenv("VM_PASSWORD", ""),
+            "monitor": {
+                'ansible_host': networkvm_ip_address,
+                'ansible_user': os.getenv("GOOGLE_VM_USER"),
                 'ansible_connection': 'ssh',
+                'ansible_ssh_private_key_file': constants.basedir+'/google-compute',
                 'ansible_ssh_common_args': '-o StrictHostKeyChecking=no'
             }
         }

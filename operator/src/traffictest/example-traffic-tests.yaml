@@ -22,7 +22,6 @@ spec:
   concurrent_users: 10
   metrics_enabled: true
   metrics_interval: 5
-  influxdb_bucket: telegraf
 
 ---
 # Daily usage pattern simulation
@@ -51,7 +50,6 @@ spec:
   think_time: 5
   metrics_enabled: true
   metrics_interval: 10
-  influxdb_bucket: telegraf
 
 ---
 # Business hours burst pattern
@@ -80,7 +78,6 @@ spec:
   think_time: 2
   metrics_enabled: true
   metrics_interval: 5
-  influxdb_bucket: telegraf
 
 ---
 # Realistic user arrival pattern (Poisson)
@@ -107,7 +104,6 @@ spec:
   think_time: 3
   metrics_enabled: true
   metrics_interval: 5
-  influxdb_bucket: telegraf
 
 ---
 # High-frequency square wave for congestion testing
@@ -134,7 +130,6 @@ spec:
   concurrent_users: 30
   metrics_enabled: true
   metrics_interval: 2  # High frequency sampling for congestion analysis
-  influxdb_bucket: telegraf
 
 ---
 # UDP traffic test for jitter analysis
@@ -158,7 +153,6 @@ spec:
   concurrent_users: 5
   metrics_enabled: true
   metrics_interval: 1  # High frequency for jitter measurement
-  influxdb_bucket: telegraf
 
 ---
 # Sawtooth pattern for gradual load increase
@@ -186,7 +180,6 @@ spec:
   session_duration: 60
   metrics_enabled: true
   metrics_interval: 5
-  influxdb_bucket: telegraf
 
 ---
 # Long-duration test for ML model training
@@ -216,4 +209,3 @@ spec:
   think_time: 10
   metrics_enabled: true
   metrics_interval: 15  # Moderate sampling for long tests
-  influxdb_bucket: telegraf

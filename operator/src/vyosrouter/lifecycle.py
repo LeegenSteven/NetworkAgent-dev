@@ -114,7 +114,7 @@ async def create_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
         await update_status(name, namespace, "Failed", str(e))
         raise
 
-@kopf.on.update('google.dev', 'v1', 'vyosrouter')
+@kopf.on.update('google.dev', 'v1', 'vyosrouter', field='spec')
 async def update_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
     """Handle VyOSRouter updates using Ansible"""
     logger.info(f"Updating VyOSRouter: {name} in namespace: {namespace}")

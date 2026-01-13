@@ -77,6 +77,7 @@ def legacy_import_modules():
         import vyosnetwork.lifecycle
         import vyosrouter.lifecycle
         import linuxnetwork.lifecycle
+        import device.lifecycle
 
     if os.getenv("FREE5GC") is not None:
         logger.info("FREE5GC Lifecycle")

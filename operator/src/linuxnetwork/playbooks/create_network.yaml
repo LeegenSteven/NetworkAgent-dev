@@ -17,6 +17,7 @@
       when: 
         - network_type != 'management'
         - bandwidth is defined
+        - bandwidth is not none
         - bandwidth != ''
       shell: |
         set -e
@@ -44,6 +45,7 @@
     - name: Display TC configuration result
       when: 
         - bandwidth is defined
+        - bandwidth is not none
         - bandwidth != ''
         - tc_result is defined
         - tc_result.stdout is defined

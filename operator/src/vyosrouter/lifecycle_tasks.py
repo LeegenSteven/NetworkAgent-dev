@@ -26,11 +26,6 @@ async def create_vyos_router(ip_address:str, router_config: Dict[str, Any]) -> D
         'vyos_image': router_config.get('image', 'vyos:1.5'),
         'source_network': router_config.get('source_network'),
         'interfaces': router_config.get('interfaces'),
-        'influxdb_url': os.getenv('INFLUXDB_URL'),
-        'influxdb_port': os.getenv('INFLUXDB_PORT'),
-        'influxdb_token': os.getenv('INFLUXDB_TOKEN'),
-        'syslog_address': os.getenv('SYSLOG_ADDRESS'),
-        'syslog_port': os.getenv('SYSLOG_PORT'),
         'operation': 'create'
     }
     

@@ -5,13 +5,6 @@ configure
 # Set hostname
 set system host-name {{ router_hostname }}
 
-# Configure remote syslog server
-{% if syslog_address is defined and syslog_port is defined %}
-set system syslog remote {{ syslog_address }} facility all level info
-set system syslog remote {{ syslog_address }} port {{ syslog_port }}
-set system syslog remote {{ syslog_address }} protocol udp
-{% endif %}
-
 # Configure interfaces
 {% set vlan_interfaces = interfaces | selectattr('name', '!=', 'lo') | selectattr('vlan', 'defined') | list %}
 {% set vlan_parent_interfaces = vlan_interfaces | map(attribute='name') | unique | list %}

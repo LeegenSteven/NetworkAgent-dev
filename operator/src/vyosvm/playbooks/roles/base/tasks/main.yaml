@@ -1,3 +1,13 @@
+- name: Get running kernel version
+  ansible.builtin.command: uname -r
+  register: running_kernel
+  changed_when: false
+
+- name: Install linux-modules-extra
+  ansible.builtin.package:
+    name: "linux-modules-extra-{{ running_kernel.stdout }}"
+    state: present
+
 - name: Install packages
   ansible.builtin.package:
     name: "{{ item }}"
@@ -5,3 +15,12 @@
   loop:
     - bridge-utils
     - python3-pip
+
+- name: Load vrf kernel module
+  ansible.builtin.command: modprobe vrf
+  changed_when: false
+
+- name: Ensure vrf module is loaded on boot
+  ansible.builtin.copy:
+    content: "vrf\n"
+    dest: /etc/modules-load.d/vrf.conf

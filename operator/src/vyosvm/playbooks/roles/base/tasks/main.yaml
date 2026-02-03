@@ -1,7 +1,6 @@
 - name: Get running kernel version
   ansible.builtin.command: uname -r
   register: running_kernel
-  changed_when: false
 
 - name: Install linux-modules-extra
   ansible.builtin.package:
@@ -24,3 +23,24 @@
   ansible.builtin.copy:
     content: "vrf\n"
     dest: /etc/modules-load.d/vrf.conf
+
+- name: Install iptables-persistent for saving rules
+  ansible.builtin.package:
+    name: iptables-persistent
+    state: present
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Allow ICMP traffic system-wide in FORWARD chain
+  ansible.builtin.shell: |
+    # Check if rule already exists
+    if ! iptables -C FORWARD -p icmp -j ACCEPT -m comment --comment "Allow ICMP for network diagnostics" 2>/dev/null; then
+      iptables -I FORWARD 1 -p icmp -j ACCEPT -m comment --comment "Allow ICMP for network diagnostics"
+      echo "changed"
+    fi
+  register: icmp_rule_result
+  changed_when: "'changed' in icmp_rule_result.stdout"
+
+- name: Save iptables rules
+  ansible.builtin.shell: iptables-save > /etc/iptables/rules.v4
+  when: icmp_rule_result.changed

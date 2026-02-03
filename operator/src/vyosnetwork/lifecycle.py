@@ -813,7 +813,7 @@ async def check_and_update_parent_network_status(parent_network_name: str, names
             return
         
         # Get all child VyOSRouters that belong to this VyOSNetwork
-        all_routers = vyosrouter_api.list(namespace=namespace)
+        all_routers = vyosrouter_api.get(namespace=namespace)
         child_routers = []
         
         for router in all_routers.items:

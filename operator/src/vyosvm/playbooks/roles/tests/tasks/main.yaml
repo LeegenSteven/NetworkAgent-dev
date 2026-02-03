@@ -1,0 +1,5 @@
+- name: Copy test script to target
+  copy:
+    src: files/test-l3vpn-hub-spoke.sh
+    dest: /opt/test-l3vpn-hub-spoke.sh
+    mode: '0777'

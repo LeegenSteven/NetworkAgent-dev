@@ -24,3 +24,7 @@
     - name: build vyos image
       import_role:
         name: vyos
+
+    - name: test scripts
+      import_role:
+        name: tests

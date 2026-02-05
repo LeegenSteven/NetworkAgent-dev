@@ -519,23 +519,6 @@ Build()
         exit 1
     fi
 
-    # Check if a custom image called networkagent already exists, if it does ask the user if they want to proceed
-    if gcloud compute images describe networkagent --project=$GOOGLE_PROJECT > /dev/null 2>&1; then
-        if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]]; then
-            read -p "Custom image 'networkagent' already exists. Do you want to rebuild it? (y/n) " choice
-            case "$choice" in 
-                y|Y ) echo "Proceeding to rebuild the networkagent image";;
-                n|N ) echo "Skipping image build"; return 0;;
-                * ) echo "Please enter y/n"; exit 1;;
-            esac
-        elif [[ $NO_FLAG == "y" ]]; then
-            echo "Skipping image build (NO_FLAG set)"
-            return 0
-        fi
-        echo "Deleting existing networkagent image..."
-        gcloud compute images delete networkagent --project=$GOOGLE_PROJECT --quiet
-    fi
-
     # Use a consistent VM name for idempotency
     VM_NAME="networkagent-build"
     
@@ -638,35 +621,13 @@ EOF
         echo "Still stopping..."
     done
 
-    # Set the VM to not delete its disk when deleted
-    echo "Setting disk to not auto-delete..."
-    gcloud compute instances set-disk-auto-delete $VM_NAME \
-        --zone=$GOOGLE_ZONE \
-        --project=$GOOGLE_PROJECT \
-        --no-auto-delete \
-        --disk=$VM_NAME
-
-    # Create a custom image from the VM disk called networkagent
-    echo "Creating custom image 'networkagent' from VM disk..."
-    gcloud compute images create networkagent \
-        --project=$GOOGLE_PROJECT \
-        --source-disk=$VM_NAME \
-        --source-disk-zone=$GOOGLE_ZONE \
-        --description="Network Agent VNF image with Free5GC, UERANSIM, Docker, and Wireguard" \
-        --family=networkagent
-
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to create custom image"
-        exit 1
-    fi
-
     # Clean up: delete the VM and its disk
     echo "Cleaning up temporary VM and disk..."
     gcloud compute instances delete $VM_NAME --zone=$GOOGLE_ZONE --project=$GOOGLE_PROJECT --quiet
     gcloud compute disks delete $VM_NAME --zone=$GOOGLE_ZONE --project=$GOOGLE_PROJECT --quiet
 
     echo "####################################################"
-    echo "Custom image 'networkagent' created successfully!  #"
+    echo "Built free5gc images !  #"
     echo "####################################################"
 }
 

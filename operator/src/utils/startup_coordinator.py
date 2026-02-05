@@ -206,7 +206,9 @@ def register_network_services_phase():
             import vpn.utils.status
             import vpn.wireguard.lifecycle
             import vyosvm.lifecycle
-            import vyosnetwork.lifecycle
+            import vyosinfrastructure.lifecycle
+            import vyosunderlay.lifecycle
+            import vyosvpn.lifecycle
             import vyosrouter.lifecycle
             import linuxnetwork.lifecycle
             import device.lifecycle

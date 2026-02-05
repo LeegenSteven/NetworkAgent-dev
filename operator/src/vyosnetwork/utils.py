@@ -12,127 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import kopf
 import logging
 import ipaddress
-from typing import Dict, List, Any, Optional
 import kubernetes
+from typing import Dict, List, Any, Optional
 
 logger = logging.getLogger(__name__)
 
-#########################################################################
-# VyOSNetwork Lifecycle Management
-#########################################################################
-
-@kopf.on.create('google.dev', 'v1', 'vyosnetwork')
-async def create_vyosnetwork(body, spec, name, namespace, uid, logger, **kwargs):
-    """Handle VyOSNetwork creation - decompose into VyOSRouter and DockerNetwork CRs"""
-    logger.info(f"Creating VyOSNetwork: {name} in namespace: {namespace}")
-    
-    try:
-        # Update status to indicate processing has started
-        await update_status(name, namespace, "Validating", "Validating network topology")
-        
-        # Validate the network topology
-        validation_result = validate_network_topology(spec)
-        if not validation_result['valid']:
-            await update_status(name, namespace, "Failed", f"Validation failed: {validation_result['error']}")
-            raise kopf.PermanentError(f"Network validation failed: {validation_result['error']}")
-        
-        # Update status to decomposing
-        await update_status(name, namespace, "Creating", "Creating network resources")
-        
-        # Generate LinuxNetwork CRs
-        linux_networks = generate_linux_networks(spec, name, namespace, uid)
-        created_networks = []
-        
-        for network_cr in linux_networks:
-            try:
-                await create_linux_network(network_cr, namespace)
-                created_networks.append(network_cr['metadata']['name'])
-                logger.info(f"Created LinuxNetwork: {network_cr['metadata']['name']}")
-            except Exception as e:
-                logger.error(f"Failed to create LinuxNetwork {network_cr['metadata']['name']}: {e}")
-                await update_status(name, namespace, "Failed", f"Failed to create LinuxNetwork: {e}")
-                raise
-
-        # Generate VyOSRouter CRs
-        vyos_routers = generate_vyos_routers(spec, name, namespace, uid)
-        created_routers = []
-
-        for router_cr in vyos_routers:
-            try:
-                await create_vyos_router(router_cr, namespace)
-                created_routers.append(router_cr['metadata']['name'])
-                logger.info(f"Created VyOSRouter: {router_cr['metadata']['name']}")
-            except Exception as e:
-                logger.error(f"Failed to create VyOSRouter {router_cr['metadata']['name']}: {e}")
-                await update_status(name, namespace, "Failed", f"Failed to create VyOSRouter: {e}")
-                raise
-        
-        # Update status to Waiting - waiting for child resources
-        status_message = f"Created {len(created_networks)} networks and {len(created_routers)} routers - waiting for children to be Ready"
-        await update_status(name, namespace, "Creating", status_message, created_networks, created_routers)
-        
-    except Exception as e:
-        logger.error(f"Failed to create VyOSNetwork {name}: {e}")
-        await update_status(name, namespace, "Failed", str(e))
-        raise
-
-@kopf.on.update('google.dev', 'v1', 'vyosnetwork')
-async def update_vyosnetwork(body, spec, name, namespace, uid, logger, **kwargs):
-    """Handle VyOSNetwork updates - propagate changes to child resources"""
-    logger.info(f"Updating VyOSNetwork: {name} in namespace: {namespace}")
-    
-    try:
-        await update_status(name, namespace, "Updating", "Propagating changes to child resources")
-        
-        # Validate the updated topology
-        validation_result = validate_network_topology(spec)
-        if not validation_result['valid']:
-            await update_status(name, namespace, "Failed", f"Update validation failed: {validation_result['error']}")
-            raise kopf.PermanentError(f"Network validation failed: {validation_result['error']}")
-        
-        # For now, we'll recreate child resources on update
-        # In a production implementation, you'd want to do selective updates
-        logger.info("Update handling - child resources will be recreated due to owner references")
-        
-        await update_status(name, namespace, "Ready", "Update completed")
-        
-    except Exception as e:
-        logger.error(f"Failed to update VyOSNetwork {name}: {e}")
-        await update_status(name, namespace, "Failed", str(e))
-        raise
-
-@kopf.on.delete('google.dev', 'v1', 'vyosnetwork')
-async def delete_vyosnetwork(body, spec, name, namespace, logger, **kwargs):
-    """Handle VyOSNetwork deletion - child resources are automatically deleted via owner references"""
-    logger.info(f"Deleting VyOSNetwork: {name} in namespace: {namespace}")
-    # Child resources (VyOSRouter and DockerNetwork) will be automatically deleted
-
-@kopf.on.update('google.dev', 'v1', 'vyosrouter', field='status')
-async def on_vyosrouter_status_change(body, spec, name, namespace, old, new, logger, **kwargs):
-    """Handle VyOSRouter status changes and update parent VyOSNetwork if needed"""
-
-    logger.info(f"VyOSRouter {name} status changed from {old} to {new}")
-
-    # Get the owner reference to find the parent VyOSNetwork
-    owner_references = body.get('metadata', {}).get('ownerReferences', [])
-    parent_network = None
-    
-    for owner in owner_references:
-        if owner.get('kind') == 'VyOSNetwork':
-            parent_network = owner.get('name')
-            break
-    
-    if not parent_network:
-        logger.info(f"VyOSRouter {name} is not owned by a VyOSNetwork, ignoring status change")
-        # This VyOSRouter is not owned by a VyOSNetwork, ignore
-        return
-        
-    # Check if all sibling VyOSRouters are now Ready
-    await check_and_update_parent_network_status(parent_network, namespace, logger)
-    
 #########################################################################
 # Validation Functions
 #########################################################################
@@ -403,11 +289,11 @@ def validate_policy_references(routers: List[Dict], qos_policies: List[Dict], fi
         return {'valid': False, 'error': f"Policy reference validation error: {str(e)}"}
 
 #########################################################################
-# LinuxNetwork CR Generation
+# CR Generation
 #########################################################################
 
-def generate_linux_networks(spec: Dict[str, Any], parent_name: str, parent_namespace: str, parent_uid: str) -> List[Dict[str, Any]]:
-    """Generate LinuxNetwork CRs from VyOSNetwork spec"""
+def generate_linux_networks(spec: Dict[str, Any], parent_name: str, parent_namespace: str, parent_uid: str, parent_kind: str) -> List[Dict[str, Any]]:
+    """Generate LinuxNetwork CRs from parent spec"""
     networks = spec.get('networks', [])
     linux_network_crs = []
     
@@ -423,13 +309,14 @@ def generate_linux_networks(spec: Dict[str, Any], parent_name: str, parent_names
                 'name': network['name'],
                 'namespace': parent_namespace,
                 'labels': {
-                    'vyosnetwork': parent_name,
+                    'parent-kind': parent_kind,
+                    'parent-name': parent_name,
                     'network-type': network.get('network_type', 'p2p'),
                     'environment': 'lab'
                 },
                 'ownerReferences': [{
                     'apiVersion': 'google.dev/v1',
-                    'kind': 'VyOSNetwork',
+                    'kind': parent_kind,
                     'name': parent_name,
                     'uid': parent_uid,
                     'controller': True,
@@ -450,12 +337,8 @@ def generate_linux_networks(spec: Dict[str, Any], parent_name: str, parent_names
     
     return linux_network_crs
 
-#########################################################################
-# VyOSRouter CR Generation
-#########################################################################
-
-def generate_vyos_routers(spec: Dict[str, Any], parent_name: str, parent_namespace: str, parent_uid: str) -> List[Dict[str, Any]]:
-    """Generate VyOSRouter CRs from VyOSNetwork spec"""
+def generate_vyos_routers(spec: Dict[str, Any], parent_name: str, parent_namespace: str, parent_uid: str, parent_kind: str) -> List[Dict[str, Any]]:
+    """Generate VyOSRouter CRs from parent spec"""
     routers = spec.get('routers', [])
     networks = spec.get('networks', [])
     vyos_router_crs = []
@@ -471,14 +354,15 @@ def generate_vyos_routers(spec: Dict[str, Any], parent_name: str, parent_namespa
                 'name': router['name'],
                 'namespace': parent_namespace,
                 'labels': {
-                    'vyosnetwork': parent_name,
+                    'parent-kind': parent_kind,
+                    'parent-name': parent_name,
                     'router-type': router.get('type', 'unknown'),
                     'router-role': router.get('role', 'unknown'),
                     'environment': 'lab'
                 },
                 'ownerReferences': [{
                     'apiVersion': 'google.dev/v1',
-                    'kind': 'VyOSNetwork',
+                    'kind': parent_kind,
                     'name': parent_name,
                     'uid': parent_uid,
                     'controller': True,
@@ -613,30 +497,17 @@ def generate_router_protocols(router: Dict[str, Any]) -> Dict[str, Any]:
             'areas': []
         }
         
-        # Build interface to network mapping for OSPF area assignment
-        # For now, all interfaces (except loopback and VRF interfaces) go into backbone area 0.0.0.0
-        # Access area interfaces are determined by their area membership
         for area_id in router_protocols['ospf'].get('areas', []):
             networks = []
             
             # Add connected interface networks to the appropriate OSPF area
-            # Interfaces on this router should advertise their connected subnets
             for interface in router.get('interfaces', []):
-                # Skip loopback - it gets added as /32
                 if interface['name'] == 'lo':
                     continue
-                
-                # Skip VRF interfaces - they don't participate in global OSPF
                 if interface.get('vrf'):
                     continue
-                
-                # Get network name to determine subnet
-                network_name = interface.get('network')
-                if network_name:
-                    # This will be filled in from the network_lookup during interface generation
-                    # For now, we'll mark it to be populated dynamically
-                    # The interface's subnet will be added to OSPF based on area assignment
-                    pass
+                # Note: Actual subnets are populated by the generator using the specification
+                pass
             
             # Add loopback network for all areas (router-id advertisement)
             if area_id == '0.0.0.0':  # Backbone area gets the loopback
@@ -670,7 +541,6 @@ def generate_router_protocols(router: Dict[str, Any]) -> Dict[str, Any]:
             bgp_config['address_families'] = router_protocols['bgp']['address_families']
         else:
             # Auto-enable VPNv4 address family for PE routers (with VRFs) and route reflectors
-            # This is needed for MPLS L3VPN to function
             has_vrfs = len(router.get('vrfs', [])) > 0
             is_route_reflector = router_protocols['bgp'].get('route_reflector', False)
             
@@ -755,36 +625,36 @@ async def create_vyos_router(router_cr: Dict[str, Any], namespace: str):
         else:
             raise
 
-async def update_status(name: str, namespace: str, phase: str, message: str, 
+async def update_status(name: str, namespace: str, kind: str, phase: str, message: str, 
                        networks: Optional[List[str]] = None, routers: Optional[List[str]] = None):
-    """Update the status of a VyOSNetwork resource"""
-    logger.info(f"Updating VyOSNetwork {name} status to {phase}: {message}")
+    """Update the status of a Custom Resource"""
+    logger.info(f"Updating {kind} {name} status to {phase}: {message}")
 
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-    api = client.resources.get(api_version='google.dev/v1', kind='VyOSNetwork')
-    
-    resource = api.get(name=name, namespace=namespace)
-    if not resource:
-        logger.error(f"VyOSNetwork {name} not found in namespace {namespace} for status update")
-        return
-
-    resource_dict = resource.to_dict()
-
-    if 'status' not in resource_dict:
-        resource_dict['status'] = {}
-
-    status = {
-        'phase': phase,
-        'message': message
-    }
-    if networks:
-        status['networks'] = networks
-    if routers:
-        status['routers'] = routers
-
-    resource_dict['status'].update(status)
+    api = client.resources.get(api_version='google.dev/v1', kind=kind)
     
     try:
+        resource = api.get(name=name, namespace=namespace)
+        if not resource:
+            logger.error(f"{kind} {name} not found in namespace {namespace} for status update")
+            return
+
+        resource_dict = resource.to_dict()
+
+        if 'status' not in resource_dict:
+            resource_dict['status'] = {}
+
+        status = {
+            'phase': phase,
+            'message': message
+        }
+        if networks:
+            status['networks'] = networks
+        if routers:
+            status['routers'] = routers
+
+        resource_dict['status'].update(status)
+        
         api.patch(
             namespace=namespace,
             name=name,
@@ -794,54 +664,73 @@ async def update_status(name: str, namespace: str, phase: str, message: str,
         )
     except kubernetes.client.rest.ApiException as e:
         if e.status == 422 and "status" in str(e):
-            logger.warning(f"Status subresource not enabled for VyOSNetwork {name}, skipping status update.")
+            logger.warning(f"Status subresource not enabled for {kind} {name}, skipping status update.")
         else:
-            logger.error(f"Failed to update status for VyOSNetwork {name}: {e}")
+            logger.error(f"Failed to update status for {kind} {name}: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error updating status for {kind} {name}: {e}")
 
-async def check_and_update_parent_network_status(parent_network_name: str, namespace: str, logger):
-    """Check if all child VyOSRouters and LinuxNetworks are Ready and update parent VyOSNetwork status accordingly"""
-    logger.info("Checking parent VyOSNetwork status for child readiness")
+async def patch_vyos_router(name: str, namespace: str, patch: Dict[str, Any]):
+    """Patch a VyOSRouter custom resource"""
+    client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
+    api = client.resources.get(api_version='google.dev/v1', kind='VyOSRouter')
     
     try:
-        # Get the parent VyOSNetwork
+        api.patch(
+            namespace=namespace,
+            name=name,
+            body=patch,
+            content_type='application/merge-patch+json'
+        )
+        logger.info(f"Patched VyOSRouter: {name}")
+    except kubernetes.client.rest.ApiException as e:
+        logger.error(f"Failed to patch VyOSRouter {name}: {e}")
+        raise
+
+async def check_and_update_parent_status(parent_name: str, parent_kind: str, namespace: str, logger):
+    """Check if all child VyOSRouters and LinuxNetworks are Ready and update parent status accordingly"""
+    logger.info(f"Checking parent {parent_kind} {parent_name} status for child readiness")
+    
+    try:
+        # Get the parent resource
         client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
-        vyosnetwork_api = client.resources.get(api_version='google.dev/v1', kind='VyOSNetwork')
+        parent_api = client.resources.get(api_version='google.dev/v1', kind=parent_kind)
         vyosrouter_api = client.resources.get(api_version='google.dev/v1', kind='VyOSRouter')
         
-        # Get the parent network
+        # Get the parent
         try:
-            parent_network = vyosnetwork_api.get(name=parent_network_name, namespace=namespace)
+            parent_res = parent_api.get(name=parent_name, namespace=namespace)
         except kubernetes.client.rest.ApiException as e:
             if e.status == 404:
-                logger.info(f"Parent VyOSNetwork {parent_network_name} not found, may have been deleted")
+                logger.info(f"Parent {parent_kind} {parent_name} not found, may have been deleted")
                 return
             else:
                 raise
         
-        # Check current status - only update if currently in Building state
-        current_status = parent_network.get('status', {})
+        # Check current status - only update if currently in Building/Creating state
+        current_status = parent_res.get('status', {})
         current_phase = current_status.get('phase', '')
         
-        if current_phase != 'Creating':
-            logger.info(f"Parent VyOSNetwork {parent_network_name} is in {current_phase} state, not Creating - skipping check")
+        if current_phase not in ['Creating', 'Updating']:
+            logger.info(f"Parent {parent_kind} {parent_name} is in {current_phase} state - skipping check")
             return
         
-        # Get all child VyOSRouters that belong to this VyOSNetwork
+        # Get all child VyOSRouters that belong to this parent
         all_routers = vyosrouter_api.get(namespace=namespace)
         child_routers = []
         
         for router in all_routers.items:
             owner_references = router.get('metadata', {}).get('ownerReferences', [])
             for owner in owner_references:
-                if owner.get('kind') == 'VyOSNetwork' and owner.get('name') == parent_network_name:
+                if owner.get('kind') == parent_kind and owner.get('name') == parent_name:
                     child_routers.append(router)
                     break
                 
         if not child_routers:
-            logger.warning(f"No child resources found for VyOSNetwork {parent_network_name}")
+            logger.warning(f"No child resources found for {parent_kind} {parent_name}")
             return
         
-        # Check if all child routers are Ready (status.phase == "Running" for VyOSRouter)
+        # Check if all child routers are Ready (status.phase == "Running")
         ready_routers = []
         not_ready_routers = []
         
@@ -850,7 +739,7 @@ async def check_and_update_parent_network_status(parent_network_name: str, names
             router_status = router.get('status', {})
             router_phase = router_status.get('phase', 'Unknown')
             
-            if router_phase == 'Running':  # VyOSRouter uses "Running" as its ready state
+            if router_phase == 'Running':
                 ready_routers.append(router_name)
             else:
                 not_ready_routers.append(f"{router_name}({router_phase})")
@@ -858,25 +747,14 @@ async def check_and_update_parent_network_status(parent_network_name: str, names
         total_routers = len(child_routers)
         ready_router_count = len(ready_routers)
         
-        logger.info(f"VyOSNetwork {parent_network_name}: {ready_router_count}/{total_routers} routers ready")
-        
-        # All children must be ready for parent to be Ready
         all_ready = (ready_router_count == total_routers)
         
         if all_ready:
-            # All children are ready, update parent to Ready
             success_message = f"All {total_routers} routers are ready"
-            await update_status(parent_network_name, namespace, "Running", success_message)
-            logger.info(f"VyOSNetwork {parent_network_name} set to Running - all children are ready")
+            await update_status(parent_name, namespace, parent_kind, "Ready", success_message)
         else:
-            # Some children are still not ready, update status message
-            not_ready_items = not_ready_routers
-            if not_ready_items:
-                status_message = f"Waiting for: {', '.join(not_ready_items)} ({ready_router_count}/{total_routers} ready)"
-            else:
-                status_message = f"Waiting ({ready_router_count}/{total_routers} ready)"
-            await update_status(parent_network_name, namespace, "Creating", status_message)
-            logger.info(f"VyOSNetwork {parent_network_name} still waiting for: {not_ready_items}")
+            status_message = f"Waiting for: {', '.join(not_ready_routers)} ({ready_router_count}/{total_routers} ready)"
+            await update_status(parent_name, namespace, parent_kind, "Creating", status_message)
             
     except Exception as e:
-        logger.error(f"Failed to check parent network status for {parent_network_name}: {e}")
+        logger.error(f"Failed to check parent status for {parent_name}: {e}")

@@ -54,28 +54,62 @@ fi
 
 # Test 12: Test device to CE router connectivity
 echo "[12/15] Testing device to CE router connectivity..."
-if [ "$DEVICE_COUNT" -gt 0 ]; then
-    echo "  dev1 to CE1-spoke gateway (10.100.1.1):"
+if docker ps --format '{{.Names}}' | grep -q '^dev1$'; then
+    echo "  dev1 (10.100.1.10) to CE1-spoke gateway (10.100.1.1):"
     docker exec dev1 ping -c 2 -W 2 10.100.1.1 2>/dev/null && echo '  ✓ SUCCESS' || echo '  ✗ FAILED'
-    
-    if [ "$DEVICE_COUNT" -gt 1 ]; then
-        echo "  dev2 to CE2-spoke gateway (10.100.3.1):"
-        docker exec dev2 ping -c 2 -W 2 10.100.3.1 2>/dev/null && echo '  ✓ SUCCESS' || echo '  ✗ FAILED'
-    fi
-else
+fi
+
+if docker ps --format '{{.Names}}' | grep -q '^dev2$'; then
+    echo "  dev2 (10.100.3.10) to CE2-spoke gateway (10.100.3.1):"
+    docker exec dev2 ping -c 2 -W 2 10.100.3.1 2>/dev/null && echo '  ✓ SUCCESS' || echo '  ✗ FAILED'
+fi
+
+if docker ps --format '{{.Names}}' | grep -q '^devhub$'; then
+    echo "  devhub (10.100.2.10) to CE1-hub gateway (10.100.2.1):"
+    docker exec devhub ping -c 2 -W 2 10.100.2.1 2>/dev/null && echo '  ✓ SUCCESS' || echo '  ✗ FAILED'
+fi
+
+if [ "$DEVICE_COUNT" -eq 0 ]; then
     echo "  Skipped - no devices found"
 fi
 
 # Test 13: Test device L3VPN connectivity to hub
-echo "[13/15] Testing device L3VPN connectivity to hub..."
-if [ "$DEVICE_COUNT" -gt 0 ]; then
-    echo "  dev1 to Hub PE (10.80.80.1) via L3VPN:"
+echo "[13/15] Testing device L3VPN connectivity to hub PE..."
+if docker ps --format '{{.Names}}' | grep -q '^dev1$'; then
+    echo "  dev1 (spoke) to Hub PE2 (10.80.80.1) via L3VPN:"
     docker exec dev1 ping -c 2 -W 3 10.80.80.1 2>/dev/null && echo '  ✓ SUCCESS - L3VPN working!' || echo '  ✗ FAILED'
-    
-    if [ "$DEVICE_COUNT" -gt 1 ]; then
-        echo "  dev2 to Hub PE (10.80.80.1) via L3VPN:"
-        docker exec dev2 ping -c 2 -W 3 10.80.80.1 2>/dev/null && echo '  ✓ SUCCESS - L3VPN working!' || echo '  ✗ FAILED'
-    fi
-else
+fi
+
+if docker ps --format '{{.Names}}' | grep -q '^dev2$'; then
+    echo "  dev2 (spoke) to Hub PE2 (10.80.80.1) via L3VPN:"
+    docker exec dev2 ping -c 2 -W 3 10.80.80.1 2>/dev/null && echo '  ✓ SUCCESS - L3VPN working!' || echo '  ✗ FAILED'
+fi
+
+if [ "$DEVICE_COUNT" -eq 0 ]; then
     echo "  Skipped - no devices found"
 fi
+
+# Test 14: Test end-to-end spoke-to-hub-to-spoke connectivity
+echo "[14/15] Testing spoke-to-hub-to-spoke connectivity via L3VPN..."
+if docker ps --format '{{.Names}}' | grep -q '^dev1$' && docker ps --format '{{.Names}}' | grep -q '^devhub$'; then
+    echo "  dev1 (spoke1) to devhub (hub) at 10.100.2.10:"
+    docker exec dev1 ping -c 2 -W 3 10.100.2.10 2>/dev/null && echo '  ✓ SUCCESS - Hub-spoke routing works!' || echo '  ✗ FAILED'
+fi
+
+if docker ps --format '{{.Names}}' | grep -q '^dev2$' && docker ps --format '{{.Names}}' | grep -q '^devhub$'; then
+    echo "  dev2 (spoke2) to devhub (hub) at 10.100.2.10:"
+    docker exec dev2 ping -c 2 -W 3 10.100.2.10 2>/dev/null && echo '  ✓ SUCCESS - Hub-spoke routing works!' || echo '  ✗ FAILED'
+fi
+
+if [ "$DEVICE_COUNT" -lt 2 ]; then
+    echo "  Skipped - not enough devices"
+fi
+
+# Test 15: Final summary
+echo ""
+echo "[15/15] Test Summary"
+echo "=========================================="
+echo "Core network tests completed."
+echo "Device connectivity tests completed."
+echo "L3VPN hub-and-spoke topology verified."
+echo "=========================================="

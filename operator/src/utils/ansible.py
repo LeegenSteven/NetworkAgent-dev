@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 ########################################################
 # Concurrency management in ansible
 ########################################################
-ANSIBLE_CONCURRENCY_LIMIT = 1
+ANSIBLE_CONCURRENCY_LIMIT = 3
 ansible_semaphore = asyncio.Semaphore(ANSIBLE_CONCURRENCY_LIMIT)
 
 # Max number of concurrent workers for handling requests

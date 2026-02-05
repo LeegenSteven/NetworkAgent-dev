@@ -248,6 +248,12 @@ spec:
     - name: "p1"
       hostname: "p1"
       router_id: "10.0.0.3"
+      location:
+        latitude: 51.5074
+        longitude: -0.1278
+        city: "London"
+        country: "United Kingdom"
+        site: "London-DC1"
       interfaces:
         - name: "eth0"
           network: "management"
@@ -266,6 +272,12 @@ spec:
     - name: "p2"
       hostname: "p2"
       router_id: "10.0.0.4"
+      location:
+        latitude: 53.4808
+        longitude: -2.2426
+        city: "Manchester"
+        country: "United Kingdom"
+        site: "Manchester-DC1"
       interfaces:
         - name: "eth0"
           network: "management"
@@ -280,6 +292,12 @@ spec:
     - name: "p3"
       hostname: "p3"
       router_id: "10.0.0.5"
+      location:
+        latitude: 55.9533
+        longitude: -3.1883
+        city: "Edinburgh"
+        country: "United Kingdom"
+        site: "Edinburgh-DC1"
       interfaces:
         - name: "eth0"
           network: "management"
@@ -296,6 +314,12 @@ spec:
     - name: "p4"
       hostname: "p4"
       router_id: "10.0.0.6"
+      location:
+        latitude: 53.8008
+        longitude: -1.5491
+        city: "Leeds"
+        country: "United Kingdom"
+        site: "Leeds-DC1"
       interfaces:
         - name: "eth0"
           network: "management"
@@ -312,6 +336,12 @@ spec:
     - name: "rr1"
       hostname: "rr1"
       router_id: "10.0.0.1"
+      location:
+        latitude: 52.4862
+        longitude: -1.8904
+        city: "Birmingham"
+        country: "United Kingdom"
+        site: "Birmingham-DC1"
       interfaces:
         - name: "eth0"
           network: "management"
@@ -324,6 +354,12 @@ spec:
     - name: "rr2"
       hostname: "rr2"
       router_id: "10.0.0.2"
+      location:
+        latitude: 51.4545
+        longitude: -2.5879
+        city: "Bristol"
+        country: "United Kingdom"
+        site: "Bristol-DC1"
       interfaces:
         - name: "eth0"
           network: "management"
@@ -336,6 +372,12 @@ spec:
     - name: "pe1"
       hostname: "pe1"
       router_id: "10.0.0.7"
+      location:
+        latitude: 51.7520
+        longitude: -1.2577
+        city: "Oxford"
+        country: "United Kingdom"
+        site: "Oxford-DC1"
       interfaces:
         - name: "eth0"
           network: "management"
@@ -348,6 +390,12 @@ spec:
     - name: "pe2"
       hostname: "pe2"
       router_id: "10.0.0.8"
+      location:
+        latitude: 52.2053
+        longitude: 0.1218
+        city: "Cambridge"
+        country: "United Kingdom"
+        site: "Cambridge-DC1"
       interfaces:
         - name: "eth0"
           network: "management"
@@ -362,6 +410,12 @@ spec:
     - name: "pe3"
       hostname: "pe3"
       router_id: "10.0.0.10"
+      location:
+        latitude: 50.8198
+        longitude: -0.1371
+        city: "Brighton"
+        country: "United Kingdom"
+        site: "Brighton-DC1"
       interfaces:
         - name: "eth0"
           network: "management"
@@ -374,6 +428,12 @@ spec:
     - name: "ce1-spoke"
       hostname: "ce1-spoke"
       router_id: "10.0.0.80"
+      location:
+        latitude: 53.3811
+        longitude: -1.4701
+        city: "Sheffield"
+        country: "United Kingdom"
+        site: "Sheffield-Site1"
       interfaces:
         - name: "eth0"
           network: "management"
@@ -386,6 +446,12 @@ spec:
     - name: "ce1-hub"
       hostname: "ce1-hub"
       router_id: "10.0.0.100"
+      location:
+        latitude: 52.9548
+        longitude: -1.1581
+        city: "Nottingham"
+        country: "United Kingdom"
+        site: "Nottingham-Hub1"
       interfaces:
         - name: "eth0"
           network: "management"
@@ -398,6 +464,12 @@ spec:
     - name: "ce2-spoke"
       hostname: "ce2-spoke"
       router_id: "10.0.0.90"
+      location:
+        latitude: 53.4084
+        longitude: -2.9916
+        city: "Liverpool"
+        country: "United Kingdom"
+        site: "Liverpool-Site1"
       interfaces:
         - name: "eth0"
           network: "management"

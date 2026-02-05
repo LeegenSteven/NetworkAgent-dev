@@ -44,3 +44,54 @@
 - name: Save iptables rules
   ansible.builtin.shell: iptables-save > /etc/iptables/rules.v4
   when: icmp_rule_result.changed
+
+- name: install dev packages for gtp compile
+  ansible.builtin.apt:
+    pkg:
+      - git
+      - gcc
+      - g++ 
+      - cmake 
+      - autoconf 
+      - libtool 
+      - pkg-config 
+      - libmnl-dev 
+      - libyaml-dev
+    state: latest
+    update_cache: true
+
+- name: install gcc 12
+  ansible.builtin.apt:
+    pkg:
+      - gcc-12
+    state: latest
+
+- name: install headers matching kernel
+  apt:
+    pkg:
+    - linux-headers-{{ running_kernel.stdout }}
+
+- name: create /opt/gtp5
+  file:
+    path: /opt/gtp5
+    state: directory
+    mode: '0777' 
+
+- name: git checkout from gtp5
+  ansible.builtin.git:
+    version: v0.8.10
+    depth: 1
+    repo: https://github.com/free5gc/gtp5g.git
+    dest: /opt/gtp5
+    clone: yes  # Ensure the repo is cloned (not just updated)
+    update: yes
+    force: yes 
+
+- name: Build and install gtp module
+  ansible.builtin.shell: |
+    make clean
+    make
+    make install
+  args:
+    chdir: /opt/gtp5
+

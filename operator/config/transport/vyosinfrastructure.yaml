@@ -94,6 +94,29 @@ spec:
                       image:
                         type: string
                         default: "vyos:1.5"
+                      location:
+                        type: object
+                        description: "GPS coordinates and location information for the router"
+                        properties:
+                          latitude:
+                            type: number
+                            description: "Latitude in decimal degrees"
+                            minimum: -90
+                            maximum: 90
+                          longitude:
+                            type: number
+                            description: "Longitude in decimal degrees"
+                            minimum: -180
+                            maximum: 180
+                          city:
+                            type: string
+                            description: "City or location name"
+                          country:
+                            type: string
+                            description: "Country name or code"
+                          site:
+                            type: string
+                            description: "Site or datacenter identifier"
                       interfaces:
                         type: array
                         items:

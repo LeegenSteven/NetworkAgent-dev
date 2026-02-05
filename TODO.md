@@ -1,6 +1,6 @@
 __Network__
 
-* Split VyosNetwork CRDs (Brian)
+* Split VyosNetwork CRDs (Brian)   DONE
     * Static transport network setup
     * CRD for routing
     * CRD for L3VPN
@@ -12,7 +12,9 @@ __Network__
     * X number of users with predictable time of day pattern
     * Update the traffic UI viewer
 * Add free5gc to NetworkVM (Brian)
-    * generate an image for everything
+    * build free5gc images in temp VM and push to registry
+    * Authenticate network vm with registry 
+    * Update free5gc CRDs and operator
 
 __Spanner__
 
@@ -28,6 +30,8 @@ __Spanner__
     * trigger a snapshot to be processed by GNN
 * Network Dashboard
     * Update topology viewer with a map? add geo in descriptor
+    * Update node details when clicking
+    * How to display underlay/overlay
 
 __GNN(s)__
 
@@ -47,6 +51,9 @@ __GNN(s)__
     * Anomaly notification
         * Device cluster affected
         * Root cause as per GNN
+* GNN Performance UI
+    * Show high level network performance
+    * Drill down into anomalies
 
 __Agents__
 

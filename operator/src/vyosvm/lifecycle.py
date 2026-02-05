@@ -40,7 +40,8 @@ async def create_vyosvm(spec, meta, name, namespace, logger, **kwargs):
                          release="ubuntu-2204-lts",
                          monitor='False', # set to false so this VM is not scraped by prometheus
                          graph='False', # set to false so this VM is not showing on topology graph
-                         machine='e2-standard-16') # gcp compute machine type
+                         machine='e2-standard-16',
+                         scopes="cloud-platform") # gcp compute machine type
 
     # Install Gitea
     await run_vyosvm_install(namespace, name, external_ip_address)

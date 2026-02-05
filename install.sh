@@ -965,12 +965,12 @@ Kill()
 DeployOperator()
 {
 
-    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO -E WEBAPPS_LOGIN \
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_PROJECT_NUMBER -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO -E WEBAPPS_LOGIN \
           -E WEBAPPS_PWD -E NETWORK_OPERATOR -E GIT_OPERATOR -E GOOGLE_ORG_NAME operator/deployment.j2 > operator/deployment.yaml
 
-    echo "#####################################"
-    echo "Deploy the Operator, networks and git"
-    echo "#####################################"
+    echo "######################################"
+    echo "Deploy the Operator, networks and CRDs"
+    echo "######################################"
 
     if ! test -f operator/deployment.yaml; then
         echo "No deployment.yaml found - you can generate by running ./install.sh -c"

@@ -343,7 +343,9 @@ async def create_nat(namespace, network_name, region):
 # Create ComputeInstance
 ########################################################################
 # @throttled
-async def create_compute(namespace, parent_name, vm_name, external_ip, interfaces, project, region, zone, vpn=False, monitor=True,family="networkagent", release="networkagent",graph=True, machine="e2-standard-2"):
+async def create_compute(namespace, parent_name, vm_name, external_ip, interfaces, project, region, zone, 
+                         vpn=False, monitor=True,family="networkagent", release="networkagent", graph=True,
+                         machine="e2-standard-2", scopes="", service_account=""):
   logger.debug(f"Create compute vm {vm_name} in ns {namespace}")
   compute_api = get_resource_api("compute.cnrm.cloud.google.com/v1beta1", "ComputeInstance")
 
@@ -479,6 +481,22 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
   if len(networkInterfaces)>2:
     machineType="e2-highcpu-4"
 
+  # Prepare the Service Account section
+  # if svc_account equals "default" then use the default compute engine 
+  # service account of the GCP project
+  svc_account = {}
+  if service_account != "":
+    if service_account == "default":
+      svc_account["serviceAccountRef"] = {
+        "external": f"{os.getenv('GOOGLE_PROJECT_NUMBER')}-compute@developer.gserviceaccount.com"
+      }
+    else:
+      svc_account["serviceAccountRef"] = {
+        "external": service_account
+    }
+  if scopes != "":
+    svc_account["scopes"] = [f"https://www.googleapis.com/auth/{scope}" for scope in scopes.split(",")]
+
   # build out labels
   labels = {}
   if monitor:
@@ -515,6 +533,7 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
           },
         },
       },
+      "serviceAccount": svc_account,
       "networkInterface": networkInterfaces,
       "canIpForward": True,
       "metadataStartupScript": f"sudo apt-get update; sudo apt-get install -yq python3-pip;{route_script}",

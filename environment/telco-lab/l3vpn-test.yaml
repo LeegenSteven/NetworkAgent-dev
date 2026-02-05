@@ -4,7 +4,7 @@ apiVersion: google.dev/v1
 kind: TrafficTest
 metadata:
   name: constant-baseline
-  namespace: automation
+  namespace: default
   labels:
     scenario: baseline
     pattern: constant

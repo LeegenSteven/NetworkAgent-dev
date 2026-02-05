@@ -1,6 +1,7 @@
 ---
 - name: Traffic Test Management
-  hosts: target
+  hosts: all
+  become: true
   gather_facts: yes
   vars:
     # Paths
@@ -121,13 +122,21 @@
           debug:
             msg: "iperf3 server check result: {{ iperf3_server_check.stdout }}, return code: {{ iperf3_server_check.rc }}"
 
+        - name: Ensure /tmp exists in source container
+          shell: "docker exec {{ source_device }} mkdir -p /tmp"
+          failed_when: false
+
+        - name: Ensure /tmp exists in destination container
+          shell: "docker exec {{ destination_device }} mkdir -p /tmp"
+          failed_when: false
+
         - name: Verify traffic generator script exists
           stat:
             path: "{{ traffic_scripts_dir }}/traffic_generator.py"
           register: traffic_gen_stat
 
         - name: Copy traffic generator script to source container
-          shell: "docker cp {{ traffic_scripts_dir }}/traffic_generator.py {{ source_device }}:/tmp/"
+          shell: "docker cp {{ traffic_scripts_dir }}/traffic_generator.py {{ source_device }}:/tmp/traffic_generator.py"
           when: traffic_gen_stat.stat.exists
 
         - name: Verify metrics collector script exists
@@ -136,7 +145,7 @@
           register: metrics_collector_stat
 
         - name: Copy metrics collector script to source container
-          shell: "docker cp {{ traffic_scripts_dir }}/metrics_collector.py {{ source_device }}:/tmp/"
+          shell: "docker cp {{ traffic_scripts_dir }}/metrics_collector.py {{ source_device }}:/tmp/metrics_collector.py"
           when: metrics_collector_stat.stat.exists
 
         - name: Verify configuration file exists
@@ -180,7 +189,7 @@
           register: wrapper_script_stat
 
         - name: Copy wrapper script to source container
-          shell: "docker cp {{ traffic_scripts_dir }}/run_traffic_test.sh {{ source_device }}:/tmp/"
+          shell: "docker cp {{ traffic_scripts_dir }}/run_traffic_test.sh {{ source_device }}:/tmp/run_traffic_test.sh"
           when: wrapper_script_stat.stat.exists
 
         - name: Start traffic generator in background

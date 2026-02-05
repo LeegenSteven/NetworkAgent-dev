@@ -60,7 +60,7 @@ async def create_traffic_test_handler(body, spec, name, namespace, uid, logger, 
         spec_with_name['destination_ip'] = dest_ip
 
         # Create the TrafficTest using Ansible
-        result = await create_traffic_test(spec_with_name)
+        result = await create_traffic_test(ip_address, spec_with_name)
 
         if result['success']:
             # Update status to running
@@ -74,7 +74,7 @@ async def create_traffic_test_handler(body, spec, name, namespace, uid, logger, 
             logger.info(f"Successfully started TrafficTest {name}")
             
             # Start background task to monitor the test
-            # asyncio.create_task(monitor_traffic_test(name, namespace, spec_with_name))
+            # asyncio.create_task(monitor_traffic_test(name, namespace, spec_with_name, ip_address))
             
         else:
             await update_status(name, namespace, "Failed", f"Failed to start traffic test: {result['error']}")
@@ -97,12 +97,18 @@ async def delete_traffic_test_handler(body, spec, name, namespace, logger, **kwa
     logger.info(f"Deleting TrafficTest: {name} in namespace: {namespace}")
 
     try:
+        # Get Network VM IP address
+        ip_address = await get_ip("automation", "networkvm")
+        if ip_address is None:
+            logger.warning("No IP address found on Network VM, skipping traffic test deletion")
+            return
+        
         # Add test name to spec for tracking
         spec_with_name = dict(spec)
         spec_with_name['test_name'] = name
         
         # Delete the traffic test using Ansible
-        result = await delete_traffic_test(spec_with_name)
+        result = await delete_traffic_test(ip_address, spec_with_name)
         
         if result['success']:
             logger.info(f"Successfully deleted TrafficTest {name}")
@@ -118,7 +124,7 @@ async def delete_traffic_test_handler(body, spec, name, namespace, logger, **kwa
 # Background Monitoring
 #########################################################################
 
-async def monitor_traffic_test(name: str, namespace: str, spec: dict):
+async def monitor_traffic_test(name: str, namespace: str, spec: dict, ip_address: str):
     """Monitor a running traffic test and update status"""
     logger.info(f"Starting monitoring for TrafficTest {name}")
     
@@ -137,7 +143,7 @@ async def monitor_traffic_test(name: str, namespace: str, spec: dict):
                 logger.info(f"TrafficTest {name} duration reached, checking final status")
                 
                 # Get final status
-                status_result = await get_traffic_test_status(spec)
+                status_result = await get_traffic_test_status(ip_address, spec)
                 
                 if status_result['success']:
                     await update_status(
@@ -157,7 +163,7 @@ async def monitor_traffic_test(name: str, namespace: str, spec: dict):
             
             # Get current status and metrics
             try:
-                status_result = await get_traffic_test_status(spec)
+                status_result = await get_traffic_test_status(ip_address, spec)
                 
                 if status_result['success']:
                     current_metrics = status_result.get('current_metrics', {})

@@ -2,7 +2,7 @@ import kopf
 import logging
 import kubernetes
 from typing import Dict, Any
-from vyosnetwork.utils import patch_vyos_router, update_status
+from utils.vyosnetwork import patch_vyos_router, update_status
 
 logger = logging.getLogger(__name__)
 

@@ -201,10 +201,6 @@ def register_network_services_phase():
     if os.getenv("VPN") is not None:
         def load_vpn():
             logger.info("Loading VPN lifecycle")
-            import vpn.pointtopoint.lifecycle
-            import vpn.mesh.lifecycle
-            import vpn.utils.status
-            import vpn.wireguard.lifecycle
             import vyosvm.lifecycle
             import vyosinfrastructure.lifecycle
             import vyosunderlay.lifecycle

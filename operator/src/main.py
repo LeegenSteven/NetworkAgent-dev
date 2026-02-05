@@ -69,10 +69,6 @@ def legacy_import_modules():
     
     if os.getenv("VPN") is not None:
         logger.info("VPN Lifecycle")
-        import vpn.pointtopoint.lifecycle
-        import vpn.mesh.lifecycle
-        import vpn.utils.status
-        import vpn.wireguard.lifecycle
         import vyosvm.lifecycle
         import vyosinfrastructure.lifecycle
         import vyosunderlay.lifecycle

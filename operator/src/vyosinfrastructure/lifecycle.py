@@ -1,7 +1,7 @@
 import kopf
 import logging
 from typing import Dict, Any
-from vyosnetwork.utils import (
+from utils.vyosnetwork import (
     validate_network_topology,
     generate_linux_networks,
     generate_vyos_routers,

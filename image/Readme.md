@@ -6,5 +6,3 @@ The scripts install the following software
 * Docker
 * UERANSIM
 * Free5gc
-* Wireguard
-* Metric Collector

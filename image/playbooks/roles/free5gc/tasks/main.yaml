@@ -58,18 +58,18 @@
 - name: pull mongodb
   command: "docker pull mongo"
 
-# - name: push images to artifact repo
-#   command: "docker push {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/networkagent/{{item}}:latest"
-#   loop:
-#    - smf
-#    - amf
-#    - upf
-#    - udr
-#    - udm
-#    - nrf
-#    - nssf
-#    - n3iwf
-#    - pcf
-#    - ausf
-#    - webconsole
-#    - ueransim
+- name: push images to artifact repo
+  command: "docker push {{GOOGLE_REGION}}-docker.pkg.dev/{{GOOGLE_PROJECT}}/networkagent/{{item}}:latest"
+  loop:
+   - smf
+   - amf
+   - upf
+   - udr
+   - udm
+   - nrf
+   - nssf
+   - n3iwf
+   - pcf
+   - ausf
+   - webconsole
+   - ueransim

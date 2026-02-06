@@ -45,7 +45,7 @@ async def create_gitea(spec, meta, name, namespace, logger, **kwargs):
                          release="ubuntu-2204-lts",
                          monitor=False, # set to false so this VM is not scraped by prometheus
                          graph=False, # set to false so this VM is not showing on topology graph
-                         )
+                         scopes="cloud-platform")
     # Install Gitea
     await run_gitea_install(namespace, external_ip_address)
 

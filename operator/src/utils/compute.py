@@ -393,32 +393,6 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
     })
     networkInterfaces[0]['accessConfig']=accessconfig
 
-  # if this is a vpn VM then connect to the dataplane
-  if vpn:
-    address_name = vm_name+"-dataplane-address"
-    subnet = f"https://www.googleapis.com/compute/v1/projects/{project}/regions/{region}/subnetworks/dataplane"
-    net = f"https://www.googleapis.com/compute/v1/projects/{project}/regions/{region}/networks/dataplane"
-    await create_internal_ip(namespace, address_name, region, externalsubnet=subnet, graph=graph)
-    networkInterfaces.append(
-      {
-        "networkRef": {
-          "external": net
-        },
-        "subnetworkRef": {
-          "external": subnet
-        },
-        "networkIpRef": {
-          "kind": "ComputeAddress",
-          "name": address_name,
-          "namespace": namespace
-        }
-      })
-
-  # for VNFs we need to build the metadatastartupscript for network routes
-  routes = ['10.0.40', '10.0.50', '10.0.60']
-  route_script=""
-  router_address=None
-
   # next add the interface to connect to - this equates to ens5 internal nic
   if interfaces is not None:
     for interface in interfaces:
@@ -449,31 +423,6 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
           }
         })
   
-
-      # if this is not a wireguard VPN compute instance generate the routing script
-      if vpn == False:
-        # check the interface is up, and wait if not
-        subnet_info=await get_subnetwork(namespace, interface['name'])
-        logger.debug(subnet_info)
-
-        # check if the subnet is in the route list, if so delete that route from the list
-        # get the subnet address and strip last digits
-        subnet_cidr=subnet_info.get('spec').get('ipCidrRange')[:-5]
-        logger.debug("subnet cidr %s", subnet_cidr)
-
-        if subnet_cidr in routes:
-          # if the subnet addres is in the route list then set the router_address to subnet gateway
-          router_address = subnet_cidr+".1"
-          logger.debug("router=%s",router_address)
-          # remove the subnet_cidr from routes
-          routes.remove(subnet_cidr)
-          logger.debug("routes=%s",routes)
-
-    # build the route script
-    if router_address is not None:
-      for route in routes:
-        route_script=route_script+f"sudo ip route add {route}.0/24 via {router_address};"
-    logger.debug("Route script = %s", route_script)
 
   machineType=machine
   # select the machinetype based on the number of interfaces, there must be the same or more number of cores 
@@ -536,7 +485,7 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
       "serviceAccount": svc_account,
       "networkInterface": networkInterfaces,
       "canIpForward": True,
-      "metadataStartupScript": f"sudo apt-get update; sudo apt-get install -yq python3-pip;{route_script}",
+      "metadataStartupScript": f"sudo apt-get update; sudo apt-get install -yq python3-pip",
       "metadata": [
         { 
           "key": "ssh-keys",

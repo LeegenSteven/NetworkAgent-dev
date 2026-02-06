@@ -18,7 +18,7 @@ import logging
 from utils.compute import *
 import utils.constants as constants
 import ansible_runner
-from vpn.wireguard.lifecycle_tasks import *;
+import kubernetes
 import base64
 
 logger = logging.getLogger(__name__)

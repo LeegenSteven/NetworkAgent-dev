@@ -15,7 +15,6 @@
 import kopf
 import logging
 from utils.compute import *
-from utils.resources import get_boolean_label
 from gitea.lifecycle_tasks import *
 
 logger = logging.getLogger(__name__)
@@ -33,10 +32,6 @@ async def create_gitea(spec, meta, name, namespace, logger, **kwargs):
     await create_external_ip(namespace, "gitea", os.getenv("GOOGLE_REGION"), graph=False)
     external_ip_address = await get_ip_address(namespace, "gitea")
 
-    # get monitor and graph labels from the metadata / labels.
-    monitor = get_boolean_label(meta, 'monitor')
-    graph = get_boolean_label(meta, 'graph')
-
     # Create VM and attach IP address
     await create_compute(namespace, 
                          name,
@@ -48,9 +43,9 @@ async def create_gitea(spec, meta, name, namespace, logger, **kwargs):
                          os.getenv("GOOGLE_ZONE"), 
                          family="ubuntu-os-cloud",
                          release="ubuntu-2204-lts",
-                         monitor='False', # set to false so this VM is not scraped by prometheus
-                         graph='False') # set to false so this VM is not showing on topology graph
-
+                         monitor=False, # set to false so this VM is not scraped by prometheus
+                         graph=False, # set to false so this VM is not showing on topology graph
+                         )
     # Install Gitea
     await run_gitea_install(namespace, external_ip_address)
 

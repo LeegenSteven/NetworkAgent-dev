@@ -59,7 +59,7 @@
                 "session_duration": {% if session_duration is defined and session_duration != '' and session_duration != 'null' %}{{ session_duration | int }}{% else %}null{% endif %},
                 "think_time": {{ think_time | int }},
                 "metrics_enabled": {{ metrics_enabled | default(true) | lower }},
-                "metrics_interval": {{ metrics_interval | int }},
+                "metrics_interval": {{ metrics_interval | int }}
               }
             dest: "{{ config_file }}"
             mode: '0644'

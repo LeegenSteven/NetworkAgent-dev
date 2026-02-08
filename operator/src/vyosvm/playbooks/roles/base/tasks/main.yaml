@@ -31,13 +31,18 @@
   environment:
     DEBIAN_FRONTEND: noninteractive
 
-- name: Allow ICMP traffic system-wide in FORWARD chain
+- name: Disable UFW
+  ansible.builtin.shell: ufw disable
+
+- name: flush iptables
   ansible.builtin.shell: |
-    # Check if rule already exists
-    if ! iptables -C FORWARD -p icmp -j ACCEPT -m comment --comment "Allow ICMP for network diagnostics" 2>/dev/null; then
-      iptables -I FORWARD 1 -p icmp -j ACCEPT -m comment --comment "Allow ICMP for network diagnostics"
-      echo "changed"
-    fi
+    iptables -P INPUT ACCEPT
+    iptables -P FORWARD ACCEPT
+    iptables -P OUTPUT ACCEPT
+    iptables -F
+    iptables -t nat -F
+    iptables -t mangle -F
+    iptables -X
   register: icmp_rule_result
   changed_when: "'changed' in icmp_rule_result.stdout"
 

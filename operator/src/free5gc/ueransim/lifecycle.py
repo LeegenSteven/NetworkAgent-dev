@@ -17,7 +17,7 @@ import kopf
 from utils.compute import *
 from free5gc.ueransim.lifecycle_tasks import *
 from utils.resources import get_boolean_label
-from graph.lifecycle_tasks import update_network_node
+# from graph.lifecycle_tasks import update_network_node
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ async def ueransim(spec, meta, status, namespace, name, logger, **kwargs):
 async def ueransim_update(body, spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Update ueransim {name} with spec: {spec} and status: {status['ueransim']['status']}")
   kind = body.get('kind')
-  await update_network_node(body, spec, namespace, name, kind, meta['uid'])
+  # await update_network_node(body, spec, namespace, name, kind, meta['uid'])
 
 ##########################################
 # Watch for Failed UERANSIM

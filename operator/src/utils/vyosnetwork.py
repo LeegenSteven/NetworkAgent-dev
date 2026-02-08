@@ -374,6 +374,7 @@ def generate_vyos_routers(spec: Dict[str, Any], parent_name: str, parent_namespa
                 'router_id': router['router_id'],
                 'image': router.get('image', 'vyos:1.5'),
                 'source_network': parent_name,
+                'location': router.get('location', {}),
                 'interfaces': generate_router_interfaces(router, network_lookup),
                 'vrfs': router.get('vrfs', []),
                 'protocols': generate_router_protocols(router),

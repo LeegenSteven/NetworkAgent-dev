@@ -17,7 +17,7 @@ from utils.compute import *
 from utils.resources import get_boolean_label
 import kopf
 from free5gc.upf.lifecycle_tasks import *
-from graph.lifecycle_tasks import update_network_node
+# from graph.lifecycle_tasks import update_network_node
 
 logger = logging.getLogger(__name__)
 
@@ -74,4 +74,4 @@ async def userplanefunction(meta, spec, status, namespace, name, logger, **kwarg
 async def userplanefunction_update(body, spec, meta, status, namespace, name, logger, **kwargs):
   logger.debug(f"Update userplanefunction {name} with spec: {spec} and status: {status['userplanefunction']['status']}")
   kind = body.get('kind')
-  await update_network_node(body, spec, namespace, name, kind, meta['uid'])
+  # await update_network_node(body, spec, namespace, name, kind, meta['uid'])

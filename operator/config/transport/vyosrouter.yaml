@@ -47,6 +47,25 @@ spec:
                 source_network:
                   type: string
                   description: "Source VyOSNetwork name that generated this router"
+                location:
+                  type: object
+                  description: "Router physical location (copied from VyOSInfrastructure)"
+                  properties:
+                    city:
+                      type: string
+                      description: "City name"
+                    latitude:
+                      type: number
+                      description: "Latitude coordinate"
+                    longitude:
+                      type: number
+                      description: "Longitude coordinate"
+                    country:
+                      type: string
+                      description: "Country name"
+                    region:
+                      type: string
+                      description: "Region/state name"
                 interfaces:
                   type: array
                   description: "Network interfaces (generated from VyOSNetwork)"

@@ -18,7 +18,7 @@ import kopf
 from free5gc.uetest.lifecycle_tasks import *
 from utils.compute import *
 from free5gc.utils.k8s import getDNNAddress, getIMSI
-from graph.lifecycle_tasks import update_network_node
+# from graph.lifecycle_tasks import update_network_node
 
 logger = logging.getLogger(__name__)
 

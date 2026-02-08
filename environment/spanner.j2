@@ -41,78 +41,145 @@ spec:
   instanceRef:
     name: {{GOOGLE_SPANNER_INSTANCE}}
   ddl:
-  - "CREATE TABLE NetworkNode (
-       id STRING(36) NOT NULL,
-       kind STRING(MAX),
-       name STRING(MAX),
-       display_name STRING(MAX),
-       self_link STRING(MAX),
-       status STRING(25),
-       node_property JSON
-    ) PRIMARY KEY(id)"
-  - "CREATE TABLE ResourceConnection (
-       id STRING(36) NOT NULL,
-       to_id STRING(36) NOT NULL,
-       connection_property JSON,
-       CONSTRAINT FK_RConnectionToNode FOREIGN KEY (to_id) REFERENCES NetworkNode (id)
-    ) PRIMARY KEY(id, to_id)"
-  - "CREATE TABLE NetworkConnection (
-       id STRING(36) NOT NULL,
-       to_id STRING(36) NOT NULL,
-       connection_property JSON
-    ) PRIMARY KEY(id, to_id)"
-  - "CREATE TABLE KgResourceDescriptionNode (
-       id STRING(36) NOT NULL,
-       content STRING(MAX),
-       embedding ARRAY<FLOAT64>
+  - "CREATE TABLE PhysicalRouter (
+      id STRING(MAX) NOT NULL,
+      name STRING(MAX) NOT NULL,
+      vendor STRING(MAX),
+      model STRING(MAX),
+      location_city STRING(MAX),
+      location_lat FLOAT64,
+      location_lon FLOAT64,
+      role STRING(MAX),
+      status STRING(MAX),
+      config JSON,
+      last_updated TIMESTAMP OPTIONS (allow_commit_timestamp=true)
     ) PRIMARY KEY (id)"
+  - "CREATE TABLE PhysicalInterface (
+      id STRING(MAX) NOT NULL,
+      router_id STRING(MAX) NOT NULL,
+      name STRING(MAX) NOT NULL,
+      speed STRING(MAX),
+      media_type STRING(MAX),
+      ip_address STRING(MAX),
+      mac_address STRING(MAX),
+      status STRING(MAX),
+      config JSON,
+      last_updated TIMESTAMP OPTIONS (allow_commit_timestamp=true),
+      CONSTRAINT FK_InterfaceRouter FOREIGN KEY (router_id) REFERENCES PhysicalRouter (id) ON DELETE CASCADE
+    ) PRIMARY KEY (id)"
+  - "CREATE TABLE PhysicalLink (
+      id STRING(MAX) NOT NULL,
+      name STRING(MAX),
+      bandwidth STRING(MAX),
+      status STRING(MAX),
+      properties JSON,
+      last_updated TIMESTAMP OPTIONS (allow_commit_timestamp=true)
+    ) PRIMARY KEY (id)"
+  - "CREATE TABLE Customer (
+      id STRING(MAX) NOT NULL,
+      name STRING(MAX) NOT NULL,
+      type STRING(MAX),
+      properties JSON,
+      last_updated TIMESTAMP OPTIONS (allow_commit_timestamp=true)
+    ) PRIMARY KEY (id)"
+  - "CREATE TABLE L3VPNService (
+      id STRING(MAX) NOT NULL,
+      customer_id STRING(MAX) NOT NULL,
+      name STRING(MAX) NOT NULL,
+      service_type STRING(MAX),
+      topology STRING(MAX),
+      status STRING(MAX),
+      config JSON,
+      last_updated TIMESTAMP OPTIONS (allow_commit_timestamp=true),
+      CONSTRAINT FK_VPNCustomer FOREIGN KEY (customer_id) REFERENCES Customer (id)
+    ) PRIMARY KEY (id)"
+  - "CREATE TABLE VRF (
+      id STRING(MAX) NOT NULL,
+      router_id STRING(MAX) NOT NULL,
+      vpn_id STRING(MAX),
+      name STRING(MAX) NOT NULL,
+      rd STRING(MAX),
+      status STRING(MAX),
+      config JSON,
+      last_updated TIMESTAMP OPTIONS (allow_commit_timestamp=true),
+      CONSTRAINT FK_VRFRouter FOREIGN KEY (router_id) REFERENCES PhysicalRouter (id) ON DELETE CASCADE,
+      CONSTRAINT FK_VRFVPN FOREIGN KEY (vpn_id) REFERENCES L3VPNService (id) ON DELETE CASCADE
+    ) PRIMARY KEY (id)"
+  - "CREATE TABLE BGPSession (
+      id STRING(MAX) NOT NULL,
+      vrf_id STRING(MAX) NOT NULL,
+      local_as INT64,
+      remote_as INT64,
+      peer_ip STRING(MAX),
+      status STRING(MAX),
+      config JSON,
+      last_updated TIMESTAMP OPTIONS (allow_commit_timestamp=true),
+      CONSTRAINT FK_BGPVRF FOREIGN KEY (vrf_id) REFERENCES VRF (id) ON DELETE CASCADE
+    ) PRIMARY KEY (id)"
+  - "CREATE TABLE LogicalSubnet (
+      id STRING(MAX) NOT NULL,
+      cidr STRING(MAX) NOT NULL,
+      network_type STRING(MAX),
+      description STRING(MAX),
+      properties JSON,
+      last_updated TIMESTAMP OPTIONS (allow_commit_timestamp=true)
+    ) PRIMARY KEY (id)"
+  - "CREATE TABLE Interface_Link (
+      interface_id STRING(MAX) NOT NULL,
+      link_id STRING(MAX) NOT NULL,
+      CONSTRAINT FK_IL_Interface FOREIGN KEY (interface_id) REFERENCES PhysicalInterface (id) ON DELETE CASCADE,
+      CONSTRAINT FK_IL_Link FOREIGN KEY (link_id) REFERENCES PhysicalLink (id) ON DELETE CASCADE
+    ) PRIMARY KEY (interface_id, link_id)"
+  - "CREATE TABLE BGP_Peering (
+      session_id_a STRING(MAX) NOT NULL,
+      session_id_b STRING(MAX) NOT NULL,
+      CONSTRAINT FK_BP_SessionA FOREIGN KEY (session_id_a) REFERENCES BGPSession (id) ON DELETE CASCADE,
+      CONSTRAINT FK_BP_SessionB FOREIGN KEY (session_id_b) REFERENCES BGPSession (id) ON DELETE CASCADE
+    ) PRIMARY KEY (session_id_a, session_id_b)"
+  - "CREATE TABLE Subnet_Association (
+      entity_id STRING(MAX) NOT NULL,
+      subnet_id STRING(MAX) NOT NULL,
+      entity_type STRING(MAX),
+      CONSTRAINT FK_SA_Subnet FOREIGN KEY (subnet_id) REFERENCES LogicalSubnet (id) ON DELETE CASCADE
+    ) PRIMARY KEY (entity_id, subnet_id)"
+  - "CREATE TABLE Incident (
+        id STRING(MAX) NOT NULL,
+        recordedTimestamp TIMESTAMP NOT NULL,
+        agentTaskId String(MAX) NOT NULL,
+        issue JSON NOT NULL,
+        strategy JSON,
+        root_cause String(MAX),
+        resolution String(MAX),
+        resolvedTimestamp TIMESTAMP
+      ) PRIMARY KEY (id)"
   - "CREATE TABLE KgLogEntryNode (
        id STRING(17) NOT NULL,
        severity STRING(16) NOT NULL,
        source STRING(MAX),
        message STRING(MAX),
        timestamp TIMESTAMP,
-       content STRING(MAX),
-       embedding ARRAY<FLOAT64>
+       content STRING(MAX)
     ) PRIMARY KEY (id)"
   - "CREATE TABLE NetworkMetrics (
         id STRING(MAX) NOT NULL,
         kind STRING(MAX) NOT NULL,
         name STRING(MAX) NOT NULL,
-        timestamp INT64 NOT NULL,
-        metrics JSON
+        timestamp TIMESTAMP NOT NULL,
+        metrics JSON,
+        interface_id STRING(MAX),
+        CONSTRAINT FK_Metrics_Interface FOREIGN KEY (interface_id) REFERENCES PhysicalInterface (id)
     ) PRIMARY KEY (id, timestamp)"
   - "CREATE TABLE ServicePerformance (
         id STRING(36) NOT NULL,
         service_type STRING(MAX) NOT NULL,
         response_time_ms FLOAT64,
-        timestamp INT64 NOT NULL,
+        timestamp TIMESTAMP NOT NULL,
         userid STRING(MAX),
         error STRING(MAX),
-        node STRING(MAX)
+        node STRING(MAX),
+        vpn_id STRING(MAX),
+        CONSTRAINT FK_Perf_VPN FOREIGN KEY (vpn_id) REFERENCES L3VPNService (id)
       ) PRIMARY KEY (id)"
-  - "CREATE TABLE Incident (
-        id STRING(MAX) NOT NULL,
-        recordedTimestamp INT64 NOT NULL,
-        agentTaskId String(MAX) NOT NULL,
-        issue JSON NOT NULL,
-        strategy JSON,
-        root_cause String(MAX),
-        resolution String(MAX),
-        resolvedTimestamp INT64
-      ) PRIMARY KEY (id)"
-  - "CREATE OR REPLACE PROPERTY GRAPH networkGraph
-       NODE TABLES (NetworkNode)
-       EDGE TABLES (
-         NetworkConnection
-           SOURCE KEY (id) REFERENCES NetworkNode(id)
-           DESTINATION KEY (to_id) REFERENCES NetworkNode(id)
-           LABEL isConnectedTo,
-         ResourceConnection
-           SOURCE KEY (id) REFERENCES NetworkNode(id)
-           DESTINATION KEY (to_id) REFERENCES NetworkNode(id)
-           LABEL Manages
-    )"
   - "CREATE TABLE AgentTrace (
        id STRING(36) NOT NULL,
        event_type STRING(MAX) NOT NULL,
@@ -132,7 +199,64 @@ spec:
   - "CREATE TABLE Orders (
        id STRING(36) NOT NULL,
        timestamp TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
+       customer_id STRING(MAX),
        customer STRING(MAX) NOT NULL,
        status STRING(MAX) NOT NULL,
-       details JSON
+       details JSON,
+       CONSTRAINT FK_Order_Customer FOREIGN KEY (customer_id) REFERENCES Customer (id)
     ) PRIMARY KEY(id)"
+  - "CREATE OR REPLACE PROPERTY GRAPH networkGraph
+       NODE TABLES (
+         PhysicalRouter,
+         PhysicalInterface,
+         PhysicalLink,
+         Customer,
+         L3VPNService,
+         VRF,
+         BGPSession,
+         LogicalSubnet,
+         Incident,
+         ServicePerformance,
+         Orders,
+         AgentTrace,
+         NetworkMetrics,
+         KgLogEntryNode
+       )
+       EDGE TABLES (
+         PhysicalInterface AS HasInterface
+           SOURCE KEY (router_id) REFERENCES PhysicalRouter (id)
+           DESTINATION KEY (id) REFERENCES PhysicalInterface (id),
+         Interface_Link AS ConnectsTo
+           SOURCE KEY (interface_id) REFERENCES PhysicalInterface (id)
+           DESTINATION KEY (link_id) REFERENCES PhysicalLink (id),
+         Interface_Link AS LinkedTo
+           SOURCE KEY (link_id) REFERENCES PhysicalLink (id)
+           DESTINATION KEY (interface_id) REFERENCES PhysicalInterface (id),
+         L3VPNService AS OwnedBy
+           SOURCE KEY (customer_id) REFERENCES Customer (id)
+           DESTINATION KEY (id) REFERENCES L3VPNService (id),
+         VRF AS RealizesVPN
+           SOURCE KEY (vpn_id) REFERENCES L3VPNService (id)
+           DESTINATION KEY (id) REFERENCES VRF (id),
+         VRF AS LocatedOn
+           SOURCE KEY (router_id) REFERENCES PhysicalRouter (id)
+           DESTINATION KEY (id) REFERENCES VRF (id),
+         BGPSession AS BelongsToVRF
+           SOURCE KEY (vrf_id) REFERENCES VRF (id)
+           DESTINATION KEY (id) REFERENCES BGPSession (id),
+         BGP_Peering AS PeersWith
+           SOURCE KEY (session_id_a) REFERENCES BGPSession (id)
+           DESTINATION KEY (session_id_b) REFERENCES BGPSession (id),
+         Subnet_Association AS AssociatedWith
+           SOURCE KEY (entity_id) REFERENCES PhysicalInterface (id)
+           DESTINATION KEY (subnet_id) REFERENCES LogicalSubnet (id),
+         ServicePerformance AS ExhibitsPerformance
+           SOURCE KEY (vpn_id) REFERENCES L3VPNService (id)
+           DESTINATION KEY (id) REFERENCES ServicePerformance (id),
+         Orders AS PlacedBy
+           SOURCE KEY (customer_id) REFERENCES Customer (id)
+           DESTINATION KEY (id) REFERENCES Orders (id),
+         NetworkMetrics AS HasMetrics
+           SOURCE KEY (interface_id) REFERENCES PhysicalInterface (id)
+           DESTINATION KEY (id, timestamp) REFERENCES NetworkMetrics (id, timestamp)
+       )"

@@ -24,6 +24,7 @@ from vyosrouter.lifecycle_tasks import (
     check_linux_networks_ready
 )
 from utils.compute import *
+from graph.lifecycle_tasks import sync_physical_router
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +42,9 @@ async def create_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
         raise kopf.TemporaryError("No ip address found on Network VM yet, temporary error - waiting", 10)
     logger.info(f"network vm address = {ip_address}")
 
-    # Update status to indicate pending
-    await update_status(name, namespace, "Pending", "Validating and waiting for dependencies")
+    # Update status to indicate pending (automatically syncs to Spanner)
+    await update_status(name, namespace, "Pending", "Validating and waiting for dependencies",
+                       body=body, spec=spec, uid=uid, logger_obj=logger)
 
     # Extract router configuration from spec
     router_config = {
@@ -81,17 +83,19 @@ async def create_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
             raise kopf.TemporaryError(error_msg, delay=20)
         
     try:
-        # Update status to indicate creation has started
-        await update_status(name, namespace, "Creating", "Creating VyOS router container")
+        # Update status to indicate creation has started (automatically syncs to Spanner)
+        await update_status(name, namespace, "Creating", "Creating VyOS router container",
+                           body=body, spec=spec, uid=uid, logger_obj=logger)
         
         # Create the VyOS router container using Ansible
         result = await create_vyos_router(ip_address, router_config)
         
         if result['success']:
-            # Update status to configuring
+            # Update status to configuring (automatically syncs to Spanner)
             await update_status(
                 name, namespace, "Configuring", 
                 "Applying VyOS configuration",
+                body=body, spec=spec, uid=uid, logger_obj=logger,
                 container_id=result.get('container_id')
             )
             
@@ -108,24 +112,28 @@ async def create_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
                         'linux_network': iface.get('linux_network', '')
                     })
                 
-                # Update status to running with interface details
+                # Update status to running with interface details (automatically syncs to Spanner)
                 await update_status(
                     name, namespace, "Running", 
                     f"VyOS router {name} is running and configured",
+                    body=body, spec=spec, uid=uid, logger_obj=logger,
                     container_id=result.get('container_id'),
                     ip_address=result.get('management_ip'),
                     interfaces=interfaces_status
                 )
                 logger.info(f"Successfully created and configured VyOSRouter {name}")
             else:
-                await update_status(name, namespace, "Failed", f"Configuration failed: {config_result['error']}")
+                await update_status(name, namespace, "Failed", f"Configuration failed: {config_result['error']}",
+                                   body=body, spec=spec, uid=uid, logger_obj=logger)
                 raise kopf.PermanentError(f"VyOS router configuration failed: {config_result['error']}")
         else:
-            await update_status(name, namespace, "Failed", f"Failed to create container: {result['error']}")
+            await update_status(name, namespace, "Failed", f"Failed to create container: {result['error']}",
+                               body=body, spec=spec, uid=uid, logger_obj=logger)
             raise kopf.PermanentError(f"VyOS router creation failed: {result['error']}")
     except Exception as e:
         logger.error(f"Failed to create VyOSRouter {name}: {e}")
-        await update_status(name, namespace, "Failed", str(e))
+        await update_status(name, namespace, "Failed", str(e),
+                           body=body, spec=spec, uid=uid, logger_obj=logger)
         raise
 
 @kopf.on.update('google.dev', 'v1', 'vyosrouter', field='spec')
@@ -139,7 +147,8 @@ async def update_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
     logger.info(f"network vm address = {ip_address}")
 
     try:
-        await update_status(name, namespace, "Updating", "Updating VyOS router configuration")
+        await update_status(name, namespace, "Updating", "Updating VyOS router configuration",
+                           body=body, spec=spec, uid=uid, logger_obj=logger)
         
         # Extract updated router configuration
         router_config = {
@@ -159,15 +168,18 @@ async def update_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
         result = await update_vyos_router(ip_address, router_config)
         
         if result['success']:
-            await update_status(name, namespace, "Running", "VyOS router updated successfully")
+            await update_status(name, namespace, "Running", "VyOS router updated successfully",
+                               body=body, spec=spec, uid=uid, logger_obj=logger)
             logger.info(f"Successfully updated VyOSRouter {name}")
         else:
-            await update_status(name, namespace, "Failed", f"Failed to update router: {result['error']}")
+            await update_status(name, namespace, "Failed", f"Failed to update router: {result['error']}",
+                               body=body, spec=spec, uid=uid, logger_obj=logger)
             raise kopf.PermanentError(f"VyOS router update failed: {result['error']}")
             
     except Exception as e:
         logger.error(f"Failed to update VyOSRouter {name}: {e}")
-        await update_status(name, namespace, "Failed", str(e))
+        await update_status(name, namespace, "Failed", str(e),
+                           body=body, spec=spec, uid=uid, logger_obj=logger)
         raise
 
 @kopf.on.delete('google.dev', 'v1', 'vyosrouter')
@@ -201,9 +213,11 @@ async def delete_vyosrouter(body, spec, name, namespace, logger, **kwargs):
 # Status Management
 #########################################################################
 async def update_status(name: str, namespace: str, phase: str, message: str, 
+                       body: Optional[Dict] = None, spec: Optional[Dict] = None, 
+                       uid: Optional[str] = None, logger_obj: Optional[Any] = None,
                        container_id: Optional[str] = None, ip_address: Optional[str] = None,
                        interfaces: Optional[list] = None):
-    """Update the status of a VyOSRouter resource"""
+    """Update the status of a VyOSRouter resource in both Kubernetes and Spanner"""
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
     api = client.resources.get(api_version='google.dev/v1', kind='VyOSRouter')
     
@@ -229,6 +243,7 @@ async def update_status(name: str, namespace: str, phase: str, message: str,
     
     resource_dict['status'].update(status)
 
+    # Update Kubernetes status
     try:
         api.patch(
             namespace=namespace,
@@ -242,3 +257,15 @@ async def update_status(name: str, namespace: str, phase: str, message: str,
             logger.warning(f"Status subresource not enabled for VyOSRouter {name}, skipping status update.")
         else:
             logger.error(f"Failed to update status for VyOSRouter {name}: {e}")
+    
+    # Sync to Spanner if parameters provided
+    if body is not None and spec is not None and uid is not None and logger_obj is not None:
+        try:
+            # Create a modified copy of body with updated status for Spanner sync
+            body_dict = dict(body)
+            body_dict['status'] = status
+            # Sync to Spanner
+            await sync_physical_router(body_dict, spec, name, uid, logger_obj)
+        except Exception as e:
+            if logger_obj:
+                logger_obj.error(f"Failed to sync status to Spanner for VyOSRouter {name}: {e}")

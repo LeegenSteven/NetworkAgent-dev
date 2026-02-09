@@ -141,7 +141,7 @@ spec:
         - router_name: "pe3"
           interface: "eth1"
           ip_address: "172.16.140.2"
-    - name: management
+    - name: mgmt
       subnet: "192.168.122.0/24"
       gateway: "192.168.122.1"
       network_type: "management"
@@ -256,7 +256,7 @@ spec:
         site: "London-DC1"
       interfaces:
         - name: "eth0"
-          network: "management"
+          network: "mgmt"
         - name: "eth1"
           network: "p1-p2"
         - name: "eth2"
@@ -280,7 +280,7 @@ spec:
         site: "Manchester-DC1"
       interfaces:
         - name: "eth0"
-          network: "management"
+          network: "mgmt"
         - name: "eth1"
           network: "p1-p2"
         - name: "eth2"
@@ -300,7 +300,7 @@ spec:
         site: "Edinburgh-DC1"
       interfaces:
         - name: "eth0"
-          network: "management"
+          network: "mgmt"
         - name: "eth1"
           network: "p3-pe2"
         - name: "eth2"
@@ -322,7 +322,7 @@ spec:
         site: "Leeds-DC1"
       interfaces:
         - name: "eth0"
-          network: "management"
+          network: "mgmt"
         - name: "eth1"
           network: "p4-rr2"
         - name: "eth2"
@@ -344,7 +344,7 @@ spec:
         site: "Birmingham-DC1"
       interfaces:
         - name: "eth0"
-          network: "management"
+          network: "mgmt"
         - name: "eth1"
           network: "p2-rr1"
         - name: "eth2"
@@ -362,7 +362,7 @@ spec:
         site: "Bristol-DC1"
       interfaces:
         - name: "eth0"
-          network: "management"
+          network: "mgmt"
         - name: "eth1"
           network: "p4-rr2"
         - name: "eth2"
@@ -380,7 +380,7 @@ spec:
         site: "Oxford-DC1"
       interfaces:
         - name: "eth0"
-          network: "management"
+          network: "mgmt"
         - name: "eth1"
           network: "p1-pe1"
         - name: "eth2"
@@ -398,7 +398,7 @@ spec:
         site: "Cambridge-DC1"
       interfaces:
         - name: "eth0"
-          network: "management"
+          network: "mgmt"
         - name: "eth1"
           network: "p1-pe2"
         - name: "eth2"
@@ -418,7 +418,7 @@ spec:
         site: "Brighton-DC1"
       interfaces:
         - name: "eth0"
-          network: "management"
+          network: "mgmt"
         - name: "eth1"
           network: "p4-pe3"
         - name: "eth2"
@@ -436,7 +436,7 @@ spec:
         site: "Sheffield-Site1"
       interfaces:
         - name: "eth0"
-          network: "management"
+          network: "mgmt"
         - name: "eth1"
           network: "pe1-ce1-spoke"
         - name: "eth2"
@@ -454,7 +454,7 @@ spec:
         site: "Nottingham-Hub1"
       interfaces:
         - name: "eth0"
-          network: "management"
+          network: "mgmt"
         - name: "eth1"
           network: "pe2-ce1-hub"
         - name: "eth2"
@@ -472,7 +472,7 @@ spec:
         site: "Liverpool-Site1"
       interfaces:
         - name: "eth0"
-          network: "management"
+          network: "mgmt"
         - name: "eth1"
           network: "pe3-ce2-spoke"
         - name: "eth2"

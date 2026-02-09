@@ -44,6 +44,10 @@ spec:
                   enum: ["p2p", "multi-access", "loopback", "management"]
                   description: "Network topology type"
                   default: "p2p"
+                gateway:
+                  type: string
+                  pattern: '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+                  description: "Gateway IP address for management network"
                 bandwidth:
                   type: string
                   pattern: '^[0-9]+[kmg]?bit$'

@@ -12,7 +12,6 @@
 
     - name: Bring down non-management bridge before deletion
       command: ip link set {{ network_name }} down
-      when: network_type != 'management'
       ignore_errors: yes
 
     - name: Delete native Linux bridge network (brctl)

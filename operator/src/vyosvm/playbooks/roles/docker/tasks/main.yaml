@@ -44,6 +44,20 @@
     state: present
   when: docker_check.rc != 0 
 
+# - name: Ensure /etc/docker directory exists
+#   ansible.builtin.file:
+#     path: /etc/docker
+#     state: directory
+#     mode: '0755'
+
+# - name: copy daemon.json
+#   ansible.builtin.copy:
+#     src: daemon.json
+#     dest: /etc/docker/daemon.json
+#     owner: root
+#     group: root
+#     mode: '0644'
+
 - name: Install docker-ce
   apt:
     pkg:
@@ -52,19 +66,11 @@
       - containerd.io
     state: latest
     update_cache: true
-  when: docker_check.rc != 0 
+  when: docker_check.rc != 0
 
-- name: Ensure /etc/docker directory exists
-  ansible.builtin.file:
-    path: /etc/docker
-    state: directory
-    mode: '0755'
+- name: allow traffic in DOCKER-USER chain
+  ansible.builtin.shell: |
+    iptables -C DOCKER-USER -j ACCEPT 2>/dev/null || iptables -I DOCKER-USER -j ACCEPT
 
-- name: copy daemon.json
-  ansible.builtin.copy:
-    src: daemon.json
-    dest: /etc/docker/daemon.json
-    owner: root
-    group: root
-    mode: '0644'
-  notify: restart docker
+- name: ensure ufw is disabled
+  ansible.builtin.shell: ufw disable

@@ -11,7 +11,15 @@
 
     - name: Bring up the bridge
       command: ip link set {{ network_name }} up
-      when: network_type != 'management'
+
+    - name: Assign gateway IP to management bridge
+      command: ip addr add {{ gateway_ip }}/24 dev {{ network_name }}
+      ignore_errors: yes
+      when: 
+        - network_type == 'management'
+        - gateway_ip is defined
+        - gateway_ip is not none
+        - gateway_ip != ''
 
     - name: Apply bandwidth limit to bridge interface using tc
       when: 

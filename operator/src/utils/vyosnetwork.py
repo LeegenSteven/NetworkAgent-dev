@@ -332,6 +332,10 @@ def generate_linux_networks(spec: Dict[str, Any], parent_name: str, parent_names
                 'connected_routers': network.get('connected_routers', [])
             }
         }
+
+        # Add gateway if specified
+        if 'gateway' in network:
+            linux_network_cr['spec']['gateway'] = network['gateway']
         
         linux_network_crs.append(linux_network_cr)
     

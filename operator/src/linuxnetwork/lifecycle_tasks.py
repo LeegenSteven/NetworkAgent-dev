@@ -33,6 +33,7 @@ async def create_linux_network(ip_address:str, spec: Dict[str, Any]) -> Dict[str
         'network_name': spec.get('name'),
         'network_type': spec.get('network_type'),
         'bandwidth': spec.get('bandwidth'),
+        'gateway_ip': spec.get('gateway'),
         'operation': 'create'
     }
 

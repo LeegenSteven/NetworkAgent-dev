@@ -8,10 +8,7 @@ RUN apk add --no-cache \
     netcat-openbsd \
     iperf3 \
     python3 \
-    py3-pip \
-    py3-influxdb \
     iproute2 \
-    openssh-client \
     tcpdump
 
 # Copy entrypoint script

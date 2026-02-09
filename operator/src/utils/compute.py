@@ -432,7 +432,7 @@ async def create_compute(namespace, parent_name, vm_name, external_ip, interface
 
   # Prepare the Service Account section
   # if svc_account equals "default" then use the default compute engine 
-  # service account of the GCP project
+  # service account of this GCP project
   svc_account = {}
   if service_account != "":
     if service_account == "default":

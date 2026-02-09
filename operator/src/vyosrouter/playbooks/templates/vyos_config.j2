@@ -12,7 +12,6 @@ set system host-name {{ router_hostname }}
 set system syslog remote 172.17.0.1 facility all level info
 set system syslog remote 172.17.0.1 port 5140
 set system syslog remote 172.17.0.1 protocol udp
-set system syslog remote 172.17.0.1 facility all level debug
 # Use RFC5424 format to include timezone - It has no effect !! Why ? (LJ)
 # set system syslog remote 172.17.0.1 format include-timezone
 

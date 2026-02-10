@@ -9,11 +9,11 @@ set system host-name {{ router_hostname }}
 # set container name {{ router_hostname }} log-driver journald
 
 # Send logs directly to the GCP Ops Agent running on the host VM
-set system syslog remote 172.17.0.1 facility all level info
-set system syslog remote 172.17.0.1 port 5140
-set system syslog remote 172.17.0.1 protocol udp
-# Use RFC5424 format to include timezone - It has no effect !! Why ? (LJ)
-# set system syslog remote 172.17.0.1 format include-timezone
+set system syslog remote 192.168.122.1 facility all level info
+set system syslog remote 192.168.122.1 port 5140
+set system syslog remote 192.168.122.1 protocol udp
+# Use RFC5424 format to include timezone
+set system syslog remote 192.168.122.1 format include-timezone
 
 # Configure interfaces
 {% set vlan_interfaces = interfaces | selectattr('name', '!=', 'lo') | selectattr('vlan', 'defined') | list %}

@@ -260,6 +260,12 @@ def capture_log(cloud_event: CloudEvent) -> None:
         if "error" in nwop_logging_json["jsonPayload"]:
           message += ': ' + nwop_logging_json["jsonPayload"]["error"]
 
+      # VYOS router messages
+      elif "msg_body" in nwop_logging_json["jsonPayload"] and "source" in nwop_logging_json["jsonPayload"] \
+            and nwop_logging_json["jsonPayload"]['source'] == "vyos":
+        message = nwop_logging_json["jsonPayload"]["msg_body"]
+        location = nwop_logging_json["jsonPayload"]["host"]
+
       elif 'labels' in nwop_logging_json and 'python_logger' in nwop_logging_json['labels']:
         # this is from uetest or liveness probe, so bad things have happened
         if nwop_logging_json['labels']['python_logger']=='CRITICALSERVICEERROR':

@@ -504,6 +504,9 @@ spec:
                       docker_network:
                         type: string
                         description: "Connected docker network"
+                applied_config:
+                  type: string
+                  description: "Last applied VyOS configuration commands"
                 protocols_status:
                   type: object
                   properties:

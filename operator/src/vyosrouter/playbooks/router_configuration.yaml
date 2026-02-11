@@ -60,6 +60,10 @@
           vars:
             config_mode: "{{ operation }}"
 
+        - name: Capture VyOS configuration
+          debug:
+            var: vyos_config_commands
+
         # - name: Debug - Display configuration commands to be applied
         #   debug:
         #     msg: "{{ vyos_config_commands.split('\n') }}"

@@ -49,7 +49,8 @@ async def create_vyos_router(ip_address:str, router_config: Dict[str, Any]) -> D
         return {
             'success': True,
             'container_id': result.get('container_id'),
-            'management_ip': result.get('management_ip')
+            'management_ip': result.get('management_ip'),
+            'applied_config': result.get('applied_config')
         }
     else:
         return {
@@ -82,7 +83,8 @@ async def configure_vyos_router(ip_address:str,router_config: Dict[str, Any]) ->
     
     return {
         'success': result['success'],
-        'error': result.get('error') if not result['success'] else None
+        'error': result.get('error') if not result['success'] else None,
+        'applied_config': result.get('applied_config')
     }
 
 async def update_vyos_router(ip_address:str, router_config: Dict[str, Any]) -> Dict[str, Any]:
@@ -110,7 +112,8 @@ async def update_vyos_router(ip_address:str, router_config: Dict[str, Any]) -> D
     
     return {
         'success': result['success'],
-        'error': result.get('error') if not result['success'] else None
+        'error': result.get('error') if not result['success'] else None,
+        'applied_config': result.get('applied_config')
     }
 
 async def delete_vyos_router(ip_address:str, router_name: str, interfaces: list = None) -> Dict[str, Any]:
@@ -197,8 +200,12 @@ async def _run_ansible_playbook(ip_address:str, playbook: str, extravars: Dict[s
                 if event.get('event') == 'runner_on_ok':
                     event_data = event.get('event_data', {})
                     res = event_data.get('res', {})
+                    task_name = event_data.get('task', '')
                     
                     # Extract router information from Ansible results
+                    if task_name == "Capture VyOS configuration":
+                        result_data['applied_config'] = res.get('vyos_config_commands', '')
+                        
                     if 'container_id' in res:
                         result_data['container_id'] = res['container_id']
                     if 'management_ip' in res:

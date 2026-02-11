@@ -119,7 +119,8 @@ async def create_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
                     body=body, spec=spec, uid=uid, logger_obj=logger,
                     container_id=result.get('container_id'),
                     ip_address=result.get('management_ip'),
-                    interfaces=interfaces_status
+                    interfaces=interfaces_status,
+                    applied_config=config_result.get('applied_config')
                 )
                 logger.info(f"Successfully created and configured VyOSRouter {name}")
             else:
@@ -169,7 +170,8 @@ async def update_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
         
         if result['success']:
             await update_status(name, namespace, "Running", "VyOS router updated successfully",
-                               body=body, spec=spec, uid=uid, logger_obj=logger)
+                               body=body, spec=spec, uid=uid, logger_obj=logger,
+                               applied_config=result.get('applied_config'))
             logger.info(f"Successfully updated VyOSRouter {name}")
         else:
             await update_status(name, namespace, "Failed", f"Failed to update router: {result['error']}",
@@ -216,7 +218,7 @@ async def update_status(name: str, namespace: str, phase: str, message: str,
                        body: Optional[Dict] = None, spec: Optional[Dict] = None, 
                        uid: Optional[str] = None, logger_obj: Optional[Any] = None,
                        container_id: Optional[str] = None, ip_address: Optional[str] = None,
-                       interfaces: Optional[list] = None):
+                       interfaces: Optional[list] = None, applied_config: Optional[str] = None):
     """Update the status of a VyOSRouter resource in both Kubernetes and Spanner"""
     client = kubernetes.dynamic.DynamicClient(kubernetes.client.ApiClient())
     api = client.resources.get(api_version='google.dev/v1', kind='VyOSRouter')
@@ -240,6 +242,10 @@ async def update_status(name: str, namespace: str, phase: str, message: str,
     
     if interfaces:
         status['interfaces'] = interfaces
+    
+
+    if applied_config:
+        status['applied_config'] = applied_config
     
     resource_dict['status'].update(status)
 

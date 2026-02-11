@@ -4,7 +4,7 @@ import '../appstate.dart';
 import '../models/network_node.dart';
 import '../utils/environment_config.dart';
 import '../widgets/agui_chat_panel.dart';
-import '../widgets/topology/network_topology.dart';
+import '../widgets/topology/google_maps_topology.dart';
 import '../widgets/markdown_drawer.dart';
 import '../widgets/log_widget.dart';
 import '../widgets/trace/trace_widget.dart';
@@ -365,37 +365,20 @@ class _NetworkDashboardState extends State<NetworkDashboard>
                 Expanded(
                   flex: (_verticalSplitRatio * 100)
                       .round(), // Convert ratio to flex units
-                  child: appState.hasReceivedTopology
-                      ? Consumer<Appstate>(
-                          // Listen to topology changes only - filter and layout changes are handled internally
-                          builder: (context, appState, child) {
-                            // Create a key based only on the topology to avoid excessive rebuilds
-                            final topologyKey = ValueKey(
-                              'topology-${appState.topology.nodes.length}-'
-                              '${appState.topology.connections.length}',
-                            );
-                            return NetworkTopologyWidget(
-                              key: topologyKey,
-                              topology: appState.topology,
-                            );
-                          },
-                        )
-                      : Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const CircularProgressIndicator(),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Waiting for network topology data...',
-                                style: TextStyle(
-                                  color: Colors.grey[700],
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                  child: Consumer<Appstate>(
+                    // Listen to topology changes only - filter and layout changes are handled internally
+                    builder: (context, appState, child) {
+                      // Create a key based only on the topology to avoid excessive rebuilds
+                      final topologyKey = ValueKey(
+                        'topology-${appState.topology.nodes.length}-'
+                        '${appState.topology.connections.length}',
+                      );
+                      return GoogleMapsTopologyWidget(
+                        key: topologyKey,
+                        topology: appState.topology,
+                      );
+                    },
+                  ),
                 ),
 
                 // Show the vertical divider and bottom panel when logs or performance graph are enabled

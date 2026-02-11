@@ -42,19 +42,19 @@ async def obj_vyosinfrastructure(body, spec, name, uid, logger, event, **kwargs)
 @kopf.on.create('vyosrouters.google.dev', id='vyosrouter-create-graph')
 async def obj_vyosrouter_create(body, spec, name, uid, logger, **kwargs):
     """Sync new VyOSRouter to Spanner"""
-    logger.info(f"VyOSRouter {name} created - syncing to Spanner")
+    logger.debug(f"VyOSRouter {name} created - syncing to Spanner")
     await sync_physical_router(body, spec, name, uid, logger)
 
 @kopf.on.update('vyosrouters.google.dev', field='spec', id='vyosrouter-spec-graph')
 async def obj_vyosrouter_spec_update(body, spec, name, uid, logger, **kwargs):
     """Sync VyOSRouter spec changes to Spanner"""
-    logger.info(f"VyOSRouter {name} spec updated - syncing to Spanner")
+    logger.debug(f"VyOSRouter {name} spec updated - syncing to Spanner")
     await sync_physical_router(body, spec, name, uid, logger)
 
 @kopf.on.delete('vyosrouters.google.dev', id='vyosrouter-delete-graph')
 async def obj_vyosrouter_delete(name, uid, logger, **kwargs):
     """Delete VyOSRouter from Spanner"""
-    logger.info(f"VyOSRouter {name} deleted - removing from Spanner")
+    logger.debug(f"VyOSRouter {name} deleted - removing from Spanner")
     await delete_physical_router(uid, name=name)
 
 @kopf.on.event('vyosl3vpns.google.dev', id='vyosl3vpn-graph')

@@ -34,17 +34,96 @@ class _NodeDetailsDialogState extends State<NodeDetailsDialog> {
 
   Future<void> _fetchNodeDetails() async {
     try {
-      final summary = await _apiService.getNodeDetails(widget.node.id);
-      setState(() {
-        _isLoading = false;
-        _markdownSummary = summary;
-      });
+      // check if node is a router based on type or properties
+      bool isRouter = widget.node.type == NodeType.route || 
+                     widget.node.properties['kind'] == 'Router' ||
+                     widget.node.properties['kind'] == 'PhysicalRouter';
+      
+      if (isRouter) {
+        final details = await _apiService.fetchRouterDetails(widget.node.id);
+        final summary = _formatRouterDetails(details);
+        setState(() {
+          _isLoading = false;
+          _markdownSummary = summary;
+        });
+      } else {
+        // Fallback for other node types
+        final summary = await _apiService.getNodeDetails(widget.node.id);
+        setState(() {
+          _isLoading = false;
+          _markdownSummary = summary;
+        });
+      }
     } catch (e) {
       setState(() {
         _isLoading = false;
         _error = e.toString();
       });
     }
+  }
+
+  String _formatRouterDetails(Map<String, dynamic> data) {
+    final buffer = StringBuffer();
+    
+    buffer.writeln('### ${data['name'] ?? 'Router Details'}');
+    buffer.writeln('');
+    buffer.writeln('**ID**: `${data['id']}`');
+    buffer.writeln('**Role**: ${data['role'] ?? 'Unknown'}');
+    buffer.writeln('**Status**: ${data['status'] ?? 'Unknown'}');
+    buffer.writeln('**Vendor/Model**: ${data['vendor'] ?? 'Unknown'} / ${data['model'] ?? 'Unknown'}');
+    
+    if (data['location'] != null) {
+      final loc = data['location'];
+      buffer.writeln('**Location**: ${loc['city'] ?? 'Unknown'}');
+      if (loc['latitude'] != null && loc['longitude'] != null) {
+        buffer.writeln('**Coordinates**: ${loc['latitude']}, ${loc['longitude']}');
+      }
+    }
+    
+    buffer.writeln('');
+    buffer.writeln('### Interfaces');
+    buffer.writeln('');
+    
+    if (data['interfaces'] != null && (data['interfaces'] as List).isNotEmpty) {
+      buffer.writeln('| Name | IP Address | Status | Speed |');
+      buffer.writeln('|---|---|---|---|');
+      
+      for (var iface in data['interfaces']) {
+        final name = iface['name'] ?? '-';
+        final ip = iface['ip_address'] ?? '-';
+        final status = iface['status'] ?? '-';
+        final speed = iface['speed'] ?? '-';
+        
+        // Add status icon if possible, or just text
+        String statusIcon = '';
+        if (status.toString().toLowerCase() == 'up') {
+          statusIcon = '🟢 ';
+        } else if (status.toString().toLowerCase() == 'down') {
+          statusIcon = '🔴 ';
+        }
+        
+        buffer.writeln('| $name | $ip | $statusIcon$status | $speed |');
+      }
+    } else {
+      buffer.writeln('No interfaces found.');
+    }
+    
+    if (data['config'] != null && (data['config'] as Map).isNotEmpty) {
+      buffer.writeln('');
+      buffer.writeln('### Configuration');
+      buffer.writeln('```json');
+      // Pretty print JSON config if possible, or just dump it
+      try {
+        // We can't easily pretty print JSON in Dart without import 'dart:convert';
+        // But markdown json block is decent enough
+        buffer.writeln(data['config'].toString());
+      } catch (_) {
+        buffer.writeln('Error displaying config');
+      }
+      buffer.writeln('```');
+    }
+    
+    return buffer.toString();
   }
 
   @override

@@ -58,49 +58,6 @@ cors = aiohttp_cors.setup(app, defaults={
 # Global trace listener instance
 trace_listener = None
 
-async def send_topology_updates():
-    """Background task that periodically sends topology and logs updates to all connected clients."""
-    database = spanner_connect()
-    while True:
-        try:
-            # For each connected client send logs if enabled
-            for sid, state in clients_state.items():
-                # Build the graph for the requested view 
-                edge_label = view_to_edge_label_map[state['topology']['view']]
-                elements, success = build_graph(database, edge_label)
-
-                # Send topology update to client sid
-                await sio.emit('topology_update', {'elements': elements})
-                logger.debug("Sent topology update to all clients")
-                
-                if not success:
-                    logger.error("Failed to build graph for topology update")
-
-                if ('logs' in state) and state['logs']['enabled']:
-                    try:
-                        # Fetch logs
-                        logs = fetch_log_entries()
-                        
-                        # Also send a separate logs update
-                        await sio.emit('logs_update', logs, room=sid)
-                        
-                        logger.info(f"Sent topology update with logs to client {sid}")
-                    except Exception as e:
-                        logger.error(f"Error sending logs to client {sid}: {e}")
-
-                # Send all last metrics to client sid
-                node_metrics = fetch_all_last_metrics()
-                users = await get_active_users()
-                service_performance = await get_average_performance_by_service_type()
-
-                await sio.emit('metrics_update', {'node_metrics': node_metrics, 'users': users, 'service_performance': service_performance}, room=sid)
-                
-        except Exception as e:
-            logger.error(f"Error in topology update task: {e}")
-        
-        # Wait for 5 seconds before sending the next update
-        await asyncio.sleep(5)
-
 async def init():
     global trace_listener
     
@@ -114,9 +71,6 @@ async def init():
     logger.info("starting server on port %s",port)
     site = web.TCPSite(runner, host="0.0.0.0", port=port, ssl_context=None)
     await site.start()
-    
-    # Start the background task for topology updates
-    asyncio.create_task(send_topology_updates())
     
     # Trace listener was already initialized before SocketEndpoint creation
     # Just log confirmation

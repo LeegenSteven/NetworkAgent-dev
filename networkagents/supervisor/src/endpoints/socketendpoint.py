@@ -17,7 +17,7 @@ import datetime
 import json
 from uuid import uuid4
 from agent.host_agent import HostAgent
-from tools.topology import fetch_db_node, build_graph, spanner_connect
+from tools.topology import build_graph, spanner_connect
 from tools.logs import fetch_log_entries, delete_logs
 from tools.metrics import *
 from utils.error_handler import (

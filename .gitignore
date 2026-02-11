@@ -29,6 +29,7 @@ porch-install
 .packages.generated
 
 # Flutter/Dart/Pub related
+ui/dashboard/web/index.html
 **/doc/api/
 .dart_tool/
 .flutter-plugins

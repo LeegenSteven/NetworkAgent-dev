@@ -9,7 +9,6 @@ import 'models/push_notification.dart';
 import 'models/incident.dart';
 import 'utils/environment_config.dart';
 import 'utils/APIService.dart';
-import 'widgets/topology/network_topology.dart';
 
 class Appstate extends ChangeNotifier {
   // Socket connection
@@ -24,17 +23,6 @@ class Appstate extends ChangeNotifier {
   // Network topology state
   NetworkTopology _topology = NetworkTopology.empty();
   bool _isConnected = false;
-  bool _hasReceivedTopology = false;
-  
-  // Topology filtering state
-  bool _filterByNodeType = false;
-  Set<NodeType> _selectedNodeTypes = Set<NodeType>.from(NodeType.values);
-  
-  // Topology layout state
-  String _selectedTopologyLayout = 'force-directed';
-  
-  // Topology view state
-  String _selectedTopologyView = NetworkTopologyWidget.defaultView;
   
   // Log widget state
   List<LogEntry> _logs = [];
@@ -63,11 +51,6 @@ class Appstate extends ChangeNotifier {
   List<Agent> get agents => List.unmodifiable(_agents);
   NetworkTopology get topology => _topology;
   bool get isConnected => _isConnected;
-  bool get hasReceivedTopology => _hasReceivedTopology;
-  bool get filterByNodeType => _filterByNodeType;
-  Set<NodeType> get selectedNodeTypes => Set<NodeType>.from(_selectedNodeTypes);
-  String get selectedTopologyLayout => _selectedTopologyLayout;
-  String get selectedTopologyView => _selectedTopologyView;
   List<LogEntry> get logs => _logs;
   bool get isLoadingLogs => _isLoadingLogs;
   Metrics get metrics => _metrics;
@@ -95,7 +78,8 @@ class Appstate extends ChangeNotifier {
       _isConnected = true;
       
       // Request initial topology data when connected
-      _socket!.emit('get_topology', {'view': NetworkTopologyWidget.defaultView});
+      // _socket!.emit('get_topology', {'view': NetworkTopologyWidget.defaultView});
+      _fetchPhysicalTopology();
       
       // Reset trace cursor to current time to avoid receiving old events
       final currentTimestamp = DateTime.now().toUtc().toIso8601String();
@@ -149,7 +133,8 @@ class Appstate extends ChangeNotifier {
     _socket!.on('topology_update', (data) {
       if (data != null && data['elements'] != null) {
         print('Received topology update with ${data['elements'].length} elements');
-        _updateTopology(data['elements']);
+        // _updateTopology(data['elements']);
+        // Ignore socket topology updates for now as we are using physical topology from REST
       }
       
       // If logs are enabled and logs data is included, update logs
@@ -157,7 +142,7 @@ class Appstate extends ChangeNotifier {
         _updateLogs(data['logs']);
       }
     });
-    
+
     // Listen for log updates
     _socket!.on('logs_update', (data) {
       if (data != null) {
@@ -248,293 +233,93 @@ class Appstate extends ChangeNotifier {
       print('Error removing agent: $e');
     }
   }
-  
-  // Callback for topology widget rebuild
-  VoidCallback? _topologyRebuildCallback;
-  
-  // Set the topology rebuild callback
-  void setTopologyRebuildCallback(VoidCallback callback) {
-    _topologyRebuildCallback = callback;
-  }
-  
-  // Update topology filtering
-  void updateTopologyFiltering({
-    required bool filterByNodeType,
-    required Set<NodeType> selectedNodeTypes,
-  }) {
-    _filterByNodeType = filterByNodeType;
-    _selectedNodeTypes = Set<NodeType>.from(selectedNodeTypes);
-    
-    // Trigger topology widget rebuild directly instead of notifyListeners
-    if (_topologyRebuildCallback != null) {
-      _topologyRebuildCallback!();
-    }
-  }
-  
-  // Update topology layout
-  void updateTopologyLayout(String layout) {
-    _selectedTopologyLayout = layout;
-    
-    // Trigger topology widget rebuild directly instead of notifyListeners
-    if (_topologyRebuildCallback != null) {
-      _topologyRebuildCallback!();
-    }
-  }
-  
-  // Helper method to check if two topologies are equivalent
-  bool _areTopologiesEquivalent(List<NetworkNode> nodes1, List<NetworkConnection> connections1,
-                               List<NetworkNode> nodes2, List<NetworkConnection> connections2) {
-    // Check if the number of nodes and connections are the same
-    if (nodes1.length != nodes2.length || connections1.length != connections2.length) {
-      // print('Topology comparison: Different lengths');
-      return false;
-    }
-    
-    // Create maps of nodes by ID for more efficient comparison
-    final nodesMap1 = <String, NetworkNode>{};
-    final nodesMap2 = <String, NetworkNode>{};
-    
-    for (var node in nodes1) {
-      nodesMap1[node.id] = node;
-    }
-    
-    for (var node in nodes2) {
-      nodesMap2[node.id] = node;
-    }
-    
-    // Check if both topologies have the same node IDs
-    if (!nodesMap1.keys.toSet().containsAll(nodesMap2.keys) ||
-        !nodesMap2.keys.toSet().containsAll(nodesMap1.keys)) {
-      // print('Topology comparison: Different node IDs');
-      return false;
-    }
-    
-    // Compare each node by ID, name, type, and properties
-    for (final id in nodesMap1.keys) {
-      final node1 = nodesMap1[id]!;
-      final node2 = nodesMap2[id]!;
-      
-      if (node1.name != node2.name || node1.type != node2.type) {
-        // print('Topology comparison: Node $id has different name or type');
-        return false;
-      }
-      
-      // Skip comparing status property as it might change frequently
-      // but doesn't affect the graph structure
-      final properties1 = Map<String, dynamic>.from(node1.properties);
-      final properties2 = Map<String, dynamic>.from(node2.properties);
-      
-      // Remove status property for comparison
-      properties1.remove('status');
-      properties2.remove('status');
-      
-      // Compare properties (excluding status)
-      if (properties1.length != properties2.length) {
-        // print('Topology comparison: Node $id has different property count');
-        return false;
-      }
-      
-      for (final key in properties1.keys) {
-        if (!properties2.containsKey(key) || properties1[key] != properties2[key]) {
-          // print('Topology comparison: Node $id has different property $key');
-          return false;
-        }
-      }
-    }
-    
-    // Create maps of connections by source and target for more efficient comparison
-    final connectionsMap1 = <String, NetworkConnection>{};
-    final connectionsMap2 = <String, NetworkConnection>{};
-    
-    for (var conn in connections1) {
-      final key = '${conn.sourceId}-${conn.targetId}';
-      connectionsMap1[key] = conn;
-    }
-    
-    for (var conn in connections2) {
-      final key = '${conn.sourceId}-${conn.targetId}';
-      connectionsMap2[key] = conn;
-    }
-    
-    // Check if both topologies have the same connection keys
-    if (!connectionsMap1.keys.toSet().containsAll(connectionsMap2.keys) ||
-        !connectionsMap2.keys.toSet().containsAll(connectionsMap1.keys)) {
-      // print('Topology comparison: Different connection pairs');
-      return false;
-    }
-    
-    // Compare each connection by source, target, label, and properties
-    for (final key in connectionsMap1.keys) {
-      final conn1 = connectionsMap1[key]!;
-      final conn2 = connectionsMap2[key]!;
-      
-      if (conn1.label != conn2.label) {
-        // print('Topology comparison: Connection $key has different label');
-        return false;
-      }
-      
-      // Compare properties
-      if (conn1.properties.length != conn2.properties.length) {
-        // print('Topology comparison: Connection $key has different property count');
-        return false;
-      }
-      
-      for (final propKey in conn1.properties.keys) {
-        if (!conn2.properties.containsKey(propKey) || conn1.properties[propKey] != conn2.properties[propKey]) {
-          // print('Topology comparison: Connection $key has different property $propKey');
-          return false;
-        }
-      }
-    }
-    
-    return true;
-  }
-  
-  // Update topology from server data
-  void _updateTopology(List<dynamic> elements) {
+
+  // Fetch physical topology from REST API
+  Future<void> _fetchPhysicalTopology() async {
     try {
-      // Process the elements from the server and convert to NetworkTopology
+      print('Fetching physical topology from REST API...');
+      
+      // Fetch physical topology data from the API
+      final topologyData = await _apiService.fetchPhysicalTopology();
+      
+      // Update the topology state with the fetched data
+      _updatePhysicalTopology(topologyData);
+      
+      print('Successfully fetched and updated physical topology');
+      
+    } catch (e) {
+      print('Error fetching physical topology: $e');
+    }
+  }
+  
+  // Update topology from physical topology data
+  void _updatePhysicalTopology(Map<String, dynamic> data) {
+    try {
+      final nodesData = data['nodes'] as List<dynamic>? ?? [];
+      final connectionsData = data['connections'] as List<dynamic>? ?? [];
+      
       final nodes = <NetworkNode>[];
       final connections = <NetworkConnection>[];
       final nodeIds = <String>{};
       
-      // First pass: collect all nodes
-      for (var element in elements) {
-        if (element['group'] == 'nodes') {
-          final data = element['data'];
-          if (data == null || data['id'] == null) {
-            print('Warning: Skipping node with missing data or ID');
-            continue;
-          }
-          
-          final id = data['id'];
-          final name = data['name'] ?? 'Unknown';
-          final kind = data['kind'] ?? '';
-          final status = data['status'] ?? '';
-          
-          // Map the kind to a NodeType
-          NodeType type = NetworkNode.mapKindToNodeType(kind);
-          
-          nodes.add(NetworkNode(
-            id: id,
-            name: name,
-            type: type,
-            properties: {
-              'kind': kind,
-              'status': status,
-              'ip': data['ip'] ?? '',
-            },
-          ));
-          
-          // Keep track of valid node IDs
-          nodeIds.add(id);
+      for (var nodeData in nodesData) {
+        final id = nodeData['id'];
+        final name = nodeData['name'] ?? 'Unknown';
+        final role = nodeData['role'] ?? 'unknown';
+        final status = nodeData['status'] ?? 'unknown';
+        final location = nodeData['location'];
+        
+        // Map role to NodeType
+        NodeType type = NodeType.compute;
+        if (role.toString().toLowerCase().contains('router') || 
+            role.toString().toLowerCase() == 'provider_edge' ||
+            role.toString().toLowerCase() == 'core') {
+          type = NodeType.route;
+        } else if (role.toString().toLowerCase().contains('switch')) {
+          type = NodeType.network;
         }
+        
+        nodes.add(NetworkNode(
+          id: id,
+          name: name,
+          type: type,
+          properties: {
+            'kind': 'Router', // Assuming mostly routers for now
+            'role': role,
+            'status': status,
+            'location': location,
+            'interfaces': nodeData['interfaces'],
+          },
+        ));
+        
+        nodeIds.add(id);
       }
       
-      // Second pass: collect all edges - only for nodes that exist
-      int connectionId = 1;
-      for (var element in elements) {
-        if (element['group'] == 'edges') {
-          final data = element['data'];
-          if (data == null || data['source'] == null || data['target'] == null) {
-            print('Warning: Skipping edge with missing data, source, or target');
-            continue;
-          }
-          
-          final sourceId = data['source'];
-          final targetId = data['target'];
-          
-          // Skip edges where either source or target node doesn't exist
-          if (!nodeIds.contains(sourceId) || !nodeIds.contains(targetId)) {
-            print('Warning: Skipping edge with non-existent source or target: $sourceId -> $targetId');
-            continue;
-          }
-          
-          final label = data['label'] ?? '';
-          
+      for (var connData in connectionsData) {
+        final id = connData['id'];
+        final sourceId = connData['source_router_id'];
+        final targetId = connData['target_router_id'];
+        final name = connData['name'] ?? '';
+        
+        if (nodeIds.contains(sourceId) && nodeIds.contains(targetId)) {
           connections.add(NetworkConnection(
-            id: 'c${connectionId++}',
+            id: id,
             sourceId: sourceId,
             targetId: targetId,
-            label: label,
-            properties: {
-              'src_kind': data['src_kind'] ?? '',
-              'tgt_kind': data['tgt_kind'] ?? '',
-            },
+            label: name,
           ));
         }
       }
       
-      // Check if the topology has actually changed (ignoring status changes)
-      final hasChanged = !_hasReceivedTopology || 
-                         !_areTopologiesEquivalent(_topology.nodes, _topology.connections, nodes, connections);
-      
-      if (hasChanged) {
-        // print('Topology has changed, updating graph');
-        _topology = NetworkTopology(nodes: nodes, connections: connections);
-        _hasReceivedTopology = true;
-        notifyListeners();
-      } else {
-        // print('Topology unchanged, skipping update');
-        
-        // Even though the structure hasn't changed, we might need to update node statuses
-        // Create a new topology with the same structure but updated statuses
-        final updatedNodes = <NetworkNode>[];
-        
-        // Create a map of the new nodes by ID for quick lookup
-        final newNodesMap = <String, NetworkNode>{};
-        for (var node in nodes) {
-          newNodesMap[node.id] = node;
-        }
-        
-        // Update each existing node with new status if available
-        for (var oldNode in _topology.nodes) {
-          if (newNodesMap.containsKey(oldNode.id)) {
-            final newNode = newNodesMap[oldNode.id]!;
-            // Only update if status has changed
-            if (oldNode.properties['status'] != newNode.properties['status']) {
-              updatedNodes.add(NetworkNode(
-                id: oldNode.id,
-                name: oldNode.name,
-                type: oldNode.type,
-                properties: {
-                  ...oldNode.properties,
-                  'status': newNode.properties['status'],
-                },
-              ));
-            } else {
-              updatedNodes.add(oldNode);
-            }
-          } else {
-            updatedNodes.add(oldNode);
-          }
-        }
-        
-        // Check if any statuses have actually changed
-        bool statusChanged = false;
-        for (int i = 0; i < updatedNodes.length; i++) {
-          if (i >= _topology.nodes.length || 
-              updatedNodes[i].properties['status'] != _topology.nodes[i].properties['status']) {
-            statusChanged = true;
-            break;
-          }
-        }
-        
-        // Only update the topology if any statuses have changed
-        if (statusChanged) {
-          // print('Node statuses have changed, updating topology without redrawing graph');
-          _topology = NetworkTopology(nodes: updatedNodes, connections: _topology.connections);
-          // Don't call notifyListeners() here to avoid triggering a redraw
-        }
-      }
-    } catch (e) {
-      print('Error updating topology: $e');
-      // If there's an error, create an empty topology to avoid crashes
-      _topology = NetworkTopology.empty();
-      _hasReceivedTopology = true;
+      _topology = NetworkTopology(nodes: nodes, connections: connections);
       notifyListeners();
+      print('Updated topology with ${nodes.length} nodes and ${connections.length} connections');
+      
+    } catch (e) {
+      print('Error updating physical topology: $e');
     }
   }
+  
   
   // Update logs from server data
   void _updateLogs(dynamic logsData) {
@@ -688,9 +473,6 @@ class Appstate extends ChangeNotifier {
   
   // Get topology view
   void getTopologyView(String view) {
-    // Store the selected view
-    _selectedTopologyView = view;
-    
     if (_socket != null && _socket!.connected) {
       _socket!.emit('get_topology', {'view': view});
     }

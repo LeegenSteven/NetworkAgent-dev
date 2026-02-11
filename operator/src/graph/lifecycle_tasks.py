@@ -293,7 +293,7 @@ async def _get_router_id_by_name(name):
 # Sync VyOSInfrastructure
 # ------------------------------------------
 async def sync_vyos_infrastructure(body, spec, name, uid, logger):
-    logger.info(f"Syncing VyOSInfrastructure {name}")
+    logger.debug(f"Syncing VyOSInfrastructure {name}")
     # Sync networks as LogicalSubnets
     networks = spec.get('networks', [])
     for net in networks:
@@ -365,7 +365,7 @@ async def sync_vyos_infrastructure(body, spec, name, uid, logger):
             
             try:
                 database.run_in_transaction(sql_upsert_link)
-                logger.info(f"Created PhysicalLink {link_id} connecting {len(connected_routers)} routers")
+                logger.debug(f"Created PhysicalLink {link_id} connecting {len(connected_routers)} routers")
             except Exception as e:
                 logger.error(f"Failed to create PhysicalLink {link_id}: {e}")
             
@@ -409,7 +409,7 @@ async def sync_vyos_infrastructure(body, spec, name, uid, logger):
 
 async def delete_vyos_infrastructure(uid, spec, logger):
     """Delete VyOSInfrastructure and associated subnets and physical links"""
-    logger.info(f"Deleting VyOSInfrastructure {uid}")
+    logger.debug(f"Deleting VyOSInfrastructure {uid}")
     
     def sql_delete(transaction):
         # Delete interface-link associations
@@ -442,7 +442,7 @@ async def delete_vyos_infrastructure(uid, spec, logger):
     
     try:
         database.run_in_transaction(sql_delete)
-        logger.info(f"Successfully deleted VyOSInfrastructure topology for {uid}")
+        logger.debug(f"Successfully deleted VyOSInfrastructure topology for {uid}")
     except Exception as e:
         logger.error(f"Failed to delete VyOSInfrastructure {uid}: {e}")
 
@@ -450,7 +450,7 @@ async def delete_vyos_infrastructure(uid, spec, logger):
 # Sync PhysicalRouter
 # ------------------------------------------
 async def sync_physical_router(body, spec, name, uid, logger):
-    logger.info(f"Syncing PhysicalRouter {name}")
+    logger.debug(f"Syncing PhysicalRouter {name}")
     
     # 1. Upsert Router
     # Use router name as ID to prevent duplicates when router is recreated
@@ -636,7 +636,7 @@ async def delete_physical_router(uid, name=None):
     """Delete physical router and cascade delete related entities"""
     # Use name-based ID if available, otherwise fall back to UID for backwards compatibility
     router_id = f"router:{name}" if name else uid
-    logger.info(f"Deleting PhysicalRouter {router_id}")
+    logger.debug(f"Deleting PhysicalRouter {router_id}")
     
     def sql_delete(transaction):
         # Delete subnet associations for all interfaces of this router
@@ -669,7 +669,7 @@ async def delete_physical_router(uid, name=None):
     
     try:
         database.run_in_transaction(sql_delete)
-        logger.info(f"Successfully deleted PhysicalRouter {uid}")
+        logger.debug(f"Successfully deleted PhysicalRouter {uid}")
     except Exception as e:
         logger.error(f"Failed to delete router {uid}: {e}")
 
@@ -677,7 +677,7 @@ async def delete_physical_router(uid, name=None):
 # Sync L3VPNService
 # ------------------------------------------
 async def sync_l3vpn_service(body, spec, name, uid, logger):
-    logger.info(f"Syncing L3VPNService {name}")
+    logger.debug(f"Syncing L3VPNService {name}")
     
     # Extract status from CRD
     l3vpn_status = 'Unknown'
@@ -856,7 +856,7 @@ async def sync_l3vpn_service(body, spec, name, uid, logger):
 
 async def delete_l3vpn_service(uid):
     """Delete L3VPN service and cascade delete VRFs and BGP sessions"""
-    logger.info(f"Deleting L3VPN Service CRD {uid}")
+    logger.debug(f"Deleting L3VPN Service CRD {uid}")
     
     # We need to find all VPNs that match this CRD's UID pattern
     # Since we don't have the body, we'll delete by pattern matching
@@ -897,7 +897,7 @@ async def delete_l3vpn_service(uid):
     
     try:
         database.run_in_transaction(sql_delete)
-        logger.info(f"Successfully deleted L3VPN services and related entities for CRD {uid}")
+        logger.debug(f"Successfully deleted L3VPN services and related entities for CRD {uid}")
     except Exception as e:
         logger.error(f"Failed to delete L3VPN service {uid}: {e}")
 

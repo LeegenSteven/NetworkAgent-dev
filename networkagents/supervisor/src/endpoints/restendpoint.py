@@ -19,7 +19,7 @@ import aiohttp_cors
 from aiohttp import web
 from agent.host_agent import HostAgent
 from endpoints.socketendpoint import SocketEndpoint
-from tools.topology import fetch_db_node
+from tools.topology import fetch_physical_topology, fetch_router_details
 from tools.metrics import (
     fetch_all_last_metrics,
     fetch_all_metrics,
@@ -68,9 +68,6 @@ class RestEndpoint:
         pushNotificationRoute = self.app.router.add_post("/pushnotification", self.pushNotification)
         self.cors.add(pushNotificationRoute, corsConfig)
 
-        getNodeDetailsRoute = self.app.router.add_get("/node/{node_id}", self.getNodeDetails)
-        self.cors.add(getNodeDetailsRoute, corsConfig)
-
         # Add metric-related REST endpoints
         getAllLastMetricsRoute = self.app.router.add_get("/metrics/last", self.getAllLastMetrics)
         self.cors.add(getAllLastMetricsRoute, corsConfig)
@@ -99,62 +96,70 @@ class RestEndpoint:
         deleteIncidentsRoute = self.app.router.add_post("/incidents/delete", self.resetIncidents)
         self.cors.add(deleteIncidentsRoute, corsConfig)
 
+        # Add topology endpoints
+        getPhysicalTopologyRoute = self.app.router.add_get("/topology/physical", self.getPhysicalTopology)
+        self.cors.add(getPhysicalTopologyRoute, corsConfig)
+
+        getRouterDetailsRoute = self.app.router.add_get("/router/{router_id}", self.getRouterDetails)
+        self.cors.add(getRouterDetailsRoute, corsConfig)
+
     #################################################################
-    # Get node details
+    # Topology endpoints
     #################################################################
-    def _parse_node_details_to_markdown(self, node_details):
-        markdown = ""
+    async def getPhysicalTopology(self, request):
+        """
+        Get the physical network topology including routers, their interfaces, 
+        links, and connectivity.
         
-        spec = node_details.get('spec', {})
-        if isinstance(spec, dict):
-            for key, value in spec.items():
-                if key in ['status', 'spec']:
-                    if isinstance(value, dict):
-                        markdown += f"\n__{key.replace('_', ' ').title()}__:\n"
-                        for sub_key, sub_value in value.items():
-                            markdown += f"  - **{sub_key.replace('_', ' ').title()}**: {sub_value}\n"
-                    elif isinstance(value, list):
-                        markdown += f"- **{key.replace('_', ' ').title()}**:\n"
-                        for item in value:
-                            markdown += f"  - {item}\n"
-                    else:
-                        markdown += f"- **{key.replace('_', ' ').title()}**: {value}\n"
-        else:
-            markdown += f"- {spec}\n"
-
-        return markdown
-
-    async def getNodeDetails(self, request):
-        logger.info("REST endpoint: get node details")
+        Returns:
+            aiohttp.web.Response: JSON response with physical topology data
+        """
+        logger.info("REST endpoint: get physical topology")
         try:
-            node_id = request.match_info.get('node_id')
-            if not node_id:
-                return web.json_response({"error": "No node ID provided"}), 400
-
-            node_data = fetch_db_node(node_id)
-            if node_data:
-                id, kind, name, display_name, status, properties = node_data
-                
-                try:
-                    properties_dict = json.loads(properties)
-                except json.JSONDecodeError:
-                    properties_dict = {}
-                
-                node_details = {
-                    'kind': kind,
-                    'name': name,
-                    'status': status,
-                    'spec': properties_dict
-                }
-
-                markdown_summary = self._parse_node_details_to_markdown(node_details)
-                return web.json_response({"summary": markdown_summary})
-            else:
-                logger.error(f"Node with ID {node_id} not found")
-                return web.json_response({"error": f"Node with ID {node_id} not found"}), 404
+            topology = fetch_physical_topology()
+            return web.json_response(topology)
         except Exception as e:
-            logger.error(f"Error fetching node details: {e}")
-            return web.json_response({"error": f"Error fetching node details: {str(e)}"}), 500
+            logger.error(f"Error fetching physical topology: {str(e)}", exc_info=True)
+            return web.json_response(
+                {"error": f"Error fetching physical topology: {str(e)}"},
+                status=500
+            )
+
+    #################################################################
+    # Get router details
+    #################################################################
+    async def getRouterDetails(self, request):
+        """
+        Get detailed information for a specific router by ID.
+        
+        Args:
+            request: The HTTP request object with router_id in the URL path
+            
+        Returns:
+            aiohttp.web.Response: JSON response with router details
+        """
+        logger.info("REST endpoint: get router details")
+        try:
+            router_id = request.match_info.get('router_id')
+            if not router_id:
+                return web.json_response(
+                    {"error": "No router ID provided"},
+                    status=400
+                )
+
+            router_details = fetch_router_details(router_id)
+            
+            if 'error' in router_details:
+                return web.json_response(router_details, status=404)
+            
+            return web.json_response(router_details)
+            
+        except Exception as e:
+            logger.error(f"Error fetching router details: {str(e)}", exc_info=True)
+            return web.json_response(
+                {"error": f"Error fetching router details: {str(e)}"},
+                status=500
+            )
 
     #################################################################
     # Add a remote agent

@@ -484,4 +484,57 @@ class APIService{
       return false; // Return false instead of rethrowing
     }
   }
+
+  Future<Map<String, dynamic>> fetchPhysicalTopology() async {
+    try {
+      var url = Uri.parse('${config.EnvironmentConfig.agentUrl}/topology/physical');
+      print('Fetching physical topology from: $url');
+      
+      final http.Response response = await http.get(url, headers: getRequestHeaders);
+      
+      if (response.statusCode == 200) {
+        final dynamic decodedData = jsonDecode(response.body);
+        if (decodedData is Map<String, dynamic>) {
+          print('Successfully fetched physical topology with ${decodedData['nodes']?.length ?? 0} nodes');
+          return decodedData;
+        } else {
+          print('Physical topology data is not a Map: ${decodedData.runtimeType}');
+          throw Exception('Invalid physical topology data format');
+        }
+      } else {
+        print('Failed to load physical topology: ${response.statusCode}');
+        print('Response body: ${response.body}');
+        throw Exception('Failed to load physical topology');
+      }
+    } catch (e) {
+      print('Error fetching physical topology: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchRouterDetails(String routerId) async {
+    try {
+      var url = Uri.parse('${config.EnvironmentConfig.agentUrl}/router/$routerId');
+      print('Fetching router details from: $url');
+      
+      final http.Response response = await http.get(url, headers: getRequestHeaders);
+      
+      if (response.statusCode == 200) {
+        final dynamic decodedData = jsonDecode(response.body);
+        if (decodedData is Map<String, dynamic>) {
+          return decodedData;
+        } else {
+          print('Router details data is not a Map: ${decodedData.runtimeType}');
+          throw Exception('Invalid router details data format');
+        }
+      } else {
+        print('Failed to load router details: ${response.statusCode}');
+        print('Response body: ${response.body}');
+        throw Exception('Failed to load router details');
+      }
+    } catch (e) {
+      print('Error fetching router details: $e');
+      rethrow;
+    }
+  }
 }

@@ -8,6 +8,7 @@ set system host-name {{ router_hostname }}
 # Send logs to Host VM journald (which will be forwarded to GCP Logging)
 # set container name {{ router_hostname }} log-driver journald
 
+# === Export Logs ===
 # Send logs directly to the GCP Ops Agent running on the host VM
 set system syslog remote 192.168.122.1 facility all level info
 set system syslog remote 192.168.122.1 port 5140
@@ -15,6 +16,16 @@ set system syslog remote 192.168.122.1 protocol udp
 # Use RFC5424 format to include timezone
 set system syslog remote 192.168.122.1 format include-timezone
 
+# === Export Metrics ===
+# Enable the standard system exporter (CPU, RAM, Disk, Network)
+set service monitoring prometheus node-exporter listen-address '0.0.0.0'
+set service monitoring prometheus node-exporter port '9100'
+
+# (Optional) Enable the routing exporter if you use BGP/OSPF
+set service monitoring prometheus frr-exporter listen-address '0.0.0.0'
+set service monitoring prometheus frr-exporter port '9101'
+
+# === Configure VYOS infrastructure ===
 # Configure interfaces
 {% set vlan_interfaces = interfaces | selectattr('name', '!=', 'lo') | selectattr('vlan', 'defined') | list %}
 {% set vlan_parent_interfaces = vlan_interfaces | map(attribute='name') | unique | list %}

@@ -150,3 +150,45 @@ logging:
       vyos_pipeline:
         receivers: [vyos_syslog]
         processors: [add_vyos_marker, vyos_parser, set_severity, set_facility]
+
+metrics:
+  receivers:
+    vyos_nodes:
+      type: prometheus
+      config:
+        scrape_configs:
+          - job_name: 'vyos-lab'
+            scrape_interval: 15s
+            scrape_timeout: 15s
+            static_configs:
+              - targets:
+                # Node Exporters (System)
+                - '192.168.122.11:9100' # p1
+                - '192.168.122.12:9100' # p2
+                - '192.168.122.13:9100' # p3
+                - '192.168.122.14:9100' # p4
+                - '192.168.122.21:9100' # rr1
+                - '192.168.122.22:9100' # rr2
+                - '192.168.122.31:9100' # pe1
+                - '192.168.122.32:9100' # pe2
+                - '192.168.122.33:9100' # pe3
+                - '192.168.122.40:9100' # ce1-spoke
+                - '192.168.122.41:9100' # ce1-hub
+                - '192.168.122.42:9100' # ce2-spoke
+                # FRR Exporters (Routing)
+                - '192.168.122.11:9101' # p1
+                - '192.168.122.12:9101' # p2
+                - '192.168.122.13:9101' # p3
+                - '192.168.122.14:9101' # p4
+                - '192.168.122.21:9101' # rr1
+                - '192.168.122.22:9101' # rr2
+                - '192.168.122.31:9101' # pe1
+                - '192.168.122.32:9101' # pe2
+                - '192.168.122.33:9101' # pe3
+                - '192.168.122.40:9101' # ce1-spoke
+                - '192.168.122.41:9101' # ce1-hub
+                - '192.168.122.42:9101' # ce2-spoke
+  service:
+    pipelines:
+      prometheus_pipeline:
+        receivers: [vyos_nodes]

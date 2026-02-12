@@ -64,6 +64,9 @@
               vyos.router.hostname: "{{ router_hostname }}"
               vyos.router.id: "{{ router_id }}"
               vyos.source.network: "{{ source_network | default('') }}"
+            ports:
+              - "9100:9100"
+              - "9101:9101"
           register: container_result
 
         - name: Sequentially create veth pair for all non lo networks and attach to linux network bridge

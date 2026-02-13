@@ -10,7 +10,7 @@ There are two categories of network agents provided:
 * __Network Optimisation Agents__: Agents that listen to the network and suggest optimisations that can resolve an issue or improve network performance.
 
 <p align=center>
-<img src="drawings/agents.png"  width="500">
+<img src="docs/drawings/agents.png"  width="500">
 </p>
 
 All agents support the Google A2A protocol, which declares each agent's capabilities and allows agents to be dynamically loaded. Adding new functionality to network lifecycle tooling as needed. 
@@ -33,7 +33,7 @@ These agents can interact with each other over A2A or directly with end users us
 End users interact with the supervisor agent in natural language. The supervisor agent is responsible for routing tasks to agents it knows about that can handle those tasks and report progress back to the user throughout the lifecycle of that task. 
 
 <p align=center>
-<img src="drawings/supervisoragent.png"  width="400">
+<img src="docs/drawings/supervisoragent.png"  width="400">
 </p>
 
 Supervisor agent communicates to the specialist network agents over the A2A protocol. As seen in the figure above, some agents are implemented using ADK and some using Langgraph. This demonstrates agents can interact with each other dynamically irrespective of the agent framework used.
@@ -45,7 +45,7 @@ Each agent has access to a set of network automation and data tools through an M
 The previous interaction pattern was human driven. In this pattern an agent is listening to the network and when it identifies a potential issue, it triggers a task to try to auto resolve the issue. 
 
 <p align=center>
-<img src="drawings/backgroundagents.png"  width="400">
+<img src="docs/drawings/backgroundagents.png"  width="400">
 </p>
 
 When a resolution to the issue is identifed, the resolution agent interacts with other agents through the A2A protocol to make the appropriate changes to the network. In this case the engineering agent receives a request to make changes from the resolution agent. The engineering agent needs approval to make any changes, so it triggers a notification to the supervisor agent asking for approval. 
@@ -55,7 +55,7 @@ When a resolution to the issue is identifed, the resolution agent interacts with
 The tools available to the network agents provide access to GCP network automation and topology services. Allowing agents to update the network, discover existing topology and what network services and capabilities can be deployed in the future.  
 
 <p align=center>
-<img src="drawings/architecture.png"  width="500">
+<img src="docs/drawings/architecture.png"  width="500">
 </p>
 
 The GCP services used are: 

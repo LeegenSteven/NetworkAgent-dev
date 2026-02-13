@@ -11,12 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
+
 apiVersion: spanner.cnrm.cloud.google.com/v1beta1
 kind: SpannerInstance
 metadata:
   labels:
-    kind: spanner-instance # Workaround to deploy instance first and change the edition  
+    kind: spanner-instance
   name: {{GOOGLE_SPANNER_INSTANCE}}
   namespace: {{GOOGLE_NAMESPACE}}
   annotations:
@@ -31,7 +31,7 @@ apiVersion: spanner.cnrm.cloud.google.com/v1beta1
 kind: SpannerDatabase
 metadata:
   labels:
-    kind: spanner-database  # Workaround to deploy instance first and change the edition
+    kind: spanner-database
   name: {{GOOGLE_SPANNER_DATABASE}}
   namespace: {{GOOGLE_NAMESPACE}}
   annotations:
@@ -52,8 +52,9 @@ spec:
       role STRING(MAX),
       status STRING(MAX),
       config JSON,
-      last_updated TIMESTAMP OPTIONS (allow_commit_timestamp=true)
-    ) PRIMARY KEY (id)"
+      valid_start_ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
+      valid_end_ts TIMESTAMP OPTIONS (allow_commit_timestamp=true)
+    ) PRIMARY KEY (id, valid_start_ts DESC)"
   - "CREATE TABLE PhysicalInterface (
       id STRING(MAX) NOT NULL,
       router_id STRING(MAX) NOT NULL,
@@ -63,18 +64,18 @@ spec:
       ip_address STRING(MAX),
       mac_address STRING(MAX),
       status STRING(MAX),
-      config JSON,
-      last_updated TIMESTAMP OPTIONS (allow_commit_timestamp=true),
-      CONSTRAINT FK_InterfaceRouter FOREIGN KEY (router_id) REFERENCES PhysicalRouter (id) ON DELETE CASCADE
-    ) PRIMARY KEY (id)"
+      valid_start_ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
+      valid_end_ts TIMESTAMP OPTIONS (allow_commit_timestamp=true)
+    ) PRIMARY KEY (id, valid_start_ts DESC)"
   - "CREATE TABLE PhysicalLink (
       id STRING(MAX) NOT NULL,
       name STRING(MAX),
       bandwidth STRING(MAX),
       status STRING(MAX),
       properties JSON,
-      last_updated TIMESTAMP OPTIONS (allow_commit_timestamp=true)
-    ) PRIMARY KEY (id)"
+      valid_start_ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
+      valid_end_ts TIMESTAMP OPTIONS (allow_commit_timestamp=true)
+    ) PRIMARY KEY (id, valid_start_ts DESC)"
   - "CREATE TABLE Customer (
       id STRING(MAX) NOT NULL,
       name STRING(MAX) NOT NULL,
@@ -90,9 +91,9 @@ spec:
       topology STRING(MAX),
       status STRING(MAX),
       config JSON,
-      last_updated TIMESTAMP OPTIONS (allow_commit_timestamp=true),
-      CONSTRAINT FK_VPNCustomer FOREIGN KEY (customer_id) REFERENCES Customer (id)
-    ) PRIMARY KEY (id)"
+      valid_start_ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
+      valid_end_ts TIMESTAMP OPTIONS (allow_commit_timestamp=true)
+    ) PRIMARY KEY (id, valid_start_ts DESC)"
   - "CREATE TABLE VRF (
       id STRING(MAX) NOT NULL,
       router_id STRING(MAX) NOT NULL,
@@ -101,10 +102,9 @@ spec:
       rd STRING(MAX),
       status STRING(MAX),
       config JSON,
-      last_updated TIMESTAMP OPTIONS (allow_commit_timestamp=true),
-      CONSTRAINT FK_VRFRouter FOREIGN KEY (router_id) REFERENCES PhysicalRouter (id) ON DELETE CASCADE,
-      CONSTRAINT FK_VRFVPN FOREIGN KEY (vpn_id) REFERENCES L3VPNService (id) ON DELETE CASCADE
-    ) PRIMARY KEY (id)"
+      valid_start_ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
+      valid_end_ts TIMESTAMP OPTIONS (allow_commit_timestamp=true)
+    ) PRIMARY KEY (id, valid_start_ts DESC)"
   - "CREATE TABLE BGPSession (
       id STRING(MAX) NOT NULL,
       vrf_id STRING(MAX) NOT NULL,
@@ -113,35 +113,37 @@ spec:
       peer_ip STRING(MAX),
       status STRING(MAX),
       config JSON,
-      last_updated TIMESTAMP OPTIONS (allow_commit_timestamp=true),
-      CONSTRAINT FK_BGPVRF FOREIGN KEY (vrf_id) REFERENCES VRF (id) ON DELETE CASCADE
-    ) PRIMARY KEY (id)"
+      valid_start_ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
+      valid_end_ts TIMESTAMP OPTIONS (allow_commit_timestamp=true)
+    ) PRIMARY KEY (id, valid_start_ts DESC)"
   - "CREATE TABLE LogicalSubnet (
       id STRING(MAX) NOT NULL,
       cidr STRING(MAX) NOT NULL,
       network_type STRING(MAX),
       description STRING(MAX),
       properties JSON,
-      last_updated TIMESTAMP OPTIONS (allow_commit_timestamp=true)
-    ) PRIMARY KEY (id)"
+      valid_start_ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
+      valid_end_ts TIMESTAMP OPTIONS (allow_commit_timestamp=true)
+    ) PRIMARY KEY (id, valid_start_ts DESC)"
   - "CREATE TABLE Interface_Link (
       interface_id STRING(MAX) NOT NULL,
       link_id STRING(MAX) NOT NULL,
-      CONSTRAINT FK_IL_Interface FOREIGN KEY (interface_id) REFERENCES PhysicalInterface (id) ON DELETE CASCADE,
-      CONSTRAINT FK_IL_Link FOREIGN KEY (link_id) REFERENCES PhysicalLink (id) ON DELETE CASCADE
-    ) PRIMARY KEY (interface_id, link_id)"
+      valid_start_ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
+      valid_end_ts TIMESTAMP OPTIONS (allow_commit_timestamp=true)
+    ) PRIMARY KEY (interface_id, link_id, valid_start_ts DESC)"
   - "CREATE TABLE BGP_Peering (
       session_id_a STRING(MAX) NOT NULL,
       session_id_b STRING(MAX) NOT NULL,
-      CONSTRAINT FK_BP_SessionA FOREIGN KEY (session_id_a) REFERENCES BGPSession (id) ON DELETE CASCADE,
-      CONSTRAINT FK_BP_SessionB FOREIGN KEY (session_id_b) REFERENCES BGPSession (id) ON DELETE CASCADE
-    ) PRIMARY KEY (session_id_a, session_id_b)"
+      valid_start_ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
+      valid_end_ts TIMESTAMP OPTIONS (allow_commit_timestamp=true)
+    ) PRIMARY KEY (session_id_a, session_id_b, valid_start_ts DESC)"
   - "CREATE TABLE Subnet_Association (
       entity_id STRING(MAX) NOT NULL,
       subnet_id STRING(MAX) NOT NULL,
       entity_type STRING(MAX),
-      CONSTRAINT FK_SA_Subnet FOREIGN KEY (subnet_id) REFERENCES LogicalSubnet (id) ON DELETE CASCADE
-    ) PRIMARY KEY (entity_id, subnet_id)"
+      valid_start_ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
+      valid_end_ts TIMESTAMP OPTIONS (allow_commit_timestamp=true)
+    ) PRIMARY KEY (entity_id, subnet_id, valid_start_ts DESC)"
   - "CREATE TABLE Incident (
         id STRING(MAX) NOT NULL,
         recordedTimestamp TIMESTAMP NOT NULL,
@@ -166,8 +168,7 @@ spec:
         name STRING(MAX) NOT NULL,
         timestamp TIMESTAMP NOT NULL,
         metrics JSON,
-        interface_id STRING(MAX),
-        CONSTRAINT FK_Metrics_Interface FOREIGN KEY (interface_id) REFERENCES PhysicalInterface (id)
+        interface_id STRING(MAX)
     ) PRIMARY KEY (id, timestamp)"
   - "CREATE TABLE ServicePerformance (
         id STRING(36) NOT NULL,
@@ -177,8 +178,7 @@ spec:
         userid STRING(MAX),
         error STRING(MAX),
         node STRING(MAX),
-        vpn_id STRING(MAX),
-        CONSTRAINT FK_Perf_VPN FOREIGN KEY (vpn_id) REFERENCES L3VPNService (id)
+        vpn_id STRING(MAX)
       ) PRIMARY KEY (id)"
   - "CREATE TABLE AgentTrace (
        id STRING(36) NOT NULL,
@@ -200,11 +200,93 @@ spec:
        id STRING(36) NOT NULL,
        timestamp TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
        customer_id STRING(MAX),
-       customer STRING(MAX) NOT NULL,
-       status STRING(MAX) NOT NULL,
-       details JSON,
-       CONSTRAINT FK_Order_Customer FOREIGN KEY (customer_id) REFERENCES Customer (id)
-    ) PRIMARY KEY(id)"
+       customer STRING(MAX) NOT NULL
+     ) PRIMARY KEY(id)"
+  - "CREATE VIEW CurrentPhysicalRouter SQL SECURITY INVOKER AS SELECT * FROM PhysicalRouter WHERE valid_end_ts IS NULL"
+  - "CREATE VIEW CurrentPhysicalInterface SQL SECURITY INVOKER AS SELECT * FROM PhysicalInterface WHERE valid_end_ts IS NULL"
+  - "CREATE VIEW CurrentPhysicalLink SQL SECURITY INVOKER AS SELECT * FROM PhysicalLink WHERE valid_end_ts IS NULL"
+  - "CREATE VIEW CurrentL3VPNService SQL SECURITY INVOKER AS SELECT * FROM L3VPNService WHERE valid_end_ts IS NULL"
+  - "CREATE VIEW CurrentVRF SQL SECURITY INVOKER AS SELECT * FROM VRF WHERE valid_end_ts IS NULL"
+  - "CREATE VIEW CurrentBGPSession SQL SECURITY INVOKER AS SELECT * FROM BGPSession WHERE valid_end_ts IS NULL"
+  - "CREATE VIEW CurrentLogicalSubnet SQL SECURITY INVOKER AS SELECT * FROM LogicalSubnet WHERE valid_end_ts IS NULL"
+  - "CREATE VIEW HasInterface_Edge SQL SECURITY INVOKER AS 
+       SELECT 
+         r.id AS router_id, r.valid_start_ts AS router_ts,
+         i.id AS interface_id, i.valid_start_ts AS interface_ts
+       FROM PhysicalRouter r
+       JOIN PhysicalInterface i
+       ON r.id = i.router_id
+       AND r.valid_start_ts < IFNULL(i.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
+       AND IFNULL(r.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > i.valid_start_ts"
+  - "CREATE VIEW ConnectsTo_Edge SQL SECURITY INVOKER AS 
+       SELECT 
+         i.id AS interface_id, i.valid_start_ts AS interface_ts,
+         l.id AS link_id, l.valid_start_ts AS link_ts
+       FROM PhysicalInterface i
+       JOIN Interface_Link il ON i.id = il.interface_id
+       JOIN PhysicalLink l ON il.link_id = l.id
+       WHERE i.valid_start_ts < IFNULL(l.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
+       AND IFNULL(i.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > l.valid_start_ts"
+  - "CREATE VIEW LinkedTo_Edge SQL SECURITY INVOKER AS 
+       SELECT 
+         l.id AS link_id, l.valid_start_ts AS link_ts,
+         i.id AS interface_id, i.valid_start_ts AS interface_ts
+       FROM PhysicalLink l
+       JOIN Interface_Link il ON l.id = il.link_id
+       JOIN PhysicalInterface i ON il.interface_id = i.id
+       WHERE l.valid_start_ts < IFNULL(i.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
+       AND IFNULL(l.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > i.valid_start_ts"
+  - "CREATE VIEW OwnedBy_Edge SQL SECURITY INVOKER AS
+       SELECT
+         vpn.id AS vpn_id, vpn.valid_start_ts AS vpn_ts,
+         c.id AS customer_id
+       FROM L3VPNService vpn
+       JOIN Customer c ON vpn.customer_id = c.id"
+  - "CREATE VIEW RealizesVPN_Edge SQL SECURITY INVOKER AS
+       SELECT
+         vrf.id AS vrf_id, vrf.valid_start_ts AS vrf_ts,
+         vpn.id AS vpn_id, vpn.valid_start_ts AS vpn_ts
+       FROM VRF vrf
+       JOIN L3VPNService vpn
+       ON vrf.vpn_id = vpn.id
+       AND vrf.valid_start_ts < IFNULL(vpn.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
+       AND IFNULL(vrf.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > vpn.valid_start_ts"
+  - "CREATE VIEW LocatedOn_Edge SQL SECURITY INVOKER AS
+       SELECT
+         vrf.id AS vrf_id, vrf.valid_start_ts AS vrf_ts,
+         r.id AS router_id, r.valid_start_ts AS router_ts
+       FROM VRF vrf
+       JOIN PhysicalRouter r
+       ON vrf.router_id = r.id
+       AND vrf.valid_start_ts < IFNULL(r.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
+       AND IFNULL(vrf.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > r.valid_start_ts"
+  - "CREATE VIEW BelongsToVRF_Edge SQL SECURITY INVOKER AS
+       SELECT
+         bgp.id AS bgp_id, bgp.valid_start_ts AS bgp_ts,
+         vrf.id AS vrf_id, vrf.valid_start_ts AS vrf_ts
+       FROM BGPSession bgp
+       JOIN VRF vrf
+       ON bgp.vrf_id = vrf.id
+       AND bgp.valid_start_ts < IFNULL(vrf.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
+       AND IFNULL(bgp.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > vrf.valid_start_ts"
+  - "CREATE VIEW PeersWith_Edge SQL SECURITY INVOKER AS
+       SELECT
+         bgp1.id AS bgp1_id, bgp1.valid_start_ts AS bgp1_ts,
+         bgp2.id AS bgp2_id, bgp2.valid_start_ts AS bgp2_ts
+       FROM BGPSession bgp1
+       JOIN BGP_Peering bp ON bgp1.id = bp.session_id_a
+       JOIN BGPSession bgp2 ON bp.session_id_b = bgp2.id
+       WHERE bgp1.valid_start_ts < IFNULL(bgp2.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
+       AND IFNULL(bgp1.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > bgp2.valid_start_ts"
+  - "CREATE VIEW AssociatedWith_Edge SQL SECURITY INVOKER AS
+       SELECT
+         i.id AS interface_id, i.valid_start_ts AS interface_ts,
+         s.id AS subnet_id, s.valid_start_ts AS subnet_ts
+       FROM PhysicalInterface i
+       JOIN Subnet_Association sa ON i.id = sa.entity_id
+       JOIN LogicalSubnet s ON sa.subnet_id = s.id
+       WHERE i.valid_start_ts < IFNULL(s.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
+       AND IFNULL(i.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > s.valid_start_ts"
   - "CREATE OR REPLACE PROPERTY GRAPH networkGraph
        NODE TABLES (
          PhysicalRouter,
@@ -223,40 +305,34 @@ spec:
          KgLogEntryNode
        )
        EDGE TABLES (
-         PhysicalInterface AS HasInterface
-           SOURCE KEY (router_id) REFERENCES PhysicalRouter (id)
-           DESTINATION KEY (id) REFERENCES PhysicalInterface (id),
-         Interface_Link AS ConnectsTo
-           SOURCE KEY (interface_id) REFERENCES PhysicalInterface (id)
-           DESTINATION KEY (link_id) REFERENCES PhysicalLink (id),
-         Interface_Link AS LinkedTo
-           SOURCE KEY (link_id) REFERENCES PhysicalLink (id)
-           DESTINATION KEY (interface_id) REFERENCES PhysicalInterface (id),
-         L3VPNService AS OwnedBy
-           SOURCE KEY (customer_id) REFERENCES Customer (id)
-           DESTINATION KEY (id) REFERENCES L3VPNService (id),
-         VRF AS RealizesVPN
-           SOURCE KEY (vpn_id) REFERENCES L3VPNService (id)
-           DESTINATION KEY (id) REFERENCES VRF (id),
-         VRF AS LocatedOn
-           SOURCE KEY (router_id) REFERENCES PhysicalRouter (id)
-           DESTINATION KEY (id) REFERENCES VRF (id),
-         BGPSession AS BelongsToVRF
-           SOURCE KEY (vrf_id) REFERENCES VRF (id)
-           DESTINATION KEY (id) REFERENCES BGPSession (id),
-         BGP_Peering AS PeersWith
-           SOURCE KEY (session_id_a) REFERENCES BGPSession (id)
-           DESTINATION KEY (session_id_b) REFERENCES BGPSession (id),
-         Subnet_Association AS AssociatedWith
-           SOURCE KEY (entity_id) REFERENCES PhysicalInterface (id)
-           DESTINATION KEY (subnet_id) REFERENCES LogicalSubnet (id),
-         ServicePerformance AS ExhibitsPerformance
-           SOURCE KEY (vpn_id) REFERENCES L3VPNService (id)
-           DESTINATION KEY (id) REFERENCES ServicePerformance (id),
+         HasInterface_Edge AS HasInterface
+           SOURCE KEY (router_id, router_ts) REFERENCES PhysicalRouter (id, valid_start_ts)
+           DESTINATION KEY (interface_id, interface_ts) REFERENCES PhysicalInterface (id, valid_start_ts),
+         ConnectsTo_Edge AS ConnectsTo
+           SOURCE KEY (interface_id, interface_ts) REFERENCES PhysicalInterface (id, valid_start_ts)
+           DESTINATION KEY (link_id, link_ts) REFERENCES PhysicalLink (id, valid_start_ts),
+         LinkedTo_Edge AS LinkedTo
+           SOURCE KEY (link_id, link_ts) REFERENCES PhysicalLink (id, valid_start_ts)
+           DESTINATION KEY (interface_id, interface_ts) REFERENCES PhysicalInterface (id, valid_start_ts),
+         OwnedBy_Edge AS OwnedBy
+           SOURCE KEY (vpn_id, vpn_ts) REFERENCES L3VPNService (id, valid_start_ts)
+           DESTINATION KEY (customer_id) REFERENCES Customer (id),
+         RealizesVPN_Edge AS RealizesVPN
+           SOURCE KEY (vrf_id, vrf_ts) REFERENCES VRF (id, valid_start_ts)
+           DESTINATION KEY (vpn_id, vpn_ts) REFERENCES L3VPNService (id, valid_start_ts),
+         LocatedOn_Edge AS LocatedOn
+           SOURCE KEY (vrf_id, vrf_ts) REFERENCES VRF (id, valid_start_ts)
+           DESTINATION KEY (router_id, router_ts) REFERENCES PhysicalRouter (id, valid_start_ts),
+         BelongsToVRF_Edge AS BelongsToVRF
+           SOURCE KEY (bgp_id, bgp_ts) REFERENCES BGPSession (id, valid_start_ts)
+           DESTINATION KEY (vrf_id, vrf_ts) REFERENCES VRF (id, valid_start_ts),
+         PeersWith_Edge AS PeersWith
+           SOURCE KEY (bgp1_id, bgp1_ts) REFERENCES BGPSession (id, valid_start_ts)
+           DESTINATION KEY (bgp2_id, bgp2_ts) REFERENCES BGPSession (id, valid_start_ts),
+         AssociatedWith_Edge AS AssociatedWith
+           SOURCE KEY (interface_id, interface_ts) REFERENCES PhysicalInterface (id, valid_start_ts)
+           DESTINATION KEY (subnet_id, subnet_ts) REFERENCES LogicalSubnet (id, valid_start_ts),
          Orders AS PlacedBy
            SOURCE KEY (customer_id) REFERENCES Customer (id)
-           DESTINATION KEY (id) REFERENCES Orders (id),
-         NetworkMetrics AS HasMetrics
-           SOURCE KEY (interface_id) REFERENCES PhysicalInterface (id)
-           DESTINATION KEY (id, timestamp) REFERENCES NetworkMetrics (id, timestamp)
+           DESTINATION KEY (id) REFERENCES Orders (id)
        )"

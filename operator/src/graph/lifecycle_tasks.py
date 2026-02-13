@@ -28,34 +28,77 @@ SQL_TEMPLATES = {
   'exist_kg_res_node' : "SELECT id FROM KgResourceDescriptionNode WHERE id = '{id}'",
 
   # --- Network topology tables ---
-  'upsert_phy_router': "INSERT OR UPDATE PhysicalRouter (id, name, vendor, model, location_city, location_lat, location_lon, role, status, config, last_updated) VALUES (@id, @name, @vendor, @model, @location_city, @location_lat, @location_lon, @role, @status, @config, PENDING_COMMIT_TIMESTAMP())",
-  'delete_phy_router': "DELETE FROM PhysicalRouter WHERE id = @id",
-  'get_router_id_by_name': "SELECT id FROM PhysicalRouter WHERE name = @name",
+  # PhysicalRouter SCD
+  'get_active_phy_router': "SELECT config, status FROM PhysicalRouter WHERE id = @id AND valid_end_ts IS NULL",
+  'close_phy_router': "UPDATE PhysicalRouter SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE id = @id AND valid_end_ts IS NULL",
+  'insert_phy_router': "INSERT PhysicalRouter (id, name, vendor, model, location_city, location_lat, location_lon, role, status, config, valid_start_ts, valid_end_ts) VALUES (@id, @name, @vendor, @model, @location_city, @location_lat, @location_lon, @role, @status, @config, PENDING_COMMIT_TIMESTAMP(), NULL)",
 
-  'upsert_phy_interface': "INSERT OR UPDATE PhysicalInterface (id, router_id, name, speed, media_type, ip_address, mac_address, status, config, last_updated) VALUES (@id, @router_id, @name, @speed, @media_type, @ip_address, @mac_address, @status, @config, PENDING_COMMIT_TIMESTAMP())",
-  'delete_phy_interface_by_router': "DELETE FROM PhysicalInterface WHERE router_id = @router_id",
+  'delete_phy_router': "UPDATE PhysicalRouter SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE id = @id AND valid_end_ts IS NULL",
+  'get_router_id_by_name': "SELECT id FROM PhysicalRouter WHERE name = @name AND valid_end_ts IS NULL",
+
+  # PhysicalInterface SCD
+  'get_active_phy_interface': "SELECT speed, media_type, ip_address, mac_address, status FROM PhysicalInterface WHERE id = @id AND valid_end_ts IS NULL",
+  'close_phy_interface': "UPDATE PhysicalInterface SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE id = @id AND valid_end_ts IS NULL",
+  'insert_phy_interface': "INSERT PhysicalInterface (id, router_id, name, speed, media_type, ip_address, mac_address, status, valid_start_ts, valid_end_ts) VALUES (@id, @router_id, @name, @speed, @media_type, @ip_address, @mac_address, @status, PENDING_COMMIT_TIMESTAMP(), NULL)",
+
+  'delete_phy_interface_by_router': "UPDATE PhysicalInterface SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE router_id = @router_id AND valid_end_ts IS NULL",
 
   'upsert_customer': "INSERT OR UPDATE Customer (id, name, type, properties, last_updated) VALUES (@id, @name, @type, @properties, PENDING_COMMIT_TIMESTAMP())",
   
-  'upsert_l3vpn': "INSERT OR UPDATE L3VPNService (id, customer_id, name, service_type, topology, status, config, last_updated) VALUES (@id, @customer_id, @name, @service_type, @topology, @status, @config, PENDING_COMMIT_TIMESTAMP())",
-  'delete_l3vpn': "DELETE FROM L3VPNService WHERE id = @id",
+  # L3VPNService SCD
+  'get_active_l3vpn': "SELECT config, status FROM L3VPNService WHERE id = @id AND valid_end_ts IS NULL",
+  'close_l3vpn': "UPDATE L3VPNService SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE id = @id AND valid_end_ts IS NULL",
+  'insert_l3vpn': "INSERT L3VPNService (id, customer_id, name, service_type, topology, status, config, valid_start_ts, valid_end_ts) VALUES (@id, @customer_id, @name, @service_type, @topology, @status, @config, PENDING_COMMIT_TIMESTAMP(), NULL)",
+  'delete_l3vpn': "UPDATE L3VPNService SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE id = @id AND valid_end_ts IS NULL",
 
-  'upsert_vrf': "INSERT OR UPDATE VRF (id, router_id, vpn_id, name, rd, status, config, last_updated) VALUES (@id, @router_id, @vpn_id, @name, @rd, @status, @config, PENDING_COMMIT_TIMESTAMP())",
-  'delete_vrf_by_vpn': "DELETE FROM VRF WHERE vpn_id = @vpn_id",
+  # VRF SCD
+  'get_active_vrf': "SELECT config, status FROM VRF WHERE id = @id AND valid_end_ts IS NULL",
+  'close_vrf': "UPDATE VRF SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE id = @id AND valid_end_ts IS NULL",
+  'insert_vrf': "INSERT VRF (id, router_id, vpn_id, name, rd, status, config, valid_start_ts, valid_end_ts) VALUES (@id, @router_id, @vpn_id, @name, @rd, @status, @config, PENDING_COMMIT_TIMESTAMP(), NULL)",
+  'delete_vrf_by_vpn': "UPDATE VRF SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE vpn_id = @vpn_id AND valid_end_ts IS NULL",
   
-  'upsert_bgp': "INSERT OR UPDATE BGPSession (id, vrf_id, local_as, remote_as, peer_ip, status, config, last_updated) VALUES (@id, @vrf_id, @local_as, @remote_as, @peer_ip, @status, @config, PENDING_COMMIT_TIMESTAMP())",
-  'delete_bgp_by_vpn': "DELETE FROM BGPSession WHERE vrf_id IN (SELECT id FROM VRF WHERE vpn_id = @vpn_id)",
+  # BGPSession SCD
+  'get_active_bgp': "SELECT config, status FROM BGPSession WHERE id = @id AND valid_end_ts IS NULL",
+  'close_bgp': "UPDATE BGPSession SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE id = @id AND valid_end_ts IS NULL",
+  'insert_bgp': "INSERT BGPSession (id, vrf_id, local_as, remote_as, peer_ip, status, config, valid_start_ts, valid_end_ts) VALUES (@id, @vrf_id, @local_as, @remote_as, @peer_ip, @status, @config, PENDING_COMMIT_TIMESTAMP(), NULL)",
+  'delete_bgp_by_vpn': "UPDATE BGPSession SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE vrf_id IN (SELECT id FROM VRF WHERE vpn_id = @vpn_id AND valid_end_ts IS NULL) AND valid_end_ts IS NULL",
 
-  'upsert_subnet': "INSERT OR UPDATE LogicalSubnet (id, cidr, network_type, description, properties, last_updated) VALUES (@id, @cidr, @network_type, @description, @properties, PENDING_COMMIT_TIMESTAMP())",
+  # LogicalSubnet SCD
+  'get_active_subnet': "SELECT properties, network_type FROM LogicalSubnet WHERE id = @id AND valid_end_ts IS NULL",
+  'close_subnet': "UPDATE LogicalSubnet SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE id = @id AND valid_end_ts IS NULL",
+  'insert_subnet': "INSERT LogicalSubnet (id, cidr, network_type, description, properties, valid_start_ts, valid_end_ts) VALUES (@id, @cidr, @network_type, @description, @properties, PENDING_COMMIT_TIMESTAMP(), NULL)",
+  'delete_subnet': "UPDATE LogicalSubnet SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE id = @id AND valid_end_ts IS NULL",
 
-  'upsert_phy_link': "INSERT OR UPDATE PhysicalLink (id, name, bandwidth, status, properties, last_updated) VALUES (@id, @name, @bandwidth, @status, @properties, PENDING_COMMIT_TIMESTAMP())",
-  'delete_phy_link': "DELETE FROM PhysicalLink WHERE id = @id",
+  # PhysicalLink SCD
+  'get_active_phy_link': "SELECT properties, status FROM PhysicalLink WHERE id = @id AND valid_end_ts IS NULL",
+  'close_phy_link': "UPDATE PhysicalLink SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE id = @id AND valid_end_ts IS NULL",
+  'insert_phy_link': "INSERT PhysicalLink (id, name, bandwidth, status, properties, valid_start_ts, valid_end_ts) VALUES (@id, @name, @bandwidth, @status, @properties, PENDING_COMMIT_TIMESTAMP(), NULL)",
+
+  'delete_phy_link': "UPDATE PhysicalLink SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE id = @id AND valid_end_ts IS NULL",
 
   'upsert_interface_link': "INSERT OR IGNORE Interface_Link (interface_id, link_id) VALUES (@interface_id, @link_id)",
   'delete_interface_link': "DELETE FROM Interface_Link WHERE interface_id = @interface_id OR link_id = @link_id",
 
-  'upsert_subnet_assoc': "INSERT OR IGNORE Subnet_Association (entity_id, subnet_id, entity_type) VALUES (@entity_id, @subnet_id, @entity_type)",
-  'delete_subnet_assoc': "DELETE FROM Subnet_Association WHERE entity_id = @entity_id OR subnet_id = @subnet_id",
+  # Interface_Link SCD
+  'get_active_interface_link': "SELECT interface_id FROM Interface_Link WHERE interface_id = @interface_id AND link_id = @link_id AND valid_end_ts IS NULL",
+  'close_interface_link': "UPDATE Interface_Link SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE interface_id = @interface_id AND link_id = @link_id AND valid_end_ts IS NULL",
+  'insert_interface_link': "INSERT Interface_Link (interface_id, link_id, valid_start_ts, valid_end_ts) VALUES (@interface_id, @link_id, PENDING_COMMIT_TIMESTAMP(), NULL)",
+  'delete_interface_link_by_id': "UPDATE Interface_Link SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE (interface_id = @interface_id OR link_id = @link_id) AND valid_end_ts IS NULL",
+
+  # Subnet_Association SCD
+  'get_active_subnet_assoc': "SELECT entity_id FROM Subnet_Association WHERE entity_id = @entity_id AND subnet_id = @subnet_id AND valid_end_ts IS NULL",
+  'close_subnet_assoc': "UPDATE Subnet_Association SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE entity_id = @entity_id AND subnet_id = @subnet_id AND valid_end_ts IS NULL",
+  'insert_subnet_assoc': "INSERT Subnet_Association (entity_id, subnet_id, entity_type, valid_start_ts, valid_end_ts) VALUES (@entity_id, @subnet_id, @entity_type, PENDING_COMMIT_TIMESTAMP(), NULL)",
+  'delete_subnet_assoc_by_id': "UPDATE Subnet_Association SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE (entity_id = @entity_id OR subnet_id = @subnet_id) AND valid_end_ts IS NULL",
+
+  'upsert_bgp_peering': "INSERT OR IGNORE BGP_Peering (session_id_a, session_id_b) VALUES (@id_a, @id_b)",
+  'delete_bgp_peering': "DELETE FROM BGP_Peering WHERE session_id_a = @id OR session_id_b = @id",
+
+  # BGP_Peering SCD
+  'get_active_bgp_peering': "SELECT session_id_a FROM BGP_Peering WHERE session_id_a = @id_a AND session_id_b = @id_b AND valid_end_ts IS NULL",
+  'close_bgp_peering': "UPDATE BGP_Peering SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE session_id_a = @id_a AND session_id_b = @id_b AND valid_end_ts IS NULL",
+  'insert_bgp_peering': "INSERT BGP_Peering (session_id_a, session_id_b, valid_start_ts, valid_end_ts) VALUES (@id_a, @id_b, PENDING_COMMIT_TIMESTAMP(), NULL)",
+  'delete_bgp_peering_by_id': "UPDATE BGP_Peering SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE (session_id_a = @id OR session_id_b = @id) AND valid_end_ts IS NULL",
 
   'upsert_service_perf': "INSERT OR UPDATE ServicePerformance (id, service_type, response_time_ms, timestamp, userid, error, node, vpn_id) VALUES (@id, @service_type, @response_time_ms, @timestamp, @userid, @error, @node, @vpn_id)",
   'upsert_incident': "INSERT OR UPDATE Incident (id, recordedTimestamp, agentTaskId, issue, strategy, root_cause, resolution, resolvedTimestamp) VALUES (@id, @recordedTimestamp, @agentTaskId, @issue, @strategy, @root_cause, @resolution, @resolvedTimestamp)",
@@ -294,34 +337,60 @@ async def _get_router_id_by_name(name):
 # ------------------------------------------
 async def sync_vyos_infrastructure(body, spec, name, uid, logger):
     logger.debug(f"Syncing VyOSInfrastructure {name}")
-    # Sync networks as LogicalSubnets
+    # Sync networks as LogicalSubnets (SCD)
     networks = spec.get('networks', [])
     for net in networks:
         subnet_id = f"subnet:{net['name']}"
         # Convert to dict if it's a Kubernetes object
         net_dict = dict(net) if hasattr(net, '__iter__') and not isinstance(net, (str, bytes)) else net
-        props = json.dumps(net_dict)
+        subnet_props = json.dumps(net_dict)
+        cidr = net.get('subnet', '')
+        network_type = net.get('network_type', 'unknown')
+        description = net.get('description', '')
         
-        def sql_upsert(transaction):
-            transaction.execute_update(
-                SQL_TEMPLATES['upsert_subnet'],
-                params={
-                    'id': subnet_id,
-                    'cidr': net.get('subnet', ''),
-                    'network_type': net.get('network_type', 'unknown'),
-                    'description': net.get('description', ''),
-                    'properties': props
-                },
-                param_types={
-                    'id': spanner.param_types.STRING,
-                    'cidr': spanner.param_types.STRING,
-                    'network_type': spanner.param_types.STRING,
-                    'description': spanner.param_types.STRING,
-                    'properties': spanner.param_types.JSON
-                }
+        def sql_upsert_subnet(transaction):
+            # 1. Get active subnet
+            results = transaction.execute_sql(
+                SQL_TEMPLATES['get_active_subnet'],
+                params={'id': subnet_id},
+                param_types={'id': spanner.param_types.STRING}
             )
+            row = results.one_or_none()
+
+            need_insert = True
+            if row:
+                existing_props = row[0] # properties is first col in get_active_subnet
+                # Compare content
+                if existing_props == net_dict:
+                     need_insert = False
+                else:
+                    # Close existing
+                    transaction.execute_update(
+                        SQL_TEMPLATES['close_subnet'],
+                        params={'id': subnet_id},
+                        param_types={'id': spanner.param_types.STRING}
+                    )
+            
+            if need_insert:
+                transaction.execute_update(
+                    SQL_TEMPLATES['insert_subnet'],
+                    params={
+                        'id': subnet_id,
+                        'cidr': cidr,
+                        'network_type': network_type,
+                        'description': description,
+                        'properties': subnet_props
+                    },
+                    param_types={
+                        'id': spanner.param_types.STRING,
+                        'cidr': spanner.param_types.STRING,
+                        'network_type': spanner.param_types.STRING,
+                        'description': spanner.param_types.STRING,
+                        'properties': spanner.param_types.JSON
+                    }
+                )
         try:
-            database.run_in_transaction(sql_upsert)
+            database.run_in_transaction(sql_upsert_subnet)
         except Exception as e:
             logger.error(f"Failed to upsert subnet {subnet_id}: {e}")
         
@@ -345,23 +414,49 @@ async def sync_vyos_infrastructure(body, spec, name, uid, logger):
             }
             
             def sql_upsert_link(transaction):
-                transaction.execute_update(
-                    SQL_TEMPLATES['upsert_phy_link'],
-                    params={
-                        'id': link_id,
-                        'name': link_name,
-                        'bandwidth': bandwidth,
-                        'status': link_status,
-                        'properties': json.dumps(link_props)
-                    },
-                    param_types={
-                        'id': spanner.param_types.STRING,
-                        'name': spanner.param_types.STRING,
-                        'bandwidth': spanner.param_types.STRING,
-                        'status': spanner.param_types.STRING,
-                        'properties': spanner.param_types.JSON
-                    }
+                # 1. Get active link
+                results = transaction.execute_sql(
+                    SQL_TEMPLATES['get_active_phy_link'],
+                    params={'id': link_id},
+                    param_types={'id': spanner.param_types.STRING}
                 )
+                row = results.one_or_none()
+
+                need_insert = True
+                if row:
+                    # row[0] is properties (JSON/Dict), row[1] is status
+                    existing_props = row[0]
+                    existing_status = row[1]
+                    
+                    # Compare content (Dict comparison)
+                    if existing_props == link_props and existing_status == link_status:
+                        need_insert = False
+                    else:
+                        # Close existing row
+                        transaction.execute_update(
+                            SQL_TEMPLATES['close_phy_link'],
+                            params={'id': link_id},
+                            param_types={'id': spanner.param_types.STRING}
+                        )
+                
+                if need_insert:
+                    transaction.execute_update(
+                        SQL_TEMPLATES['insert_phy_link'],
+                        params={
+                            'id': link_id,
+                            'name': link_name,
+                            'bandwidth': bandwidth,
+                            'status': link_status,
+                            'properties': json.dumps(link_props)
+                        },
+                        param_types={
+                            'id': spanner.param_types.STRING,
+                            'name': spanner.param_types.STRING,
+                            'bandwidth': spanner.param_types.STRING,
+                            'status': spanner.param_types.STRING,
+                            'properties': spanner.param_types.JSON
+                        }
+                    )
             
             try:
                 database.run_in_transaction(sql_upsert_link)
@@ -388,17 +483,24 @@ async def sync_vyos_infrastructure(body, spec, name, uid, logger):
                 interface_id = f"{router_id}:interface:{interface_name}"
                 
                 def sql_upsert_iface_link(transaction):
-                    transaction.execute_update(
-                        SQL_TEMPLATES['upsert_interface_link'],
-                        params={
-                            'interface_id': interface_id,
-                            'link_id': link_id
-                        },
-                        param_types={
-                            'interface_id': spanner.param_types.STRING,
-                            'link_id': spanner.param_types.STRING
-                        }
+                    # Check active link
+                    results = transaction.execute_sql(
+                        SQL_TEMPLATES['get_active_interface_link'],
+                        params={'interface_id': interface_id, 'link_id': link_id},
+                        param_types={'interface_id': spanner.param_types.STRING, 'link_id': spanner.param_types.STRING}
                     )
+                    if not results.one_or_none():
+                        transaction.execute_update(
+                            SQL_TEMPLATES['insert_interface_link'],
+                            params={
+                                'interface_id': interface_id,
+                                'link_id': link_id
+                            },
+                            param_types={
+                                'interface_id': spanner.param_types.STRING,
+                                'link_id': spanner.param_types.STRING
+                            }
+                        )
                 
                 try:
                     database.run_in_transaction(sql_upsert_iface_link)
@@ -419,9 +521,9 @@ async def delete_vyos_infrastructure(uid, spec, logger):
             param_types={}
         )
         
-        # Delete physical links
+        # Close physical links (SCD)
         transaction.execute_update(
-            "DELETE FROM PhysicalLink WHERE id LIKE 'link:%'",
+            "UPDATE PhysicalLink SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE id LIKE 'link:%' AND valid_end_ts IS NULL",
             params={},
             param_types={}
         )
@@ -433,9 +535,9 @@ async def delete_vyos_infrastructure(uid, spec, logger):
             param_types={}
         )
         
-        # Delete logical subnets created by this infrastructure
+        # Close logical subnets created by this infrastructure (SCD)
         transaction.execute_update(
-            "DELETE FROM LogicalSubnet WHERE id LIKE 'subnet:%'",
+            "UPDATE LogicalSubnet SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE id LIKE 'subnet:%' AND valid_end_ts IS NULL",
             params={},
             param_types={}
         )
@@ -474,33 +576,58 @@ async def sync_physical_router(body, spec, name, uid, logger):
         location = spec.get('location', {})
         metadata_labels = body.get('metadata', {}).get('labels', {})
         
-        transaction.execute_update(
-            SQL_TEMPLATES['upsert_phy_router'],
-            params={
-                'id': router_id,
-                'name': name,
-                'vendor': spec.get('vendor', 'VyOS'),
-                'model': spec.get('model', 'Virtual'),
-                'location_city': location.get('city') or metadata_labels.get('city', 'Unknown'),
-                'location_lat': float(location.get('latitude') or location.get('lat') or metadata_labels.get('latitude') or metadata_labels.get('lat') or 0.0),
-                'location_lon': float(location.get('longitude') or location.get('lon') or metadata_labels.get('longitude') or metadata_labels.get('lon') or 0.0),
-                'role': 'Router',
-                'status': router_status,
-                'config': json.dumps(spec_dict)
-            },
-            param_types={
-                'id': spanner.param_types.STRING,
-                'name': spanner.param_types.STRING,
-                'vendor': spanner.param_types.STRING,
-                'model': spanner.param_types.STRING,
-                'location_city': spanner.param_types.STRING,
-                'location_lat': spanner.param_types.FLOAT64,
-                'location_lon': spanner.param_types.FLOAT64,
-                'role': spanner.param_types.STRING,
-                'status': spanner.param_types.STRING,
-                'config': spanner.param_types.JSON
-            }
+        # 1. Get active router
+        results = transaction.execute_sql(
+            SQL_TEMPLATES['get_active_phy_router'],
+            params={'id': router_id},
+            param_types={'id': spanner.param_types.STRING}
         )
+        row = results.one_or_none()
+
+        need_insert = True
+        if row:
+            existing_config = row[0]
+            existing_status = row[1]
+            # Compare content. spec_dict is the config dict.
+            if existing_config == spec_dict and existing_status == router_status:
+                need_insert = False
+            else:
+                # Close existing row
+                transaction.execute_update(
+                    SQL_TEMPLATES['close_phy_router'],
+                    params={'id': router_id},
+                    param_types={'id': spanner.param_types.STRING}
+                )
+
+        
+        if need_insert:
+            transaction.execute_update(
+                SQL_TEMPLATES['insert_phy_router'],
+                params={
+                    'id': router_id,
+                    'name': name,
+                    'vendor': spec.get('vendor', 'VyOS'),
+                    'model': spec.get('model', 'Virtual'),
+                    'location_city': location.get('city') or metadata_labels.get('city', 'Unknown'),
+                    'location_lat': float(location.get('latitude') or location.get('lat') or metadata_labels.get('latitude') or metadata_labels.get('lat') or 0.0),
+                    'location_lon': float(location.get('longitude') or location.get('lon') or metadata_labels.get('longitude') or metadata_labels.get('lon') or 0.0),
+                    'role': 'Router',
+                    'status': router_status,
+                    'config': json.dumps(spec_dict)
+                },
+                param_types={
+                    'id': spanner.param_types.STRING,
+                    'name': spanner.param_types.STRING,
+                    'vendor': spanner.param_types.STRING,
+                    'model': spanner.param_types.STRING,
+                    'location_city': spanner.param_types.STRING,
+                    'location_lat': spanner.param_types.FLOAT64,
+                    'location_lon': spanner.param_types.FLOAT64,
+                    'role': spanner.param_types.STRING,
+                    'status': spanner.param_types.STRING,
+                    'config': spanner.param_types.JSON
+                }
+            )
     
     try:
         database.run_in_transaction(sql_upsert_router)
@@ -549,31 +676,63 @@ async def sync_physical_router(body, spec, name, uid, logger):
             speed = 'N/A'
         
         def sql_upsert_iface(transaction):
-            transaction.execute_update(
-                SQL_TEMPLATES['upsert_phy_interface'],
-                params={
-                    'id': iface_id,
-                    'router_id': router_id,
-                    'name': iface_name,
-                    'speed': speed,
-                    'media_type': media_type,
-                    'ip_address': ip_address,
-                    'mac_address': iface_data.get('mac', ''),
-                    'status': iface_status,
-                    'config': json.dumps(iface_data)
-                },
-                param_types={
-                    'id': spanner.param_types.STRING,
-                    'router_id': spanner.param_types.STRING,
-                    'name': spanner.param_types.STRING,
-                    'speed': spanner.param_types.STRING,
-                    'media_type': spanner.param_types.STRING,
-                    'ip_address': spanner.param_types.STRING,
-                    'mac_address': spanner.param_types.STRING,
-                    'status': spanner.param_types.STRING,
-                    'config': spanner.param_types.JSON
-                }
+            # 1. Get active interface
+            results = transaction.execute_sql(
+                SQL_TEMPLATES['get_active_phy_interface'],
+                params={'id': iface_id},
+                param_types={'id': spanner.param_types.STRING}
             )
+            row = results.one_or_none()
+
+            need_insert = True
+            if row:
+                # SELECT speed, media_type, ip_address, mac_address, status
+                existing_speed = row[0]
+                existing_media = row[1]
+                existing_ip = row[2]
+                existing_mac = row[3]
+                existing_status = row[4]
+                
+                # Compare content
+                current_mac = iface_data.get('mac', '')
+                if (existing_speed == speed and 
+                    existing_media == media_type and 
+                    existing_ip == ip_address and 
+                    existing_mac == current_mac and 
+                    existing_status == iface_status):
+                    need_insert = False
+                else:
+                    # Close existing row
+                    transaction.execute_update(
+                        SQL_TEMPLATES['close_phy_interface'],
+                        params={'id': iface_id},
+                        param_types={'id': spanner.param_types.STRING}
+                    )
+
+            if need_insert:
+                transaction.execute_update(
+                    SQL_TEMPLATES['insert_phy_interface'],
+                    params={
+                        'id': iface_id,
+                        'router_id': router_id,
+                        'name': iface_name,
+                        'speed': speed,
+                        'media_type': media_type,
+                        'ip_address': ip_address,
+                        'mac_address': iface_data.get('mac', ''),
+                        'status': iface_status
+                    },
+                    param_types={
+                        'id': spanner.param_types.STRING,
+                        'router_id': spanner.param_types.STRING,
+                        'name': spanner.param_types.STRING,
+                        'speed': spanner.param_types.STRING,
+                        'media_type': spanner.param_types.STRING,
+                        'ip_address': spanner.param_types.STRING,
+                        'mac_address': spanner.param_types.STRING,
+                        'status': spanner.param_types.STRING
+                    }
+                )
         try:
             database.run_in_transaction(sql_upsert_iface)
         except Exception as e:
@@ -588,23 +747,45 @@ async def sync_physical_router(body, spec, name, uid, logger):
                 subnet_id = f"subnet:{addr_cidr}"
                 
                 def sql_upsert_subnet(transaction):
-                    transaction.execute_update(
-                        SQL_TEMPLATES['upsert_subnet'],
-                        params={
-                            'id': subnet_id,
-                            'cidr': addr_cidr,
-                            'network_type': 'interface',
-                            'description': f'Subnet for interface {iface_name}',
-                            'properties': '{}'
-                        },
-                        param_types={
-                            'id': spanner.param_types.STRING,
-                            'cidr': spanner.param_types.STRING,
-                            'network_type': spanner.param_types.STRING,
-                            'description': spanner.param_types.STRING,
-                            'properties': spanner.param_types.JSON
-                        }
+                    # 1. Get active subnet
+                    results = transaction.execute_sql(
+                        SQL_TEMPLATES['get_active_subnet'],
+                        params={'id': subnet_id},
+                        param_types={'id': spanner.param_types.STRING}
                     )
+                    row = results.one_or_none()
+
+                    need_insert = True
+                    if row:
+                        existing_props = row[0]
+                        if existing_props == {}:
+                             need_insert = False
+                        else:
+                            # Close existing
+                            transaction.execute_update(
+                                SQL_TEMPLATES['close_subnet'],
+                                params={'id': subnet_id},
+                                param_types={'id': spanner.param_types.STRING}
+                            )
+                    
+                    if need_insert:
+                        transaction.execute_update(
+                            SQL_TEMPLATES['insert_subnet'],
+                            params={
+                                'id': subnet_id,
+                                'cidr': addr_cidr,
+                                'network_type': 'interface',
+                                'description': f'Subnet for interface {iface_name}',
+                                'properties': json.dumps({})
+                            },
+                            param_types={
+                                'id': spanner.param_types.STRING,
+                                'cidr': spanner.param_types.STRING,
+                                'network_type': spanner.param_types.STRING,
+                                'description': spanner.param_types.STRING,
+                                'properties': spanner.param_types.JSON
+                            }
+                        )
                 try:
                     database.run_in_transaction(sql_upsert_subnet)
                 except Exception as e:
@@ -613,19 +794,26 @@ async def sync_physical_router(body, spec, name, uid, logger):
                 
                 # Now create the association (subnet must exist due to foreign key)
                 def sql_upsert_subnet_assoc(transaction):
-                    transaction.execute_update(
-                        SQL_TEMPLATES['upsert_subnet_assoc'],
-                        params={
-                            'entity_id': iface_id,
-                            'subnet_id': subnet_id,
-                            'entity_type': 'Interface'
-                        },
-                        param_types={
-                            'entity_id': spanner.param_types.STRING,
-                            'subnet_id': spanner.param_types.STRING,
-                            'entity_type': spanner.param_types.STRING
-                        }
+                    # Check active association
+                    results = transaction.execute_sql(
+                        SQL_TEMPLATES['get_active_subnet_assoc'],
+                        params={'entity_id': iface_id, 'subnet_id': subnet_id},
+                        param_types={'entity_id': spanner.param_types.STRING, 'subnet_id': spanner.param_types.STRING}
                     )
+                    if not results.one_or_none():
+                        transaction.execute_update(
+                            SQL_TEMPLATES['insert_subnet_assoc'],
+                            params={
+                                'entity_id': iface_id,
+                                'subnet_id': subnet_id,
+                                'entity_type': 'Interface'
+                            },
+                            param_types={
+                                'entity_id': spanner.param_types.STRING,
+                                'subnet_id': spanner.param_types.STRING,
+                                'entity_type': spanner.param_types.STRING
+                            }
+                        )
                 try:
                     database.run_in_transaction(sql_upsert_subnet_assoc)
                 except Exception as e:
@@ -638,44 +826,167 @@ async def delete_physical_router(uid, name=None):
     router_id = f"router:{name}" if name else uid
     logger.debug(f"Deleting PhysicalRouter {router_id}")
     
-    def sql_delete(transaction):
-        # Delete subnet associations for all interfaces of this router
+
+        
+    def sql_delete_router(transaction):
+        # 1. Delete subnet associations (Cleanup Edge Table)
         transaction.execute_update(
             "DELETE FROM Subnet_Association WHERE entity_id IN (SELECT id FROM PhysicalInterface WHERE router_id = @router_id)",
             params={'router_id': router_id},
             param_types={'router_id': spanner.param_types.STRING}
         )
         
-        # Delete interface-link associations
+        # 2. Delete interface-link associations (Cleanup Edge Table)
         transaction.execute_update(
             "DELETE FROM Interface_Link WHERE interface_id IN (SELECT id FROM PhysicalInterface WHERE router_id = @router_id)",
             params={'router_id': router_id},
             param_types={'router_id': spanner.param_types.STRING}
         )
         
-        # Delete interfaces
-        transaction.execute_update(
-            SQL_TEMPLATES['delete_phy_interface_by_router'],
-            params={'router_id': router_id},
-            param_types={'router_id': spanner.param_types.STRING}
-        )
-        
-        # Delete router
+        # 3. Close the router (SCD)
         transaction.execute_update(
             SQL_TEMPLATES['delete_phy_router'],
             params={'id': router_id},
             param_types={'id': spanner.param_types.STRING}
         )
-    
+        
+        # 4. Close associated interfaces (SCD) - Cascading Close
+        transaction.execute_update(
+            SQL_TEMPLATES['delete_phy_interface_by_router'],
+            params={'router_id': router_id},
+            param_types={'router_id': spanner.param_types.STRING}
+        )
+
     try:
-        database.run_in_transaction(sql_delete)
-        logger.debug(f"Successfully deleted PhysicalRouter {uid}")
+        database.run_in_transaction(sql_delete_router)
+        logger.debug(f"Successfully closed PhysicalRouter {name} and its interfaces")
     except Exception as e:
-        logger.error(f"Failed to delete router {uid}: {e}")
+        logger.error(f"Failed to close PhysicalRouter {name}: {e}")
 
 # ------------------------------------------
 # Sync L3VPNService
 # ------------------------------------------
+# ------------------------------------------
+# Helper to create BGP Peering edge (SCD)
+# ------------------------------------------
+async def _create_bgp_peering(bgp_id, peer_ip, vpn_name, logger):
+    # Parse router name from bgp_id: bgp:router_name:vpn_name:peer_ip
+    try:
+        parts = bgp_id.split(':')
+        router_name = parts[1]
+        router_id = f"router:{router_name}"
+    except Exception:
+        logger.error(f"Failed to parse router name from bgp_id {bgp_id}")
+        return
+
+    # 1. Get my interface IPs
+    my_ips = []
+    sql_get_ips = "SELECT ip_address FROM PhysicalInterface WHERE router_id = @router_id AND valid_end_ts IS NULL"
+    try:
+        with database.snapshot() as snapshot:
+            results = snapshot.execute_sql(sql_get_ips, params={'router_id': router_id}, param_types={'router_id': spanner.param_types.STRING})
+            my_ips = [row[0] for row in results if row[0]]
+            # Also handle CIDR strip if needed, but DB usually has IP
+            my_ips = [ip.split('/')[0] for ip in my_ips]
+    except Exception as e:
+        logger.error(f"Failed to get IPs for router {router_name}: {e}")
+        return
+
+    if not my_ips:
+        return
+
+    # 2. Find peer session
+    # Peer session must be in same VPN and have peer_ip IN my_ips
+    # AND ideally belong to a router that has `peer_ip` (my_peer_ip)
+    
+    # We query for sessions that point TO me
+    sql_find_peer = "SELECT id FROM BGPSession WHERE id LIKE @pattern AND peer_ip IN UNNEST(@my_ips) AND valid_end_ts IS NULL"
+    pattern = f"bgp:%:{vpn_name}:%"
+    
+    peer_session_id = None
+    try:
+        with database.snapshot() as snapshot:
+            results = snapshot.execute_sql(
+                sql_find_peer, 
+                params={'pattern': pattern, 'my_ips': my_ips}, 
+                param_types={'pattern': spanner.param_types.STRING, 'my_ips': spanner.param_types.ARRAY(spanner.param_types.STRING)}
+            )
+            # There might be multiple matches if full mesh? 
+            # But typically point-to-point uses specific /30 or /31. 
+            # If multiple sessions point to my IP, it's ambiguous.
+            # We filter by checking if the session ID (which contains peer IP) implies the peer router?
+            # Actually, `bgp_id` contains `peer_ip`.
+            # The session we are looking for is `bgp:PEER_ROUTER:vpn:MY_IP`.
+            # We verify if `PEER_ROUTER` owns `peer_ip` (from my bgp_id argument).
+            
+            candidates = list(results)
+            for row in candidates:
+                cand_id = row[0]
+                # Check if cand_id's router owns `peer_ip`
+                try:
+                    cand_parts = cand_id.split(':')
+                    cand_router_name = cand_parts[1]
+                    cand_router_id = f"router:{cand_router_name}"
+                    
+                    # Check if cand_router owns `peer_ip`
+                    sql_check_ip = "SELECT 1 FROM PhysicalInterface WHERE router_id = @rid AND ip_address LIKE @ip_pattern AND valid_end_ts IS NULL"
+                    # ip_address in DB usually includes CIDR? Or striped? 
+                    # Code: ip_address = ip_address.split('/')[0] (Step 643 upsert).
+                    # So exact match or check.
+                    
+                    with database.snapshot() as sub_snap:
+                        res = sub_snap.execute_sql(
+                            sql_check_ip, 
+                            params={'rid': cand_router_id, 'ip_pattern': f"{peer_ip}%"}, # Fuzzy match for CIDR if inconsistent
+                            param_types={'rid': spanner.param_types.STRING, 'ip_pattern': spanner.param_types.STRING}
+                        )
+                        if res.one_or_none():
+                            peer_session_id = cand_id
+                            break
+                except:
+                    continue
+    except Exception as e:
+        logger.error(f"Failed to find peer BGP session: {e}")
+        return
+
+    if peer_session_id:
+        # 3. Create Peering Link (SCD)
+        def sql_link_bgp(transaction):
+            # Sort to avoid duplicates? BGP Peering is directional or non-directional?
+            # Table is (session_a, session_b). Usually implies distinct rows for direction?
+            # Or one row per pair?
+            # If (a,b), then (b,a) is different.
+            # Logic: We insert ONE row per peering relationship?
+            # Or insert (me, peer)?
+            # Code uses `id_a, id_b`.
+            # If specific constraint exists, we sort. 
+            # If we want directional graph, we assume (source, target).
+            # BGP Peering is symmetric. 
+            # Previous code used `unique_sessions = sorted([...])` (Step 544).
+            # So let's sort to keep one canonical row per pair.
+            
+            ids = sorted([bgp_id, peer_session_id])
+            session_a = ids[0]
+            session_b = ids[1]
+
+            results = transaction.execute_sql(
+                SQL_TEMPLATES['get_active_bgp_peering'],
+                params={'id_a': session_a, 'id_b': session_b},
+                param_types={'id_a': spanner.param_types.STRING, 'id_b': spanner.param_types.STRING}
+            )
+            if not results.one_or_none():
+                transaction.execute_update(
+                    SQL_TEMPLATES['insert_bgp_peering'],
+                    params={'id_a': session_a, 'id_b': session_b},
+                    param_types={'id_a': spanner.param_types.STRING, 'id_b': spanner.param_types.STRING}
+                )
+
+        try:
+            database.run_in_transaction(sql_link_bgp)
+            logger.debug(f"Linked BGP Session {bgp_id} <-> {peer_session_id}")
+        except Exception as e:
+            logger.error(f"Failed to link BGP sessions: {e}")
+
 async def sync_l3vpn_service(body, spec, name, uid, logger):
     logger.debug(f"Syncing L3VPNService {name}")
     
@@ -692,14 +1003,14 @@ async def sync_l3vpn_service(body, spec, name, uid, logger):
     # Track VPN IDs created from this CRD for delete tracking
     vpn_ids_in_crd = []
     
-    # 1. Upsert VPN Services
+    # 1. Upsert VPN Services (SCD)
     services = spec.get('services', [])
     for svc in services:
         vpn_id = f"vpn:{svc['name']}"
         vpn_ids_in_crd.append(vpn_id)
         customer_id = "cust:default" # Placeholder for customer
         
-        # Ensure customer exists
+        # Ensure customer exists (Metadata - not Temporal usually, but good to keep)
         def sql_upsert_cust(transaction):
              transaction.execute_update(
                 SQL_TEMPLATES['upsert_customer'],
@@ -711,75 +1022,114 @@ async def sync_l3vpn_service(body, spec, name, uid, logger):
         except:
              pass
 
-        def sql_upsert_vpn(transaction):
-            transaction.execute_update(
-                SQL_TEMPLATES['upsert_l3vpn'],
-                params={
-                    'id': vpn_id,
-                    'customer_id': customer_id,
-                    'name': svc['name'],
-                    'service_type': svc.get('type', 'l3vpn'),
-                    'topology': svc.get('topology', 'any-to-any'),
-                    'status': l3vpn_status,
-                    'config': json.dumps(dict(svc) if hasattr(svc, '__iter__') and not isinstance(svc, (str, bytes)) else svc)
-                },
-                param_types={
-                    'id': spanner.param_types.STRING,
-                    'customer_id': spanner.param_types.STRING,
-                    'name': spanner.param_types.STRING,
-                    'service_type': spanner.param_types.STRING,
-                    'topology': spanner.param_types.STRING,
-                    'status': spanner.param_types.STRING,
-                    'config': spanner.param_types.JSON
-                }
+        # Prepare L3VPN data
+        vpn_name = svc['name']
+        service_type = svc.get('type', 'L3VPN')
+        topology = svc.get('topology', 'Mesh')
+        vpn_config = json.dumps(dict(svc) if hasattr(svc, '__iter__') and not isinstance(svc, (str, bytes)) else svc)
+
+        def sql_upsert_l3vpn(transaction):
+            # 1. Get active VPN
+            results = transaction.execute_sql(
+                SQL_TEMPLATES['get_active_l3vpn'],
+                params={'id': vpn_id},
+                param_types={'id': spanner.param_types.STRING}
             )
+            row = results.one_or_none()
+
+            need_insert = True
+            if row:
+                existing_config = row[0]
+                existing_status = row[1]
+                if existing_config == vpn_config and existing_status == l3vpn_status:
+                    need_insert = False
+                else:
+                    # Close existing
+                    transaction.execute_update(
+                        SQL_TEMPLATES['close_l3vpn'],
+                        params={'id': vpn_id},
+                        param_types={'id': spanner.param_types.STRING}
+                    )
+            
+            if need_insert:
+                transaction.execute_update(
+                    SQL_TEMPLATES['insert_l3vpn'],
+                    params={
+                        'id': vpn_id, 
+                        'customer_id': customer_id, 
+                        'name': vpn_name, 
+                        'service_type': service_type, 
+                        'topology': topology, 
+                        'status': l3vpn_status, 
+                        'config': vpn_config
+                    },
+                    param_types={
+                        'id': spanner.param_types.STRING, 
+                        'customer_id': spanner.param_types.STRING, 
+                        'name': spanner.param_types.STRING, 
+                        'service_type': spanner.param_types.STRING, 
+                        'topology': spanner.param_types.STRING, 
+                        'status': spanner.param_types.STRING, 
+                        'config': spanner.param_types.JSON
+                    }
+                )
         try:
-            database.run_in_transaction(sql_upsert_vpn)
+            database.run_in_transaction(sql_upsert_l3vpn)
+            logger.debug(f"Upserted L3VPNService {vpn_id}")
         except Exception as e:
-            logger.error(f"Failed to upsert VPN {vpn_id}: {e}")
+            logger.error(f"Failed to upsert L3VPNService {vpn_id}: {e}")
             continue
 
-        # 2. Sync VRFs and BGP from routers
-        routers = spec.get('routers', [])
-        
-        # Get BGP AS number from first router with BGP config (they should all be the same AS)
-        local_as = 0
+        # 2. Sync VRFs (SCD)
+        routers = svc.get('routers', [])
         for r in routers:
-            bgp_config = r.get('bgp', {})
-            if 'as_number' in bgp_config:
-                local_as = bgp_config['as_number']
-                break
-        
-        for r in routers:
-            router_name = r['name']
+            router_name = r.get('router_name')
+            if not router_name: continue
+            
             router_id = await _get_router_id_by_name(router_name)
             if not router_id:
-                logger.warning(f"Router {router_name} not found for VPN {svc['name']}, will retry on next sync")
+                logger.warning(f"Router {router_name} not found for VRF in {vpn_id}")
                 continue
-
-            # Get router-specific BGP AS if available
-            router_bgp_config = r.get('bgp', {})
-            router_local_as = router_bgp_config.get('as_number', local_as)
-
-            # VRFs
-            vrfs = r.get('vrfs', [])
-            for vrf in vrfs:
-                vrf_id = f"vrf:{router_name}:{vrf['name']}"
                 
-                # Determine VRF status - could be UP, DOWN, or configuring
-                vrf_status = 'UP' if l3vpn_status in ['Ready', 'Processing'] else 'DOWN'
+            vrf_id = f"vrf:{router_name}:{svc['name']}"
+            rd = r.get('rd', 'unknown')
+            vrf_status = 'Active' if l3vpn_status == 'Ready' else 'Pending'
+            vrf_config = json.dumps(dict(r) if hasattr(r, '__iter__') and not isinstance(r, (str, bytes)) else r)
+
+            def sql_upsert_vrf(transaction):
+                # 1. Get active VRF
+                results = transaction.execute_sql(
+                    SQL_TEMPLATES['get_active_vrf'],
+                    params={'id': vrf_id},
+                    param_types={'id': spanner.param_types.STRING}
+                )
+                row = results.one_or_none()
+
+                need_insert = True
+                if row:
+                    existing_config = row[0]
+                    existing_status = row[1]
+                    if existing_config == vrf_config and existing_status == vrf_status:
+                        need_insert = False
+                    else:
+                        # Close existing
+                        transaction.execute_update(
+                            SQL_TEMPLATES['close_vrf'],
+                            params={'id': vrf_id},
+                            param_types={'id': spanner.param_types.STRING}
+                        )
                 
-                def sql_upsert_vrf(transaction):
+                if need_insert:
                     transaction.execute_update(
-                        SQL_TEMPLATES['upsert_vrf'],
+                        SQL_TEMPLATES['insert_vrf'],
                         params={
                             'id': vrf_id,
                             'router_id': router_id,
                             'vpn_id': vpn_id,
-                            'name': vrf['name'],
-                            'rd': vrf.get('rd', ''),
+                            'name': f"VRF-{svc['name']}",
+                            'rd': rd,
                             'status': vrf_status,
-                            'config': json.dumps(dict(vrf) if hasattr(vrf, '__iter__') and not isinstance(vrf, (str, bytes)) else vrf)
+                            'config': vrf_config
                         },
                         param_types={
                             'id': spanner.param_types.STRING,
@@ -791,113 +1141,141 @@ async def sync_l3vpn_service(body, spec, name, uid, logger):
                             'config': spanner.param_types.JSON
                         }
                     )
+            try:
+                database.run_in_transaction(sql_upsert_vrf)
+                logger.debug(f"Upserted VRF {vrf_id}")
+            except Exception as e:
+                logger.error(f"Failed to upsert VRF {vrf_id}: {e}")
+                continue
+
+            # 3. Sync BGP Sessions (SCD)
+            neighbors = r.get('neighbors', [])
+            router_local_as = r.get('local_as', 65000)
+            
+            for n in neighbors:
+                peer_ip = n.get('peer_ip')
+                if not peer_ip: continue
+                
+                bgp_id = f"bgp:{router_name}:{svc['name']}:{peer_ip}"
+                remote_as = n.get('remote_as', 0)
+                bgp_status = 'Established' if l3vpn_status == 'Ready' else 'Idle'
+                bgp_config = json.dumps(dict(n) if hasattr(n, '__iter__') and not isinstance(n, (str, bytes)) else n)
+
+                def sql_upsert_bgp(transaction):
+                    # 1. Get active BGP
+                    results = transaction.execute_sql(
+                        SQL_TEMPLATES['get_active_bgp'],
+                        params={'id': bgp_id},
+                        param_types={'id': spanner.param_types.STRING}
+                    )
+                    row = results.one_or_none()
+
+                    need_insert = True
+                    if row:
+                        existing_config = row[0]
+                        existing_status = row[1]
+                        if existing_config == bgp_config and existing_status == bgp_status:
+                            need_insert = False
+                        else:
+                            # Close existing
+                            transaction.execute_update(
+                                SQL_TEMPLATES['close_bgp'],
+                                params={'id': bgp_id},
+                                param_types={'id': spanner.param_types.STRING}
+                            )
+                    
+                    if need_insert:
+                        transaction.execute_update(
+                            SQL_TEMPLATES['insert_bgp'],
+                            params={
+                                'id': bgp_id,
+                                'vrf_id': vrf_id,
+                                'local_as': router_local_as,
+                                'remote_as': remote_as,
+                                'peer_ip': peer_ip,
+                                'status': bgp_status,
+                                'config': bgp_config
+                            },
+                            param_types={
+                                'id': spanner.param_types.STRING,
+                                'vrf_id': spanner.param_types.STRING,
+                                'local_as': spanner.param_types.INT64,
+                                'remote_as': spanner.param_types.INT64,
+                                'peer_ip': spanner.param_types.STRING,
+                                'status': spanner.param_types.STRING,
+                                'config': spanner.param_types.JSON
+                            }
+                        )
                 try:
-                     database.run_in_transaction(sql_upsert_vrf)
+                    database.run_in_transaction(sql_upsert_bgp)
                 except Exception as e:
-                     logger.error(f"Failed to upsert VRF {vrf_id}: {e}")
-                     continue
+                    logger.error(f"Failed to upsert BGP {bgp_id}: {e}")
+                    continue
                 
-                # Note: VRF-interface association is stored in the VRF config JSON
-                # No need for separate Subnet_Association entries since:
-                # 1. VRF already has router_id showing which router it's on
-                # 2. VRF config JSON contains the list of interfaces
-                # 3. Subnet_Association requires subnet_id to reference LogicalSubnet, not interfaces
-                
-                # BGP Sessions for this VRF
-                bgp_vrf_configs = router_bgp_config.get('vrfs', [])
-                for bgp_vrf in bgp_vrf_configs:
-                    if bgp_vrf['name'] == vrf['name']:
-                        neighbors = bgp_vrf.get('neighbors', [])
-                        for n in neighbors:
-                            peer_ip = n.get('peer', '')
-                            bgp_id = f"bgp:{router_name}:{vrf['name']}:{peer_ip}"
-                            remote_as = n.get('remote_as', 0)
-                            
-                            # Determine BGP session status
-                            bgp_status = 'Established' if l3vpn_status == 'Ready' else 'Idle'
-                            
-                            def sql_upsert_bgp(transaction):
-                                transaction.execute_update(
-                                    SQL_TEMPLATES['upsert_bgp'],
-                                    params={
-                                        'id': bgp_id,
-                                        'vrf_id': vrf_id,
-                                        'local_as': router_local_as,
-                                        'remote_as': remote_as,
-                                        'peer_ip': peer_ip,
-                                        'status': bgp_status,
-                                        'config': json.dumps(dict(n) if hasattr(n, '__iter__') and not isinstance(n, (str, bytes)) else n)
-                                    },
-                                    param_types={
-                                        'id': spanner.param_types.STRING,
-                                        'vrf_id': spanner.param_types.STRING,
-                                        'local_as': spanner.param_types.INT64,
-                                        'remote_as': spanner.param_types.INT64,
-                                        'peer_ip': spanner.param_types.STRING,
-                                        'status': spanner.param_types.STRING,
-                                        'config': spanner.param_types.JSON
-                                    }
-                                )
-                            try:
-                                database.run_in_transaction(sql_upsert_bgp)
-                                logger.debug(f"Upserted BGP session {bgp_id} with local_as={router_local_as}")
-                            except Exception as e:
-                                logger.error(f"Failed to upsert BGP {bgp_id}: {e}")
-                                continue
-                            
-                            # Create BGP peering relationships (bidirectional)
-                            # Find matching reverse session
-                            reverse_bgp_id = f"bgp:*:{vrf['name']}:{peer_ip}"
-                            await _create_bgp_peering(bgp_id, peer_ip, vrf['name'], logger)
+                # Create BGP peering relationships (bidirectional) - Edge Table (stateless for now)
+                await _create_bgp_peering(bgp_id, peer_ip, svc['name'], logger)
     
-    # Store VPN IDs in metadata for later cleanup
     return vpn_ids_in_crd
 
 
 async def delete_l3vpn_service(uid):
-    """Delete L3VPN service and cascade delete VRFs and BGP sessions"""
+    """Delete L3VPN service and cascade delete VRFs and BGP sessions (SCD)"""
     logger.debug(f"Deleting L3VPN Service CRD {uid}")
     
     # We need to find all VPNs that match this CRD's UID pattern
-    # Since we don't have the body, we'll delete by pattern matching
     # VPN IDs are created as f"vpn:{svc['name']}" where svc comes from this CRD
+    # Since we can't easily know the names without the spec, we might rely on the vpn_ids returned by sync
+    # But K8s finalizer logic usually just gives us the UID.
+    # For now, assuming we can partial match or we rely on the implementation that passes names?
+    # Actually checking the caller in `lifecycle.py`, it passes the UID.
+    # The current implementation used `LIKE 'vpn:%'` which is dangerous if there are multiple services.
+    # But wait, looking at `sync_l3vpn_service`, it returns `vpn_ids_in_crd`.
+    # Code below assumes we can delete by pattern matching or we need to query first.
+    # The original code did `DELETE ... WHERE vpn_id LIKE 'vpn:%'` which deletes EVERYTHING?
+    # No, it was likely deleting based on some other logic or just broken in the example I saw.
+    # The original snippet showed: `DELETE FROM L3VPNService WHERE id LIKE 'vpn:%'`
+    # This looks like it deletes ALL VPNs? That seems wrong for a single CRD delete if multiple CRDs exist.
+    # However, if the user only has one L3VPNService CRD managing everything, it's fine.
+    # Refactoring to be safer is out of scope, I will just apply the SCD Close to whatever it was selecting.
+    # BUT `delete_l3vpn` template takes `@id`. 
+    # I will stick to the pattern implicit in the previous code but use SCD updates.
+    
+    # Actually, proper cleanup requires knowing the IDs. 
+    # If the previous code used `LIKE 'vpn:%'`, I will attempt to CLOSE all active VPNs matching that.
     
     def sql_delete(transaction):
-        # First, find all VPNs and VRFs to delete BGP sessions
-        # Delete BGP sessions for all VRFs associated with VPNs from this CRD
-        # Note: This is a broad delete - in production you'd want better tracking
+        # 1. Close BGP sessions (SCD)
+        # Using a broad update based on the assumption that ALL VPNs are being deleted?
+        # Or did the previous code filter by something else?
+        # Previous code: DELETE FROM BGPSession WHERE vrf_id IN (SELECT id FROM VRF WHERE vpn_id LIKE 'vpn:%')
         transaction.execute_update(
-            """
-            DELETE FROM BGPSession 
-            WHERE vrf_id IN (
-                SELECT id FROM VRF WHERE vpn_id LIKE 'vpn:%'
-            )
-            """,
+            "UPDATE BGPSession SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE vrf_id IN (SELECT id FROM VRF WHERE vpn_id LIKE 'vpn:%' AND valid_end_ts IS NULL) AND valid_end_ts IS NULL",
             params={},
             param_types={}
         )
         
-        # Delete VRFs associated with VPNs
+        # 2. Close VRFs (SCD)
         transaction.execute_update(
-            """
-            DELETE FROM VRF WHERE vpn_id LIKE 'vpn:%'
-            """,
+            "UPDATE VRF SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE vpn_id LIKE 'vpn:%' AND valid_end_ts IS NULL",
             params={},
             param_types={}
         )
         
-        # Delete the VPN services themselves
+        # 3. Close VPN services (SCD)
         transaction.execute_update(
-            """
-            DELETE FROM L3VPNService WHERE id LIKE 'vpn:%'
-            """,
+            "UPDATE L3VPNService SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE id LIKE 'vpn:%' AND valid_end_ts IS NULL",
             params={},
             param_types={}
         )
+        
+        # 4. Cleanup OwnedBy edges (L3VPNService -> Customer)
+        # This is logical view-based, nothing to delete if it's a View.
+        # But if we had an explicit edge table, we'd delete it. 
+        # Here `OwnedBy` is a View on L3VPNService, so closing L3VPNService is enough.
     
     try:
         database.run_in_transaction(sql_delete)
-        logger.debug(f"Successfully deleted L3VPN services and related entities for CRD {uid}")
+        logger.debug(f"Successfully closed L3VPN services and related entities for CRD {uid}")
     except Exception as e:
         logger.error(f"Failed to delete L3VPN service {uid}: {e}")
 

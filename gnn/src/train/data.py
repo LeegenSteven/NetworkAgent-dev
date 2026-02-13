@@ -21,8 +21,6 @@ class SpannerDataset:
         end_time = datetime.datetime.utcnow()
         timestamps = []
         for i in range(self.num_snapshots):
-            # T, T-5, T-10 ... (reverse order? No, we usually want t=0 to t=N)
-            # Let's generate chronological order: oldest to newest
             delta = datetime.timedelta(minutes=self.interval_minutes * (self.num_snapshots - 1 - i))
             timestamps.append(end_time - delta)
         return timestamps
@@ -35,75 +33,60 @@ class SpannerDataset:
         snapshot_data = {"timestamp": timestamp.isoformat(), "nodes": [], "edges": []}
         
         # Active filter for SCD Type 2
-        # Start <= T < End (or End is NULL)
         valid_filter = "valid_start_ts <= @ts AND (valid_end_ts > @ts OR valid_end_ts IS NULL)"
         params = {'ts': timestamp}
         param_types = {'ts': spanner.param_types.TIMESTAMP}
         
         with self.database.snapshot() as sn:
-            # 1. Fetch Routers
+            # 1. Fetch Routers with ROLE
+            # Map role to Node Type: PE Router, P Router, CE Router
             query_routers = f"""
-                SELECT id, name, config 
+                SELECT id, name, config, role, status
                 FROM PhysicalRouter WHERE {valid_filter}
             """
             results = sn.execute_sql(query_routers, params=params, param_types=param_types)
             for row in results:
+                role = row[3] if row[3] else "Unknown"
+                # Map role to specific allowed types, default to "P Router" or "PE Router" if unknown?
+                # User specified 3 types: PE, P, CE.
+                # We assume 'role' column contains strings like "PE", "P", "CE".
+                # If not, we might need normalization. Let's assume strict mapping for now or fallback.
+                node_type = "P Router" # Fallback
+                if role and "PE" in role.upper(): node_type = "PE Router"
+                elif role and "CE" in role.upper(): node_type = "CE Router"
+                elif role and "P" in role.upper(): node_type = "P Router"
+                
+                # Encode state/status?
+                state_val = 1.0 if row[4] and row[4].lower() == "active" else 0.0
+                
                 snapshot_data["nodes"].append({
                     "id": row[0],
-                    "type": "Router",
+                    "type": node_type,
                     "hostname": row[1],
                     "config": row[2] if row[2] else "",
-                    # Metrics will be joined/filled later or fetched from metrics table
-                    "rib_size": 0, # Placeholder
-                    "bgp_prefixes": 0 # Placeholder
+                    "state": state_val
                 })
                 
             # 2. Fetch Interfaces
             query_interfaces = f"""
-                SELECT id, router_id, name, speed
+                SELECT id, router_id, name, speed, status
                 FROM PhysicalInterface WHERE {valid_filter}
             """
             results = sn.execute_sql(query_interfaces, params=params, param_types=param_types)
             for row in results:
+                state_val = 1.0 if row[4] and row[4].lower() == "up" else 0.0
                 snapshot_data["nodes"].append({
                     "id": row[0],
                     "type": "Interface",
                     "name": row[2],
                     "device_id": row[1],
-                    "errors": 0,      # Placeholder
-                    "utilization": 0.0 # Placeholder
+                    "state": state_val,
+                    "errors": 0.0,      # Placeholder
+                    "rx": 0.0,          # Placeholder
+                    "tx": 0.0           # Placeholder
                 })
             
-            # 3. Fetch Links (Edges: Interface <-> Interface via Link)
-            # PhysicalLink is an edge object in our graph model, but in the GNN model 'Link' might not be a node type?
-            # Reference gnn_utils.py doesn't show "Link" as a node type in FEATURE_MAP.
-            # Reference uses "Connected" relation between Interfaces.
-            # We need to resolve PhysicalLink to direct connections or use it as an edge.
-            # The VIEW 'ConnectsTo_Edge' and 'LinkedTo_Edge' helps.
-            # Let's use the views if possible, or manual join.
-            # Reference logic: 
-            #   ("ConnectedTo", "src_interface_id", "dst_interface_id", "Connected"),
-            
-            # Since we are essentially recreating the logic, let's fetch 'PhysicalLink' and find the two interfaces it connects using Interface_Link.
-            # Or better, query the Interface_Link table directly?
-            # Interface_Link: interface_id, link_id.
-            # A link connects 2 interfaces usually.
-            
-            query_links = f"""
-                SELECT il1.interface_id, il2.interface_id
-                FROM PhysicalLink l
-                JOIN Interface_Link il1 ON l.id = il1.link_id
-                JOIN Interface_Link il2 ON l.id = il2.link_id
-                WHERE {valid_filter.replace('valid_', 'l.valid_')}
-                AND il1.interface_id < il2.interface_id -- Avoid duplicates
-                AND il1.valid_start_ts <= @ts AND (il1.valid_end_ts > @ts OR il1.valid_end_ts IS NULL)
-                AND il2.valid_start_ts <= @ts AND (il2.valid_end_ts > @ts OR il2.valid_end_ts IS NULL)
-            """
-            # Wait, complex join might be slow or hard to get right with SCD2 on all tables.
-            # Let's stick to edges we can easily reconstruct.
-            
-            # Router -> Owns -> Interface
-            # We already fetched Interface with router_id.
+            # 3. Router -> Interface Edges (Owns)
             for node in snapshot_data["nodes"]:
                 if node["type"] == "Interface":
                     snapshot_data["edges"].append({
@@ -111,53 +94,58 @@ class SpannerDataset:
                         "target": node["id"],
                         "relation": "Owns"
                     })
-                    
-            # 4. Fetch Network Metrics (closest to timestamp)
-            # NetworkMetrics table: id, kind, name, timestamp, metrics (JSON), interface_id
-            # We need to join this to Interface/Router.
-            # Assuming metrics are logged frequently. We want the latest metric BEFORE or AT @ts for each entity?
-            # Or just "at" @ts if we assume roughly aligned snapshots.
-            # Let's query NetworkMetrics where timestamp between T-5m and T.
-            
+
+            # 4. Interface <-> Interface Edges (Connected)
+            # Find interfaces sharing a link
+            query_links = f"""
+                SELECT il1.interface_id, il2.interface_id
+                FROM Interface_Link il1
+                JOIN Interface_Link il2 ON il1.link_id = il2.link_id
+                WHERE il1.interface_id < il2.interface_id
+                AND il1.valid_start_ts <= @ts AND (il1.valid_end_ts > @ts OR il1.valid_end_ts IS NULL)
+                AND il2.valid_start_ts <= @ts AND (il2.valid_end_ts > @ts OR il2.valid_end_ts IS NULL)
+            """
+            results = sn.execute_sql(query_links, params=params, param_types=param_types)
+            for row in results:
+                # Add bidirectional 'Connected' edge
+                snapshot_data["edges"].append({
+                    "source": row[0],
+                    "target": row[1],
+                    "relation": "Connected"
+                })
+                snapshot_data["edges"].append({
+                    "source": row[1],
+                    "target": row[0],
+                    "relation": "Connected"
+                })
+
+            # 5. Connect Metrics
             t_start = timestamp - datetime.timedelta(minutes=self.interval_minutes)
             params_metrics = {'t_start': t_start, 't_end': timestamp}
             param_types_metrics = {'t_start': spanner.param_types.TIMESTAMP, 't_end': spanner.param_types.TIMESTAMP}
             
-            # We want the LATEST metric for each interface_id within the window
             query_metrics = """
                 SELECT interface_id, metrics
                 FROM NetworkMetrics
                 WHERE timestamp > @t_start AND timestamp <= @t_end
                 ORDER BY timestamp DESC
             """
-            # This query might return multiple rows per interface. We'll handle dedup in python or use ARRAY_AGG in SQL?
-            # Let's just fetch and update dict.
             
             results = sn.execute_sql(query_metrics, params=params_metrics, param_types=param_types_metrics)
-            metrics_map = {} # interface_id -> metrics dict
+            metrics_map = {} 
             
             for row in results:
                 if row[0] not in metrics_map:
-                    metrics_map[row[0]] = row[1] # First one is latest due to DESC sort (if we trust stability, but wait, global sort?)
-                    # Spanner doesn't guarantee global sort unless we strictly order query.
-                    # Actually logic: keys are not unique in WHERE.
-                    # Better: SELECT interface_id, metrics FROM (SELECT *, ROW_NUMBER() OVER(PARTITION BY interface_id ORDER BY timestamp DESC) as rn ...)
+                    metrics_map[row[0]] = row[1]
             
-            # Simplified: just iterate and take first seen if we strictly ordered.
-            # Or just take ANY in the window for this MVP.
-            
-            # Update Node Metrics
             for node in snapshot_data["nodes"]:
                 if node["type"] == "Interface":
                     if node["id"] in metrics_map:
                         m = metrics_map[node["id"]]
-                        # Map JSON fields to Feature Map
-                        # FEATURE_MAP["Interface"]: ["Errors", "Utilization"]
-                        node["errors"] = float(m.get("errors", 0))
-                        node["utilization"] = float(m.get("utilization", 0.0))
-            
-            # TODO: Add Flow fetching logic if Flow table exists and is populated.
-            # The schema had "HasFlow" edge.
-            
-        return snapshot_data
+                        # metrics JSON assumed to have 'errors', 'rx_bps', 'tx_bps' etc.
+                        # Adapting keys as needed
+                        node["errors"] = float(m.get("errors", 0.0))
+                        node["rx"] = float(m.get("rx_bps", 0.0)) # Assuming bps or similar
+                        node["tx"] = float(m.get("tx_bps", 0.0))
 
+        return snapshot_data

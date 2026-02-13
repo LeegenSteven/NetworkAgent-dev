@@ -156,6 +156,26 @@ def body_string_dump(body, kind, namespace, name):
   return json.dumps(resource_dict, ensure_ascii = True)
 
 # ------------------------------------------
+# Helper to sanitize K8s body for storage
+# ------------------------------------------
+def sanitize_k8s_body(body):
+  import copy
+  # Deep copy to avoid modifying the original body used by kopf
+  clean_body = copy.deepcopy(body)
+  
+  if 'metadata' in clean_body:
+    # Remove managedFields as they are verbose and not needed for config
+    clean_body['metadata'].pop('managedFields', None)
+    
+    # Remove internal annotations
+    if 'annotations' in clean_body['metadata']:
+      for key in list(clean_body['metadata']['annotations'].keys()):
+        if key.startswith('kopf') or key.startswith('kubectl.kubernetes.io'):
+          clean_body['metadata']['annotations'].pop(key, None)
+          
+  return clean_body
+
+# ------------------------------------------
 # Extract a human readbale status and return a well 
 # formatted string to use in SQL INSERT (either NULL or
 # "'status_string'")
@@ -569,8 +589,16 @@ async def sync_physical_router(body, spec, name, uid, logger):
             router_status = status_str
     
     def sql_upsert_router(transaction):
-        # Convert spec to dict if it's a Kubernetes object
-        spec_dict = dict(spec) if hasattr(spec, '__iter__') and not isinstance(spec, (str, bytes)) else spec
+        # Prepare the full config object (sanitized body)
+        # We use the full body so we have metadata, status, etc.
+        sanitized_body = sanitize_k8s_body(body)
+        # Ensure it is a dict (it should be coming from kopf/lifecycle)
+        if not isinstance(sanitized_body, dict):
+             # Fallback if somehow it's not a dict, though unexpected
+             sanitized_body = dict(sanitized_body)
+             
+        config_json = json.dumps(sanitized_body)
+
         
         # Get location from spec.location (VyOS Infrastructure uses latitude/longitude, not lat/lon)
         location = spec.get('location', {})
@@ -588,8 +616,13 @@ async def sync_physical_router(body, spec, name, uid, logger):
         if row:
             existing_config = row[0]
             existing_status = row[1]
-            # Compare content. spec_dict is the config dict.
-            if existing_config == spec_dict and existing_status == router_status:
+            # Compare content. existing_config is the config JSON string from DB (or dict if client decodes it??)
+            # Spanner client usually returns JSON types as native Python objects (dicts/lists)
+            # But let's be careful. If row[0] is a string, load it.
+            # update: param_types.JSON returns native object (dict)
+            
+            # We compare the dictionary representations
+            if existing_config == sanitized_body and existing_status == router_status:
                 need_insert = False
             else:
                 # Close existing row
@@ -613,7 +646,7 @@ async def sync_physical_router(body, spec, name, uid, logger):
                     'location_lon': float(location.get('longitude') or location.get('lon') or metadata_labels.get('longitude') or metadata_labels.get('lon') or 0.0),
                     'role': 'Router',
                     'status': router_status,
-                    'config': json.dumps(spec_dict)
+                    'config': config_json
                 },
                 param_types={
                     'id': spanner.param_types.STRING,

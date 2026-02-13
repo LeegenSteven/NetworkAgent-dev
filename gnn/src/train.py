@@ -1,7 +1,10 @@
+
 import logging
 import os
+import threading
 from aiohttp import web
 import aiohttp_cors
+from train.pipeline import run_training_pipeline
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
@@ -23,13 +26,24 @@ cors = aiohttp_cors.setup(app, defaults={
 })
 
 async def train(request):
-    logger.info("train")
-    return web.json_response({'success': True})
+    logger.info("Received request to start training")
+    # Run training in background thread/process
+    # Threading is simplest for now.
+    t = threading.Thread(target=run_training_pipeline)
+    t.start()
+    return web.json_response({'success': True, 'message': 'Training started in background.'}, status=202)
+
+async def health(request):
+    return web.json_response({'status': 'UP'})
 
 if __name__ == "__main__":
-    train_route = app.router.add_get('/train', train)    
+    train_route = app.router.add_post('/train', train)    
+    health_route = app.router.add_get('/health', health)
+    
     # Add CORS to API routes
     cors.add(train_route)
+    cors.add(health_route)
 
-    logger.info("starting gnn agent...")
-    web.run_app(app, port=8080)
+    logger.info("starting gnn training agent...")
+    port = int(os.environ.get('PORT', 8080))
+    web.run_app(app, port=port)

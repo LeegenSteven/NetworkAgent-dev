@@ -90,7 +90,7 @@ spec:
                         default: "vyos"
                       role:
                         type: string
-                        enum: ["p", "pe", "ce", "rr", "access", "core", "edge"]
+                        enum: ["p", "pe", "ce", "P", "PE", "CE"]
                       image:
                         type: string
                         default: "vyos:1.5"

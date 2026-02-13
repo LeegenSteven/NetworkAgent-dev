@@ -360,9 +360,6 @@ def generate_vyos_routers(spec: Dict[str, Any], parent_name: str, parent_namespa
                 'labels': {
                     'parent-kind': parent_kind,
                     'parent-name': parent_name,
-                    'router-type': router.get('type', 'unknown'),
-                    'router-role': router.get('role', 'unknown'),
-                    'environment': 'lab'
                 },
                 'ownerReferences': [{
                     'apiVersion': 'google.dev/v1',
@@ -384,7 +381,8 @@ def generate_vyos_routers(spec: Dict[str, Any], parent_name: str, parent_namespa
                 'protocols': generate_router_protocols(router),
                 'services': router.get('services', {}),
                 'qos': generate_router_qos_config(router),
-                'firewall': generate_router_firewall_config(router)
+                'firewall': generate_router_firewall_config(router),
+                'role': router.get('role', 'P')
             }
         }
         
@@ -626,7 +624,19 @@ async def create_vyos_router(router_cr: Dict[str, Any], namespace: str):
         api.create(router_cr)
     except kubernetes.client.rest.ApiException as e:
         if e.status == 409:  # Already exists
-            logger.info(f"VyOSRouter {router_cr['metadata']['name']} already exists")
+            logger.info(f"VyOSRouter {router_cr['metadata']['name']} already exists, updating...")
+            try:
+                # Patch the existing router to ensure it stays in sync
+                await patch_vyos_router(
+                    router_cr['metadata']['name'],
+                    router_cr['metadata']['namespace'],
+                    {
+                        'metadata': {'labels': router_cr['metadata']['labels']},
+                        'spec': router_cr['spec']
+                    }
+                )
+            except Exception as patch_error:
+                logger.error(f"Failed to update existing VyOSRouter {router_cr['metadata']['name']}: {patch_error}")
         else:
             raise
 

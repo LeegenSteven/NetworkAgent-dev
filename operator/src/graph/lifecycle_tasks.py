@@ -578,6 +578,9 @@ async def sync_physical_router(body, spec, name, uid, logger):
     # Use router name as ID to prevent duplicates when router is recreated
     router_id = f"router:{name}"
     
+    router_role = spec.get('role', 'Router')
+    logger.debug(f"Syncing PhysicalRouter {name} with role: {router_role}")
+    
     # Extract status from CRD status field
     router_status = 'Unknown'
     status_obj = body.get('status', {})
@@ -644,7 +647,7 @@ async def sync_physical_router(body, spec, name, uid, logger):
                     'location_city': location.get('city') or metadata_labels.get('city', 'Unknown'),
                     'location_lat': float(location.get('latitude') or location.get('lat') or metadata_labels.get('latitude') or metadata_labels.get('lat') or 0.0),
                     'location_lon': float(location.get('longitude') or location.get('lon') or metadata_labels.get('longitude') or metadata_labels.get('lon') or 0.0),
-                    'role': 'Router',
+                    'role': spec.get('role', 'Router'),
                     'status': router_status,
                     'config': config_json
                 },

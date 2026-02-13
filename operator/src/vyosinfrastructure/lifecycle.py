@@ -60,9 +60,8 @@ async def create_vyosinfrastructure(body, spec, name, namespace, uid, logger, **
 @kopf.on.update('google.dev', 'v1', 'vyosinfrastructure')
 async def update_vyosinfrastructure(body, spec, name, namespace, uid, logger, **kwargs):
     logger.info(f"Updating VyOSInfrastructure: {name}")
-    # Logic for updating infrastructure (e.g., adding/removing routers) could go here
-    # For now, we rely on the create handler and manual reconciliation if needed
-    pass
+    # Reuse creation logic to reconcile resources
+    await create_vyosinfrastructure(body, spec, name, namespace, uid, logger, **kwargs)
 
 @kopf.on.event('google.dev', 'v1', 'vyosrouter')
 async def on_vyosrouter_status_change(body, spec, name, namespace, logger, **kwargs):

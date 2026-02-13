@@ -248,6 +248,7 @@ spec:
     - name: "p1"
       hostname: "p1"
       router_id: "10.0.0.3"
+      role: "P"
       location:
         latitude: 51.5074
         longitude: -0.1278
@@ -272,6 +273,7 @@ spec:
     - name: "p2"
       hostname: "p2"
       router_id: "10.0.0.4"
+      role: "P"
       location:
         latitude: 53.4808
         longitude: -2.2426
@@ -292,6 +294,7 @@ spec:
     - name: "p3"
       hostname: "p3"
       router_id: "10.0.0.5"
+      role: "P"
       location:
         latitude: 55.9533
         longitude: -3.1883
@@ -314,6 +317,7 @@ spec:
     - name: "p4"
       hostname: "p4"
       router_id: "10.0.0.6"
+      role: "P"
       location:
         latitude: 53.8008
         longitude: -1.5491
@@ -336,6 +340,7 @@ spec:
     - name: "rr1"
       hostname: "rr1"
       router_id: "10.0.0.1"
+      role: "P"
       location:
         latitude: 52.4862
         longitude: -1.8904
@@ -354,6 +359,7 @@ spec:
     - name: "rr2"
       hostname: "rr2"
       router_id: "10.0.0.2"
+      role: "P"
       location:
         latitude: 51.4545
         longitude: -2.5879
@@ -372,6 +378,7 @@ spec:
     - name: "pe1"
       hostname: "pe1"
       router_id: "10.0.0.7"
+      role: "PE"
       location:
         latitude: 51.7520
         longitude: -1.2577
@@ -390,6 +397,7 @@ spec:
     - name: "pe2"
       hostname: "pe2"
       router_id: "10.0.0.8"
+      role: "PE"
       location:
         latitude: 52.2053
         longitude: 0.1218
@@ -410,6 +418,7 @@ spec:
     - name: "pe3"
       hostname: "pe3"
       router_id: "10.0.0.10"
+      role: "PE"
       location:
         latitude: 50.8198
         longitude: -0.1371
@@ -428,6 +437,7 @@ spec:
     - name: "ce1-spoke"
       hostname: "ce1-spoke"
       router_id: "10.0.0.80"
+      role: "CE"
       location:
         latitude: 53.3811
         longitude: -1.4701
@@ -446,6 +456,7 @@ spec:
     - name: "ce1-hub"
       hostname: "ce1-hub"
       router_id: "10.0.0.100"
+      role: "CE"
       location:
         latitude: 52.9548
         longitude: -1.1581
@@ -464,6 +475,7 @@ spec:
     - name: "ce2-spoke"
       hostname: "ce2-spoke"
       router_id: "10.0.0.90"
+      role: "CE"
       location:
         latitude: 53.4084
         longitude: -2.9916

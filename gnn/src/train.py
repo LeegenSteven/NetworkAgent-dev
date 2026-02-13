@@ -37,7 +37,7 @@ async def health(request):
     return web.json_response({'status': 'UP'})
 
 if __name__ == "__main__":
-    train_route = app.router.add_post('/train', train)    
+    train_route = app.router.add_get('/train', train)    
     health_route = app.router.add_get('/health', health)
     
     # Add CORS to API routes

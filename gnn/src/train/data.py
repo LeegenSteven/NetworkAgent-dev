@@ -1,8 +1,10 @@
 
 import datetime
 import logging
+import google.auth
 from google.cloud import spanner
 from typing import List, Dict, Optional
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +12,8 @@ class SpannerDataset:
     """Loads snapshots from Google Spanner using SCD Type 2 query logic."""
     
     def __init__(self, instance_id: str, database_id: str, num_snapshots: int = 50, interval_minutes: int = 5):
-        self.client = spanner.Client()
+        credentials, _ = google.auth.load_credentials_from_file(os.getenv("GOOGLE_APPLICATION_CREDENTIALS","/agent/networkagent.json"), scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        self.client = spanner.Client(credentials=credentials)
         self.instance = self.client.instance(instance_id)
         self.database = self.instance.database(database_id)
         self.num_snapshots = num_snapshots

@@ -6,7 +6,7 @@ The network agent demo uses a gitops approach to making changes to the network. 
 
 The network agent gitops pipeline is shown in the figure below. 
 
-![cicd pipeline](/drawings/lifecycle/CICD.drawio.svg)
+![cicd pipeline](/docs/drawings/lifecycle/CICD.drawio.svg)
 
 There are two k8s operators that execute changes on the network, as follows: 
 

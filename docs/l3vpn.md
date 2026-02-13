@@ -6,7 +6,7 @@ The example in the demo is a L3 VPN with 3 sites provisioned on a number of VyOS
 
 L3VPN consists of multiple access links, VPN routing and forwarding (VRF) tables, and MPLS paths or P2MP LSPs. A L3VPN can be configured to connect two or more customer sites. In hub-and-spoke MPLS L3VPN environments, the spoke routers have unique Route Distinguisers (RDs). The spoke sites export their routes to the hub. Spokes can talk to hubs, but never have direct paths to other spokes. All traffic is controlled and delivered over the hub site. 
 
-![example](/drawings/transport/l3vpn-example.drawio.svg)
+![example](/docs/drawings/transport/l3vpn-example.drawio.svg)
 
 In the demo example above, PE1 is the hub PE and has the main VRF (BLUE_HUB), its own Route-Distinguisher (RD) and route-targer import/export lists. Multi-protocol BGP (MP-BGP) delivers L3VPN related control plane information to the nodes across network where the PE spokes import the route-target 60535:1030 (export route-target of vrf BLUE_HUB) and export its own route-target 60535:1011 (this is BLUE_SPOKE export route-target). 
 
@@ -26,7 +26,7 @@ The following sections break this L3 VPN topology into logically separate models
 
 This model represents the physical connectivity and capacity available in the network. Modelling vendor and location aspects of the physical routers and the physical links connecting router ports together. 
 
-![physical model](/drawings/transport/physical_model.drawio.svg)
+![physical model](/docs/drawings/transport/physical_model.drawio.svg)
 
 ### Nodes
 
@@ -204,14 +204,14 @@ This multi-layered graph model provides a powerful way to represent and analyze 
 
 The underlay configures P routers.
 
-![underlay model](/drawings/transport/underlay_logical_models.drawio.svg)
+![underlay model](/docs/drawings/transport/underlay_logical_models.drawio.svg)
 
 
 ## L3VPN Service Descriptor
 
 L3 VPN Service configured to PE/CE
 
-![edge model](/drawings/transport/edge_logical_model.drawio.svg)
+![edge model](/docs/drawings/transport/edge_logical_model.drawio.svg)
 
 
 ```
@@ -408,5 +408,5 @@ The VPN solution must be scalable to accommodate future growth in sites, users, 
 Example: The VPN architecture must easily allow for adding new branch offices within a month's notice.
 
 
-![intent](/drawings/transport/customer_intent.drawio.svg)
+![intent](/docs/drawings/transport/customer_intent.drawio.svg)
 

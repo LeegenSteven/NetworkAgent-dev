@@ -2,7 +2,7 @@
 
 The demo manages an end to end 5G virtual mobile network, The 5G network service topology shown below can be automated into an operational state within a single GCP project.
 
-![virtual mobile network](/drawings/free5gc/mobile.drawio.svg)
+![virtual mobile network](/docs/drawings/free5gc/mobile.drawio.svg)
 
 The following virtual infrastructure can be deployed to instantiate the 5G network service. 
 

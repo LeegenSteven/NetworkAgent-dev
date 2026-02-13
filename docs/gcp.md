@@ -2,7 +2,7 @@
 
 The demo is deployed to a single GCP project, as shown in the figure below. 
 
-![Environment](/drawings/gcp.drawio.svg)
+![Environment](/docs/drawings/gcp.drawio.svg)
 
 The GCP components are as follows: 
 

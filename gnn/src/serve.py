@@ -7,6 +7,7 @@ import numpy as np
 from aiohttp import web
 import aiohttp_cors
 from google.cloud import storage
+from google.cloud import spanner
 import datetime
 from utils.gnn_utils import THGAT, GraphBuilder, HIDDEN_CHANNELS, OUT_CHANNELS, NUM_HEADS, NUM_LAYERS, explain_node_anomaly
 from utils.data import SpannerDataset
@@ -224,6 +225,43 @@ async def inference(request):
                         
                         total_loss += score
                         node_count += 1
+                        
+            # --- Write embeddings to Spanner ---
+            mutations = []
+            spanner_timestamp = spanner.COMMIT_TIMESTAMP
+            import uuid
+            
+            for node_type, recon_x in recon_dict.items():
+                if state_dict and node_type in state_dict:
+                    embeddings = state_dict[node_type].squeeze(0).tolist()
+                    rev_id_map = {v: k for k, v in gb.global_id_map[node_type].items()}
+                    
+                    for i in range(len(embeddings)):
+                        if i not in rev_id_map: continue
+                        nid = rev_id_map[i]
+                        emb = embeddings[i]
+                        embedding_id = str(uuid.uuid4())
+                        
+                        mutations.append(
+                            spanner.Mutation.insert(
+                                table="NodeEmbedding",
+                                columns=("id", "node_id", "node_type", "embedding", "timestamp"),
+                                values=[
+                                    (embedding_id, nid, node_type, emb, spanner_timestamp)
+                                ]
+                            )
+                        )
+            
+            if mutations:
+                logger.info(f"Writing {len(mutations)} embeddings to Spanner from inference...")
+                spanner_client = spanner.Client()
+                instance = spanner_client.instance(SPANNER_INSTANCE)
+                database = instance.database(SPANNER_DATABASE)
+                
+                with database.batch() as batch:
+                    batch.mutate(mutations)
+                    
+                logger.info("Successfully wrote embeddings to Spanner.")
             
             if node_count > 0:
                 results["average_score"] = total_loss / node_count
@@ -233,7 +271,6 @@ async def inference(request):
             return web.json_response(results)
             
     except Exception as e:
-        logger.error(f"Inference failed: {e}", exc_info=True)
         return web.json_response({'error': str(e)}, status=500)
 
 if __name__ == "__main__":

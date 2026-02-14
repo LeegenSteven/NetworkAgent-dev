@@ -21,6 +21,9 @@ SCALER_PATH = os.path.join(BASE_DIR, "scalers.pkl")
 ANOMALY_THRESHOLD = 0.5 
 GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "network-model-artifacts")
 
+# Initialize aiohttp application with no middleware
+app = web.Application()
+
 # Setup CORS for aiohttp routes
 cors = aiohttp_cors.setup(app, defaults={
     "*": aiohttp_cors.ResourceOptions(
@@ -30,9 +33,6 @@ cors = aiohttp_cors.setup(app, defaults={
         allow_methods="*"
     )
 })
-
-# Initialize aiohttp application with no middleware
-app = web.Application()
 
 # Global variables for model and graph builder
 gb = None

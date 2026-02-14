@@ -7,7 +7,9 @@ import numpy as np
 from aiohttp import web
 import aiohttp_cors
 from google.cloud import storage
+import datetime
 from utils.gnn_utils import THGAT, GraphBuilder, HIDDEN_CHANNELS, OUT_CHANNELS, NUM_HEADS, NUM_LAYERS, explain_node_anomaly
+from utils.data import SpannerDataset
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
              "%(filename)s::%(lineno)d::%(message)s"
@@ -20,6 +22,8 @@ MODEL_PATH = os.path.join(BASE_DIR, "model.pth")
 SCALER_PATH = os.path.join(BASE_DIR, "scalers.pkl")
 ANOMALY_THRESHOLD = 0.5 
 GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "network-model-artifacts")
+SPANNER_INSTANCE = os.getenv("SPANNER_INSTANCE", "networktopology-instance")
+SPANNER_DATABASE = os.getenv("SPANNER_DATABASE", "networktopology-db")
 
 # Initialize aiohttp application with no middleware
 app = web.Application()
@@ -130,10 +134,7 @@ def load_model():
 
 async def inference(request):
     global model, gb
-    try:
-        data = await request.json()
-    except json.JSONDecodeError:
-        return web.json_response({'error': 'Invalid JSON'}, status=400)
+    logger.info("Received inference request")
         
     if not model or not gb:
         # Try to reload
@@ -142,6 +143,23 @@ async def inference(request):
             return web.json_response({'error': 'Model not available'}, status=503)
 
     try:
+        # Fetch the latest snapshot from Spanner
+        dataset = SpannerDataset(
+            instance_id=SPANNER_INSTANCE, 
+            database_id=SPANNER_DATABASE, 
+            num_snapshots=1 # We only need the latest one for inference
+        )
+        
+        # _get_timestamps returns a list ending at now()
+        timestamps = dataset._get_timestamps()
+        latest_ts = timestamps[-1]
+        
+        logger.info(f"Fetching snapshot for timestamp: {latest_ts}")
+        data = dataset.fetch_snapshot(latest_ts)
+        
+        if not data["nodes"]:
+            return web.json_response({'error': 'No data found in Spanner snapshot'}, status=404)
+
         # Process snapshot
         hdata, input_dims = gb.process_snapshot(data)
         

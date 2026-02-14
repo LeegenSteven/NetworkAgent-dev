@@ -7,7 +7,7 @@ from tqdm import tqdm
 from google.cloud import storage
 import joblib
 import logging
-from train.data import SpannerDataset
+from utils.data import SpannerDataset
 from utils.gnn_utils import THGAT, GraphBuilder, HIDDEN_CHANNELS, OUT_CHANNELS, NUM_HEADS, NUM_LAYERS
 
 logger = logging.getLogger(__name__)

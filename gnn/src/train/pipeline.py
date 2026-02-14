@@ -19,7 +19,7 @@ GCS_BUCKET = os.getenv("GCS_BUCKET_NAME", "network-model-artifacts")
 
 MODEL_SAVE_PATH = "model.pth"
 SCALER_PATH = "scalers.pkl"
-EPOCHS = 50
+EPOCHS = 5
 LEARNING_RATE = 0.001
 TRAINING_SNAPSHOTS = 4
 INTERVAL_MINUTES = 1
@@ -55,7 +55,7 @@ def run_training_pipeline():
         for ts in tqdm(timestamps, desc="Fetching Snapshots"):
             try:
                 snapshot = dataset.fetch_snapshot(ts)
-                # logger.info(snapshot)
+                logger.info(snapshot)
 
                 if snapshot["nodes"]:
                     snapshot_objects.append(snapshot)
@@ -68,77 +68,77 @@ def run_training_pipeline():
             logger.error("Error: No data found. Exiting.")
             return
 
-        # logger.info("Fitting scalers...")
-        # gb.fit_scalers(snapshot_objects)
-        # gb.save_scalers()
-        # logger.info(f"Scalers saved locally to {SCALER_PATH}")
+        logger.info("Fitting scalers...")
+        gb.fit_scalers(snapshot_objects)
+        gb.save_scalers()
+        logger.info(f"Scalers saved locally to {SCALER_PATH}")
 
-        # logger.info("Processing snapshots into HeteroData...")
-        # snapshots = []
-        # input_dims = None
+        logger.info("Processing snapshots into HeteroData...")
+        snapshots = []
+        input_dims = None
         
-        # for data in tqdm(snapshot_objects, desc="Processing Graphs"):
-        #     hdata, dims = gb.process_snapshot(data)
-        #     snapshots.append(hdata)
-        #     if input_dims is None:
-        #         input_dims = dims
+        for data in tqdm(snapshot_objects, desc="Processing Graphs"):
+            hdata, dims = gb.process_snapshot(data)
+            snapshots.append(hdata)
+            if input_dims is None:
+                input_dims = dims
                 
-        # # Derive metadata
-        # node_types = list(input_dims.keys())
-        # all_edge_types = set()
-        # for s in snapshots:
-        #     for et in s.edge_index_dict.keys():
-        #         all_edge_types.add(et)
+        # Derive metadata
+        node_types = list(input_dims.keys())
+        all_edge_types = set()
+        for s in snapshots:
+            for et in s.edge_index_dict.keys():
+                all_edge_types.add(et)
         
-        # edge_types = list(all_edge_types)
-        # metadata = (node_types, edge_types)
+        edge_types = list(all_edge_types)
+        metadata = (node_types, edge_types)
         
-        # logger.info(f"Model Metadata: {metadata}")
+        logger.info(f"Model Metadata: {metadata}")
         
-        # logger.info("Initializing THGAT Model...")
-        # model = THGAT(metadata, HIDDEN_CHANNELS, OUT_CHANNELS, NUM_HEADS, NUM_LAYERS)
-        # model.set_input_dims(input_dims)
+        logger.info("Initializing THGAT Model...")
+        model = THGAT(metadata, HIDDEN_CHANNELS, OUT_CHANNELS, NUM_HEADS, NUM_LAYERS)
+        model.set_input_dims(input_dims)
         
-        # optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-        # criterion = nn.MSELoss()
+        optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+        criterion = nn.MSELoss()
         
-        # logger.info("Starting Training...")
-        # model.train()
+        logger.info("Starting Training...")
+        model.train()
         
-        # for epoch in range(EPOCHS):
-        #     total_loss = 0
-        #     hidden_state = None 
+        for epoch in range(EPOCHS):
+            total_loss = 0
+            hidden_state = None 
             
-        #     for snapshot in snapshots:
-        #         optimizer.zero_grad()
-        #         if hidden_state:
-        #             hidden_state = {k: v.detach() for k, v in hidden_state.items()}
+            for snapshot in snapshots:
+                optimizer.zero_grad()
+                if hidden_state:
+                    hidden_state = {k: v.detach() for k, v in hidden_state.items()}
                     
-        #         recon_dict, hidden_state = model(snapshot.x_dict, snapshot.edge_index_dict, hidden_state)
+                recon_dict, hidden_state = model(snapshot.x_dict, snapshot.edge_index_dict, hidden_state)
                 
-        #         loss = 0
-        #         for node_type, recon_x in recon_dict.items():
-        #             if node_type in snapshot.x_dict:
-        #                 loss += criterion(recon_x, snapshot.x_dict[node_type])
+                loss = 0
+                for node_type, recon_x in recon_dict.items():
+                    if node_type in snapshot.x_dict:
+                        loss += criterion(recon_x, snapshot.x_dict[node_type])
                 
-        #         loss.backward()
-        #         optimizer.step()
-        #         total_loss += loss.item()
+                loss.backward()
+                optimizer.step()
+                total_loss += loss.item()
                 
-        #     if (epoch + 1) % 5 == 0:
-        #         logger.info(f"Epoch {epoch+1}/{EPOCHS}, Loss: {total_loss:.4f}")
+            if (epoch + 1) % 5 == 0:
+                logger.info(f"Epoch {epoch+1}/{EPOCHS}, Loss: {total_loss:.4f}")
             
-        # logger.info(f"Saving model locally to {MODEL_SAVE_PATH}...")
-        # torch.save(model.state_dict(), MODEL_SAVE_PATH)
+        logger.info(f"Saving model locally to {MODEL_SAVE_PATH}...")
+        torch.save(model.state_dict(), MODEL_SAVE_PATH)
         
-        # logger.info("Uploading artifacts to GCS...")
-        # if GCS_BUCKET:
-        #     upload_blob(GCS_BUCKET, MODEL_SAVE_PATH, f"models/thgat/{MODEL_SAVE_PATH}")
-        #     upload_blob(GCS_BUCKET, SCALER_PATH, f"models/thgat/{SCALER_PATH}")
-        # else:
-        #     logger.info("GCS_BUCKET_NAME not set. Skipping upload.")
+        logger.info("Uploading artifacts to GCS...")
+        if GCS_BUCKET:
+            upload_blob(GCS_BUCKET, MODEL_SAVE_PATH, f"models/thgat/{MODEL_SAVE_PATH}")
+            upload_blob(GCS_BUCKET, SCALER_PATH, f"models/thgat/{SCALER_PATH}")
+        else:
+            logger.info("GCS_BUCKET_NAME not set. Skipping upload.")
             
-        # logger.info("Training pipeline completed successfully.")
+        logger.info("Training pipeline completed successfully.")
         
     except Exception as e:
         logger.error(f"Training pipeline failed: {e}")

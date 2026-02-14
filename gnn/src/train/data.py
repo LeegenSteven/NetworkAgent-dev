@@ -179,41 +179,41 @@ class SpannerDataset:
             
             logger.debug(f"Created {connected_edge_count} 'Connected' edges")
 
-            # 5. Connect Metrics
-            t_start = timestamp - datetime.timedelta(minutes=self.interval_minutes)
-            logger.debug(f"Querying NetworkMetrics table for time range: {t_start.isoformat()} to {timestamp.isoformat()}")
-            params_metrics = {'t_start': t_start, 't_end': timestamp}
-            param_types_metrics = {'t_start': spanner.param_types.TIMESTAMP, 't_end': spanner.param_types.TIMESTAMP}
+            # # 5. Connect Metrics
+            # t_start = timestamp - datetime.timedelta(minutes=self.interval_minutes)
+            # logger.debug(f"Querying NetworkMetrics table for time range: {t_start.isoformat()} to {timestamp.isoformat()}")
+            # params_metrics = {'t_start': t_start, 't_end': timestamp}
+            # param_types_metrics = {'t_start': spanner.param_types.TIMESTAMP, 't_end': spanner.param_types.TIMESTAMP}
             
-            query_metrics = """
-                SELECT interface_id, metrics
-                FROM NetworkMetrics
-                WHERE timestamp > @t_start AND timestamp <= @t_end
-                ORDER BY timestamp DESC
-            """
+            # query_metrics = """
+            #     SELECT interface_id, metrics
+            #     FROM NetworkMetrics
+            #     WHERE timestamp > @t_start AND timestamp <= @t_end
+            #     ORDER BY timestamp DESC
+            # """
             
-            results = sn.execute_sql(query_metrics, params=params_metrics, param_types=param_types_metrics)
-            metrics_map = {} 
+            # results = sn.execute_sql(query_metrics, params=params_metrics, param_types=param_types_metrics)
+            # metrics_map = {} 
             
-            for row in results:
-                if row[0] not in metrics_map:
-                    metrics_map[row[0]] = row[1]
+            # for row in results:
+            #     if row[0] not in metrics_map:
+            #         metrics_map[row[0]] = row[1]
             
-            logger.debug(f"Fetched metrics for {len(metrics_map)} interfaces")
+            # logger.debug(f"Fetched metrics for {len(metrics_map)} interfaces")
             
-            metrics_applied = 0
-            for node in snapshot_data["nodes"]:
-                if node["type"] == "Interface":
-                    if node["id"] in metrics_map:
-                        m = metrics_map[node["id"]]
-                        # metrics JSON assumed to have 'errors', 'rx_bps', 'tx_bps' etc.
-                        # Adapting keys as needed
-                        node["errors"] = float(m.get("errors", 0.0))
-                        node["rx"] = float(m.get("rx_bps", 0.0)) # Assuming bps or similar
-                        node["tx"] = float(m.get("tx_bps", 0.0))
-                        metrics_applied += 1
+            # metrics_applied = 0
+            # for node in snapshot_data["nodes"]:
+            #     if node["type"] == "Interface":
+            #         if node["id"] in metrics_map:
+            #             m = metrics_map[node["id"]]
+            #             # metrics JSON assumed to have 'errors', 'rx_bps', 'tx_bps' etc.
+            #             # Adapting keys as needed
+            #             node["errors"] = float(m.get("errors", 0.0))
+            #             node["rx"] = float(m.get("rx_bps", 0.0)) # Assuming bps or similar
+            #             node["tx"] = float(m.get("tx_bps", 0.0))
+            #             metrics_applied += 1
             
-            logger.info(f"Applied metrics to {metrics_applied}/{interface_count} interfaces")
+            # logger.info(f"Applied metrics to {metrics_applied}/{interface_count} interfaces")
 
         total_edges = len(snapshot_data["edges"])
         total_nodes = len(snapshot_data["nodes"])

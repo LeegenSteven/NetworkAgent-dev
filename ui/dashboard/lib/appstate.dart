@@ -10,6 +10,8 @@ import 'models/incident.dart';
 import 'utils/environment_config.dart';
 import 'utils/APIService.dart';
 
+enum TopologyViewType { map, logical }
+
 class Appstate extends ChangeNotifier {
   // Socket connection
   io.Socket? _socket;
@@ -22,6 +24,7 @@ class Appstate extends ChangeNotifier {
   
   // Network topology state
   NetworkTopology _topology = NetworkTopology.empty();
+  TopologyViewType _currentTopologyView = TopologyViewType.map;
   bool _isConnected = false;
   
   // Log widget state
@@ -50,6 +53,7 @@ class Appstate extends ChangeNotifier {
   io.Socket? get socket => _socket;
   List<Agent> get agents => List.unmodifiable(_agents);
   NetworkTopology get topology => _topology;
+  TopologyViewType get currentTopologyView => _currentTopologyView;
   bool get isConnected => _isConnected;
   List<LogEntry> get logs => _logs;
   bool get isLoadingLogs => _isLoadingLogs;
@@ -320,6 +324,13 @@ class Appstate extends ChangeNotifier {
     }
   }
   
+  // Toggle topology view
+  void toggleTopologyView() {
+    _currentTopologyView = _currentTopologyView == TopologyViewType.map
+        ? TopologyViewType.logical
+        : TopologyViewType.map;
+    notifyListeners();
+  }
   
   // Update logs from server data
   void _updateLogs(dynamic logsData) {

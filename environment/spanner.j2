@@ -209,16 +209,6 @@ spec:
        customer_id STRING(MAX),
        customer STRING(MAX) NOT NULL
      ) PRIMARY KEY(id)"
-  - "CREATE VIEW CurrentPhysicalRouter SQL SECURITY INVOKER AS SELECT * FROM PhysicalRouter WHERE valid_end_ts IS NULL"
-  - "CREATE VIEW CurrentPhysicalInterface SQL SECURITY INVOKER AS SELECT * FROM PhysicalInterface WHERE valid_end_ts IS NULL"
-  - "CREATE VIEW CurrentPhysicalLink SQL SECURITY INVOKER AS SELECT * FROM PhysicalLink WHERE valid_end_ts IS NULL"
-  - "CREATE VIEW CurrentL3VPNService SQL SECURITY INVOKER AS SELECT * FROM L3VPNService WHERE valid_end_ts IS NULL"
-  - "CREATE VIEW CurrentVRF SQL SECURITY INVOKER AS SELECT * FROM VRF WHERE valid_end_ts IS NULL"
-  - "CREATE VIEW CurrentBGPSession SQL SECURITY INVOKER AS SELECT * FROM BGPSession WHERE valid_end_ts IS NULL"
-  - "CREATE VIEW CurrentLogicalSubnet SQL SECURITY INVOKER AS SELECT * FROM LogicalSubnet WHERE valid_end_ts IS NULL"
-  - "CREATE VIEW CurrentNodeEmbedding SQL SECURITY INVOKER AS
-       SELECT * FROM NodeEmbedding ne1
-       WHERE timestamp = (SELECT MAX(timestamp) FROM NodeEmbedding ne2 WHERE ne1.node_id = ne2.node_id)"
   - "CREATE VIEW HasInterface_Edge SQL SECURITY INVOKER AS 
        SELECT 
          r.id AS router_id, r.valid_start_ts AS router_ts,
@@ -227,7 +217,8 @@ spec:
        JOIN PhysicalInterface i
        ON r.id = i.router_id
        AND r.valid_start_ts < IFNULL(i.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
-       AND IFNULL(r.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > i.valid_start_ts"
+       AND IFNULL(r.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > i.valid_start_ts
+       GROUP BY router_id, router_ts, interface_id, interface_ts"
   - "CREATE VIEW ConnectsTo_Edge SQL SECURITY INVOKER AS 
        SELECT 
          i.id AS interface_id, i.valid_start_ts AS interface_ts,
@@ -236,21 +227,24 @@ spec:
        JOIN Interface_Link il ON i.id = il.interface_id
        JOIN PhysicalLink l ON il.link_id = l.id
        WHERE i.valid_start_ts < IFNULL(l.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
-       AND IFNULL(i.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > l.valid_start_ts"
+       AND IFNULL(i.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > l.valid_start_ts
+       GROUP BY interface_id, interface_ts, link_id, link_ts"
   - "CREATE VIEW RouterHasEmbedding_Edge SQL SECURITY INVOKER AS
        SELECT
          r.id AS router_id, r.valid_start_ts AS router_ts,
          e.id AS embedding_id, e.timestamp AS embedding_ts
        FROM PhysicalRouter r
        JOIN NodeEmbedding e ON r.id = e.node_id
-       WHERE e.timestamp >= r.valid_start_ts AND e.timestamp < IFNULL(r.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))"
+       WHERE e.timestamp >= r.valid_start_ts AND e.timestamp < IFNULL(r.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
+       GROUP BY router_id, router_ts, embedding_id, embedding_ts"
   - "CREATE VIEW InterfaceHasEmbedding_Edge SQL SECURITY INVOKER AS
        SELECT
          i.id AS interface_id, i.valid_start_ts AS interface_ts,
          e.id AS embedding_id, e.timestamp AS embedding_ts
        FROM PhysicalInterface i
        JOIN NodeEmbedding e ON i.id = e.node_id
-       WHERE e.timestamp >= i.valid_start_ts AND e.timestamp < IFNULL(i.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))"
+       WHERE e.timestamp >= i.valid_start_ts AND e.timestamp < IFNULL(i.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
+       GROUP BY interface_id, interface_ts, embedding_id, embedding_ts"
   - "CREATE VIEW LinkedTo_Edge SQL SECURITY INVOKER AS 
        SELECT 
          l.id AS link_id, l.valid_start_ts AS link_ts,
@@ -259,13 +253,15 @@ spec:
        JOIN Interface_Link il ON l.id = il.link_id
        JOIN PhysicalInterface i ON il.interface_id = i.id
        WHERE l.valid_start_ts < IFNULL(i.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
-       AND IFNULL(l.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > i.valid_start_ts"
+       AND IFNULL(l.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > i.valid_start_ts
+       GROUP BY link_id, link_ts, interface_id, interface_ts"
   - "CREATE VIEW OwnedBy_Edge SQL SECURITY INVOKER AS
        SELECT
          vpn.id AS vpn_id, vpn.valid_start_ts AS vpn_ts,
          c.id AS customer_id
        FROM L3VPNService vpn
-       JOIN Customer c ON vpn.customer_id = c.id"
+       JOIN Customer c ON vpn.customer_id = c.id
+       GROUP BY vpn_id, vpn_ts, customer_id"
   - "CREATE VIEW RealizesVPN_Edge SQL SECURITY INVOKER AS
        SELECT
          vrf.id AS vrf_id, vrf.valid_start_ts AS vrf_ts,
@@ -274,7 +270,8 @@ spec:
        JOIN L3VPNService vpn
        ON vrf.vpn_id = vpn.id
        AND vrf.valid_start_ts < IFNULL(vpn.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
-       AND IFNULL(vrf.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > vpn.valid_start_ts"
+       AND IFNULL(vrf.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > vpn.valid_start_ts
+       GROUP BY vrf_id, vrf_ts, vpn_id, vpn_ts"
   - "CREATE VIEW LocatedOn_Edge SQL SECURITY INVOKER AS
        SELECT
          vrf.id AS vrf_id, vrf.valid_start_ts AS vrf_ts,
@@ -283,7 +280,8 @@ spec:
        JOIN PhysicalRouter r
        ON vrf.router_id = r.id
        AND vrf.valid_start_ts < IFNULL(r.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
-       AND IFNULL(vrf.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > r.valid_start_ts"
+       AND IFNULL(vrf.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > r.valid_start_ts
+       GROUP BY vrf_id, vrf_ts, router_id, router_ts"
   - "CREATE VIEW BelongsToVRF_Edge SQL SECURITY INVOKER AS
        SELECT
          bgp.id AS bgp_id, bgp.valid_start_ts AS bgp_ts,
@@ -292,7 +290,8 @@ spec:
        JOIN VRF vrf
        ON bgp.vrf_id = vrf.id
        AND bgp.valid_start_ts < IFNULL(vrf.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
-       AND IFNULL(bgp.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > vrf.valid_start_ts"
+       AND IFNULL(bgp.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > vrf.valid_start_ts
+       GROUP BY bgp_id, bgp_ts, vrf_id, vrf_ts"
   - "CREATE VIEW PeersWith_Edge SQL SECURITY INVOKER AS
        SELECT
          bgp1.id AS bgp1_id, bgp1.valid_start_ts AS bgp1_ts,
@@ -301,7 +300,8 @@ spec:
        JOIN BGP_Peering bp ON bgp1.id = bp.session_id_a
        JOIN BGPSession bgp2 ON bp.session_id_b = bgp2.id
        WHERE bgp1.valid_start_ts < IFNULL(bgp2.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
-       AND IFNULL(bgp1.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > bgp2.valid_start_ts"
+       AND IFNULL(bgp1.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > bgp2.valid_start_ts
+       GROUP BY bgp1_id, bgp1_ts, bgp2_id, bgp2_ts"
   - "CREATE VIEW AssociatedWith_Edge SQL SECURITY INVOKER AS
        SELECT
          i.id AS interface_id, i.valid_start_ts AS interface_ts,
@@ -310,7 +310,8 @@ spec:
        JOIN Subnet_Association sa ON i.id = sa.entity_id
        JOIN LogicalSubnet s ON sa.subnet_id = s.id
        WHERE i.valid_start_ts < IFNULL(s.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
-       AND IFNULL(i.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > s.valid_start_ts"
+       AND IFNULL(i.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > s.valid_start_ts
+       GROUP BY interface_id, interface_ts, subnet_id, subnet_ts"
   - "CREATE OR REPLACE PROPERTY GRAPH networkGraph
        NODE TABLES (
          PhysicalRouter,
@@ -330,37 +331,59 @@ spec:
          NodeEmbedding
        )
        EDGE TABLES (
-         HasInterface_Edge AS HasInterface
+         HasInterface_Edge 
+           AS HasInterface
+           KEY (router_id, router_ts, interface_id, interface_ts)
            SOURCE KEY (router_id, router_ts) REFERENCES PhysicalRouter (id, valid_start_ts)
            DESTINATION KEY (interface_id, interface_ts) REFERENCES PhysicalInterface (id, valid_start_ts),
-         ConnectsTo_Edge AS ConnectsTo
+         ConnectsTo_Edge 
+           AS ConnectsTo
+           KEY (interface_id, interface_ts, link_id, link_ts)
            SOURCE KEY (interface_id, interface_ts) REFERENCES PhysicalInterface (id, valid_start_ts)
            DESTINATION KEY (link_id, link_ts) REFERENCES PhysicalLink (id, valid_start_ts),
-         RouterHasEmbedding_Edge AS RouterHasEmbedding
+         RouterHasEmbedding_Edge 
+           AS RouterHasEmbedding
+           KEY (router_id, router_ts, embedding_id, embedding_ts)
            SOURCE KEY (router_id, router_ts) REFERENCES PhysicalRouter (id, valid_start_ts)
            DESTINATION KEY (embedding_id, embedding_ts) REFERENCES NodeEmbedding (id, timestamp),
-         InterfaceHasEmbedding_Edge AS InterfaceHasEmbedding
+         InterfaceHasEmbedding_Edge 
+           AS InterfaceHasEmbedding
+           KEY (interface_id, interface_ts, embedding_id, embedding_ts)
            SOURCE KEY (interface_id, interface_ts) REFERENCES PhysicalInterface (id, valid_start_ts)
            DESTINATION KEY (embedding_id, embedding_ts) REFERENCES NodeEmbedding (id, timestamp),
-         LinkedTo_Edge AS LinkedTo
+         LinkedTo_Edge 
+           AS LinkedTo
+           KEY (link_id, link_ts, interface_id, interface_ts)
            SOURCE KEY (link_id, link_ts) REFERENCES PhysicalLink (id, valid_start_ts)
            DESTINATION KEY (interface_id, interface_ts) REFERENCES PhysicalInterface (id, valid_start_ts),
-         OwnedBy_Edge AS OwnedBy
+         OwnedBy_Edge 
+           AS OwnedBy
+           KEY (vpn_id, vpn_ts, customer_id)
            SOURCE KEY (vpn_id, vpn_ts) REFERENCES L3VPNService (id, valid_start_ts)
            DESTINATION KEY (customer_id) REFERENCES Customer (id),
-         RealizesVPN_Edge AS RealizesVPN
+         RealizesVPN_Edge 
+           AS RealizesVPN
+           KEY (vrf_id, vrf_ts, vpn_id, vpn_ts)
            SOURCE KEY (vrf_id, vrf_ts) REFERENCES VRF (id, valid_start_ts)
            DESTINATION KEY (vpn_id, vpn_ts) REFERENCES L3VPNService (id, valid_start_ts),
-         LocatedOn_Edge AS LocatedOn
+         LocatedOn_Edge 
+           AS LocatedOn
+           KEY (vrf_id, vrf_ts, router_id, router_ts)
            SOURCE KEY (vrf_id, vrf_ts) REFERENCES VRF (id, valid_start_ts)
            DESTINATION KEY (router_id, router_ts) REFERENCES PhysicalRouter (id, valid_start_ts),
-         BelongsToVRF_Edge AS BelongsToVRF
+         BelongsToVRF_Edge 
+           AS BelongsToVRF
+           KEY (bgp_id, bgp_ts, vrf_id, vrf_ts)
            SOURCE KEY (bgp_id, bgp_ts) REFERENCES BGPSession (id, valid_start_ts)
            DESTINATION KEY (vrf_id, vrf_ts) REFERENCES VRF (id, valid_start_ts),
-         PeersWith_Edge AS PeersWith
+         PeersWith_Edge 
+           AS PeersWith
+           KEY (bgp1_id, bgp1_ts, bgp2_id, bgp2_ts)
            SOURCE KEY (bgp1_id, bgp1_ts) REFERENCES BGPSession (id, valid_start_ts)
            DESTINATION KEY (bgp2_id, bgp2_ts) REFERENCES BGPSession (id, valid_start_ts),
-         AssociatedWith_Edge AS AssociatedWith
+         AssociatedWith_Edge 
+           AS AssociatedWith
+           KEY (interface_id, interface_ts, subnet_id, subnet_ts)
            SOURCE KEY (interface_id, interface_ts) REFERENCES PhysicalInterface (id, valid_start_ts)
            DESTINATION KEY (subnet_id, subnet_ts) REFERENCES LogicalSubnet (id, valid_start_ts),
          Orders AS PlacedBy

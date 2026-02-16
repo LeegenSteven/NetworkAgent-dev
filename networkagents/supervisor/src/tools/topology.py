@@ -62,10 +62,15 @@ def fetch_physical_topology():
         gql_query = f"""
             GRAPH {GRAPH_NAME}
             MATCH (router:PhysicalRouter)
+            WHERE router.valid_end_ts IS NULL
             OPTIONAL MATCH (router) -[:HasInterface]-> (interface:PhysicalInterface)
+            WHERE interface.valid_end_ts IS NULL AND interface.name != 'eth0'
             OPTIONAL MATCH (interface) -[:ConnectsTo]-> (link:PhysicalLink)
+            WHERE link.valid_end_ts IS NULL
             OPTIONAL MATCH (link) -[:LinkedTo]-> (remote_interface:PhysicalInterface)
+            WHERE remote_interface.valid_end_ts IS NULL AND remote_interface.name != 'eth0'
             OPTIONAL MATCH (remote_interface) <-[:HasInterface]- (remote_router:PhysicalRouter)
+            WHERE remote_router.valid_end_ts IS NULL
             RETURN 
                 router.id AS router_id,
                 router.name AS router_name,
@@ -176,7 +181,9 @@ def fetch_router_details(router_id):
         gql_query = f"""
             GRAPH {GRAPH_NAME}
             MATCH (router:PhysicalRouter {{id: '{router_id}'}})
+            WHERE router.valid_end_ts IS NULL
             OPTIONAL MATCH (router) -[:HasInterface]-> (interface:PhysicalInterface)
+            WHERE interface.valid_end_ts IS NULL AND interface.name != 'eth0'
             RETURN 
                 router.id AS router_id,
                 router.name AS router_name,

@@ -5,6 +5,7 @@ import '../models/network_node.dart';
 import '../utils/environment_config.dart';
 import '../widgets/agui_chat_panel.dart';
 import '../widgets/topology/google_maps_topology.dart';
+import '../widgets/topology/logical_topology.dart';
 import '../widgets/markdown_drawer.dart';
 import '../widgets/log_widget.dart';
 import '../widgets/trace/trace_widget.dart';
@@ -258,6 +259,23 @@ class _NetworkDashboardState extends State<NetworkDashboard>
             onPressed: () => _toggleChat(),
             tooltip: 'Toggle Chat',
           ),
+          // Topology view toggle button
+          Consumer<Appstate>(
+            builder: (context, appState, child) {
+              return IconButton(
+                icon: Icon(
+                  appState.currentTopologyView == TopologyViewType.map
+                      ? Icons.map
+                      : Icons.device_hub,
+                  color: Colors.white,
+                ),
+                onPressed: () => appState.toggleTopologyView(),
+                tooltip: appState.currentTopologyView == TopologyViewType.map
+                    ? 'Switch to Logical View'
+                    : 'Switch to Map View',
+              );
+            },
+          ),
           // Trace toggle button
           IconButton(
             icon: Icon(
@@ -373,9 +391,18 @@ class _NetworkDashboardState extends State<NetworkDashboard>
                         'topology-${appState.topology.nodes.length}-'
                         '${appState.topology.connections.length}',
                       );
-                      return GoogleMapsTopologyWidget(
-                        key: topologyKey,
-                        topology: appState.topology,
+                      
+                      return AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        child: appState.currentTopologyView == TopologyViewType.map
+                            ? GoogleMapsTopologyWidget(
+                                key: ValueKey('map_$topologyKey'),
+                                topology: appState.topology,
+                              )
+                            : LogicalTopologyWidget(
+                                key: ValueKey('logical_$topologyKey'),
+                                topology: appState.topology,
+                              ),
                       );
                     },
                   ),

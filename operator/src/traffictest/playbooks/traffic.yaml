@@ -68,22 +68,21 @@
           debug:
             msg: "Generated config file: {{ config_file }}"
 
-        - name: Stop any existing iperf3 server on destination device
-          shell: "docker exec {{ destination_device }} pkill -f 'iperf3.*-s.*-p {{ port }}' || true"
+        - name: Check if iperf3 server is already running on destination
+          shell: "docker exec {{ destination_device }} pgrep -f 'iperf3.*-s.*-p {{ port }}' || echo 'not_running'"
+          register: server_check
           failed_when: false
 
-        - name: Wait for existing iperf3 processes to stop
-          pause:
-            seconds: 2
-
-        - name: Start iperf3 server on destination device
+        - name: Start iperf3 server on destination device (only if not running)
           shell: "docker exec {{ destination_device }} iperf3 -s -p {{ port }} -D --logfile /tmp/iperf3_server_{{ port }}.log"
+          when: server_check.stdout == "not_running"
           register: iperf3_server_start
           failed_when: false
 
         - name: Wait for iperf3 server to start
           pause:
             seconds: 3
+          when: server_check.stdout == "not_running"
 
         - name: Verify iperf3 server is running
           shell: |
@@ -287,17 +286,40 @@
             '
           failed_when: false
 
-        - name: Wait for processes to terminate and zombies to be reaped
+        - name: Wait for processes to terminate
           pause:
-            seconds: 3
+            seconds: 2
 
-        - name: Force reap any remaining zombie processes
+        - name: Reap zombie processes in container
           shell: |
             docker exec {{ source_device }} sh -c '
-              # Send SIGCHLD to init process to trigger zombie reaping
-              kill -CHLD 1 2>/dev/null || true
+              # Kill any remaining zombie iperf3 processes
+              # First, find zombie processes
+              ZOMBIES=$(ps aux | grep iperf3 | grep defunct | awk "{print \$2}")
+              
+              # If zombies exist, force their parent to reap them
+              if [ -n "$ZOMBIES" ]; then
+                for pid in $ZOMBIES; do
+                  # Get parent PID
+                  PPID=$(ps -o ppid= -p $pid 2>/dev/null | tr -d " ")
+                  if [ -n "$PPID" ] && [ "$PPID" != "1" ]; then
+                    # Signal parent to reap child
+                    kill -CHLD $PPID 2>/dev/null || true
+                  fi
+                done
+                sleep 1
+              fi
+              
+              # Final cleanup: kill any remaining process references
+              pkill -9 -f "iperf3" 2>/dev/null || true
             '
           failed_when: false
+          register: zombie_cleanup
+
+        - name: Debug zombie cleanup
+          debug:
+            msg: "Zombie cleanup output: {{ zombie_cleanup.stdout }}"
+          when: zombie_cleanup.stdout != ""
 
         # - name: Stop local monitoring process
         #   shell: |

@@ -51,20 +51,37 @@ spec:
             spec:
               type: object
               required:
-                - source_device
+                - source_devices
                 - destination_device
                 - protocol
               properties:
-                source_device:
-                  type: string
+                source_devices:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
                   description: |
-                    Name of the source device that will initiate the traffic test.
+                    List of source devices that will initiate traffic tests to the destination.
+                    All sources use the same traffic pattern, bandwidth, and configuration.
+                    
+                    Multi-Source Use Cases:
+                    - Load testing: Multiple clients sending to single server to test aggregate capacity
+                    - Hub testing: Multiple spoke sites sending to central hub simultaneously
+                    - Aggregate bandwidth measurement: Combined throughput from multiple sources
+                    - Network stress testing: Simulate realistic multi-client scenarios
+                    - Capacity planning: Understand how network handles concurrent traffic flows
                     
                     Device Selection:
-                    - Must reference a Device resource defined in the same namespace
-                    - Typically a Customer Premise Equipment (CPE) or test endpoint
-                    - Device must have network connectivity and traffic generation capabilities
-                    - Should be strategically located to test specific network paths
+                    - Each device must reference a Device resource defined in the same namespace
+                    - All devices must have network connectivity and traffic generation capabilities
+                    - Devices should be reachable from the destination through the network
+                    - Consider network topology when selecting multiple sources
+                    
+                    Traffic Pattern:
+                    - All sources use identical traffic configuration (pattern, bandwidth, duration)
+                    - Traffic generators run independently on each source
+                    - Metrics collected per-source and aggregated for total view
+                    - Each source maintains separate iperf3 connection to destination
                     
                     Common Source Device Types:
                     - Customer CPE routers for end-to-end connectivity testing
@@ -73,9 +90,10 @@ spec:
                     - Application servers for service-specific traffic simulation
                     
                     Examples:
-                    - "customer-a-cpe" - Customer A's main site CPE device
-                    - "branch-office-router" - Branch office network device
-                    - "test-probe-east" - Dedicated test probe in eastern region
+                    - ["customer-a-cpe"] - Single source (equivalent to previous single-device behavior)
+                    - ["branch-1", "branch-2", "branch-3"] - Three branch offices testing hub
+                    - ["probe-east", "probe-west", "probe-central"] - Geographic distribution test
+                    - ["client-1", "client-2", "client-3", "client-4", "client-5"] - Load testing with 5 clients
                 destination_device:
                   type: string
                   description: |
@@ -793,11 +811,119 @@ spec:
                 
                 Status Tracking provides:
                 - Real-time test execution phase and progress monitoring
-                - Performance metrics and measurement results
+                - Performance metrics and measurement results per source device
+                - Aggregate metrics across all source devices
                 - Error reporting and troubleshooting information
                 - Test lifecycle management and completion status
                 - Historical data for analysis and reporting
               properties:
+                source_count:
+                  type: integer
+                  description: |
+                    Total number of source devices participating in the traffic test.
+                    
+                    Provides quick overview of test scale:
+                    - Single source: Traditional point-to-point test
+                    - Multiple sources: Load testing or aggregate capacity measurement
+                    - Useful for capacity planning and resource allocation
+                source_status:
+                  type: object
+                  additionalProperties:
+                    type: object
+                    description: Per-source device status and metrics
+                    properties:
+                      phase:
+                        type: string
+                        enum:
+                          - Pending
+                          - Running
+                          - Completed
+                          - Failed
+                        description: Current phase of this specific source device
+                      message:
+                        type: string
+                        description: Status message specific to this source device
+                      metrics:
+                        type: object
+                        description: Performance metrics for this source device
+                        properties:
+                          throughput_bps:
+                            type: number
+                            description: Throughput from this source in bits per second
+                          latency_ms:
+                            type: number
+                            description: Latency measured from this source in milliseconds
+                          packet_loss_pct:
+                            type: number
+                            description: Packet loss percentage from this source
+                          active_connections:
+                            type: integer
+                            description: Number of active connections from this source
+                          retransmissions:
+                            type: integer
+                            description: Number of retransmissions from this source
+                  description: |
+                    Per-source device status and metrics tracking.
+                    
+                    Structure: Map of device name to status object
+                    - Key: Source device name (e.g., "branch-1")
+                    - Value: Status object with phase, message, and metrics
+                    
+                    Use Cases:
+                    - Identify which sources are performing well vs struggling
+                    - Detect individual source failures without failing entire test
+                    - Compare performance across different network paths
+                    - Debug connectivity issues for specific sources
+                    
+                    Example:
+                    source_status:
+                      branch-1:
+                        phase: Running
+                        metrics:
+                          throughput_bps: 98000000
+                          latency_ms: 12.5
+                      branch-2:
+                        phase: Running
+                        metrics:
+                          throughput_bps: 95000000
+                          latency_ms: 15.2
+                aggregate_metrics:
+                  type: object
+                  description: |
+                    Aggregated performance metrics across all source devices.
+                    
+                    Aggregation Methods:
+                    - Throughput: Sum of all source throughputs (total bandwidth)
+                    - Latency: Average across all sources
+                    - Packet Loss: Average across all sources
+                    - Connections: Sum of all source connections
+                    
+                    Use Cases:
+                    - Total network capacity measurement
+                    - Overall SLA compliance verification
+                    - Aggregate performance trending
+                    - Capacity planning and forecasting
+                  properties:
+                    total_throughput_bps:
+                      type: number
+                      description: |
+                        Sum of throughput from all source devices in bits per second.
+                        Represents total aggregate bandwidth to destination.
+                    avg_latency_ms:
+                      type: number
+                      description: |
+                        Average latency across all source devices in milliseconds.
+                        Provides overall network latency characteristic.
+                    avg_packet_loss_pct:
+                      type: number
+                      description: |
+                        Average packet loss percentage across all source devices.
+                        Indicates overall network quality.
+                    total_connections:
+                      type: integer
+                      description: |
+                        Sum of active connections from all source devices.
+                        Represents total concurrent sessions.
                 phase:
                   type: string
                   enum:
@@ -1082,9 +1208,10 @@ spec:
         - name: Phase
           type: string
           jsonPath: .status.phase
-        - name: Source
+        - name: Sources
           type: string
-          jsonPath: .spec.source_device
+          jsonPath: .status.source_count
+          description: Number of source devices
         - name: Destination
           type: string
           jsonPath: .spec.destination_device

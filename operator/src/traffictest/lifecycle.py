@@ -29,49 +29,91 @@ async def create_traffic_test_handler(body, spec, name, namespace, uid, logger, 
 
     try:
         # Validate required Devices exist and are ready
-        source_device = spec.get('source_device')
+        source_devices = spec.get('source_devices', [])
         destination_device = spec.get('destination_device')
         
-        if not source_device or not destination_device:
-            error_msg = "Both source_device and destination_device are required"
+        if not source_devices or not destination_device:
+            error_msg = "Both source_devices (array) and destination_device are required"
             logger.error(f"TrafficTest {name}: {error_msg}")
             await update_status(name, namespace, "Failed", error_msg)
             raise kopf.PermanentError(error_msg)
         
-        # Check if the required Devices are ready
-        source_ready, source_ip = await check_device_ready(source_device, namespace)
+        # Check if all source devices are ready and assign unique ports
+        # iperf3 can only handle ONE client per server instance, so each source needs its own port
+        base_port = spec.get('port', 5201)
+        source_info = {}
+        all_ready = True
+        not_ready_devices = []
+        
+        for index, source_device in enumerate(source_devices):
+            ready, device_ip = await check_device_ready(source_device, namespace)
+            # Assign unique port per source (e.g., 5201, 5202, 5203, ...)
+            assigned_port = base_port + index
+            source_info[source_device] = {
+                'ready': ready,
+                'ip': device_ip,
+                'port': assigned_port  # Each source gets its own port
+            }
+            if not ready:
+                all_ready = False
+                not_ready_devices.append(source_device)
+        
+        logger.info(f"Port assignments: {[(dev, info['port']) for dev, info in source_info.items()]}")
+        
+        # Check if destination device is ready
         dest_ready, dest_ip = await check_device_ready(destination_device, namespace)
 
-        if not source_ready or not dest_ready:
-            error_msg = f"Waiting for Devices to be ready (source: {source_ready}, dest: {dest_ready})"
+        if not all_ready or not dest_ready:
+            not_ready_list = not_ready_devices + ([destination_device] if not dest_ready else [])
+            error_msg = f"Waiting for Devices to be ready: {', '.join(not_ready_list)}"
             logger.warning(f"TrafficTest {name}: {error_msg}")
-            await update_status(name, namespace, "Pending", error_msg)
+            await update_status(name, namespace, "Pending", error_msg, 
+                              additional_data={'source_count': len(source_devices)})
             
             # Raise temporary error to retry later
             raise kopf.TemporaryError(error_msg, delay=30)
 
         # Update status to indicate creation has started
-        await update_status(name, namespace, "Deploying", "Starting traffic test deployment")
+        await update_status(name, namespace, "Deploying", 
+                          f"Starting traffic test deployment for {len(source_devices)} source(s)",
+                          additional_data={'source_count': len(source_devices)})
 
-        # Add test name and IPs to spec for tracking
+        # Add test name and source info to spec for tracking
         spec_with_name = dict(spec)
         spec_with_name['test_name'] = name
-        spec_with_name['source_ip'] = source_ip
+        spec_with_name['source_info'] = source_info  # {device_name: {ready: bool, ip: str}}
         spec_with_name['destination_ip'] = dest_ip
 
         # Create the TrafficTest using Ansible
         result = await create_traffic_test(ip_address, spec_with_name)
 
         if result['success']:
+            # Initialize per-source status
+            source_statuses = {}
+            for source_device in source_devices:
+                source_statuses[source_device] = {
+                    'phase': 'Running',
+                    'message': 'Traffic generator started',
+                    'metrics': {}
+                }
+            
             # Update status to running
             await update_status(
                 name, namespace, "Running", 
-                f"Traffic test started successfully at {result.get('start_time', 'unknown time')}",
+                f"Traffic test started successfully with {len(source_devices)} source(s) at {result.get('start_time', 'unknown time')}",
                 additional_data={
                     'start_time': result.get('start_time'),
+                    'source_count': len(source_devices),
+                    'source_status': source_statuses,
+                    'aggregate_metrics': {
+                        'total_throughput_bps': 0,
+                        'avg_latency_ms': 0,
+                        'avg_packet_loss_pct': 0,
+                        'total_connections': 0
+                    }
                 }
             )
-            logger.info(f"Successfully started TrafficTest {name}")
+            logger.info(f"Successfully started TrafficTest {name} with {len(source_devices)} source device(s)")
             
             # Start background task to monitor the test
             # asyncio.create_task(monitor_traffic_test(name, namespace, spec_with_name, ip_address))

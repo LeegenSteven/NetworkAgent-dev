@@ -295,7 +295,7 @@ class _LogicalTopologyWidgetState extends State<LogicalTopologyWidget>
                                           backgroundColor: node.getColor(),
                                           radius: 20,
                                           child: Icon(
-                                             node.getIcon(),
+                                             Icons.device_hub,
                                              color: Colors.white,
                                              size: 24,
                                           ),

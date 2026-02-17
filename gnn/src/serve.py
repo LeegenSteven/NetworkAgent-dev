@@ -245,13 +245,7 @@ async def run_inference():
                         embedding_id = str(uuid.uuid4())
                         
                         mutations.append(
-                            spanner.Mutation.insert(
-                                table="NodeEmbedding",
-                                columns=("id", "node_id", "node_type", "embedding", "timestamp"),
-                                values=[
-                                    (embedding_id, nid, node_type, emb, spanner_timestamp)
-                                ]
-                            )
+                            (embedding_id, nid, node_type, emb, spanner_timestamp)
                         )
             
             if mutations:
@@ -263,7 +257,11 @@ async def run_inference():
                 # Check if the table exists, assuming it might not yet or using a try-except
                 try:
                     with database.batch() as batch:
-                        batch.mutate(mutations)
+                        batch.insert(
+                            table="NodeEmbedding",
+                            columns=("id", "node_id", "node_type", "embedding", "timestamp"),
+                            values=mutations
+                        )
                     logger.info("Successfully wrote embeddings to Spanner.")
                 except Exception as e:
                     logger.error(f"Failed to write embeddings to Spanner: {e}")

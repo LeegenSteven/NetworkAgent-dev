@@ -180,18 +180,43 @@ class GraphBuilder:
         if self.text_model is None:
             logger.debug("NetBERT model not available, returning zero embedding")
             return np.zeros(self.text_embed_dim)
+        
+        # Ensure text is a valid string
+        if text is None or text == "":
+            logger.debug("Empty or None config text, returning zero embedding")
+            return np.zeros(self.text_embed_dim)
+        
+        # Handle different input types
+        if not isinstance(text, str):
+            # Handle Spanner JsonObject
+            if hasattr(text, '__class__') and 'JsonObject' in text.__class__.__name__:
+                try:
+                    # Convert JsonObject to JSON string
+                    text = json.dumps(dict(text))
+                    logger.debug("Converted Spanner JsonObject to JSON string")
+                except Exception as e:
+                    logger.warning(f"Failed to convert JsonObject to JSON: {e}, using str() instead")
+                    text = str(text)
+            # Handle dict or other objects
+            elif isinstance(text, dict):
+                text = json.dumps(text)
+                logger.debug("Converted dict to JSON string")
+            else:
+                logger.warning(f"Config text is not a string (type: {type(text)}), converting to string")
+                text = str(text)
+        
         try:
             inputs = self.tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=128)
             with torch.no_grad():
                 outputs = self.text_model(**inputs)
             embedding = outputs.last_hidden_state[:, 0, :].squeeze().numpy()
             if np.isnan(embedding).any():
-                logger.warning("NaN values detected in embedding, returning zero embedding")
+                logger.warning("NaN values detected in embedding, replacing with zero embedding")
                 return np.zeros(self.text_embed_dim)
             logger.debug(f"Generated config embedding of shape: {embedding.shape}")
             return embedding
         except Exception as e:
-            logger.error(f"Error generating config embedding: {e}")
+            logger.error(f"Error generating config embedding for text type {type(text)}: {e}")
             return np.zeros(self.text_embed_dim)
 
     def fit_scalers(self, snapshot_objects):

@@ -133,15 +133,16 @@ def load_model():
         logger.warning(f"Model file not found at {MODEL_PATH}")
 
 
-async def inference(request):
+async def run_inference():
     global model, gb
-    logger.info("Received inference request")
+    logger.info("Executing inference run")
         
     if not model or not gb:
         # Try to reload
         load_model()
         if not model:
-            return web.json_response({'error': 'Model not available'}, status=503)
+            logger.error("Model not available for inference")
+            return {'error': 'Model not available'}
 
     try:
         # Fetch the latest snapshot from Spanner
@@ -159,7 +160,8 @@ async def inference(request):
         data = dataset.fetch_snapshot(latest_ts)
         
         if not data["nodes"]:
-            return web.json_response({'error': 'No data found in Spanner snapshot'}, status=404)
+            logger.warning("No data found in Spanner snapshot")
+            return {'error': 'No data found in Spanner snapshot'}
 
         # Process snapshot
         hdata, input_dims = gb.process_snapshot(data)
@@ -258,26 +260,64 @@ async def inference(request):
                 instance = spanner_client.instance(SPANNER_INSTANCE)
                 database = instance.database(SPANNER_DATABASE)
                 
-                with database.batch() as batch:
-                    batch.mutate(mutations)
-                    
-                logger.info("Successfully wrote embeddings to Spanner.")
+                # Check if the table exists, assuming it might not yet or using a try-except
+                try:
+                    with database.batch() as batch:
+                        batch.mutate(mutations)
+                    logger.info("Successfully wrote embeddings to Spanner.")
+                except Exception as e:
+                    logger.error(f"Failed to write embeddings to Spanner: {e}")
             
             if node_count > 0:
                 results["average_score"] = total_loss / node_count
                 
             results["global_anomaly"] = results["average_score"] > ANOMALY_THRESHOLD
             
-            return web.json_response(results)
+            return results
             
     except Exception as e:
-        return web.json_response({'error': str(e)}, status=500)
+        logger.error(f"Inference run failed: {e}", exc_info=True)
+        return {'error': str(e)}
+
+async def inference_handler(request):
+    logger.info("Received REST inference request")
+    results = await run_inference()
+    if 'error' in results:
+        status = 500 if results['error'] != 'No data found in Spanner snapshot' else 404
+        if results['error'] == 'Model not available': status = 503
+        return web.json_response(results, status=status)
+    return web.json_response(results)
+
+async def inference_loop(app):
+    import asyncio
+    logger.info("Starting background inference loop (every 60s)")
+    while True:
+        try:
+            await run_inference()
+        except asyncio.CancelledError:
+            logger.info("Background inference loop cancelled")
+            break
+        except Exception as e:
+            logger.error(f"Error in background inference loop: {e}", exc_info=True)
+        await asyncio.sleep(60)
+
+async def start_background_tasks(app):
+    import asyncio
+    app['inference_task'] = asyncio.create_task(inference_loop(app))
+
+async def cleanup_background_tasks(app):
+    app['inference_task'].cancel()
+    import asyncio
+    await asyncio.gather(app['inference_task'], return_exceptions=True)
 
 if __name__ == "__main__":
     # Load model on start
     load_model()
     
-    inference_route = app.router.add_post('/inference', inference)
+    app.on_startup.append(start_background_tasks)
+    app.on_cleanup.append(cleanup_background_tasks)
+    
+    inference_route = app.router.add_post('/inference', inference_handler)
     
     # Add CORS to API routes
     cors.add(inference_route)

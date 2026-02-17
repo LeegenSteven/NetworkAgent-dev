@@ -19,9 +19,9 @@ GCS_BUCKET = os.getenv("GCS_BUCKET_NAME", "network-model-artifacts")
 
 MODEL_SAVE_PATH = "model.pth"
 SCALER_PATH = "scalers.pkl"
-EPOCHS = 5
+EPOCHS = 50
 LEARNING_RATE = 0.001
-TRAINING_SNAPSHOTS = 4
+TRAINING_SNAPSHOTS = 100
 INTERVAL_MINUTES = 1
 
 def upload_blob(bucket_name, source_file_name, destination_blob_name):
@@ -106,6 +106,7 @@ def run_training_pipeline():
         model.train()
         
         for epoch in range(EPOCHS):
+            logger.info(f"epoch {epoch}")
             total_loss = 0
             hidden_state = None 
             

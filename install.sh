@@ -640,6 +640,15 @@ Start()
     echo "Starting the network agent services"
     echo "####################################"
 
+    # Create bucket
+    echo "###########################"
+    echo "Create GNN Bucket          "
+    echo "###########################"
+    gcloud storage buckets describe gs://network-model-artifacts --location=$GOOGLE_REGION > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        gcloud storage buckets create gs://network-model-artifacts --location=$GOOGLE_REGION --project=$GOOGLE_PROJECT
+    fi
+
    # Create artifact repository
     echo "###########################"
     echo "Create Artifact Repository "

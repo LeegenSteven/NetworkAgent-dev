@@ -149,6 +149,8 @@ spec:
       node_id STRING(MAX) NOT NULL,
       node_type STRING(MAX) NOT NULL,
       embedding ARRAY<FLOAT64>,
+      anomaly_score FLOAT64,
+      root_cause JSON,
       timestamp TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true)
     ) PRIMARY KEY (node_id, timestamp DESC)"
   - "CREATE TABLE Incident (

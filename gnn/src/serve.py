@@ -233,20 +233,25 @@ async def run_inference():
             spanner_timestamp = spanner.COMMIT_TIMESTAMP
             import uuid
             
-            for node_type, recon_x in recon_dict.items():
-                if state_dict and node_type in state_dict:
-                    embeddings = state_dict[node_type].squeeze(0).tolist()
-                    rev_id_map = {v: k for k, v in gb.global_id_map[node_type].items()}
+            # Use results["nodes"] which already contains all computed info
+            for node in results["nodes"]:
+                if "embedding" not in node:
+                    continue
                     
-                    for i in range(len(embeddings)):
-                        if i not in rev_id_map: continue
-                        nid = rev_id_map[i]
-                        emb = embeddings[i]
-                        embedding_id = str(uuid.uuid4())
-                        
-                        mutations.append(
-                            (embedding_id, nid, node_type, emb, spanner_timestamp)
-                        )
+                embedding_id = str(uuid.uuid4())
+                nid = node["id"]
+                node_type = node["type"]
+                emb = node["embedding"]
+                score = node["score"]
+                # Spanner JSON column expects a dict/list or None.
+                explanation = node.get("explanation") 
+                
+                # Explanation might be a dict, ensure it's JSON serializable if wrapper objects exist
+                # But typically it's just a dict from explain_node_anomaly
+                
+                mutations.append(
+                    (embedding_id, nid, node_type, emb, score, explanation, spanner_timestamp)
+                )
             
             if mutations:
                 logger.info(f"Writing {len(mutations)} embeddings to Spanner from inference...")
@@ -259,7 +264,7 @@ async def run_inference():
                     with database.batch() as batch:
                         batch.insert(
                             table="NodeEmbedding",
-                            columns=("id", "node_id", "node_type", "embedding", "timestamp"),
+                            columns=("id", "node_id", "node_type", "embedding", "anomaly_score", "root_cause", "timestamp"),
                             values=mutations
                         )
                     logger.info("Successfully wrote embeddings to Spanner.")
@@ -308,6 +313,98 @@ async def cleanup_background_tasks(app):
     import asyncio
     await asyncio.gather(app['inference_task'], return_exceptions=True)
 
+async def get_snapshots_handler(request):
+    try:
+        spanner_client = spanner.Client()
+        instance = spanner_client.instance(SPANNER_INSTANCE)
+        database = instance.database(SPANNER_DATABASE)
+        
+        query = "SELECT DISTINCT timestamp FROM NodeEmbedding ORDER BY timestamp DESC LIMIT 100"
+        
+        snapshots = []
+        with database.snapshot() as snapshot:
+            results = snapshot.execute_sql(query)
+            for row in results:
+                # Spanner returns datetime objects
+                ts = row[0]
+                if ts:
+                    snapshots.append(ts.isoformat())
+                    
+        return web.json_response({"snapshots": snapshots})
+    except Exception as e:
+        logger.error(f"Failed to fetch snapshots: {e}", exc_info=True)
+        return web.json_response({'error': str(e)}, status=500)
+
+async def get_anomalies_handler(request):
+    try:
+        limit = int(request.query.get('limit', 50))
+        timestamp_str = request.query.get('timestamp')
+        
+        spanner_client = spanner.Client()
+        instance = spanner_client.instance(SPANNER_INSTANCE)
+        database = instance.database(SPANNER_DATABASE)
+        
+        params = {"limit": limit}
+        param_types = {"limit": spanner.param_types.INT64}
+        
+        if timestamp_str:
+            # Parse timestamp
+            # Python 3.7+ fromisoformat handles simple ISO strings, but might fail on Z suffix or others if not careful.
+            # Spanner expects passing a timestamp param or string? 
+            # Spanner params can take datetime objects.
+            try:
+                # Handle 'Z' if present
+                if timestamp_str.endswith('Z'):
+                    timestamp_str = timestamp_str[:-1] + '+00:00'
+                ts = datetime.datetime.fromisoformat(timestamp_str)
+                params["timestamp"] = ts
+                param_types["timestamp"] = spanner.param_types.TIMESTAMP
+                
+                query = """
+                    SELECT e.node_id, e.node_type, e.anomaly_score, e.root_cause, 
+                           COALESCE(r.name, i.name) as name, e.timestamp
+                    FROM NodeEmbedding e
+                    LEFT JOIN PhysicalRouter r ON e.node_id = r.id
+                    LEFT JOIN PhysicalInterface i ON e.node_id = i.id
+                    WHERE e.timestamp = @timestamp
+                    ORDER BY e.anomaly_score DESC
+                    LIMIT @limit
+                """
+            except ValueError:
+                 return web.json_response({'error': 'Invalid timestamp format'}, status=400)
+        else:
+            # Latest
+            query = """
+                SELECT e.node_id, e.node_type, e.anomaly_score, e.root_cause, 
+                       COALESCE(r.name, i.name) as name, e.timestamp
+                FROM NodeEmbedding e
+                LEFT JOIN PhysicalRouter r ON e.node_id = r.id
+                LEFT JOIN PhysicalInterface i ON e.node_id = i.id
+                WHERE e.timestamp = (SELECT MAX(timestamp) FROM NodeEmbedding)
+                ORDER BY e.anomaly_score DESC
+                LIMIT @limit
+            """
+            
+        anomalies = []
+        with database.snapshot() as snapshot:
+            results = snapshot.execute_sql(query, params=params, param_types=param_types)
+            for row in results:
+                # row: node_id, node_type, anomaly_score, root_cause, name, timestamp
+                anomalies.append({
+                    "node_id": row[0],
+                    "node_type": row[1],
+                    "anomaly_score": row[2],
+                    "root_cause": row[3], # JSON/dict
+                    "name": row[4] if row[4] else "Unknown",
+                    "timestamp": row[5].isoformat() if row[5] else None
+                })
+                
+        return web.json_response({"anomalies": anomalies})
+            
+    except Exception as e:
+        logger.error(f"Failed to fetch anomalies: {e}", exc_info=True)
+        return web.json_response({'error': str(e)}, status=500)
+
 if __name__ == "__main__":
     # Load model on start
     load_model()
@@ -316,9 +413,13 @@ if __name__ == "__main__":
     app.on_cleanup.append(cleanup_background_tasks)
     
     inference_route = app.router.add_post('/inference', inference_handler)
+    snapshots_route = app.router.add_get('/snapshots', get_snapshots_handler)
+    anomalies_route = app.router.add_get('/anomalies', get_anomalies_handler)
     
     # Add CORS to API routes
     cors.add(inference_route)
+    cors.add(snapshots_route)
+    cors.add(anomalies_route)
 
     logger.info("starting gnn agent...")
     web.run_app(app, port=8080)

@@ -19,7 +19,7 @@ import aiohttp_cors
 from aiohttp import web
 from agent.host_agent import HostAgent
 from endpoints.socketendpoint import SocketEndpoint
-from tools.topology import fetch_physical_topology, fetch_router_details
+from tools.topology import fetch_physical_topology, fetch_router_details, fetch_snapshots, fetch_anomalies
 from tools.metrics import (
     fetch_all_last_metrics,
     fetch_all_metrics,
@@ -103,6 +103,12 @@ class RestEndpoint:
         getRouterDetailsRoute = self.app.router.add_get("/router/{router_id}", self.getRouterDetails)
         self.cors.add(getRouterDetailsRoute, corsConfig)
 
+        getSnapshotsRoute = self.app.router.add_get("/snapshots", self.getSnapshots)
+        self.cors.add(getSnapshotsRoute, corsConfig)
+
+        getAnomaliesRoute = self.app.router.add_get("/anomalies", self.getAnomalies)
+        self.cors.add(getAnomaliesRoute, corsConfig)
+
     #################################################################
     # Topology endpoints
     #################################################################
@@ -158,6 +164,60 @@ class RestEndpoint:
             logger.error(f"Error fetching router details: {str(e)}", exc_info=True)
             return web.json_response(
                 {"error": f"Error fetching router details: {str(e)}"},
+                status=500
+            )
+
+    #################################################################
+    # Anomalies and Snapshots
+    #################################################################
+    async def getSnapshots(self, request):
+        """
+        Get the list of available network snapshot timestamps.
+        
+        Returns:
+            aiohttp.web.Response: JSON response with snapshots array
+        """
+        logger.info("REST endpoint: get snapshots")
+        try:
+            snapshots_data = fetch_snapshots()
+            if 'error' in snapshots_data:
+                return web.json_response(snapshots_data, status=500)
+            return web.json_response(snapshots_data)
+        except Exception as e:
+            logger.error(f"Error fetching snapshots: {str(e)}", exc_info=True)
+            return web.json_response(
+                {"error": f"Error fetching snapshots: {str(e)}"},
+                status=500
+            )
+
+    async def getAnomalies(self, request):
+        """
+        Get the top anomalies for a specific timestamp or the latest snapshot.
+        
+        Args:
+            request: HTTP request with optional query params 'limit' and 'timestamp'
+            
+        Returns:
+            aiohttp.web.Response: JSON response with anomalies array
+        """
+        logger.info("REST endpoint: get anomalies")
+        try:
+            limit = int(request.query.get('limit', 50))
+            timestamp_str = request.query.get('timestamp')
+            
+            anomalies_data = fetch_anomalies(limit=limit, timestamp_str=timestamp_str)
+            
+            if 'error' in anomalies_data:
+                status_code = 400 if anomalies_data['error'] == 'Invalid timestamp format' else 500
+                return web.json_response(anomalies_data, status=status_code)
+                
+            return web.json_response(anomalies_data)
+        except ValueError:
+            return web.json_response({"error": "Invalid limit parameter"}, status=400)
+        except Exception as e:
+            logger.error(f"Error fetching anomalies: {str(e)}", exc_info=True)
+            return web.json_response(
+                {"error": f"Error fetching anomalies: {str(e)}"},
                 status=500
             )
 

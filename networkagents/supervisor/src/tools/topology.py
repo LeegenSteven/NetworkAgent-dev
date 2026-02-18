@@ -16,6 +16,7 @@ from google.cloud import spanner
 import logging
 from agent_library import get_credentials
 import json as json
+import datetime
 
 SPANNER_INSTANCE = 'networktopology-instance'
 SPANNER_DATABASE = 'networktopology-db'
@@ -318,3 +319,90 @@ def build_graph(database, edge_label=None):
     except Exception as e:
         logger.error(f"Error building graph: {e}", exc_info=True)
         return [], False
+
+#####################################################################################
+# Anomalies & Snapshots
+#####################################################################################
+
+def fetch_snapshots():
+    """
+    Fetch available snapshots from the Spanner database.
+    """
+    logger.info("Fetching snapshots")
+    try:
+        database = spanner_connect()
+        query = "SELECT DISTINCT timestamp FROM NodeEmbedding ORDER BY timestamp DESC LIMIT 100"
+        
+        snapshots = []
+        with database.snapshot() as snapshot:
+            results = snapshot.execute_sql(query)
+            for row in results:
+                ts = row[0]
+                if ts:
+                    snapshots.append(ts.isoformat())
+                    
+        return {"snapshots": snapshots}
+    except Exception as e:
+        logger.error(f"Failed to fetch snapshots: {e}", exc_info=True)
+        return {"error": str(e)}
+
+def fetch_anomalies(limit: int = 50, timestamp_str: str = None):
+    """
+    Fetch top anomalies from NodeEmbedding.
+    """
+    logger.info(f"Fetching anomalies (limit={limit}, timestamp={timestamp_str})")
+    try:
+        database = spanner_connect()
+        
+        params = {"limit": limit}
+        param_types = {"limit": spanner.param_types.INT64}
+        
+        if timestamp_str:
+            try:
+                if timestamp_str.endswith('Z'):
+                    timestamp_str = timestamp_str[:-1] + '+00:00'
+                ts = datetime.datetime.fromisoformat(timestamp_str)
+                params["timestamp"] = ts
+                param_types["timestamp"] = spanner.param_types.TIMESTAMP
+                
+                query = """
+                    SELECT e.node_id, e.node_type, e.anomaly_score, e.root_cause, 
+                           COALESCE(r.name, i.name) as name, e.timestamp
+                    FROM NodeEmbedding e
+                    LEFT JOIN PhysicalRouter r ON e.node_id = r.id
+                    LEFT JOIN PhysicalInterface i ON e.node_id = i.id
+                    WHERE e.timestamp = @timestamp
+                    ORDER BY e.anomaly_score DESC
+                    LIMIT @limit
+                """
+            except ValueError:
+                return {"error": "Invalid timestamp format"}
+        else:
+            query = """
+                SELECT e.node_id, e.node_type, e.anomaly_score, e.root_cause, 
+                       COALESCE(r.name, i.name) as name, e.timestamp
+                FROM NodeEmbedding e
+                LEFT JOIN PhysicalRouter r ON e.node_id = r.id
+                LEFT JOIN PhysicalInterface i ON e.node_id = i.id
+                WHERE e.timestamp = (SELECT MAX(timestamp) FROM NodeEmbedding)
+                ORDER BY e.anomaly_score DESC
+                LIMIT @limit
+            """
+            
+        anomalies = []
+        with database.snapshot() as snapshot:
+            results = snapshot.execute_sql(query, params=params, param_types=param_types)
+            for row in results:
+                anomalies.append({
+                    "node_id": row[0],
+                    "node_type": row[1],
+                    "anomaly_score": row[2],
+                    "root_cause": row[3],
+                    "name": row[4] if row[4] else "Unknown",
+                    "timestamp": row[5].isoformat() if row[5] else None
+                })
+                
+        return {"anomalies": anomalies}
+    except Exception as e:
+        logger.error(f"Failed to fetch anomalies: {e}", exc_info=True)
+        return {"error": str(e)}

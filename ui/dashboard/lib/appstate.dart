@@ -73,7 +73,7 @@ class Appstate extends ChangeNotifier {
   
   Appstate() {
     _connectToServer();
-    _startAnomalyPolling();
+    // _startAnomalyPolling();
   }
   
   void _startAnomalyPolling() {
@@ -336,14 +336,14 @@ class Appstate extends ChangeNotifier {
         final status = nodeData['status'] ?? 'unknown';
         final location = nodeData['location'];
         
-        // Map role to NodeType
-        NodeType type = NodeType.compute;
-        if (role.toString().toLowerCase().contains('router') || 
-            role.toString().toLowerCase() == 'provider_edge' ||
-            role.toString().toLowerCase() == 'core') {
-          type = NodeType.route;
-        } else if (role.toString().toLowerCase().contains('switch')) {
-          type = NodeType.network;
+        // Physical topology typically consists of routers (default) and switches
+        NodeType type = NodeType.P; 
+        final roleStr = role.toString().toLowerCase();
+        
+        if (roleStr == 'pe' || roleStr == 'provider_edge') {
+          type = NodeType.PE;
+        } else if (roleStr == 'ce' || roleStr == 'customer_edge') {
+          type = NodeType.CE;
         }
         
         nodes.add(NetworkNode(

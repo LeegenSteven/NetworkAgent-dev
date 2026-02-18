@@ -113,7 +113,7 @@ class _NodePerformanceWidgetState extends State<NodePerformanceWidget> {
 
   List<NetworkNode> _getComputeInstanceNodes(Appstate appState) {
     return appState.topology.nodes
-        .where((node) => node.type == NodeType.compute)
+        .where((node) => node.properties['kind'] == 'ComputeInstance')
         .toList();
   }
 

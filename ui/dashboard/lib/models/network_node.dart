@@ -1,21 +1,9 @@
 import 'package:flutter/material.dart';
 
 enum NodeType {
-  network,
-  subnetwork,
-  compute,
-  firewall,
-  address,
-  route,
-  config,
-  wireguard,
-  ptp,
-  mesh,
-  cluster,
-  upf,
-  controlplane,
-  ueransim,
-  uetest
+  P,
+  PE,
+  CE
 }
 
 class NetworkNode {
@@ -58,68 +46,6 @@ class NetworkNode {
     );
   }
   
-  // Get the appropriate icon for this node type
-  IconData getIcon() {
-    switch (type) {
-      case NodeType.route:
-        return Icons.router;
-      case NodeType.network:
-        return Icons.device_hub;
-      case NodeType.subnetwork:
-        return Icons.storage;
-      case NodeType.compute:
-        return Icons.computer;
-      case NodeType.firewall:
-        return Icons.security;
-      case NodeType.address:
-        return Icons.network_ping;
-      case NodeType.wireguard:
-        return Icons.vpn_lock;
-      case NodeType.config:
-        return Icons.edit_document;
-      case NodeType.ptp:
-        return Icons.private_connectivity_rounded;
-      case NodeType.mesh:
-        return Icons.auto_graph_rounded;
-      case NodeType.cluster:
-        return Icons.cloud_sharp;
-      case NodeType.upf:
-        return Icons.router_sharp;
-      case NodeType.controlplane:
-        return Icons.control_point;
-      case NodeType.ueransim:
-        return Icons.wifi_rounded;
-      case NodeType.uetest:
-        return Icons.textsms_sharp;
-      default:
-        return Icons.device_unknown;
-    }
-  }
-  
-  // Get the appropriate color for this node type
-  Color getColor() {
-    switch (type) {
-      case NodeType.network:
-        return const Color(0xFF0D47A1); // Dark blue
-      case NodeType.subnetwork:
-        return const Color(0xFF1976D2); // Medium blue
-      case NodeType.compute:
-        return const Color(0xFF2196F3); // Standard blue
-      case NodeType.route:
-        return const Color(0xFF42A5F5); // Light blue
-      case NodeType.firewall:
-        return const Color(0xFF1565C0); // Deep blue
-      case NodeType.wireguard:
-        return const Color(0xFF0277BD); // Ocean blue
-      case NodeType.ptp:
-        return const Color(0xFF0288D1); // Bright blue
-      case NodeType.mesh:
-        return const Color(0xFF01579B); // Dark ocean blue
-      default:
-        return const Color(0xFF90CAF9); // Very light blue
-    }
-  }
-  
   // Get the appropriate color for a node status
   static Color getStatusColor(String? status) {
     if (status == null) {
@@ -145,38 +71,13 @@ class NetworkNode {
   // Map the kind from the server to a NodeType
   static NodeType mapKindToNodeType(String kind) {
     switch (kind) {
-      case 'ComputeNetwork':
-        return NodeType.network;
-      case 'ComputeSubnetwork':
-        return NodeType.subnetwork;
-      case 'ComputeFirewall':
-        return NodeType.firewall;
-      case 'ComputeInstance':
-        return NodeType.compute;
-      case 'ComputeRoute':
-        return NodeType.route;
-      case 'ComputeAddress':
-        return NodeType.address;
-      case 'ConfigMap':
-        return NodeType.config;
-      case 'WireguardAppliance':
-        return NodeType.wireguard;
-      case 'PointToPointService':
-        return NodeType.ptp;
-      case 'MeshService':
-        return NodeType.mesh;
-      case 'ContainerCluster':
-        return NodeType.cluster;
-      case 'UserPlaneFunction':
-        return NodeType.upf;
-      case 'ControlPlane':
-        return NodeType.controlplane;
-      case 'UERanSim':
-        return NodeType.ueransim;
-      case 'UETest':
-        return NodeType.uetest;
+      case 'PE':
+        return NodeType.PE;
+      case 'CE':
+        return NodeType.CE;
+      case 'P':
       default:
-        return NodeType.compute;
+        return NodeType.P;
     }
   }
 }
@@ -324,5 +225,4 @@ class NetworkTopology {
         hash ^ '${conn.sourceId}-${conn.targetId}'.hashCode);
     return nodesHash ^ connectionsHash;
   }
-
 }

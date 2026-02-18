@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../models/network_node.dart';
+import '../../utils/node_visuals.dart';
 import 'node_details_dialog.dart';
 
 class LogicalTopologyWidget extends StatefulWidget {
@@ -305,10 +306,10 @@ class _LogicalTopologyWidgetState extends State<LogicalTopologyWidget>
                                               : [],
                                          ),
                                          child: CircleAvatar(
-                                            backgroundColor: node.getColor(),
+                                            backgroundColor: getNodeColor(node),
                                             radius: 20,
                                             child: Icon(
-                                               node.getIcon(),
+                                               getNodeIcon(node),
                                                color: Colors.white,
                                                size: 24,
                                             ),

@@ -280,7 +280,7 @@ class NodePerformanceWidget extends StatelessWidget {
     final node = NetworkNode(
       id: nodeId,
       name: metricEntry.hostname,
-      type: NodeType.compute, // Default to compute type
+      type: NodeType.CE, // Fallback type
       properties: {
         'kind': 'ComputeInstance',
         'ip': '', // We don't have IP in the metric entry

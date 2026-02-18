@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../appstate.dart';
 import '../../models/network_node.dart';
 import '../../utils/APIService.dart';
+import '../../utils/node_visuals.dart';
 import '../performance/node_performance.dart';
 import '../../screens/notification_screen.dart';
 
@@ -34,9 +35,8 @@ class _NodeDetailsDialogState extends State<NodeDetailsDialog> {
 
   Future<void> _fetchNodeDetails() async {
     try {
-      // check if node is a router based on type or properties
-      bool isRouter = widget.node.type == NodeType.route || 
-                     widget.node.properties['kind'] == 'Router' ||
+      // check if node is a router based on properties
+      bool isRouter = widget.node.properties['kind'] == 'Router' ||
                      widget.node.properties['kind'] == 'PhysicalRouter';
       
       if (isRouter) {
@@ -201,8 +201,8 @@ class _NodeDetailsDialogState extends State<NodeDetailsDialog> {
                     Row(
                       children: [
                         Icon(
-                          widget.node.getIcon(),
-                          color: widget.node.getColor(),
+                          getNodeIcon(widget.node),
+                          color: getNodeColor(widget.node),
                           size: 36,
                         ),
                         const SizedBox(width: 16),
@@ -255,7 +255,7 @@ class _NodeDetailsDialogState extends State<NodeDetailsDialog> {
                         Consumer<Appstate>(
                           builder: (context, appState, child) {
                             // Only show for ComputeInstance nodes (NodeType.compute)
-                            if (widget.node.type != NodeType.compute) {
+                            if (widget.node.properties['kind'] != 'ComputeInstance') {
                               return const SizedBox.shrink();
                             }
                             

@@ -44,6 +44,6 @@ if __name__ == "__main__":
     cors.add(train_route)
     cors.add(health_route)
 
-    logger.info("starting gnn training agent...")
-    port = int(os.environ.get('PORT', 8080))
+    logger.info("starting gnn training service...")
+    port = int(os.environ.get('PORT', 8081))
     web.run_app(app, port=port)

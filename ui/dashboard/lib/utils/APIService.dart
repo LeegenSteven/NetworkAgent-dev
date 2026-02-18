@@ -541,7 +541,7 @@ class APIService{
   // GNN / Anomaly API methods
   Future<List<String>> getSnapshots() async {
     try {
-      var url = Uri.parse('${config.EnvironmentConfig.gnnUrl}/snapshots');
+      var url = Uri.parse('${config.EnvironmentConfig.serveGNNUrl}/snapshots');
       print('Fetching snapshots from: $url');
       
       final http.Response response = await http.get(url, headers: getRequestHeaders);
@@ -564,7 +564,7 @@ class APIService{
 
   Future<List<Map<String, dynamic>>> getAnomalies({String? timestamp}) async {
     try {
-      String urlStr = '${config.EnvironmentConfig.gnnUrl}/anomalies';
+      String urlStr = '${config.EnvironmentConfig.serveGNNUrl}/anomalies';
       if (timestamp != null) {
         urlStr += '?timestamp=$timestamp';
       }

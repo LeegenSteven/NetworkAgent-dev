@@ -1644,6 +1644,9 @@ Networkagent()
         echo "Supervisor Agent URL is ${SUPERVISOR_URL}"
 
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/dashboard:latest"
+        TRAIN_GNN_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/train-gnn:latest"
+        SERVE_GNN_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/serve-gnn:latest"
+
         if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
             read -p "Dashboard image already exists. Rebuild? (y/n) " -n 1 -r
             echo
@@ -1657,7 +1660,9 @@ Networkagent()
                         --dart-define=WEBAPPS_PWD=${WEBAPPS_PWD} \
                         --dart-define=GCP_PROJECT=${GOOGLE_PROJECT}\
                         --dart-define=GITEA_URL=https://${GITEA_HOST}:3000 \
-                        --dart-define=NETWORKAGENT_URL=${SUPERVISOR_URL}
+                        --dart-define=NETWORKAGENT_URL=${SUPERVISOR_URL}\
+                        --dart-define=TRAIN_GNN_URI=${TRAIN_GNN_URI}\
+                        --dart-define=SERVE_GNN_URI=${SERVE_GNN_URI}
                 cd ../../
                 gcloud builds submit --region=$GOOGLE_REGION --config ui/dashboard/cloudbuild.yaml .
             fi
@@ -1671,7 +1676,9 @@ Networkagent()
                     --dart-define=WEBAPPS_PWD=${WEBAPPS_PWD} \
                     --dart-define=GCP_PROJECT=${GOOGLE_PROJECT}\
                     --dart-define=GITEA_URL=https://${GITEA_HOST}:3000 \
-                    --dart-define=NETWORKAGENT_URL=${SUPERVISOR_URL}
+                    --dart-define=NETWORKAGENT_URL=${SUPERVISOR_URL}\
+                    --dart-define=TRAIN_GNN_URI=${TRAIN_GNN_URI}\
+                    --dart-define=SERVE_GNN_URI=${SERVE_GNN_URI}
             cd ../../
             gcloud builds submit --region=$GOOGLE_REGION --config ui/dashboard/cloudbuild.yaml .
         fi
@@ -1685,6 +1692,8 @@ Networkagent()
         --update-env-vars GITEA_URL=https://${GITEA_HOST}:3000 \
         --update-env-vars WEBAPPS_PWD=${WEBAPPS_PWD} \
         --update-env-vars WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
+        --update-env-vars TRAIN_GNN_URI=${TRAIN_GNN_URI} \
+        --update-env-vars SERVE_GNN_URI=${SERVE_GNN_URI} \
         --allow-unauthenticated 
 
         DASHBOARD_URL=$(gcloud run services describe network-dashboard --region=$GOOGLE_REGION --format="value(status.url)")

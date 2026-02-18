@@ -5,6 +5,8 @@ ENV SPANNER_INSTANCE=networktopology-instance
 ENV SPANNER_DATABASE=networktopology-db
 ENV GCS_BUCKET_NAME=network-model-artifacts
 
+ENV PORT = 8080
+
 # Install system dependencies if needed (e.g. for numpy/scikit-learn build)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \

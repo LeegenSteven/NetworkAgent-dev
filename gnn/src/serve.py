@@ -421,5 +421,6 @@ if __name__ == "__main__":
     cors.add(snapshots_route)
     cors.add(anomalies_route)
 
-    logger.info("starting gnn agent...")
-    web.run_app(app, port=8080)
+    logger.info("serving gnn...")
+    port = int(os.environ.get('PORT', 8082))
+    web.run_app(app, port=port)

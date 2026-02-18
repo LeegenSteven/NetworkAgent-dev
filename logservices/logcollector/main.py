@@ -264,7 +264,8 @@ def capture_log(cloud_event: CloudEvent) -> None:
       elif "msg_body" in nwop_logging_json["jsonPayload"] and "source" in nwop_logging_json["jsonPayload"] \
             and nwop_logging_json["jsonPayload"]['source'] == "vyos":
         message = nwop_logging_json["jsonPayload"]["msg_body"]
-        location = nwop_logging_json["jsonPayload"]["host"]
+        # In Spanner replace the source with the router name 
+        source = f"vyos:{nwop_logging_json["jsonPayload"]["host"]}"
 
       elif 'labels' in nwop_logging_json and 'python_logger' in nwop_logging_json['labels']:
         # this is from uetest or liveness probe, so bad things have happened

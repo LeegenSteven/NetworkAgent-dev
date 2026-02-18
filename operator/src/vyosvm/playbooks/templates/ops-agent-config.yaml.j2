@@ -188,6 +188,56 @@ metrics:
                 - '192.168.122.40:9101' # ce1-spoke
                 - '192.168.122.41:9101' # ce1-hub
                 - '192.168.122.42:9101' # ce2-spoke
+            relabel_configs:
+              # Create a 'router_name' label based on the IP address
+              - source_labels: [__address__]
+                regex: '192\.168\.122\.11:.*'
+                target_label: 'router_name'
+                replacement: 'p1'
+              - source_labels: [__address__]
+                regex: '192\.168\.122\.12:.*'
+                target_label: 'router_name'
+                replacement: 'p2'
+              - source_labels: [__address__]
+                regex: '192\.168\.122\.13:.*'
+                target_label: 'router_name'
+                replacement: 'p3'
+              - source_labels: [__address__]
+                regex: '192\.168\.122\.14:.*'
+                target_label: 'router_name'
+                replacement: 'p4'
+              - source_labels: [__address__]
+                regex: '192\.168\.122\.21:.*'
+                target_label: 'router_name'
+                replacement: 'rr1'
+              - source_labels: [__address__]
+                regex: '192\.168\.122\.22:.*'
+                target_label: 'router_name'
+                replacement: 'rr2'
+              - source_labels: [__address__]
+                regex: '192\.168\.122\.31:.*'
+                target_label: 'router_name'
+                replacement: 'pe1'
+              - source_labels: [__address__]
+                regex: '192\.168\.122\.32:.*'
+                target_label: 'router_name'
+                replacement: 'pe2'
+              - source_labels: [__address__]
+                regex: '192\.168\.122\.33:.*'
+                target_label: 'router_name'
+                replacement: 'pe3'
+              - source_labels: [__address__]
+                regex: '192\.168\.122\.40:.*'
+                target_label: 'router_name'
+                replacement: 'ce1-spoke'
+              - source_labels: [__address__]
+                regex: '192\.168\.122\.41:.*'
+                target_label: 'router_name'
+                replacement: 'ce1-hub'
+              - source_labels: [__address__]
+                regex: '192\.168\.122\.42:.*'
+                target_label: 'router_name'
+                replacement: 'ce2-spoke'
   service:
     pipelines:
       prometheus_pipeline:

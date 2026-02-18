@@ -360,7 +360,7 @@ Create()
         for role in "roles/editor" "roles/container.admin" "roles/compute.admin" \
             "roles/compute.networkAdmin" "roles/iam.serviceAccountAdmin" "roles/monitoring.metricWriter" \
             "roles/aiplatform.user" "roles/logging.logWriter" "roles/run.admin" "roles/spanner.databaseUser" \
-            "roles/pubsub.editor" "roles/pubsub.subscriber"; do
+            "roles/pubsub.editor" "roles/pubsub.subscriber" "roles/monitoring.viewer"; do
             echo "$role"   
             gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" \
               --role="$role" --no-user-output-enabled
@@ -398,6 +398,7 @@ Create()
         cp networkagent.json ui/incident/src
         cp networkagent.json ui/portal/src
         cp networkagent.json logservices/faultservice/src
+        cp networkagent.json logservices/metricscollector/src
     else
         echo "#############################################################"
         echo "networkagent.json is empty, check your project is allowed to "
@@ -434,6 +435,7 @@ Create()
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO ui/incident/cloudbuild.j2 > ui/incident/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO ui/portal/cloudbuild.j2 > ui/portal/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO logservices/faultservice/cloudbuild.j2 > logservices/faultservice/cloudbuild.yaml
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO logservices/metricscollector/cloudbuild.j2 > logservices/metricscollector/cloudbuild.yaml
 
 }
 
@@ -875,6 +877,9 @@ Delete()
         logservices/faultservice/src/networkagent.json \
         logservices/faultservice/cloudbuild.yaml \
         \
+        logservices/metricscollector/src/networkagent.json \
+        logservices/metricscollector/cloudbuild.yaml \
+        \
         environment/bigquery.yaml \
         environment/spanner.yaml \
         environment/configconnector.yaml \
@@ -1050,6 +1055,49 @@ DeployGit()
     echo "You can clone the git repos as follows (username/password = ${WEBAPPS_LOGIN}/${WEBAPPS_PWD})"
     echo "  git clone https://$gitea_host:3000/${WEBAPPS_LOGIN}/network -c http.sslVerify=false"
 }
+
+############################################################
+# Build and deploy the log capture                         #
+############################################################
+DeployMetricsCollector()
+{
+    echo "##############################################################"
+    echo "Deploy VYOS metrics collector from Cloud Monitoring to Spanner"
+    echo "##############################################################"
+    export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter="networkagent@${GOOGLE_PROJECT}."`
+
+    cd logservices/metricscollector
+    IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/metricscollector:latest"
+    if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+        read -p "Metrics collector image already exists. Rebuild? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+        fi
+    elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+        echo "Metrics collector image already exists - not building the image (NO_FLAG set)"
+    elif [[ $NO_FLAG != "y" ]]; then
+        gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
+    fi
+    gcloud beta run worker-pools deploy metricscollector \
+    --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/metricscollector:latest \
+    --region $GOOGLE_REGION \
+    --instances 1 \
+    --cpu 1 \
+    --memory 1Gi \
+    --service-account $GOOGLE_SERVICE_ACCOUNT \
+    --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
+    --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
+    --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
+    --update-env-vars GOOGLE_SPANNER_INSTANCE=$GOOGLE_SPANNER_INSTANCE \
+    --update-env-vars GOOGLE_SPANNER_DATABASE=$GOOGLE_SPANNER_DATABASE \
+    --update-env-vars POLL_INTERVAL=15 \
+    --update-env-vars NETWORK_AGENT_FILE="/app/networkagent.json" \
+    --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/app/networkagent.json"
+    cd ../..
+    sleep 5
+}
+
 
 ############################################################
 # Build and deploy the log capture                         #
@@ -1772,7 +1820,10 @@ InstallAll()
     Networkagent
 
     echo "Deploying the fault notification service"
-    DeployFaultCapture    
+    DeployFaultCapture
+
+    echo "Deploying the metrics collector service"
+    DeployMetricsCollector
 
     # Display demo information summary
     DisplayDemoInfo
@@ -1947,6 +1998,10 @@ if [[ "$1" == "--deploy" ]]; then
                 func_calls="${func_calls} DeployLogCapture"
                 shift
                 ;;
+            metricscollector)
+                func_calls="${func_calls} DeployMetricsCollector"
+                shift
+                ;;
             faultcapture)
                 func_calls="${func_calls} DeployFaultCapture"
                 shift
@@ -1966,7 +2021,7 @@ fi
 
 # If func_calls is already set (from -all), skip getopts
 if [[ -z $func_calls ]]; then
-    while getopts "hcsfolbn:kdpgiwyN" option; do
+    while getopts "hcsfolmbn:kdpgiwyN" option; do
        case $option in
           h) 
             func_calls="Help"
@@ -1985,6 +2040,9 @@ if [[ -z $func_calls ]]; then
             ;;
           l) 
             func_calls="CheckGCPEnv SetDemoEnv DeployLogCapture"
+            ;;
+          m) 
+            func_calls="CheckGCPEnv SetDemoEnv DeployMetricsCollector"
             ;;
           f) 
             func_calls="CheckGCPEnv SetDemoEnv DeployFaultCapture"

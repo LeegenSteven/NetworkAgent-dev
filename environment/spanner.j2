@@ -172,13 +172,17 @@ spec:
        content STRING(MAX)
     ) PRIMARY KEY (id)"
   - "CREATE TABLE NetworkMetrics (
-        id STRING(MAX) NOT NULL,
-        kind STRING(MAX) NOT NULL,
-        name STRING(MAX) NOT NULL,
+        id UUID DEFAULT (NEW_UUID()),
         timestamp TIMESTAMP NOT NULL,
-        metrics JSON,
-        interface_id STRING(MAX)
+        node_name STRING(MAX) NOT NULL,
+        metric_name STRING(MAX) NOT NULL,
+        metric_type STRING(MAX) NOT NULL,
+        kind STRING(MAX) NOT NULL,
+        value FLOAT64 NOT NULL,
+        labels JSON,
+        interface STRING(MAX)
     ) PRIMARY KEY (id, timestamp)"
+  - "CREATE INDEX NetworkMetricsByTimestamp ON NetworkMetrics(timestamp)"
   - "CREATE TABLE ServicePerformance (
         id STRING(36) NOT NULL,
         service_type STRING(MAX) NOT NULL,

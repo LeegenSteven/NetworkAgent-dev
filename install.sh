@@ -387,6 +387,7 @@ Create()
         echo "#########################"
         cp networkagent.json operator/src
         cp networkagent.json tools/src
+        cp networkagent.json gnn/src
         cp networkagent.json networkagents/supervisor/src
         cp networkagent.json networkagents/engineer/src
         cp networkagent.json networkagents/orderagent/src
@@ -421,6 +422,7 @@ Create()
           -E WEBAPPS_PWD -E NETWORK_OPERATOR -E GIT_OPERATOR -E GOOGLE_ORG_NAME operator/deployment.j2 > operator/deployment.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO operator/cloudbuild.j2 > operator/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO tools/cloudbuild.j2 > tools/cloudbuild.yaml
+    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO gnn/cloudbuild.j2 > gnn/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/engineer/cloudbuild.j2 > networkagents/engineer/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/orderagent/cloudbuild.j2 > networkagents/orderagent/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/tester/cloudbuild.j2 > networkagents/tester/cloudbuild.yaml
@@ -799,6 +801,8 @@ Start()
     kubectl apply -f environment/networkvm.yaml
     # kubectl apply -f environment/bigquery.yaml
 
+    DeployGNN
+
     DeployGit
 }
 
@@ -844,6 +848,8 @@ Delete()
         \
         tools/src/networkagent.json \
         tools/cloudbuild.yaml \
+        gnn/src/networkagent.json \
+        gnn/cloudbuild.yaml \
         networkagents/supervisor/src/networkagent.json \
         networkagents/supervisor/cloudbuild.yaml \
         networkagents/engineer/src/networkagent.json \
@@ -935,6 +941,8 @@ Kill()
     fi
 
     gcloud run services delete networktools --region=$GOOGLE_REGION --quiet
+    gcloud run services delete train-gnn --region=$GOOGLE_REGION --quiet
+    gcloud run services delete serve-gnn --region=$GOOGLE_REGION --quiet
     gcloud run services delete engineeragent --region=$GOOGLE_REGION --quiet
     gcloud run services delete operationsagent --region=$GOOGLE_REGION --quiet
     gcloud run services delete orderagent --region=$GOOGLE_REGION --quiet
@@ -1228,6 +1236,54 @@ DeployFaultCapture()
     echo "Fault capture service setup completed successfully!"
 }
 
+############################################################
+# Build and deploy the GNN services                        #
+############################################################
+DeployGNN()
+{
+    export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter="networkagent@${GOOGLE_PROJECT}."`
+
+    IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/traingnn:latest"
+    if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+        read -p "GNN image already exists. Rebuild? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            gcloud builds submit --region=$GOOGLE_REGION --config=gnn/cloudbuild.yaml .
+        fi
+    elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+        echo "GNN image already exists - not building the image (NO_FLAG set)"
+    elif [[ $NO_FLAG != "y" ]]; then
+        gcloud builds submit --region=$GOOGLE_REGION --config=gnn/cloudbuild.yaml .
+    fi
+
+    gcloud run deploy train-gnn \
+    --image $IMAGE_URI \
+    --region $GOOGLE_REGION \
+    --service-account $GOOGLE_SERVICE_ACCOUNT \
+    --timeout=3600 \
+    --min 1 \
+    --memory 2Gi \
+    --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
+    --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
+    --update-env-vars NETWORK_AGENT_FILE="/app/networkagent.json" \
+    --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/app/networkagent.json" \
+    --allow-unauthenticated 
+
+    IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/servegnn:latest"
+    gcloud run deploy serve-gnn \
+    --image $IMAGE_URI \
+    --region $GOOGLE_REGION \
+    --service-account $GOOGLE_SERVICE_ACCOUNT \
+    --min 1 \
+    --memory 2Gi \
+    --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
+    --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
+    --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
+    --update-env-vars NETWORK_AGENT_FILE="/app/networkagent.json" \
+    --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/app/networkagent.json" \
+    --allow-unauthenticated 
+
+}
 
 ############################################################
 # Build and deploy the networkagent                        #
@@ -1792,7 +1848,7 @@ Help()
    echo "  --all  install everything (comprehensive setup: create env if needed, build image if needed, start runtime, deploy all agents)"
    echo "         can be combined with -y or -N flags (e.g., ./install.sh -all -y)"
    echo "  --deploy component1 component2"
-   echo "         (re)deploy specific components (valid components : spanner, operator, logcapture, git)"
+   echo "         (re)deploy specific components (valid components : spanner, operator, logcapture, git, gnn)"
    echo 
    echo "short options:"
    echo "--------------"
@@ -1868,6 +1924,10 @@ if [[ "$1" == "--deploy" ]]; then
         case $1 in
             spanner)
                 func_calls="${func_calls} DeploySpanner"
+                shift
+                ;;
+            gnn)
+                func_calls="${func_calls} DeployGNN"
                 shift
                 ;;
             operator)

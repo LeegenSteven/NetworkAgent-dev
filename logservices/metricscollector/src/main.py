@@ -3,35 +3,36 @@ import itertools
 import json
 import os
 import datetime
+import threading
 from google.api import metric_pb2 as ga_metric
 from google.cloud import monitoring_v3
 from google.cloud import spanner
 
-# Adapt logging strategy if we run on GCP
-if os.environ.get("CLOUD_RUN_WORKER_POOL"):
-  # Attach the Cloud Logging handler to the Python root logger 
-  # by calling the setup_logging method. By doing so Cloud Logging
-  # will properly report the logs severity for instance. If we do it
-  # directly (as above) all logs are classified with ERROR severity
-  # (see https://cloud.google.com/logging/docs/setup/python)
-  import google.cloud.logging
-  logging_client = google.cloud.logging.Client()
-  import logging
-  logging_client.setup_logging(log_level=logging.DEBUG)
+# # Adapt logging strategy if we run on GCP
+# if os.environ.get("CLOUD_RUN_WORKER_POOL"):
+#   # Attach the Cloud Logging handler to the Python root logger 
+#   # by calling the setup_logging method. By doing so Cloud Logging
+#   # will properly report the logs severity for instance. If we do it
+#   # directly (as above) all logs are classified with ERROR severity
+#   # (see https://cloud.google.com/logging/docs/setup/python)
+#   import google.cloud.logging
+#   logging_client = google.cloud.logging.Client()
+#   import logging
+#   logging_client.setup_logging(log_level=logging.DEBUG)
 
-  logger = logging.getLogger(__name__)
+#   logger = logging.getLogger(__name__)
 
-  # After importing the Python standard logging library we end up with 2 log
-  # handlers at the root level causing duplicate log entries to appear
-  # in Cloud Logging, one that comes from the Cloud Logging Structured
-  # handler and the other from the standard Python StreamHandler
-  # Logger root handlers: [<StreamHandler <stderr> (NOTSET)>, <StructuredLogHandler <stderr> (NOTSET)>]
-  # Remove the standard Python logging handler to avoid duplicate (first handler in the list)
-  del logging.getLogger().handlers[0]
-else:
-  import logging
-  logging.basicConfig(level=logging.DEBUG)
-  logger = logging.getLogger(__name__)
+#   # After importing the Python standard logging library we end up with 2 log
+#   # handlers at the root level causing duplicate log entries to appear
+#   # in Cloud Logging, one that comes from the Cloud Logging Structured
+#   # handler and the other from the standard Python StreamHandler
+#   # Logger root handlers: [<StreamHandler <stderr> (NOTSET)>, <StructuredLogHandler <stderr> (NOTSET)>]
+#   # Remove the standard Python logging handler to avoid duplicate (first handler in the list)
+#   #del logging.getLogger().handlers[0]
+# else:
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Configuration
 PROJECT_ID = os.environ.get("GOOGLE_PROJECT")
@@ -43,6 +44,11 @@ DATABASE_ID = os.environ.get("GOOGLE_SPANNER_DATABASE")
 # see ops agent config file for more details
 # (operator/src/vyosvm/playbooks/templates/ops-agent-config.yaml.j2)
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", 20))
+
+# Retention settings
+RETENTION_HOURS = int(os.environ.get("RETENTION_HOURS", 3))
+# Metrics clean up frequency
+CLEANUP_INTERVAL_SECONDS = int(os.environ.get("CLEANUP_INTERVAL_SECONDS", 1200))
 
 SELECTED_METRICS = [
   # SYSTEM metrics
@@ -161,11 +167,54 @@ def fetch_all_vyos_metrics(client, project_name, start_time):
     # Chain all the individual iterators into one stream
     return itertools.chain.from_iterable(generators)
 
+def retention_worker(db, lock):
+    """
+    Background worker that removes old metrics from Spanner.
+    """
+    logger.info(f"Retention thread started. Retention period: {RETENTION_HOURS} hours. Cleanup interval: {CLEANUP_INTERVAL_SECONDS}s")
+    while True:
+        try:
+            time.sleep(CLEANUP_INTERVAL_SECONDS)
+            
+            cutoff_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=RETENTION_HOURS)
+            logger.debug(f"Retention thread: Cleanup started. Removing data older than {cutoff_time}")
+            
+            # Using partitioned DML for potentially large deletions
+            # Spanner SQL syntax for deletions with parameter
+            dml = "DELETE FROM NetworkMetrics WHERE timestamp < @cutoff_time"
+            
+            with lock:
+                logger.debug("Retention thread: Acquired lock")
+                def execute_delete(transaction):
+                    row_count = transaction.execute_update(
+                        dml,
+                        params={'cutoff_time': cutoff_time},
+                        param_types={'cutoff_time': spanner.param_types.TIMESTAMP}
+                    )
+                    logger.info(f"Retention thread: Deleted {row_count} old metric rows.")
+                
+                db.run_in_transaction(execute_delete)
+                logger.debug("Retention thread: Released lock")
+                
+        except Exception as e:
+            logger.error(f"Error in retention worker: {e}")
+
 def run_worker():
     mon_client = monitoring_v3.MetricServiceClient()
     span_client = spanner.Client(project=PROJECT_ID, disable_builtin_metrics=True)
     db = span_client.instance(INSTANCE_ID).database(DATABASE_ID)
     project_name = f"projects/{PROJECT_ID}"
+    
+    # Concurrency lock
+    lock = threading.Lock()
+    
+    # Start retention thread
+    retention_thread = threading.Thread(
+        target=retention_worker, 
+        args=(db, lock), 
+        daemon=True
+    )
+    retention_thread.start()
     
     logger.info(f"Worker Pool started. Polling all VyOS metrics every {POLL_INTERVAL}s...")
     last_poll_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=POLL_INTERVAL)
@@ -222,13 +271,16 @@ def run_worker():
       if data_to_insert:
         #logger.debug(f"Data to insert: {data_to_insert}")
         try:
-            with db.batch() as batch:
-                logger.info(f"Inserting {len(data_to_insert)} metric points at {current_poll_time}")
-                batch.insert(
-                    table="NetworkMetrics",
-                    columns=("timestamp", "node_name", "metric_name", "metric_type", "kind", "value", "labels", "interface"),
-                    values=data_to_insert
-                )
+            with lock:
+                logger.debug("Main thread: Acquired lock")
+                with db.batch() as batch:
+                    logger.info(f"Inserting {len(data_to_insert)} metric points at {current_poll_time}")
+                    batch.insert(
+                        table="NetworkMetrics",
+                        columns=("timestamp", "node_name", "metric_name", "metric_type", "kind", "value", "labels", "interface"),
+                        values=data_to_insert
+                    )
+                logger.debug("Main thread: Released lock")
         except Exception as e:
             logger.error(f"Error writing to Spanner: {e}")
 

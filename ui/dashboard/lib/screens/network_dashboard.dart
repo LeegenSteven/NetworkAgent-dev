@@ -10,6 +10,8 @@ import '../widgets/markdown_drawer.dart';
 import '../widgets/log_widget.dart';
 import '../widgets/trace/trace_widget.dart';
 import '../widgets/performance/performance_graph_widget.dart';
+import '../widgets/anomaly_panel.dart';
+import '../widgets/timeslot_slider.dart';
 import 'settings_screen.dart';
 import 'notification_screen.dart';
 
@@ -29,10 +31,12 @@ class _NetworkDashboardState extends State<NetworkDashboard>
   bool _showChat = false; // Chat is hidden by default
   bool _showLogs = false;
   bool _showTrace = false;
+  bool _showAnomalies = false;
 
   // Control the horizontal split view ratios
   double _chatPanelRatio = 0.3; // 30% for chat panel
   double _tracePanelRatio = 0.3; // 30% for trace panel
+  double _anomalyPanelRatio = 0.25; // 25% for anomaly panel
   static const double _minHorizontalSplitRatio = 0.2;
   static const double _maxHorizontalSplitRatio = 0.8;
 
@@ -135,6 +139,12 @@ class _NetworkDashboardState extends State<NetworkDashboard>
   void _toggleChat() {
     setState(() {
       _showChat = !_showChat;
+    });
+  }
+
+  void _toggleAnomalies() {
+    setState(() {
+      _showAnomalies = !_showAnomalies;
     });
   }
 
@@ -276,6 +286,22 @@ class _NetworkDashboardState extends State<NetworkDashboard>
               );
             },
           ),
+          // Anomaly toggle button
+          Consumer<Appstate>(
+             builder: (context, appState, child) {
+               bool hasAnomalies = appState.anomalies.any((a) => (a['anomaly_score'] ?? 0.0) > 0.5);
+               return IconButton(
+                 icon: Icon(
+                   Icons.warning_amber_rounded,
+                   color: _showAnomalies 
+                     ? Colors.amber 
+                     : (hasAnomalies ? Colors.redAccent : Colors.white),
+                 ),
+                 onPressed: () => _toggleAnomalies(),
+                 tooltip: 'Toggle Anomaly Panel',
+               );
+             }
+          ),
           // Trace toggle button
           IconButton(
             icon: Icon(
@@ -377,40 +403,42 @@ class _NetworkDashboardState extends State<NetworkDashboard>
 
           // Main panel - Network Topology and Logs
           Expanded(
-            child: Column(
+            child: Stack(
               children: [
-                // Main content area - Always show Network Topology
-                Expanded(
-                  flex: (_verticalSplitRatio * 100)
-                      .round(), // Convert ratio to flex units
-                  child: Consumer<Appstate>(
-                    // Listen to topology changes only - filter and layout changes are handled internally
-                    builder: (context, appState, child) {
-                      // Create a key based only on the topology to avoid excessive rebuilds
-                      final topologyKey = ValueKey(
-                        'topology-${appState.topology.nodes.length}-'
-                        '${appState.topology.connections.length}',
-                      );
-                      
-                      return AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 300),
-                        child: appState.currentTopologyView == TopologyViewType.map
-                            ? GoogleMapsTopologyWidget(
-                                key: ValueKey('map_$topologyKey'),
-                                topology: appState.topology,
-                              )
-                            : LogicalTopologyWidget(
-                                key: ValueKey('logical_$topologyKey'),
-                                topology: appState.topology,
-                              ),
-                      );
-                    },
-                  ),
-                ),
+                Column(
+                  children: [
+                    // Main content area - Always show Network Topology
+                    Expanded(
+                      flex: (_verticalSplitRatio * 100)
+                          .round(), // Convert ratio to flex units
+                      child: Consumer<Appstate>(
+                        // Listen to topology changes only - filter and layout changes are handled internally
+                        builder: (context, appState, child) {
+                          // Create a key based only on the topology to avoid excessive rebuilds
+                          final topologyKey = ValueKey(
+                            'topology-${appState.topology.nodes.length}-'
+                            '${appState.topology.connections.length}',
+                          );
+                          
+                          return AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 300),
+                            child: appState.currentTopologyView == TopologyViewType.map
+                                ? GoogleMapsTopologyWidget(
+                                    key: ValueKey('map_$topologyKey'),
+                                    topology: appState.topology,
+                                  )
+                                : LogicalTopologyWidget(
+                                    key: ValueKey('logical_$topologyKey'),
+                                    topology: appState.topology,
+                                  ),
+                          );
+                        },
+                      ),
+                    ),
 
-                // Show the vertical divider and bottom panel when logs or performance graph are enabled
-                Consumer<Appstate>(
-                  builder: (context, appState, child) {
+                    // Show the vertical divider and bottom panel when logs or performance graph are enabled
+                    Consumer<Appstate>(
+                      builder: (context, appState, child) {
                     if (_showLogs || appState.showPerformanceGraph) {
                       return Expanded(
                         flex: ((1 - _verticalSplitRatio) * 100)
@@ -478,11 +506,25 @@ class _NetworkDashboardState extends State<NetworkDashboard>
                 ),
               ],
             ),
-          ),
+            // Overlay for the timeslot slider (now correctly inside Stack)
+            Positioned(
+              bottom: 16,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 500),
+                  child: const TimeslotSlider(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
 
-          // Right panel - Trace (only shown if _showTrace is true)
-          if (_showTrace) ...[
-            // Horizontal resizable divider for trace panel
+          // Right panels - Trace and/or Anomalies
+          if (_showTrace || _showAnomalies) ...[
+            // Divider for the right panel(s)
             GestureDetector(
               behavior: HitTestBehavior.translucent,
               onHorizontalDragUpdate: (details) {
@@ -497,25 +539,35 @@ class _NetworkDashboardState extends State<NetworkDashboard>
               },
               child: Container(
                 width: 8,
-                color: const Color(0xFFE3F2FD), // Light blue background
+                color: const Color(0xFFE3F2FD),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      width: 2,
-                      height: 30,
-                      color: const Color(
-                        0xFF90CAF9,
-                      ), // Slightly darker blue for the handle
-                    ),
+                    Container(width: 2, height: 30, color: const Color(0xFF90CAF9)),
                   ],
                 ),
               ),
             ),
-
+            
+            // Container for both right-side panels
             SizedBox(
               width: MediaQuery.of(context).size.width * _tracePanelRatio,
-              child: const TraceWidget(),
+              child: Column(
+                children: [
+                   if (_showTrace) ...[
+                      const Expanded(
+                         child: TraceWidget(),
+                      ),
+                   ],
+                   if (_showTrace && _showAnomalies)
+                      const Divider(height: 1, thickness: 1),
+                   if (_showAnomalies) ...[
+                      const Expanded(
+                         child: AnomalyPanel(),
+                      ),
+                   ]
+                ],
+              ),
             ),
           ],
         ],

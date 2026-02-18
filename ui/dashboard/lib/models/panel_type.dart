@@ -3,6 +3,7 @@ enum PanelType {
   logs,
   performance,
   trace,
+  anomaly,
 }
 
 extension PanelTypeExtension on PanelType {
@@ -16,6 +17,8 @@ extension PanelTypeExtension on PanelType {
         return 'Performance Graphs';
       case PanelType.trace:
         return 'Agent Traces';
+      case PanelType.anomaly:
+        return 'Top Anomalies';
     }
   }
 }

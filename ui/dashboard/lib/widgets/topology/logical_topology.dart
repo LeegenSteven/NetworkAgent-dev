@@ -291,22 +291,36 @@ class _LogicalTopologyWidgetState extends State<LogicalTopologyWidget>
                                  },
                                  child: Column(
                                     children: [
-                                       CircleAvatar(
-                                          backgroundColor: node.getColor(),
-                                          radius: 20,
-                                          child: Icon(
-                                             Icons.device_hub,
-                                             color: Colors.white,
-                                             size: 24,
-                                          ),
+                                       Container(
+                                         decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            boxShadow: node.isAnomaly
+                                              ? [
+                                                  BoxShadow(
+                                                    color: Colors.red.withOpacity(0.8),
+                                                    blurRadius: 15,
+                                                    spreadRadius: 5,
+                                                  ),
+                                                ]
+                                              : [],
+                                         ),
+                                         child: CircleAvatar(
+                                            backgroundColor: node.getColor(),
+                                            radius: 20,
+                                            child: Icon(
+                                               node.getIcon(),
+                                               color: Colors.white,
+                                               size: 24,
+                                            ),
+                                         ),
                                        ),
                                        const SizedBox(height: 4),
                                        Text(
                                           node.name,
-                                          style: const TextStyle(
-                                             color: Colors.black87,
+                                          style: TextStyle(
+                                             color: node.isAnomaly ? Colors.red : Colors.black87,
                                              fontSize: 10,
-                                             fontWeight: FontWeight.bold,
+                                             fontWeight: node.isAnomaly ? FontWeight.w900 : FontWeight.bold,
                                           ),
                                        )
                                     ],

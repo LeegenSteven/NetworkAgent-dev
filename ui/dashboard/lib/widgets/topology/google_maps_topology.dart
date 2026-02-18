@@ -64,14 +64,16 @@ class _GoogleMapsTopologyWidgetState extends State<GoogleMapsTopologyWidget> {
       final Color statusColor = NetworkNode.getStatusColor(node.properties['status']);
       final bool hasIncident = _hasMatchingIncident(node);
 
-      // Use color-coded default markers based on status
+      // Use color-coded default markers based on status, but prioritize anomaly
       BitmapDescriptor markerColor;
-      if (statusColor == Colors.green) {
+      if (node.isAnomaly) {
+        markerColor = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
+      } else if (statusColor == Colors.green) {
         markerColor = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
       } else if (statusColor == Colors.orange) {
         markerColor = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
       } else {
-        markerColor = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
+        markerColor = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue);
       }
 
       markers.add(

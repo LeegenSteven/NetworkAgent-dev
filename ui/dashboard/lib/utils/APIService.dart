@@ -537,4 +537,55 @@ class APIService{
       rethrow;
     }
   }
+
+  // GNN / Anomaly API methods
+  Future<List<String>> getSnapshots() async {
+    try {
+      var url = Uri.parse('${config.EnvironmentConfig.gnnUrl}/snapshots');
+      print('Fetching snapshots from: $url');
+      
+      final http.Response response = await http.get(url, headers: getRequestHeaders);
+      
+      if (response.statusCode == 200) {
+        final dynamic decodedData = jsonDecode(response.body);
+        if (decodedData is Map<String, dynamic> && decodedData['snapshots'] is List) {
+          return List<String>.from(decodedData['snapshots']);
+        }
+        return [];
+      } else {
+        print('Failed to load snapshots: ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      print('Error fetching snapshots: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAnomalies({String? timestamp}) async {
+    try {
+      String urlStr = '${config.EnvironmentConfig.gnnUrl}/anomalies';
+      if (timestamp != null) {
+        urlStr += '?timestamp=$timestamp';
+      }
+      var url = Uri.parse(urlStr);
+      print('Fetching anomalies from: $url');
+      
+      final http.Response response = await http.get(url, headers: getRequestHeaders);
+      
+      if (response.statusCode == 200) {
+        final dynamic decodedData = jsonDecode(response.body);
+        if (decodedData is Map<String, dynamic> && decodedData['anomalies'] is List) {
+           return List<Map<String, dynamic>>.from(decodedData['anomalies']);
+        }
+        return [];
+      } else {
+        print('Failed to load anomalies: ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      print('Error fetching anomalies: $e');
+      return [];
+    }
+  }
 }

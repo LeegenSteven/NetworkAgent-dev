@@ -29,7 +29,34 @@ class NetworkNode {
     required this.name,
     required this.type,
     this.properties = const {},
+    this.anomalyScore,
+    this.isAnomaly = false,
+    this.rootCause,
   });
+
+  final double? anomalyScore;
+  final bool isAnomaly;
+  final String? rootCause;
+
+  NetworkNode copyWith({
+    String? id,
+    String? name,
+    NodeType? type,
+    Map<String, dynamic>? properties,
+    double? anomalyScore,
+    bool? isAnomaly,
+    String? rootCause,
+  }) {
+    return NetworkNode(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      type: type ?? this.type,
+      properties: properties ?? this.properties,
+      anomalyScore: anomalyScore ?? this.anomalyScore,
+      isAnomaly: isAnomaly ?? this.isAnomaly,
+      rootCause: rootCause ?? this.rootCause,
+    );
+  }
   
   // Get the appropriate icon for this node type
   IconData getIcon() {

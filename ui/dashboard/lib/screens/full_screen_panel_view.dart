@@ -7,6 +7,7 @@ import '../widgets/agui_chat_panel.dart';
 import '../widgets/log_widget.dart';
 import '../widgets/performance/performance_graph_widget.dart';
 import '../widgets/trace/trace_widget.dart';
+import '../widgets/anomaly_panel.dart';
 import '../appstate.dart';
 
 class FullScreenPanelView extends StatelessWidget {
@@ -120,6 +121,8 @@ class FullScreenPanelView extends StatelessWidget {
         );
       case PanelType.trace:
         return const TraceWidget(isFullScreen: true);
+      case PanelType.anomaly:
+        return const AnomalyPanel(isFullScreen: true);
     }
   }
 }

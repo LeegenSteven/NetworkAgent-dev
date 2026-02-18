@@ -9,6 +9,7 @@ import 'models/push_notification.dart';
 import 'models/incident.dart';
 import 'utils/environment_config.dart';
 import 'utils/APIService.dart';
+import 'dart:async';
 
 enum TopologyViewType { map, logical }
 
@@ -49,6 +50,10 @@ class Appstate extends ChangeNotifier {
   final List<Map<String, dynamic>> _traceEvents = [];
   bool _isTracesEnabled = false;
   
+  // Anomalies state
+  List<Map<String, dynamic>> _anomalies = [];
+  Timer? _anomalyDataTimer;
+  
   // Getters
   io.Socket? get socket => _socket;
   List<Agent> get agents => List.unmodifiable(_agents);
@@ -64,11 +69,69 @@ class Appstate extends ChangeNotifier {
   List<Incident> get incidents => List.unmodifiable(_incidents);
   bool get isLoadingIncidents => _isLoadingIncidents;
   List<Map<String, dynamic>> get traceEvents => _traceEvents;
+  List<Map<String, dynamic>> get anomalies => _anomalies;
   
   Appstate() {
     _connectToServer();
+    _startAnomalyPolling();
   }
   
+  void _startAnomalyPolling() {
+    // Fetch immediately
+    fetchAnomalies();
+    // Then poll every 15 seconds
+    _anomalyDataTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      fetchAnomalies();
+    });
+  }
+  
+  Future<void> fetchAnomalies({String? timestamp}) async {
+    try {
+      final anomaliesData = await _apiService.getAnomalies(timestamp: timestamp);
+      _anomalies = anomaliesData;
+      
+      // Update NetworkNodes with anomaly scores to re-render topology
+      _applyAnomaliesToTopology();
+      
+      notifyListeners();
+    } catch (e) {
+      print('Error fetching anomalies in Appstate: $e');
+    }
+  }
+  
+  void _applyAnomaliesToTopology() {
+    if (_topology.nodes.isEmpty || _anomalies.isEmpty) return;
+    
+    // Create a map for quick lookup
+    final anomalyMap = <String, Map<String, dynamic>>{};
+    for (var a in _anomalies) {
+      anomalyMap[a['node_id']] = a;
+    }
+    
+    final updatedNodes = <NetworkNode>[];
+    for (var node in _topology.nodes) {
+      final anomalyData = anomalyMap[node.id];
+      if (anomalyData != null) {
+        final score = anomalyData['anomaly_score'] as double? ?? 0.0;
+        final isAnomaly = score > 0.5; // Threshold
+        updatedNodes.add(node.copyWith(
+          anomalyScore: score,
+          isAnomaly: isAnomaly,
+          rootCause: anomalyData['root_cause']?.toString(), // Just store string representation for now
+        ));
+      } else {
+        // Reset if no longer anomalous
+        updatedNodes.add(node.copyWith(
+          anomalyScore: 0.0,
+          isAnomaly: false,
+          rootCause: null,
+        ));
+      }
+    }
+    
+    _topology = NetworkTopology(nodes: updatedNodes, connections: _topology.connections);
+  }
+
   // Connect to the server and initialize socket
   void _connectToServer() {
     // Connect to the NetworkAgent socket server
@@ -670,6 +733,8 @@ class Appstate extends ChangeNotifier {
   
   @override
   void dispose() {
+    _anomalyDataTimer?.cancel();
+    
     // Remove event listeners to prevent memory leaks
     if (_socket != null) {
       // Agent management has been moved to REST endpoints

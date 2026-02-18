@@ -250,7 +250,7 @@ async def run_inference():
                 # But typically it's just a dict from explain_node_anomaly
                 
                 mutations.append(
-                    (embedding_id, nid, node_type, emb, score, explanation, spanner_timestamp)
+                    (embedding_id, nid, node_type, emb, float(score), explanation, spanner_timestamp)
                 )
             
             if mutations:
@@ -264,7 +264,7 @@ async def run_inference():
                     with database.batch() as batch:
                         batch.insert(
                             table="NodeEmbedding",
-                            columns=("id", "node_id", "node_type", "embedding", "anomaly_score", "root_cause", "timestamp"),
+                            columns=("id", "node_id", "node_type", "embedding", "anomaly_score", "anomaly_explanation", "timestamp"),
                             values=mutations
                         )
                     logger.info("Successfully wrote embeddings to Spanner.")

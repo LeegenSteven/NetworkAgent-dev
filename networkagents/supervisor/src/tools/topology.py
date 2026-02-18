@@ -366,7 +366,7 @@ def fetch_anomalies(limit: int = 50, timestamp_str: str = None):
                 param_types["timestamp"] = spanner.param_types.TIMESTAMP
                 
                 query = """
-                    SELECT e.node_id, e.node_type, e.anomaly_score, e.root_cause, 
+                    SELECT e.node_id, e.node_type, e.anomaly_score, e.anomaly_explanation AS root_cause, 
                            COALESCE(r.name, i.name) as name, e.timestamp
                     FROM NodeEmbedding e
                     LEFT JOIN PhysicalRouter r ON e.node_id = r.id
@@ -379,7 +379,7 @@ def fetch_anomalies(limit: int = 50, timestamp_str: str = None):
                 return {"error": "Invalid timestamp format"}
         else:
             query = """
-                SELECT e.node_id, e.node_type, e.anomaly_score, e.root_cause, 
+                SELECT e.node_id, e.node_type, e.anomaly_score, e.anomaly_explanation AS root_cause, 
                        COALESCE(r.name, i.name) as name, e.timestamp
                 FROM NodeEmbedding e
                 LEFT JOIN PhysicalRouter r ON e.node_id = r.id

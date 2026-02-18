@@ -803,9 +803,7 @@ Start()
     kubectl apply -f environment/networkvm.yaml
     # kubectl apply -f environment/bigquery.yaml
 
-    DeployGNN
-
-    DeployGit
+    # DeployGit
 }
 
 ############################################################
@@ -1825,6 +1823,9 @@ InstallAll()
     echo "Deploying the metrics collector service"
     DeployMetricsCollector
 
+    echo "Deploying GNN"
+    DeployGNN
+
     # Display demo information summary
     DisplayDemoInfo
 
@@ -1908,7 +1909,7 @@ Help()
    echo "  --all  install everything (comprehensive setup: create env if needed, build image if needed, start runtime, deploy all agents)"
    echo "         can be combined with -y or -N flags (e.g., ./install.sh -all -y)"
    echo "  --deploy component1 component2"
-   echo "         (re)deploy specific components (valid components : spanner, operator, logcapture, git, gnn)"
+   echo "         (re)deploy specific components (valid components : spanner, operator, logcapture, git, gnn, metricscollector)"
    echo 
    echo "short options:"
    echo "--------------"

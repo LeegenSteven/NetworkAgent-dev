@@ -48,6 +48,10 @@ hidden_state = None  # For stateful inference if needed, though REST assumes sta
 # but a POST endpoint suggests single-shot. 
 # We'll use None for hidden_state to treat it as a fresh sequence start or single step.
 
+# Background task control
+background_task_running = False
+inference_task = None
+
 def download_blob(bucket_name, source_blob_name, destination_file_name):
     """Downloads a blob from the bucket."""
     try:
@@ -290,25 +294,107 @@ async def inference_handler(request):
 
 async def inference_loop(app):
     import asyncio
+    global background_task_running
     logger.info("Starting background inference loop (every 60s)")
-    while True:
-        try:
-            await run_inference()
-        except asyncio.CancelledError:
-            logger.info("Background inference loop cancelled")
-            break
-        except Exception as e:
-            logger.error(f"Error in background inference loop: {e}", exc_info=True)
-        await asyncio.sleep(60)
+    background_task_running = True
+    try:
+        while True:
+            try:
+                await run_inference()
+            except asyncio.CancelledError:
+                logger.info("Background inference loop cancelled")
+                break
+            except Exception as e:
+                logger.error(f"Error in background inference loop: {e}", exc_info=True)
+            await asyncio.sleep(60)
+    finally:
+        background_task_running = False
+        logger.info("Background inference loop stopped")
 
 async def start_background_tasks(app):
     import asyncio
-    app['inference_task'] = asyncio.create_task(inference_loop(app))
+    global inference_task, background_task_running
+    
+    if inference_task and not inference_task.done():
+        logger.warning("Background task already running")
+        return False
+    
+    inference_task = asyncio.create_task(inference_loop(app))
+    logger.info("Background inference task started")
+    return True
 
 async def cleanup_background_tasks(app):
-    app['inference_task'].cancel()
+    global inference_task, background_task_running
     import asyncio
-    await asyncio.gather(app['inference_task'], return_exceptions=True)
+    
+    if inference_task and not inference_task.done():
+        inference_task.cancel()
+        await asyncio.gather(inference_task, return_exceptions=True)
+        background_task_running = False
+        logger.info("Background tasks cleaned up")
+
+async def start_handler(request):
+    """REST endpoint to start the background inference loop"""
+    global inference_task, background_task_running
+    
+    if inference_task and not inference_task.done():
+        return web.json_response({
+            "status": "already_running",
+            "message": "Background inference task is already running"
+        }, status=200)
+    
+    success = await start_background_tasks(request.app)
+    
+    if success:
+        return web.json_response({
+            "status": "started",
+            "message": "Background inference task started successfully"
+        }, status=200)
+    else:
+        return web.json_response({
+            "status": "error",
+            "message": "Failed to start background inference task"
+        }, status=500)
+
+async def stop_handler(request):
+    """REST endpoint to stop the background inference loop"""
+    global inference_task, background_task_running
+    
+    if not inference_task or inference_task.done():
+        return web.json_response({
+            "status": "not_running",
+            "message": "Background inference task is not running"
+        }, status=200)
+    
+    try:
+        inference_task.cancel()
+        import asyncio
+        await asyncio.gather(inference_task, return_exceptions=True)
+        background_task_running = False
+        
+        return web.json_response({
+            "status": "stopped",
+            "message": "Background inference task stopped successfully"
+        }, status=200)
+    except Exception as e:
+        logger.error(f"Error stopping background task: {e}", exc_info=True)
+        return web.json_response({
+            "status": "error",
+            "message": f"Error stopping background task: {str(e)}"
+        }, status=500)
+
+async def status_handler(request):
+    """REST endpoint to check the status of the background inference loop"""
+    global inference_task, background_task_running
+    
+    is_running = inference_task is not None and not inference_task.done()
+    
+    return web.json_response({
+        "status": "running" if is_running else "stopped",
+        "task_exists": inference_task is not None,
+        "task_done": inference_task.done() if inference_task else True,
+        "background_flag": background_task_running
+    }, status=200)
 
 
 
@@ -316,13 +402,27 @@ if __name__ == "__main__":
     # Load model on start
     load_model()
     
-    app.on_startup.append(start_background_tasks)
+    # Optional: Auto-start background tasks (set AUTO_START=true to enable)
+    auto_start = os.environ.get('AUTO_START', 'false').lower() == 'true'
+    if auto_start:
+        app.on_startup.append(start_background_tasks)
+        logger.info("Background tasks will auto-start on service startup")
+    else:
+        logger.info("Background tasks will NOT auto-start. Use POST /start to begin.")
+    
     app.on_cleanup.append(cleanup_background_tasks)
     
+    # Add routes
     inference_route = app.router.add_post('/inference', inference_handler)
+    start_route = app.router.add_post('/start', start_handler)
+    stop_route = app.router.add_post('/stop', stop_handler)
+    status_route = app.router.add_get('/status', status_handler)
     
     # Add CORS to API routes
     cors.add(inference_route)
+    cors.add(start_route)
+    cors.add(stop_route)
+    cors.add(status_route)
 
     logger.info("serving gnn...")
     port = int(os.environ.get('PORT', 8082))

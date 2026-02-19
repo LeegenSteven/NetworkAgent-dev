@@ -23,17 +23,11 @@ Shows the complete L3VPN hub-spoke network with all PE routers and their connect
 
 ```gql
 GRAPH networkGraph
-MATCH (router:PhysicalRouter)-[:HasInterface]->(intf:PhysicalInterface)
+MATCH (router:PhysicalRouter)-[e:HasInterface]->(intf:PhysicalInterface)
 WHERE router.role IN ('PE', 'pe')
   AND router.valid_end_ts IS NULL
   AND intf.valid_end_ts IS NULL
-RETURN 
-    router.name AS router_name,
-    router.role AS role,
-    router.location_city AS city,
-    router.router_id AS router_id,
-    COUNT(intf.id) AS interface_count
-ORDER BY router.name
+RETURN TO_JSON(router) AS router, TO_JSON(e) AS edge, TO_JSON(intf) AS interface
 ```
 
 **Expected Result**: PE1 (Oxford), PE2 (Cambridge), PE3 (Brighton) with their interface counts.
@@ -46,23 +40,25 @@ Visualizes the physical connectivity between routers through interfaces and link
 
 ```gql
 GRAPH networkGraph
-MATCH (r1:PhysicalRouter)-[:HasInterface]->(i1:PhysicalInterface)
-      -[:ConnectsTo]->(link:PhysicalLink)
-      -[:LinkedTo]->(i2:PhysicalInterface)
-      <-[:HasInterface]-(r2:PhysicalRouter)
+MATCH (r1:PhysicalRouter)-[e1:HasInterface]->(i1:PhysicalInterface)
+      -[e2:ConnectsTo]->(link:PhysicalLink)
+      -[e3:LinkedTo]->(i2:PhysicalInterface)
+      <-[e4:HasInterface]-(r2:PhysicalRouter)
 WHERE r1.valid_end_ts IS NULL 
   AND r2.valid_end_ts IS NULL
   AND i1.valid_end_ts IS NULL
   AND i2.valid_end_ts IS NULL
   AND link.valid_end_ts IS NULL
 RETURN 
-    r1.name AS router1,
-    i1.name AS interface1,
-    link.name AS link_name,
-    i2.name AS interface2,
-    r2.name AS router2
-ORDER BY r1.name, r2.name
-LIMIT 50
+    TO_JSON(r1) AS router1,
+    TO_JSON(e1) AS r1_to_i1,
+    TO_JSON(i1) AS interface1,
+    TO_JSON(e2) AS i1_to_link,
+    TO_JSON(link) AS link,
+    TO_JSON(e3) AS link_to_i2,
+    TO_JSON(i2) AS interface2,
+    TO_JSON(e4) AS r2_to_i2,
+    TO_JSON(r2) AS router2
 ```
 
 **Expected Result**: Shows connections like `pe1 (eth2) -[pe1-ce1-spoke]-> (eth1) ce1-spoke`.
@@ -75,17 +71,16 @@ Shows the L3VPN service layer with VRFs and route targets.
 
 ```gql
 GRAPH networkGraph
-MATCH (router:PhysicalRouter)-[:LocatedOn]-(vrf:VRF)-[:RealizesVPN]->(vpn:L3VPNService)
+MATCH (router:PhysicalRouter)<-[e1:LocatedOn]-(vrf:VRF)-[e2:RealizesVPN]->(vpn:L3VPNService)
 WHERE router.valid_end_ts IS NULL
   AND vrf.valid_end_ts IS NULL
   AND vpn.valid_end_ts IS NULL
 RETURN 
-    router.name AS router_name,
-    vrf.name AS vrf_name,
-    vrf.rd AS route_distinguisher,
-    vpn.name AS vpn_service,
-    vpn.topology AS topology_type
-ORDER BY router.name
+    TO_JSON(router) AS router,
+    TO_JSON(e1) AS router_to_vrf,
+    TO_JSON(vrf) AS vrf,
+    TO_JSON(e2) AS vrf_to_vpn,
+    TO_JSON(vpn) AS vpn
 ```
 
 **Expected Result**: Shows BLUE_SPOKE on PE1/PE3 and BLUE_HUB on PE2.
@@ -119,22 +114,6 @@ SELECT
     NULL AS location
 FROM PhysicalInterface
 WHERE valid_end_ts IS NULL
-
-UNION ALL
-
-SELECT 
-    'VRF' AS element_type,
-    CONCAT(
-        (SELECT name FROM PhysicalRouter WHERE id = router_id AND valid_end_ts IS NULL),
-        '-',
-        name
-    ) AS name,
-    rd AS detail,
-    NULL AS location
-FROM VRF
-WHERE valid_end_ts IS NULL
-
-ORDER BY element_type, name;
 ```
 
 ---

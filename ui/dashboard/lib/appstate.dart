@@ -25,7 +25,7 @@ class Appstate extends ChangeNotifier {
   
   // Network topology state
   NetworkTopology _topology = NetworkTopology.empty();
-  TopologyViewType _currentTopologyView = TopologyViewType.map;
+  TopologyViewType _currentTopologyView = TopologyViewType.logical;
   bool _isConnected = false;
   
   // Log widget state
@@ -50,9 +50,10 @@ class Appstate extends ChangeNotifier {
   final List<Map<String, dynamic>> _traceEvents = [];
   bool _isTracesEnabled = false;
   
-  // Anomalies state
-  List<Map<String, dynamic>> _anomalies = [];
-  Timer? _anomalyDataTimer;
+  // Topology polling state
+  Timer? _topologyRefreshTimer;
+  bool _isLiveMode = true;
+  String? _selectedTimestamp;
   
   // Getters
   io.Socket? get socket => _socket;
@@ -69,67 +70,72 @@ class Appstate extends ChangeNotifier {
   List<Incident> get incidents => List.unmodifiable(_incidents);
   bool get isLoadingIncidents => _isLoadingIncidents;
   List<Map<String, dynamic>> get traceEvents => _traceEvents;
-  List<Map<String, dynamic>> get anomalies => _anomalies;
+  bool get isLiveMode => _isLiveMode;
   
   Appstate() {
     _connectToServer();
-    // _startAnomalyPolling();
+    _startLiveTopologyPolling();
   }
   
-  void _startAnomalyPolling() {
+  // Set LIVE mode or historical mode
+  void setLiveMode(bool isLive, {String? timestamp}) {
+    _isLiveMode = isLive;
+    _selectedTimestamp = timestamp;
+    
+    if (isLive) {
+      print('Switching to LIVE mode - starting topology polling');
+      _startLiveTopologyPolling();
+    } else {
+      print('Switching to historical mode at timestamp: $timestamp');
+      _stopLiveTopologyPolling();
+      _fetchTopologyAtTimestamp(timestamp);
+    }
+  }
+  
+  // Start LIVE mode topology polling
+  void _startLiveTopologyPolling() {
+    _stopLiveTopologyPolling(); // Clear any existing timer
+    
     // Fetch immediately
-    fetchAnomalies();
-    // Then poll every 15 seconds
-    _anomalyDataTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      fetchAnomalies();
+    _fetchLiveTopology();
+    
+    // Then poll every 10 seconds
+    _topologyRefreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (_isLiveMode) {
+        _fetchLiveTopology();
+      }
     });
   }
   
-  Future<void> fetchAnomalies({String? timestamp}) async {
+  // Stop LIVE mode topology polling
+  void _stopLiveTopologyPolling() {
+    _topologyRefreshTimer?.cancel();
+    _topologyRefreshTimer = null;
+  }
+  
+  // Fetch LIVE topology with latest embeddings
+  Future<void> _fetchLiveTopology() async {
     try {
-      final anomaliesData = await _apiService.getAnomalies(timestamp: timestamp);
-      _anomalies = anomaliesData;
-      
-      // Update NetworkNodes with anomaly scores to re-render topology
-      _applyAnomaliesToTopology();
-      
-      notifyListeners();
+      final topologyData = await _apiService.fetchPhysicalTopology();
+      _updatePhysicalTopologyWithEmbeddings(topologyData);
     } catch (e) {
-      print('Error fetching anomalies in Appstate: $e');
+      print('Error fetching LIVE topology: $e');
     }
   }
   
-  void _applyAnomaliesToTopology() {
-    if (_topology.nodes.isEmpty || _anomalies.isEmpty) return;
-    
-    // Create a map for quick lookup
-    final anomalyMap = <String, Map<String, dynamic>>{};
-    for (var a in _anomalies) {
-      anomalyMap[a['node_id']] = a;
+  // Fetch historical topology snapshot at a specific timestamp
+  Future<void> _fetchTopologyAtTimestamp(String? timestamp) async {
+    if (timestamp == null) {
+      print('No timestamp provided for historical fetch');
+      return;
     }
     
-    final updatedNodes = <NetworkNode>[];
-    for (var node in _topology.nodes) {
-      final anomalyData = anomalyMap[node.id];
-      if (anomalyData != null) {
-        final score = anomalyData['anomaly_score'] as double? ?? 0.0;
-        final isAnomaly = score > 0.5; // Threshold
-        updatedNodes.add(node.copyWith(
-          anomalyScore: score,
-          isAnomaly: isAnomaly,
-          rootCause: anomalyData['root_cause']?.toString(), // Just store string representation for now
-        ));
-      } else {
-        // Reset if no longer anomalous
-        updatedNodes.add(node.copyWith(
-          anomalyScore: 0.0,
-          isAnomaly: false,
-          rootCause: null,
-        ));
-      }
+    try {
+      final topologyData = await _apiService.fetchPhysicalTopology(timestamp: timestamp);
+      _updatePhysicalTopologyWithEmbeddings(topologyData);
+    } catch (e) {
+      print('Error fetching historical topology: $e');
     }
-    
-    _topology = NetworkTopology(nodes: updatedNodes, connections: _topology.connections);
   }
 
   // Connect to the server and initialize socket
@@ -319,8 +325,13 @@ class Appstate extends ChangeNotifier {
     }
   }
   
-  // Update topology from physical topology data
+  // Update topology from physical topology data (legacy, without embeddings)
   void _updatePhysicalTopology(Map<String, dynamic> data) {
+    _updatePhysicalTopologyWithEmbeddings(data);
+  }
+  
+  // Update topology from physical topology data WITH embeddings
+  void _updatePhysicalTopologyWithEmbeddings(Map<String, dynamic> data) {
     try {
       final nodesData = data['nodes'] as List<dynamic>? ?? [];
       final connectionsData = data['connections'] as List<dynamic>? ?? [];
@@ -335,6 +346,25 @@ class Appstate extends ChangeNotifier {
         final role = nodeData['role'] ?? 'unknown';
         final status = nodeData['status'] ?? 'unknown';
         final location = nodeData['location'];
+        
+        // Extract embeddings data
+        final double? routerMSE = nodeData['router_mse'] != null 
+            ? (nodeData['router_mse'] as num).toDouble() 
+            : null;
+        final routerRCA = nodeData['router_rca'];
+        final embeddingTimestamp = nodeData['embedding_timestamp'];
+        
+        // Parse interface MSEs
+        Map<String, double>? interfaceMSEs;
+        if (nodeData['interface_mses'] != null && nodeData['interface_mses'] is Map) {
+          interfaceMSEs = {};
+          final interfaceMSEsData = nodeData['interface_mses'] as Map<String, dynamic>;
+          interfaceMSEsData.forEach((interfaceId, data) {
+            if (data is Map && data['mse'] != null) {
+              interfaceMSEs![interfaceId] = (data['mse'] as num).toDouble();
+            }
+          });
+        }
         
         // Physical topology typically consists of routers (default) and switches
         NodeType type = NodeType.P; 
@@ -357,6 +387,10 @@ class Appstate extends ChangeNotifier {
             'location': location,
             'interfaces': nodeData['interfaces'],
           },
+          routerMSE: routerMSE,
+          interfaceMSEs: interfaceMSEs,
+          routerRCA: routerRCA,
+          embeddingTimestamp: embeddingTimestamp,
         ));
         
         nodeIds.add(id);
@@ -379,11 +413,17 @@ class Appstate extends ChangeNotifier {
       }
       
       _topology = NetworkTopology(nodes: nodes, connections: connections);
-      notifyListeners();
+      
+      // Log embedding stats
+      final nodesWithMSE = nodes.where((n) => n.routerMSE != null).length;
+      final nodesWithHighMSE = nodes.where((n) => n.hasHighMSE).length;
       print('Updated topology with ${nodes.length} nodes and ${connections.length} connections');
+      print('Embeddings: $nodesWithMSE nodes have MSE data, $nodesWithHighMSE have high MSE');
+      
+      notifyListeners();
       
     } catch (e) {
-      print('Error updating physical topology: $e');
+      print('Error updating physical topology with embeddings: $e');
     }
   }
   
@@ -733,7 +773,7 @@ class Appstate extends ChangeNotifier {
   
   @override
   void dispose() {
-    _anomalyDataTimer?.cancel();
+    _topologyRefreshTimer?.cancel();
     
     // Remove event listeners to prevent memory leaks
     if (_socket != null) {

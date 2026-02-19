@@ -17,8 +17,15 @@ logger = logging.getLogger(__name__)
 # Constants
 HIDDEN_CHANNELS = 64
 OUT_CHANNELS = 32
+INTERVAL_MINUTES = 1
 NUM_HEADS = 4
 NUM_LAYERS = 2
+
+# Shared Environment Configuration
+SPANNER_INSTANCE = os.getenv("SPANNER_INSTANCE", "networktopology-instance")
+SPANNER_DATABASE = os.getenv("SPANNER_DATABASE", "networktopology-db")
+GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "network-model-artifacts")
+
 
 # Mapping of node types to feature names for explainability
 # Updated to User Specs:
@@ -34,12 +41,13 @@ FEATURE_MAP = {
 def explain_node_anomaly(node_type, original_x, reconstructed_x):
     """
     Decomposes reconstruction error into per-feature contributions.
+    Returns a dict with detailed explanation.
     """
     logger.debug(f"Explaining anomaly for node type: {node_type}")
     
     if node_type not in FEATURE_MAP:
         logger.warning(f"Unknown node type: {node_type}")
-        return "Unknown"
+        return {"error": "Unknown node type"}
     
     errors = (original_x - reconstructed_x) ** 2
     labels = FEATURE_MAP[node_type]
@@ -54,14 +62,37 @@ def explain_node_anomaly(node_type, original_x, reconstructed_x):
         collapsed_errors = torch.cat([numeric_errors, config_error.unsqueeze(0)])
         max_idx = torch.argmax(collapsed_errors).item()
         feature_label = labels[max_idx]
-        logger.info(f"Node type '{node_type}' anomaly attributed to: {feature_label}")
-        return feature_label
+        error_value = float(collapsed_errors[max_idx].item())
+        
+        logger.info(f"Node type '{node_type}' anomaly attributed to: {feature_label} (error={error_value:.6f})")
+        
+        return {
+            "primary_feature": feature_label,
+            "error_value": error_value,
+            "feature_errors": {
+                labels[0]: float(collapsed_errors[0].item()),
+                labels[1]: float(collapsed_errors[1].item())
+            }
+        }
     else:
         # Interface: All numeric
         max_idx = torch.argmax(errors).item()
         feature_label = labels[max_idx]
-        logger.info(f"Node type '{node_type}' anomaly attributed to: {feature_label}")
-        return feature_label
+        error_value = float(errors[max_idx].item())
+        
+        logger.info(f"Node type '{node_type}' anomaly attributed to: {feature_label} (error={error_value:.6f})")
+        
+        # Build feature errors dict
+        feature_errors = {}
+        for i, label in enumerate(labels):
+            if i < len(errors):
+                feature_errors[label] = float(errors[i].item())
+        
+        return {
+            "primary_feature": feature_label,
+            "error_value": error_value,
+            "feature_errors": feature_errors
+        }
 
 class THGAT(nn.Module):
     def __init__(self, metadata, hidden_channels, out_channels, num_heads, num_layers):
@@ -231,9 +262,9 @@ class GraphBuilder:
             for node in data["nodes"]:
                 ntype = node["type"]
                 if ntype == "Interface":
-                    all_metrics["Interface"]["rx"].append(node.get("rx", 0.0))
-                    all_metrics["Interface"]["tx"].append(node.get("tx", 0.0))
-                    all_metrics["Interface"]["errors"].append(node.get("errors", 0.0))
+                    all_metrics["Interface"]["rx"].append(float(node.get("rx") or 0.0))
+                    all_metrics["Interface"]["tx"].append(float(node.get("tx") or 0.0))
+                    all_metrics["Interface"]["errors"].append(float(node.get("errors") or 0.0))
 
         for ntype, metrics in all_metrics.items():
             self.scalers[ntype] = {}
@@ -313,6 +344,7 @@ class GraphBuilder:
             vec = []
             
             if "Router" in ntype:
+                logger.info(f"processing router {node.get('hostname')}")
                 # State
                 vec.append(node.get("state", 0.0))
                 # Config using NetBERT
@@ -320,14 +352,17 @@ class GraphBuilder:
                 vec.extend(self.get_config_embedding(config_text))
                 
             elif ntype == "Interface":
+                logger.info(f"interface {node.get('device_id')} {node.get('name')}")
                 # State
                 vec.append(node.get("state", 0.0))
+
                 # Scaled metrics: Errors, Rx, Tx
                 # Handle missing scaler gracefully if we fit on empty data
                 def get_scaled(metric):
-                    val = node.get(metric, 0.0)
+                    val = float(node.get(metric, 0.0) or 0.0)
                     if "Interface" in self.scalers and metric in self.scalers["Interface"]:
-                        return self.scalers["Interface"][metric].transform([[val]])[0][0]
+                        scaled_val = self.scalers["Interface"][metric].transform([[val]])[0][0]
+                        return scaled_val
                     return val # Fallback unscaled
                     
                 vec.append(get_scaled("errors"))

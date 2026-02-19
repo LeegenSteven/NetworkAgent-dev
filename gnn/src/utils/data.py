@@ -179,41 +179,76 @@ class SpannerDataset:
             
             logger.debug(f"Created {connected_edge_count} 'Connected' edges")
 
-            # # 5. Connect Metrics
-            # t_start = timestamp - datetime.timedelta(minutes=self.interval_minutes)
-            # logger.debug(f"Querying NetworkMetrics table for time range: {t_start.isoformat()} to {timestamp.isoformat()}")
-            # params_metrics = {'t_start': t_start, 't_end': timestamp}
-            # param_types_metrics = {'t_start': spanner.param_types.TIMESTAMP, 't_end': spanner.param_types.TIMESTAMP}
+            # 5. Connect Metrics
+            t_start = timestamp - datetime.timedelta(minutes=self.interval_minutes)
+            logger.debug(f"Querying NetworkMetrics table for time range: {t_start.isoformat()} to {timestamp.isoformat()}")
             
-            # query_metrics = """
-            #     SELECT interface_id, metrics
-            #     FROM NetworkMetrics
-            #     WHERE timestamp > @t_start AND timestamp <= @t_end
-            #     ORDER BY timestamp DESC
-            # """
+            # Gather physical router names and map interface properties
+            physical_router_names = []
+            router_id_to_hostname = {}
+            for node in snapshot_data["nodes"]:
+                if node["type"] in ["PE Router", "P Router", "CE Router"]:
+                    if node.get("hostname"):
+                        physical_router_names.append(node["hostname"])
+                        router_id_to_hostname[node["id"]] = node["hostname"]
             
-            # results = sn.execute_sql(query_metrics, params=params_metrics, param_types=param_types_metrics)
-            # metrics_map = {} 
+            interface_nodes = [n for n in snapshot_data["nodes"] if n["type"] == "Interface"]
             
-            # for row in results:
-            #     if row[0] not in metrics_map:
-            #         metrics_map[row[0]] = row[1]
-            
-            # logger.debug(f"Fetched metrics for {len(metrics_map)} interfaces")
-            
-            # metrics_applied = 0
-            # for node in snapshot_data["nodes"]:
-            #     if node["type"] == "Interface":
-            #         if node["id"] in metrics_map:
-            #             m = metrics_map[node["id"]]
-            #             # metrics JSON assumed to have 'errors', 'rx_bps', 'tx_bps' etc.
-            #             # Adapting keys as needed
-            #             node["errors"] = float(m.get("errors", 0.0))
-            #             node["rx"] = float(m.get("rx_bps", 0.0)) # Assuming bps or similar
-            #             node["tx"] = float(m.get("tx_bps", 0.0))
-            #             metrics_applied += 1
-            
-            # logger.info(f"Applied metrics to {metrics_applied}/{interface_count} interfaces")
+            if physical_router_names:
+                params_metrics = {
+                    "t_start": t_start, 
+                    "t_end": timestamp,
+                    "node_names": physical_router_names
+                }
+                param_types_metrics = {
+                    "t_start": spanner.param_types.TIMESTAMP, 
+                    "t_end": spanner.param_types.TIMESTAMP,
+                    "node_names": spanner.param_types.Array(spanner.param_types.STRING)
+                }
+                
+                query_metrics = """
+                    SELECT node_name, interface, metric_name, AVG(value) as agg_value
+                    FROM NetworkMetrics
+                    WHERE timestamp > @t_start AND timestamp <= @t_end
+                    AND node_name IN UNNEST(@node_names)
+                    AND interface IS NOT NULL
+                    GROUP BY node_name, interface, metric_name
+                """
+                
+                results = sn.execute_sql(query_metrics, params=params_metrics, param_types=param_types_metrics)
+                
+                # Dictionary mapping (node_name, interface_name) -> {metric_name: agg_value}
+                metrics_map = {} 
+                
+                for row in results:
+                    node_name = row[0]
+                    interface_name = row[1]
+                    metric_name = row[2]
+                    value = row[3]
+                    
+                    key = (node_name, interface_name)
+                    if key not in metrics_map:
+                        metrics_map[key] = {}
+                    
+                    metrics_map[key][metric_name] = value
+                
+                logger.debug(f"Fetched metrics for {len(metrics_map)} interfaces")
+                
+                metrics_applied = 0
+                for node in interface_nodes:
+                    hostname = router_id_to_hostname.get(node.get("device_id"))
+                    if not hostname:
+                        continue
+                    
+                    key = (hostname, node.get("name"))
+                    if key in metrics_map:
+                        m = metrics_map[key]
+                        node["errors"] = float(m.get("node_network_receive_errs_total", 0.0)) + float(m.get("node_network_transmit_errs_total", 0.0))
+                        node["rx"] = float(m.get("node_network_receive_bytes_total", 0.0))
+                        node["tx"] = float(m.get("node_network_transmit_bytes_total", 0.0))
+                        metrics_applied += 1
+                
+                logger.info(f"Applied metrics to {metrics_applied}/{interface_count} interfaces")
 
         total_edges = len(snapshot_data["edges"])
         total_nodes = len(snapshot_data["nodes"])

@@ -172,7 +172,7 @@ spec:
        content STRING(MAX)
     ) PRIMARY KEY (id)"
   - "CREATE TABLE NetworkMetrics (
-        id UUID DEFAULT (NEW_UUID()),
+        id STRING(36) NOT NULL DEFAULT (GENERATE_UUID()),
         timestamp TIMESTAMP NOT NULL,
         node_name STRING(MAX) NOT NULL,
         metric_name STRING(MAX) NOT NULL,

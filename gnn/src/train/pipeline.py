@@ -8,21 +8,17 @@ from google.cloud import storage
 import joblib
 import logging
 from utils.data import SpannerDataset
-from utils.gnn_utils import THGAT, GraphBuilder, HIDDEN_CHANNELS, OUT_CHANNELS, NUM_HEADS, NUM_LAYERS
+from utils.gnn_utils import SPANNER_INSTANCE, SPANNER_DATABASE, GCS_BUCKET_NAME, INTERVAL_MINUTES, THGAT, GraphBuilder, HIDDEN_CHANNELS, OUT_CHANNELS, NUM_HEADS, NUM_LAYERS
 
 logger = logging.getLogger(__name__)
 
 # Configuration
-INSTANCE_ID = os.getenv("SPANNER_INSTANCE", "networktopology-instance")
-DATABASE_ID = os.getenv("SPANNER_DATABASE", "networktopology-db")
-GCS_BUCKET = os.getenv("GCS_BUCKET_NAME", "network-model-artifacts")
 
 MODEL_SAVE_PATH = "model.pth"
 SCALER_PATH = "scalers.pkl"
 EPOCHS = 50
 LEARNING_RATE = 0.001
-TRAINING_SNAPSHOTS = 100
-INTERVAL_MINUTES = 1
+TRAINING_SNAPSHOTS = 20
 
 def upload_blob(bucket_name, source_file_name, destination_blob_name):
     """Uploads a file to the bucket."""
@@ -38,7 +34,7 @@ def upload_blob(bucket_name, source_file_name, destination_blob_name):
 def run_training_pipeline():
     logger.info("="*60)
     logger.info(f"THGAT TRAINING SERVICE STARTED")
-    logger.info(f"Instance: {INSTANCE_ID}, Database: {DATABASE_ID}")
+    logger.info(f"Instance: {SPANNER_INSTANCE}, Database: {SPANNER_DATABASE}")
     logger.info("="*60)
 
     try:
@@ -47,7 +43,7 @@ def run_training_pipeline():
         gb.init_netbert()
 
         logger.info(f"Fetching {TRAINING_SNAPSHOTS} snapshots from Spanner...")
-        dataset = SpannerDataset(INSTANCE_ID, DATABASE_ID, num_snapshots=TRAINING_SNAPSHOTS, interval_minutes=INTERVAL_MINUTES)
+        dataset = SpannerDataset(SPANNER_INSTANCE, SPANNER_DATABASE, num_snapshots=TRAINING_SNAPSHOTS, interval_minutes=INTERVAL_MINUTES)
         
         timestamps = dataset._get_timestamps()
         snapshot_objects = []
@@ -55,7 +51,8 @@ def run_training_pipeline():
         for ts in tqdm(timestamps, desc="Fetching Snapshots"):
             try:
                 snapshot = dataset.fetch_snapshot(ts)
-                logger.info(snapshot)
+                # logger.info("+++++++++++++++++++++++++++++++++++++++++++++SNAPSHOT++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+                # logger.info(snapshot)
 
                 if snapshot["nodes"]:
                     snapshot_objects.append(snapshot)
@@ -79,6 +76,7 @@ def run_training_pipeline():
         
         for data in tqdm(snapshot_objects, desc="Processing Graphs"):
             hdata, dims = gb.process_snapshot(data)
+            logger.info(hdata)
             snapshots.append(hdata)
             if input_dims is None:
                 input_dims = dims
@@ -133,9 +131,9 @@ def run_training_pipeline():
         torch.save(model.state_dict(), MODEL_SAVE_PATH)
         
         logger.info("Uploading artifacts to GCS...")
-        if GCS_BUCKET:
-            upload_blob(GCS_BUCKET, MODEL_SAVE_PATH, f"models/thgat/{MODEL_SAVE_PATH}")
-            upload_blob(GCS_BUCKET, SCALER_PATH, f"models/thgat/{SCALER_PATH}")
+        if GCS_BUCKET_NAME:
+            upload_blob(GCS_BUCKET_NAME, MODEL_SAVE_PATH, f"models/thgat/{MODEL_SAVE_PATH}")
+            upload_blob(GCS_BUCKET_NAME, SCALER_PATH, f"models/thgat/{SCALER_PATH}")
         else:
             logger.info("GCS_BUCKET_NAME not set. Skipping upload.")
             

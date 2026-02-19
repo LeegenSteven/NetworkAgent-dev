@@ -20,11 +20,38 @@ class NetworkNode {
     this.anomalyScore,
     this.isAnomaly = false,
     this.rootCause,
+    this.routerMSE,
+    this.interfaceMSEs,
+    this.routerRCA,
+    this.embeddingTimestamp,
   });
 
   final double? anomalyScore;
   final bool isAnomaly;
   final String? rootCause;
+  
+  // Embeddings data
+  final double? routerMSE;
+  final Map<String, double>? interfaceMSEs; // interface_id -> MSE
+  final dynamic routerRCA; // Root Cause Analysis (can be JSON object)
+  final String? embeddingTimestamp;
+  
+  // Computed property to check if router or any interface has high MSE
+  bool get hasHighMSE {
+    const double threshold = 2.0;
+    
+    // Check router MSE
+    if (routerMSE != null && routerMSE! > threshold) {
+      return true;
+    }
+    
+    // Check interface MSEs
+    if (interfaceMSEs != null) {
+      return interfaceMSEs!.values.any((mse) => mse > threshold);
+    }
+    
+    return false;
+  }
 
   NetworkNode copyWith({
     String? id,
@@ -34,6 +61,10 @@ class NetworkNode {
     double? anomalyScore,
     bool? isAnomaly,
     String? rootCause,
+    double? routerMSE,
+    Map<String, double>? interfaceMSEs,
+    dynamic routerRCA,
+    String? embeddingTimestamp,
   }) {
     return NetworkNode(
       id: id ?? this.id,
@@ -43,6 +74,10 @@ class NetworkNode {
       anomalyScore: anomalyScore ?? this.anomalyScore,
       isAnomaly: isAnomaly ?? this.isAnomaly,
       rootCause: rootCause ?? this.rootCause,
+      routerMSE: routerMSE ?? this.routerMSE,
+      interfaceMSEs: interfaceMSEs ?? this.interfaceMSEs,
+      routerRCA: routerRCA ?? this.routerRCA,
+      embeddingTimestamp: embeddingTimestamp ?? this.embeddingTimestamp,
     );
   }
   

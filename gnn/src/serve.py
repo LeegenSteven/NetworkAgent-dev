@@ -9,7 +9,7 @@ import aiohttp_cors
 from google.cloud import storage
 from google.cloud import spanner
 import datetime
-from utils.gnn_utils import THGAT, GraphBuilder, HIDDEN_CHANNELS, OUT_CHANNELS, NUM_HEADS, NUM_LAYERS, explain_node_anomaly
+from utils.gnn_utils import SPANNER_INSTANCE, SPANNER_DATABASE, GCS_BUCKET_NAME, INTERVAL_MINUTES, THGAT, GraphBuilder, HIDDEN_CHANNELS, OUT_CHANNELS, NUM_HEADS, NUM_LAYERS, explain_node_anomaly
 from utils.data import SpannerDataset
 
 log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
@@ -22,9 +22,6 @@ BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "model.pth")
 SCALER_PATH = os.path.join(BASE_DIR, "scalers.pkl")
 ANOMALY_THRESHOLD = 0.5 
-GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "network-model-artifacts")
-SPANNER_INSTANCE = os.getenv("SPANNER_INSTANCE", "networktopology-instance")
-SPANNER_DATABASE = os.getenv("SPANNER_DATABASE", "networktopology-db")
 
 # Initialize aiohttp application with no middleware
 app = web.Application()
@@ -149,7 +146,7 @@ async def run_inference():
         dataset = SpannerDataset(
             instance_id=SPANNER_INSTANCE, 
             database_id=SPANNER_DATABASE, 
-            num_snapshots=1 # We only need the latest one for inference
+            num_snapshots=1, interval_minutes=INTERVAL_MINUTES # We only need the latest one for inference
         )
         
         # _get_timestamps returns a list ending at now()
@@ -208,9 +205,8 @@ async def run_inference():
                         score = loss[i].item()
                         is_anomaly = score > ANOMALY_THRESHOLD
                         
-                        explanation = None
-                        if is_anomaly:
-                            explanation = explain_node_anomaly(node_type, hdata.x_dict[node_type][i], recon_x[i])
+                        # Always generate explanation for better insights
+                        explanation = explain_node_anomaly(node_type, hdata.x_dict[node_type][i], recon_x[i])
                         
                         node_result = {
                             "id": nid,
@@ -243,11 +239,12 @@ async def run_inference():
                 node_type = node["type"]
                 emb = node["embedding"]
                 score = node["score"]
-                # Spanner JSON column expects a dict/list or None.
-                explanation = node.get("explanation") 
+                # Spanner JSON column expects a JSON-encoded string or None
+                explanation = node.get("explanation")
                 
-                # Explanation might be a dict, ensure it's JSON serializable if wrapper objects exist
-                # But typically it's just a dict from explain_node_anomaly
+                # Convert dict to JSON string for Spanner's JSON column
+                if explanation is not None:
+                    explanation = json.dumps(explanation)
                 
                 mutations.append(
                     (embedding_id, nid, node_type, emb, float(score), explanation, spanner_timestamp)

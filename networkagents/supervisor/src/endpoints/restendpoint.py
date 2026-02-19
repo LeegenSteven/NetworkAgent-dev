@@ -19,7 +19,7 @@ import aiohttp_cors
 from aiohttp import web
 from agent.host_agent import HostAgent
 from endpoints.socketendpoint import SocketEndpoint
-from tools.topology import fetch_physical_topology, fetch_router_details, fetch_snapshots, fetch_anomalies
+from tools.topology import fetch_physical_topology, fetch_router_details, fetch_node_embeddings, fetch_snapshots, fetch_anomalies
 from tools.metrics import (
     fetch_all_last_metrics,
     fetch_all_metrics,
@@ -109,20 +109,29 @@ class RestEndpoint:
         getAnomaliesRoute = self.app.router.add_get("/anomalies", self.getAnomalies)
         self.cors.add(getAnomaliesRoute, corsConfig)
 
+        getNodeEmbeddingsRoute = self.app.router.add_get("/embeddings/{node_id}", self.getNodeEmbeddings)
+        self.cors.add(getNodeEmbeddingsRoute, corsConfig)
+
     #################################################################
     # Topology endpoints
     #################################################################
     async def getPhysicalTopology(self, request):
         """
         Get the physical network topology including routers, their interfaces, 
-        links, and connectivity.
+        links, connectivity, and embeddings data (always included).
+        
+        Query Parameters:
+            timestamp: Optional ISO-8601 timestamp for historical snapshot
         
         Returns:
-            aiohttp.web.Response: JSON response with physical topology data
+            aiohttp.web.Response: JSON response with physical topology data including embeddings
         """
         logger.info("REST endpoint: get physical topology")
         try:
-            topology = fetch_physical_topology()
+            # Get optional timestamp parameter
+            timestamp_str = request.query.get('timestamp')
+            
+            topology = fetch_physical_topology(timestamp_str=timestamp_str)
             return web.json_response(topology)
         except Exception as e:
             logger.error(f"Error fetching physical topology: {str(e)}", exc_info=True)
@@ -164,6 +173,42 @@ class RestEndpoint:
             logger.error(f"Error fetching router details: {str(e)}", exc_info=True)
             return web.json_response(
                 {"error": f"Error fetching router details: {str(e)}"},
+                status=500
+            )
+
+    #################################################################
+    # Get node embeddings (router and interfaces)
+    #################################################################
+    async def getNodeEmbeddings(self, request):
+        """
+        Get the latest embeddings for a router and its interfaces.
+        
+        Args:
+            request: The HTTP request object with node_id in the URL path
+            
+        Returns:
+            aiohttp.web.Response: JSON response with embeddings data including MSE
+        """
+        logger.info("REST endpoint: get node embeddings")
+        try:
+            node_id = request.match_info.get('node_id')
+            if not node_id:
+                return web.json_response(
+                    {"error": "No node ID provided"},
+                    status=400
+                )
+
+            embeddings_data = fetch_node_embeddings(node_id)
+            
+            if 'error' in embeddings_data:
+                return web.json_response(embeddings_data, status=500)
+            
+            return web.json_response(embeddings_data)
+            
+        except Exception as e:
+            logger.error(f"Error fetching node embeddings: {str(e)}", exc_info=True)
+            return web.json_response(
+                {"error": f"Error fetching node embeddings: {str(e)}"},
                 status=500
             )
 

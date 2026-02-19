@@ -26,11 +26,31 @@ class _NodeDetailsDialogState extends State<NodeDetailsDialog> {
   String _markdownSummary = '';
   String? _error;
   final APIService _apiService = APIService();
+  Map<String, dynamic>? _embeddingsData;
 
   @override
   void initState() {
     super.initState();
     _fetchNodeDetails();
+    _fetchEmbeddings();
+  }
+
+  Future<void> _fetchEmbeddings() async {
+    try {
+      // Only fetch embeddings for routers
+      bool isRouter = widget.node.properties['kind'] == 'Router' ||
+                     widget.node.properties['kind'] == 'PhysicalRouter';
+      
+      if (isRouter) {
+        final embeddings = await _apiService.fetchNodeEmbeddings(widget.node.id);
+        setState(() {
+          _embeddingsData = embeddings;
+        });
+      }
+    } catch (e) {
+      print('Error fetching embeddings: $e');
+      // Don't set error state, just continue without embeddings
+    }
   }
 
   Future<void> _fetchNodeDetails() async {
@@ -331,6 +351,50 @@ class _NodeDetailsDialogState extends State<NodeDetailsDialog> {
                                 }
                               },
                             ),
+                            // Embeddings Card (if available)
+                            if (_embeddingsData != null && 
+                                (_embeddingsData!['router_embedding'] != null || 
+                                 (_embeddingsData!['interface_embeddings'] as List?)?.isNotEmpty == true))
+                              Card(
+                                elevation: 2,
+                                margin: const EdgeInsets.all(4.0),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8.0),
+                                  side: BorderSide(
+                                    color: Color(0xFFFF6F00),
+                                    width: 1.0,
+                                  ),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            Icons.analytics,
+                                            color: Color(0xFFFF6F00),
+                                            size: 16,
+                                          ),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'GNN Embeddings (MSE)',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFFE65100),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      Divider(height: 12),
+                                      _buildEmbeddingsContent(),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             // Configuration Card
                             Card(
                               elevation: 2,
@@ -402,6 +466,140 @@ class _NodeDetailsDialogState extends State<NodeDetailsDialog> {
                   ],
                 ),
     );
+  }
+
+  Widget _buildEmbeddingsContent() {
+    if (_embeddingsData == null) {
+      return Text('No embeddings data available', style: TextStyle(fontSize: 12, color: Colors.grey));
+    }
+
+    final routerEmbedding = _embeddingsData!['router_embedding'];
+    final interfaceEmbeddings = _embeddingsData!['interface_embeddings'] as List? ?? [];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Router embedding
+        if (routerEmbedding != null) ...[
+          Text(
+            'Router MSE: ${_formatMSE(routerEmbedding['mse'])}',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: _getMSEColor(routerEmbedding['mse']),
+            ),
+          ),
+          if (routerEmbedding['timestamp'] != null)
+            Text(
+              'Last updated: ${_formatTimestamp(routerEmbedding['timestamp'])}',
+              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+            ),
+          if (routerEmbedding['embedding_vector'] != null)
+            Text(
+              'Embedding dim: ${(routerEmbedding['embedding_vector'] as List).length}',
+              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+            ),
+        ],
+        
+        // Interface embeddings
+        if (interfaceEmbeddings.isNotEmpty) ...[
+          SizedBox(height: 8),
+          Text(
+            'Interface MSEs:',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFFE65100),
+            ),
+          ),
+          SizedBox(height: 4),
+          ...interfaceEmbeddings.map((iface) {
+            return Padding(
+              padding: const EdgeInsets.only(left: 8.0, top: 2.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${iface['interface_name']}: ',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                  ),
+                  Text(
+                    _formatMSE(iface['mse']),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: _getMSEColor(iface['mse']),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ],
+        
+        if (routerEmbedding == null && interfaceEmbeddings.isEmpty)
+          Text(
+            'No embeddings available for this node',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+      ],
+    );
+  }
+
+  String _formatMSE(dynamic mse) {
+    if (mse == null) return 'N/A';
+    if (mse is num) {
+      return mse.toStringAsFixed(6);
+    }
+    return mse.toString();
+  }
+
+  Color _getMSEColor(dynamic mse) {
+    if (mse == null) return Colors.grey;
+    
+    double value = 0.0;
+    if (mse is num) {
+      value = mse.toDouble();
+    } else {
+      try {
+        value = double.parse(mse.toString());
+      } catch (e) {
+        return Colors.grey;
+      }
+    }
+    
+    // Color coding based on MSE value
+    // Lower MSE = better (green), higher MSE = worse (red)
+    if (value < 0.01) {
+      return Colors.green;
+    } else if (value < 0.05) {
+      return Colors.orange;
+    } else {
+      return Colors.red;
+    }
+  }
+
+  String _formatTimestamp(String? timestamp) {
+    if (timestamp == null) return 'Unknown';
+    try {
+      final dt = DateTime.parse(timestamp);
+      final now = DateTime.now();
+      final diff = now.difference(dt);
+      
+      if (diff.inMinutes < 1) {
+        return 'Just now';
+      } else if (diff.inHours < 1) {
+        return '${diff.inMinutes}m ago';
+      } else if (diff.inDays < 1) {
+        return '${diff.inHours}h ago';
+      } else {
+        return '${diff.inDays}d ago';
+      }
+    } catch (e) {
+      return timestamp;
+    }
   }
 
 }

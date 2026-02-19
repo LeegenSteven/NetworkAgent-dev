@@ -485,9 +485,14 @@ class APIService{
     }
   }
 
-  Future<Map<String, dynamic>> fetchPhysicalTopology() async {
+  Future<Map<String, dynamic>> fetchPhysicalTopology({String? timestamp}) async {
     try {
-      var url = Uri.parse('${config.EnvironmentConfig.agentUrl}/topology/physical');
+      // Build URL with optional timestamp parameter
+      String urlStr = '${config.EnvironmentConfig.agentUrl}/topology/physical';
+      if (timestamp != null) {
+        urlStr += '?timestamp=$timestamp';
+      }
+      var url = Uri.parse(urlStr);
       print('Fetching physical topology from: $url');
       
       final http.Response response = await http.get(url, headers: getRequestHeaders);
@@ -496,6 +501,7 @@ class APIService{
         final dynamic decodedData = jsonDecode(response.body);
         if (decodedData is Map<String, dynamic>) {
           print('Successfully fetched physical topology with ${decodedData['nodes']?.length ?? 0} nodes');
+          // Embeddings are now included in the topology response
           return decodedData;
         } else {
           print('Physical topology data is not a Map: ${decodedData.runtimeType}');
@@ -535,6 +541,34 @@ class APIService{
     } catch (e) {
       print('Error fetching router details: $e');
       rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchNodeEmbeddings(String nodeId) async {
+    try {
+      var url = Uri.parse('${config.EnvironmentConfig.agentUrl}/embeddings/$nodeId');
+      print('Fetching node embeddings from: $url');
+      
+      final http.Response response = await http.get(url, headers: getRequestHeaders);
+      
+      if (response.statusCode == 200) {
+        final dynamic decodedData = jsonDecode(response.body);
+        if (decodedData is Map<String, dynamic>) {
+          return decodedData;
+        } else {
+          print('Node embeddings data is not a Map: ${decodedData.runtimeType}');
+          throw Exception('Invalid node embeddings data format');
+        }
+      } else {
+        print('Failed to load node embeddings: ${response.statusCode}');
+        print('Response body: ${response.body}');
+        // Return empty result instead of throwing
+        return {'node_id': nodeId, 'router_embedding': null, 'interface_embeddings': []};
+      }
+    } catch (e) {
+      print('Error fetching node embeddings: $e');
+      // Return empty result instead of throwing
+      return {'node_id': nodeId, 'router_embedding': null, 'interface_embeddings': []};
     }
   }
 

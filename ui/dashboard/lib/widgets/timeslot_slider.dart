@@ -106,13 +106,12 @@ class _TimeslotSliderState extends State<TimeslotSlider> {
     final appState = Provider.of<Appstate>(context, listen: false);
     
     if (isLatest) {
-       // Refresh with latest
-       appState.fetchAnomalies();
+       // Switch to LIVE mode - start polling
+       appState.setLiveMode(true);
     } else {
-       // Fetch historical nearest that selected time
+       // Historical mode - fetch snapshot at this timestamp
        final selectedTime = _timeWindow[index];
-       // Convert to UTC ISO-8601 string for the backend
-       appState.fetchAnomalies(timestamp: selectedTime.toUtc().toIso8601String());
+       appState.setLiveMode(false, timestamp: selectedTime.toUtc().toIso8601String());
     }
   }
 
@@ -193,7 +192,7 @@ class _TimeslotSliderState extends State<TimeslotSlider> {
                            _isLive = true;
                          });
                          // Trigger live mode fetch immediately when scale changes to avoid stale view
-                         Provider.of<Appstate>(context, listen: false).fetchAnomalies();
+                         Provider.of<Appstate>(context, listen: false).setLiveMode(true);
                        }
                      },
                      items: const [

@@ -289,7 +289,8 @@ class _NetworkDashboardState extends State<NetworkDashboard>
           // Anomaly toggle button
           Consumer<Appstate>(
              builder: (context, appState, child) {
-               bool hasAnomalies = appState.anomalies.any((a) => (a['anomaly_score'] ?? 0.0) > 0.5);
+               // Check if any node has high MSE (router or interface)
+               bool hasAnomalies = appState.topology.nodes.any((node) => node.hasHighMSE);
                return IconButton(
                  icon: Icon(
                    Icons.warning_amber_rounded,

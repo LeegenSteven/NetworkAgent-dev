@@ -3,6 +3,7 @@
 This document contains ready-to-execute queries for demonstrating network topology visualization, metrics analysis, and GNN embedding-based root cause analysis in Spanner Studio.
 
 ## Prerequisites
+
 1. base demo deployed: `install.sh c && install.sh -s`
 2. Network deployed: `kubectl apply -f environment/telco-lab/l3vpn-hub-spoke.yaml`
    - wait until all vyosrouters are ready `watch kubectl get vyosrouter -n default`
@@ -337,6 +338,63 @@ ORDER BY node_type, node_id;
 ```
 
 **Use Case**: Export this to visualize embeddings in 2D/3D using UMAP or t-SNE.
+
+---
+
+# Introduce the Fault
+
+## Network Architecture
+
+### Hub-Spoke Topology
+- **Hub Router**: PE2 (Cambridge) - Aggregates traffic from all spokes
+- **Spoke Routers**: 
+  - PE1 (Oxford) - Connected to CE1-spoke (Sheffield)
+  - PE3 (Brighton) - Connected to CE2-spoke (Liverpool)
+
+### Route Target Configuration (Correct)
+- **Spokes (PE1, PE3)**: 
+  - Export: `65035:1011` (spoke routes)
+  - Import: `65035:1030` (hub routes)
+- **Hub (PE2)**:
+  - Export: `65035:1030` (hub routes)
+  - Import: `65035:1011`, `65035:1030` (both spoke and hub routes)
+
+### Route Distinguishers (Correct)
+- **PE1**: `10.50.50.1:1011`
+- **PE2**: `10.80.80.1:1011`
+- **PE3**: `10.60.60.1:1011`
+
+### Fault 1: RT Import Misconfiguration (Severe)
+
+**File**: `l3vpn-hub-spoke-fault1-rt-import.yaml`
+
+**Misconfiguration**:
+- **Location**: PE1 router, BLUE_SPOKE VRF
+- **Change**: `rt_import` changed from `["65035:1030"]` to `["65035:9999"]`
+- **Line**: ~970 in the VyOSL3VPN section
+
+**Impact**:
+- **Severity**: Complete connectivity failure between spoke1 and hub
+- **Symptom**: PE1 cannot import routes from the hub (PE2)
+- **Affected Traffic**: 
+  - dev1 (10.100.1.10) ❌ devhub (10.100.2.10)
+  - dev1 ✅ dev2 (via hub) - works if hub can still reach dev1's routes
+- **BGP Behavior**: PE1 will reject all VPNv4 routes with RT `65035:1030`
+
+**GNN Detection Signature**:
+- **Router Embedding**: PE1 config embedding shows high reconstruction error
+- **Feature Attribution**: Config (semantic) feature is primary anomaly driver
+- **Temporal Signal**: Embedding diverges at fault injection time
+- **Interface Metrics**: pe1-eth2 shows dropped traffic/zero throughput
+- **Graph Propagation**: Anomaly localizes to PE1 node and connected interfaces
+
+## Misconfigure the system
+
+```
+kubectl apply -f environment/telco-lab/l3vpn-hub-spoke-fault1-rt-import.yaml
+```
+
+Wait a minute for the embeddings to make their way through
 
 ---
 

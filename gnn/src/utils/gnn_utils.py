@@ -196,15 +196,25 @@ class GraphBuilder:
         
     def init_netbert(self):
         logger.info("Initializing NetBERT model...")
+        
+        # Check for local model directory first
+        # gnn/src/utils/gnn_utils.py -> gnn/src/netbert
+        local_model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "netbert")
+        model_name_or_path = "antoinelouis/netbert"
+        
+        if os.path.exists(local_model_path):
+             logger.info(f"Found local netbert directory at {local_model_path}")
+             model_name_or_path = local_model_path
+
         try:
-            self.tokenizer = AutoTokenizer.from_pretrained("antoinelouis/netbert")
-            logger.debug("NetBERT tokenizer loaded successfully")
-            self.text_model = AutoModel.from_pretrained("antoinelouis/netbert")
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+            logger.debug(f"NetBERT tokenizer loaded successfully from {model_name_or_path}")
+            self.text_model = AutoModel.from_pretrained(model_name_or_path)
             self.text_model.eval()
             self.text_embed_dim = self.text_model.config.hidden_size
             logger.info(f"NetBERT initialized successfully with embedding dimension: {self.text_embed_dim}")
         except Exception as e:
-            logger.warning(f"Could not load NetBERT ({e}). Using dummy embeddings.")
+            logger.warning(f"Could not load NetBERT from {model_name_or_path} ({e}). Using dummy embeddings.")
             self.text_model = None
 
     def get_config_embedding(self, text):
@@ -212,42 +222,74 @@ class GraphBuilder:
             logger.debug("NetBERT model not available, returning zero embedding")
             return np.zeros(self.text_embed_dim)
         
-        # Ensure text is a valid string
+        # Ensure text is valid
         if text is None or text == "":
             logger.debug("Empty or None config text, returning zero embedding")
             return np.zeros(self.text_embed_dim)
         
-        # Handle different input types
-        if not isinstance(text, str):
-            # Handle Spanner JsonObject
-            if hasattr(text, '__class__') and 'JsonObject' in text.__class__.__name__:
-                try:
-                    # Convert JsonObject to JSON string
-                    text = json.dumps(dict(text))
-                    logger.debug("Converted Spanner JsonObject to JSON string")
-                except Exception as e:
-                    logger.warning(f"Failed to convert JsonObject to JSON: {e}, using str() instead")
-                    text = str(text)
-            # Handle dict or other objects
-            elif isinstance(text, dict):
-                text = json.dumps(text)
-                logger.debug("Converted dict to JSON string")
-            else:
-                logger.warning(f"Config text is not a string (type: {type(text)}), converting to string")
-                text = str(text)
+        # Extract meaningful content if input is structured data
+        content_to_embed = text
         
+        # 1. Normalize input to dict if possible
+        data_dict = None
+        if isinstance(text, (dict, list)):
+            data_dict = text
+        elif hasattr(text, '__class__') and 'JsonObject' in text.__class__.__name__:
+             try:
+                 data_dict = dict(text)
+             except:
+                 pass
+        elif isinstance(text, str):
+            try:
+                # Try parsing string as JSON
+                if text.strip().startswith('{'):
+                    data_dict = json.loads(text)
+            except:
+                pass
+        
+        # 2. Extract specific fields if it is a K8s resource dict
+        if isinstance(data_dict, dict):
+            # Option A: status.applied_config (Actual device config - Best for fault detection)
+            if 'status' in data_dict and isinstance(data_dict['status'], dict) and 'applied_config' in data_dict['status']:
+                content_to_embed = data_dict['status']['applied_config']
+                logger.debug("Embedding extracted applied_config")
+            
+            # Option B: spec (Intent - Good fallback)
+            elif 'spec' in data_dict:
+                content_to_embed = json.dumps(data_dict['spec'])
+                logger.debug("Embedding extracted spec")
+                
+            # Option C: Use full dict as string
+            else:
+                content_to_embed = json.dumps(data_dict)
+        
+        # 3. Ensure we have a string for the tokenizer
+        if not isinstance(content_to_embed, str):
+            if isinstance(content_to_embed, (dict, list)) or (hasattr(content_to_embed, '__class__') and 'JsonObject' in content_to_embed.__class__.__name__):
+                try:
+                    content_to_embed = json.dumps(dict(content_to_embed) if hasattr(content_to_embed, '__iter__') else content_to_embed)
+                except:
+                    content_to_embed = str(content_to_embed)
+            else:
+                content_to_embed = str(content_to_embed)
+                
         try:
-            inputs = self.tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=128)
+            # Tokenize and embed
+            # Using 512 max length to capture more context
+            inputs = self.tokenizer(content_to_embed, return_tensors="pt", truncation=True, padding=True, max_length=512)
             with torch.no_grad():
                 outputs = self.text_model(**inputs)
             embedding = outputs.last_hidden_state[:, 0, :].squeeze().numpy()
+            
             if np.isnan(embedding).any():
                 logger.warning("NaN values detected in embedding, replacing with zero embedding")
                 return np.zeros(self.text_embed_dim)
-            logger.debug(f"Generated config embedding of shape: {embedding.shape}")
+                
+            # logger.debug(f"Generated config embedding of shape: {embedding.shape}")
             return embedding
+            
         except Exception as e:
-            logger.error(f"Error generating config embedding for text type {type(text)}: {e}")
+            logger.error(f"Error generating config embedding: {e}")
             return np.zeros(self.text_embed_dim)
 
     def fit_scalers(self, snapshot_objects):

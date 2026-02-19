@@ -414,8 +414,8 @@ if __name__ == "__main__":
     
     # Add routes
     inference_route = app.router.add_post('/inference', inference_handler)
-    start_route = app.router.add_post('/start', start_handler)
-    stop_route = app.router.add_post('/stop', stop_handler)
+    start_route = app.router.add_get('/start', start_handler)
+    stop_route = app.router.add_get('/stop', stop_handler)
     status_route = app.router.add_get('/status', status_handler)
     
     # Add CORS to API routes

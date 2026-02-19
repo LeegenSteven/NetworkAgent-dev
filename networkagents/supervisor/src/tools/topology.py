@@ -77,19 +77,40 @@ def fetch_physical_topology(timestamp_str: str = None):
                 return {'nodes': [], 'connections': [], 'error': 'Invalid timestamp format'}
         
         # GQL query to get all routers with their interfaces and links
-        # For now, fetch latest topology (temporal filtering would require more complex logic)
+        # Supports both CURRENT (target_timestamp=None) and HISTORICAL (SCD Type 2) topology
+        if target_timestamp:
+            # Historical mode: Use SCD Type 2 time-travel
+            ts_filter = f"""
+                router.valid_start_ts <= TIMESTAMP('{target_timestamp.isoformat()}')
+                AND (router.valid_end_ts > TIMESTAMP('{target_timestamp.isoformat()}') OR router.valid_end_ts IS NULL)
+            """
+            interface_filter = f"""
+                interface.valid_start_ts <= TIMESTAMP('{target_timestamp.isoformat()}')
+                AND (interface.valid_end_ts > TIMESTAMP('{target_timestamp.isoformat()}') OR interface.valid_end_ts IS NULL)
+                AND interface.name != 'eth0'
+            """
+            link_filter = f"""
+                link.valid_start_ts <= TIMESTAMP('{target_timestamp.isoformat()}')
+                AND (link.valid_end_ts > TIMESTAMP('{target_timestamp.isoformat()}') OR link.valid_end_ts IS NULL)
+            """
+        else:
+            # Current mode: Only get currently valid entities
+            ts_filter = "router.valid_end_ts IS NULL"
+            interface_filter = "interface.valid_end_ts IS NULL AND interface.name != 'eth0'"
+            link_filter = "link.valid_end_ts IS NULL"
+        
         gql_query = f"""
             GRAPH {GRAPH_NAME}
             MATCH (router:PhysicalRouter)
-            WHERE router.valid_end_ts IS NULL
+            WHERE {ts_filter}
             OPTIONAL MATCH (router) -[:HasInterface]-> (interface:PhysicalInterface)
-            WHERE interface.valid_end_ts IS NULL AND interface.name != 'eth0'
+            WHERE {interface_filter}
             OPTIONAL MATCH (interface) -[:ConnectsTo]-> (link:PhysicalLink)
-            WHERE link.valid_end_ts IS NULL
+            WHERE {link_filter}
             OPTIONAL MATCH (link) -[:LinkedTo]-> (remote_interface:PhysicalInterface)
-            WHERE remote_interface.valid_end_ts IS NULL AND remote_interface.name != 'eth0'
+            WHERE {interface_filter}
             OPTIONAL MATCH (remote_interface) <-[:HasInterface]- (remote_router:PhysicalRouter)
-            WHERE remote_router.valid_end_ts IS NULL
+            WHERE {ts_filter}
             RETURN 
                 router.id AS router_id,
                 router.name AS router_name,
@@ -192,12 +213,12 @@ def _add_embeddings_to_routers(database, routers, target_timestamp=None):
     Args:
         database: Spanner database connection
         routers: Dict of routers keyed by router_id
-        target_timestamp: Optional datetime for historical embeddings
+        target_timestamp: Optional datetime for exact snapshot timestamp match
     """
     try:
         # Build query to fetch router embeddings
         if target_timestamp:
-            # Historical: find embeddings closest to target timestamp
+            # Historical: Use EXACT timestamp match for snapshot
             router_embedding_query = """
                 SELECT 
                     e.node_id,
@@ -207,13 +228,14 @@ def _add_embeddings_to_routers(database, routers, target_timestamp=None):
                 FROM NodeEmbedding e
                 WHERE e.node_id IN UNNEST(@router_ids)
                   AND e.node_type = 'PhysicalRouter'
-                  AND e.timestamp <= @target_timestamp
-                ORDER BY e.node_id, e.timestamp DESC
+                  AND e.timestamp = @target_timestamp
             """
             
             interface_embedding_query = """
                 SELECT 
-                    e.node_id,
+                    i.router_id,
+                    e.node_id AS interface_id,
+                    i.name AS interface_name,
                     e.anomaly_score,
                     TO_JSON_STRING(e.anomaly_explanation) AS anomaly_explanation,
                     e.timestamp
@@ -221,8 +243,7 @@ def _add_embeddings_to_routers(database, routers, target_timestamp=None):
                 JOIN PhysicalInterface i ON e.node_id = i.id
                 WHERE i.router_id IN UNNEST(@router_ids)
                   AND e.node_type = 'PhysicalInterface'
-                  AND e.timestamp <= @target_timestamp
-                ORDER BY i.router_id, e.node_id, e.timestamp DESC
+                  AND e.timestamp = @target_timestamp
             """
         else:
             # Latest embeddings

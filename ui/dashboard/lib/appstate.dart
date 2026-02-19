@@ -54,6 +54,7 @@ class Appstate extends ChangeNotifier {
   Timer? _topologyRefreshTimer;
   bool _isLiveMode = true;
   String? _selectedTimestamp;
+  List<String> _availableSnapshots = [];
   
   // Getters
   io.Socket? get socket => _socket;
@@ -71,10 +72,24 @@ class Appstate extends ChangeNotifier {
   bool get isLoadingIncidents => _isLoadingIncidents;
   List<Map<String, dynamic>> get traceEvents => _traceEvents;
   bool get isLiveMode => _isLiveMode;
+  List<String> get availableSnapshots => List.unmodifiable(_availableSnapshots);
   
   Appstate() {
     _connectToServer();
     _startLiveTopologyPolling();
+    _loadAvailableSnapshots();
+  }
+  
+  // Load available snapshots from backend
+  Future<void> _loadAvailableSnapshots() async {
+    try {
+      final snapshots = await _apiService.getSnapshots();
+      _availableSnapshots = snapshots;
+      print('Loaded ${snapshots.length} available snapshots');
+      notifyListeners();
+    } catch (e) {
+      print('Error loading available snapshots: $e');
+    }
   }
   
   // Set LIVE mode or historical mode
@@ -98,11 +113,13 @@ class Appstate extends ChangeNotifier {
     
     // Fetch immediately
     _fetchLiveTopology();
+    _loadAvailableSnapshots(); // Refresh snapshots
     
     // Then poll every 10 seconds
     _topologyRefreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (_isLiveMode) {
         _fetchLiveTopology();
+        _loadAvailableSnapshots(); // Refresh snapshots to pick up new ones
       }
     });
   }

@@ -3,15 +3,18 @@
 This document contains ready-to-execute queries for demonstrating network topology visualization, metrics analysis, and GNN embedding-based root cause analysis in Spanner Studio.
 
 ## Prerequisites
-
-1. Network deployed: `kubectl apply -f environment/telco-lab/l3vpn-hub-spoke.yaml`
-2. Traffic running: `kubectl apply -f environment/telco-lab/l3vpn-test.yaml`
-2. Metrics being collected by metricscollector
-3. GNN model trained and generating embeddings
-
+1. base demo deployed: `install.sh c && install.sh -s`
+2. Network deployed: `kubectl apply -f environment/telco-lab/l3vpn-hub-spoke.yaml`
+   - wait until all vyosrouters are ready `watch kubectl get vyosrouter -n default`
+3. Traffic running: `kubectl apply -f environment/telco-lab/l3vpn-test.yaml`
+4. GNN model training and inferencing deployed: `install.sh --deploy gnn`
+5. Metrics being collected by metricscollector: `install.sh --deploy metricscollector`
+6. After 20 mins train the GNN: `curl <train-gnn cloud run service>/train`
+   - note that when you have trained the model its weights will be stored in a bucket, so the next time you run the demo you can skip the training phase.
+7. Start the embedding generation: `curl <serve-gnn cloud run service>/start`
 ---
 
-## A) Live Topology Visualization (GQL)
+## A) Show Live Topology Visualization
 
 ### Query A1: Hub-Spoke Topology Overview
 

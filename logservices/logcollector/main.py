@@ -187,22 +187,22 @@ def capture_log(cloud_event: CloudEvent) -> None:
   def insert_log_entry(transaction):
     transaction.execute_update(
       "INSERT INTO KgLogEntryNode "
-      "(id, severity, source, message, timestamp, content, embedding)"
-      "VALUES (@id, @severity, @source, @message, @timestamp, @content, @embedding)",
+      "(id, timestamp, severity, source, message, content, embedding)"
+      "VALUES (@id, @timestamp, @severity, @source, @message, @content, @embedding)",
       params={
-        "id": insert_id, 
+        "id": insert_id,
+        "timestamp": timestamp, 
         "severity": severity, 
         "source": source,
         "message": message, 
-        "timestamp": timestamp, 
         "content": content, 
         "embedding": embedding },
       param_types={
         "id": spanner.param_types.STRING, 
+        "timestamp": spanner.param_types.TIMESTAMP,
         "severity": spanner.param_types.STRING,
         "source": spanner.param_types.STRING,
         "message": spanner.param_types.STRING, 
-        "timestamp": spanner.param_types.TIMESTAMP,
         "content": spanner.param_types.STRING, 
         "embedding": spanner.param_types.Array(spanner.param_types.FLOAT64) },
     )

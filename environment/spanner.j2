@@ -165,12 +165,14 @@ spec:
       ) PRIMARY KEY (id)"
   - "CREATE TABLE KgLogEntryNode (
        id STRING(17) NOT NULL,
+       timestamp TIMESTAMP NOT NULL,
        severity STRING(16) NOT NULL,
        source STRING(MAX),
        message STRING(MAX),
-       timestamp TIMESTAMP,
-       content STRING(MAX)
-    ) PRIMARY KEY (id)"
+       content STRING(MAX),
+       embedding ARRAY<FLOAT64>
+    ) PRIMARY KEY (id, timestamp)"
+  - "CREATE INDEX KgLogEntryNodeIdx1 ON KgLogEntryNode(timestamp DESC) STORING (severity, source, message, content, embedding)"
   - "CREATE TABLE NetworkMetrics (
         id STRING(36) NOT NULL DEFAULT (GENERATE_UUID()),
         timestamp TIMESTAMP NOT NULL,
@@ -182,7 +184,7 @@ spec:
         labels JSON,
         interface STRING(MAX)
     ) PRIMARY KEY (id, timestamp)"
-  - "CREATE INDEX NetworkMetricsByTimestamp ON NetworkMetrics(timestamp)"
+  - "CREATE INDEX NetworkMetricsIdx1 ON NetworkMetrics(timestamp DESC) STORING (interface, kind, labels, metric_name, metric_type, node_name, value)"
   - "CREATE TABLE ServicePerformance (
         id STRING(36) NOT NULL,
         service_type STRING(MAX) NOT NULL,

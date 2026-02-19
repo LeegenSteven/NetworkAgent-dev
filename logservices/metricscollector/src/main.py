@@ -185,15 +185,12 @@ def retention_worker(db, lock):
             
             with lock:
                 logger.debug("Retention thread: Acquired lock")
-                def execute_delete(transaction):
-                    row_count = transaction.execute_update(
-                        dml,
-                        params={'cutoff_time': cutoff_time},
-                        param_types={'cutoff_time': spanner.param_types.TIMESTAMP}
-                    )
-                    logger.info(f"Retention thread: Deleted {row_count} old metric rows.")
-                
-                db.run_in_transaction(execute_delete)
+                row_count = db.execute_partitioned_dml(
+                    dml,
+                    params={'cutoff_time': cutoff_time},
+                    param_types={'cutoff_time': spanner.param_types.TIMESTAMP}
+                )
+                logger.info(f"Retention thread: Deleted {row_count} old metric rows.")
                 logger.debug("Retention thread: Released lock")
                 
         except Exception as e:

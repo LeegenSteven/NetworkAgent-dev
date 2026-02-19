@@ -133,6 +133,9 @@ class THGAT(nn.Module):
             self.decoder_dict[node_type] = Linear(HIDDEN_CHANNELS, dim)
             logger.debug(f"Node type '{node_type}': input_dim={dim}, hidden_dim={HIDDEN_CHANNELS}")
         logger.info("Input dimensions set successfully")
+        # Log which input dim corresponds to which feature set
+        # Router: 1 + 128 = 129
+        # Interface: 4
 
     def forward(self, x_dict, edge_index_dict, state_dict=None):
         logger.debug(f"Forward pass - Processing {len(x_dict)} node types")
@@ -195,102 +198,151 @@ class GraphBuilder:
         logger.debug(f"Global ID map initialized with node types: {list(self.global_id_map.keys())}")
         
     def init_netbert(self):
-        logger.info("Initializing NetBERT model...")
+        # Using structured encoding instead of NetBERT
+        # Dimensions: 128 hash buckets for robust feature hashing
+        self.text_embed_dim = 128
+        logger.info(f"Using Structured Config Encoder with dimension: {self.text_embed_dim}")
         
-        # Check for local model directory first
-        # gnn/src/utils/gnn_utils.py -> gnn/src/netbert
-        local_model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "netbert")
-        model_name_or_path = "antoinelouis/netbert"
+    def _parse_vyos_commands(self, config_text):
+        """
+        Extracts key configuration items from VyOS text commands.
+        Returns a list of feature strings like 'rt_import:65035:1030', 'neighbor:10.0.0.1'.
+        """
+        features = []
         
-        if os.path.exists(local_model_path):
-             logger.info(f"Found local netbert directory at {local_model_path}")
-             model_name_or_path = local_model_path
+        # Split into lines
+        if not config_text:
+            return features
+            
+        lines = config_text.split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+                
+            parts = line.split()
+            
+            # Pattern 1: Route Targets (Import/Export)
+            # set vrf name BLUE_SPOKE protocols bgp address-family ipv4-unicast route-target vpn import '65035:9999'
+            if "route-target" in line and "vpn" in line:
+                try:
+                    # Extract the target (last element usually)
+                    target = parts[-1].strip("'\"")
+                    if "import" in line:
+                        features.append(f"rt_import:{target}")
+                    elif "export" in line:
+                        features.append(f"rt_export:{target}")
+                except:
+                    pass
+                    
+            # Pattern 2: BGP Neighbors
+            # set protocols bgp neighbor 10.0.0.1 ...
+            elif "protocols bgp neighbor" in line:
+                try:
+                    # 'set', 'protocols', 'bgp', 'neighbor', '10.0.0.1', ...
+                    idx = parts.index("neighbor")
+                    if idx + 1 < len(parts):
+                        neighbor_ip = parts[idx + 1]
+                        features.append(f"bgp_neighbor:{neighbor_ip}")
+                except:
+                    pass
+            
+            # Pattern 3: Interfaces
+            # set interfaces ethernet eth1 address 172.16.90.2/24
+            elif "set interfaces" in line and "address" in line:
+                try:
+                    # simplistic extraction
+                    # set interfaces ethernet eth1 address 172.16.90.2/24
+                    if "ethernet" in line:
+                        idx = parts.index("ethernet")
+                        if idx + 1 < len(parts):
+                            eth_name = parts[idx + 1]
+                            features.append(f"interface:{eth_name}")
+                except:
+                    pass
+                    
+            # Pattern 4: VRF Definition
+            # set vrf name BLUE_SPOKE table 200
+            elif "set vrf name" in line:
+                try:
+                    idx = parts.index("name")
+                    if idx + 1 < len(parts):
+                        vrf_name = parts[idx + 1]
+                        features.append(f"vrf:{vrf_name}")
+                except:
+                    pass
 
-        try:
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
-            logger.debug(f"NetBERT tokenizer loaded successfully from {model_name_or_path}")
-            self.text_model = AutoModel.from_pretrained(model_name_or_path)
-            self.text_model.eval()
-            self.text_embed_dim = self.text_model.config.hidden_size
-            logger.info(f"NetBERT initialized successfully with embedding dimension: {self.text_embed_dim}")
-        except Exception as e:
-            logger.warning(f"Could not load NetBERT from {model_name_or_path} ({e}). Using dummy embeddings.")
-            self.text_model = None
+        return features
 
     def get_config_embedding(self, text):
-        if self.text_model is None:
-            logger.debug("NetBERT model not available, returning zero embedding")
-            return np.zeros(self.text_embed_dim)
-        
+        """
+        Generates a fixed-size embedding using hashing of configuration features.
+        Robust to new/unseen values.
+        """
         # Ensure text is valid
         if text is None or text == "":
-            logger.debug("Empty or None config text, returning zero embedding")
             return np.zeros(self.text_embed_dim)
         
-        # Extract meaningful content if input is structured data
+        # Extract content (Logic copied from previous fix)
         content_to_embed = text
-        
-        # 1. Normalize input to dict if possible
         data_dict = None
+        
+        # 1. Normalize input
         if isinstance(text, (dict, list)):
             data_dict = text
         elif hasattr(text, '__class__') and 'JsonObject' in text.__class__.__name__:
-             try:
-                 data_dict = dict(text)
-             except:
-                 pass
+             try: data_dict = dict(text)
+             except: pass
         elif isinstance(text, str):
             try:
-                # Try parsing string as JSON
-                if text.strip().startswith('{'):
-                    data_dict = json.loads(text)
-            except:
-                pass
+                if text.strip().startswith('{'): data_dict = json.loads(text)
+            except: pass
         
-        # 2. Extract specific fields if it is a K8s resource dict
+        # 2. Extract specific fields
         if isinstance(data_dict, dict):
-            # Option A: status.applied_config (Actual device config - Best for fault detection)
             if 'status' in data_dict and isinstance(data_dict['status'], dict) and 'applied_config' in data_dict['status']:
                 content_to_embed = data_dict['status']['applied_config']
-                logger.debug("Embedding extracted applied_config")
-            
-            # Option B: spec (Intent - Good fallback)
             elif 'spec' in data_dict:
+                # Fallback: Convert spec to something resembling commands or just string
+                # Ideally we'd parse spec too, but for now stringify
                 content_to_embed = json.dumps(data_dict['spec'])
-                logger.debug("Embedding extracted spec")
-                
-            # Option C: Use full dict as string
             else:
                 content_to_embed = json.dumps(data_dict)
         
-        # 3. Ensure we have a string for the tokenizer
+        # 3. Ensure string
         if not isinstance(content_to_embed, str):
-            if isinstance(content_to_embed, (dict, list)) or (hasattr(content_to_embed, '__class__') and 'JsonObject' in content_to_embed.__class__.__name__):
-                try:
-                    content_to_embed = json.dumps(dict(content_to_embed) if hasattr(content_to_embed, '__iter__') else content_to_embed)
-                except:
-                    content_to_embed = str(content_to_embed)
-            else:
-                content_to_embed = str(content_to_embed)
-                
-        try:
-            # Tokenize and embed
-            # Using 512 max length to capture more context
-            inputs = self.tokenizer(content_to_embed, return_tensors="pt", truncation=True, padding=True, max_length=512)
-            with torch.no_grad():
-                outputs = self.text_model(**inputs)
-            embedding = outputs.last_hidden_state[:, 0, :].squeeze().numpy()
+            content_to_embed = str(content_to_embed)
+
+        # --- Structured Hashing Encoding ---
+        # 1. Parse features
+        features = self._parse_vyos_commands(content_to_embed)
+        
+        # 2. Initialize zero vector
+        embedding = np.zeros(self.text_embed_dim)
+        
+        # 3. Hash features into buckets
+        # This is a simple "Hashing Vectorizer" / "Multi-hot Encoding"
+        import hashlib
+        
+        if not features:
+            # If parsing failed (e.g. JSON spec instead of commands), 
+            # fallback to hashing the raw tokens of the string
+            # to ensure we still detect changes
+            features = content_to_embed.split()
+        
+        for feature in features:
+            # Deterministic hash to index
+            # MD5 is stable across runs/platforms
+            hash_val = int(hashlib.md5(feature.encode('utf-8')).hexdigest(), 16)
+            idx = hash_val % self.text_embed_dim
             
-            if np.isnan(embedding).any():
-                logger.warning("NaN values detected in embedding, replacing with zero embedding")
-                return np.zeros(self.text_embed_dim)
-                
-            # logger.debug(f"Generated config embedding of shape: {embedding.shape}")
-            return embedding
+            # Binary presence (or count)
+            # Using 1.0 for presence creates a "multi-hot" vector
+            embedding[idx] = 1.0
             
-        except Exception as e:
-            logger.error(f"Error generating config embedding: {e}")
-            return np.zeros(self.text_embed_dim)
+        logger.debug(f"Encoded {len(features)} features into {self.text_embed_dim}-dim vector")
+        return embedding
 
     def fit_scalers(self, snapshot_objects):
         logger.info(f"Fitting scalers on {len(snapshot_objects)} snapshot objects")
@@ -357,7 +409,7 @@ class GraphBuilder:
         input_dims = {}
         
         # Define dimensions
-        # Router: [State(1)] + [Config(768)] = 769
+        # Router: [State(1)] + [Config(128)] = 129
         # Interface: [State(1), Errors(1), Rx(1), Tx(1)] = 4
         
         for ntype, id_map in self.global_id_map.items():
@@ -389,7 +441,7 @@ class GraphBuilder:
                 logger.info(f"processing router {node.get('hostname')}")
                 # State
                 vec.append(node.get("state", 0.0))
-                # Config using NetBERT
+                # Config using structured encoding
                 config_text = node.get("config", "")
                 vec.extend(self.get_config_embedding(config_text))
                 

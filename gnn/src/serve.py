@@ -114,12 +114,12 @@ def load_model():
     if os.path.exists(MODEL_PATH):
         try:
             # Hardcoded standard dims based on gnn_utils.py
-            # Router: 1 + 768 = 769
+            # Router: 1 + 128 = 129
             # Interface: 4
             input_dims = {
-                "PE Router": 769, 
-                "P Router": 769, 
-                "CE Router": 769,
+                "PE Router": 129, 
+                "P Router": 129, 
+                "CE Router": 129,
                 "Interface": 4
             }
             
@@ -189,7 +189,10 @@ async def run_inference():
             
             for node_type, recon_x in recon_dict.items():
                 if node_type in hdata.x_dict:
-                    loss = criterion(recon_x, hdata.x_dict[node_type]).mean(dim=1)
+                    # Using Sum Squared Error (SSE) instead of Mean Squared Error
+                    # This makes the score proportional to the number of mismatched features
+                    # which is better for sparse/binary feature vectors.
+                    loss = criterion(recon_x, hdata.x_dict[node_type]).sum(dim=1)
                     
                     # Get embeddings from state_dict
                     # state_dict[node_type] is (num_layers, batch, hidden_channels) -> (1, N, 64)

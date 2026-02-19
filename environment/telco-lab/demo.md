@@ -283,8 +283,8 @@ SELECT
     ne.node_id,
     ne.node_type,
     ne.anomaly_score,
-    JSON_EXTRACT_SCALAR(ne.anomaly_explanation, '$.primary_feature') AS primary_issue,
-    JSON_EXTRACT_SCALAR(ne.anomaly_explanation, '$.error_value') AS error_value,
+    JSON_VALUE(ne.anomaly_explanation, '$.primary_feature') AS primary_issue,
+    JSON_VALUE(ne.anomaly_explanation, '$.error_value') AS error_value,
     ne.timestamp
 FROM NodeEmbedding ne
 WHERE ne.timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 MINUTE)
@@ -420,7 +420,7 @@ SELECT
         WHEN c.current_score > b.baseline_score * 1.5 THEN 'WARNING'
         ELSE 'NORMAL'
     END AS status,
-    JSON_EXTRACT_SCALAR(c.anomaly_explanation, '$.primary_feature') AS root_cause_feature,
+    JSON_VALUE(c.anomaly_explanation, '$.primary_feature') AS root_cause_feature,
     b.baseline_time,
     c.current_time
 FROM current c
@@ -440,8 +440,8 @@ Shows how a specific node's embedding changed over time.
 SELECT 
     timestamp,
     anomaly_score,
-    JSON_EXTRACT_SCALAR(anomaly_explanation, '$.primary_feature') AS primary_feature,
-    JSON_EXTRACT_SCALAR(anomaly_explanation, '$.error_value') AS error_value,
+    JSON_VALUE(anomaly_explanation, '$.primary_feature') AS primary_feature,
+    JSON_VALUE(anomaly_explanation, '$.error_value') AS error_value,
     -- Show first 5 dimensions of embedding for trending
     embedding[OFFSET(0)] AS emb_dim_0,
     embedding[OFFSET(1)] AS emb_dim_1,
@@ -500,7 +500,7 @@ WITH config_changes AS (
         node_id,
         timestamp,
         anomaly_score,
-        JSON_EXTRACT_SCALAR(anomaly_explanation, '$.feature_errors."Config (Semantic)"') AS config_error,
+        JSON_VALUE(anomaly_explanation, '$.feature_errors."Config (Semantic)"') AS config_error,
         LAG(anomaly_score) OVER (PARTITION BY node_id ORDER BY timestamp) AS prev_score
     FROM NodeEmbedding
     WHERE node_type IN ('PE Router', 'P Router', 'CE Router')

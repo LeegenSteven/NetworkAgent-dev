@@ -98,7 +98,8 @@ def run_training_pipeline():
         model.set_input_dims(input_dims)
         
         optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-        criterion = nn.MSELoss()
+        # Using SSE instead of MSE to handle sparse feature vectors better
+        criterion = nn.MSELoss(reduction='sum')
         
         logger.info("Starting Training...")
         model.train()

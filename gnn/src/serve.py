@@ -8,6 +8,7 @@ from aiohttp import web
 import aiohttp_cors
 from google.cloud import storage
 from google.cloud import spanner
+from google.cloud.spanner_v1 import JsonObject
 import datetime
 from utils.gnn_utils import SPANNER_INSTANCE, SPANNER_DATABASE, GCS_BUCKET_NAME, INTERVAL_MINUTES, THGAT, GraphBuilder, HIDDEN_CHANNELS, OUT_CHANNELS, NUM_HEADS, NUM_LAYERS, explain_node_anomaly
 from utils.data import SpannerDataset
@@ -246,13 +247,14 @@ async def run_inference():
                 node_type = node["type"]
                 emb = node["embedding"]
                 score = node["score"]
-                # Spanner JSON column expects a JSON-encoded string or None
+                # Spanner JSON column expects a JSON object (dict) or None
                 explanation = node.get("explanation")
                 
-                # Convert dict to JSON string for Spanner's JSON column
+                # Use JsonObject wrapper if needed, but dict is usually sufficient for client lib
+                # The error "Expected JSON" suggests the client expects a JSON-serializable object
                 if explanation is not None:
-                    explanation = json.dumps(explanation)
-                
+                     explanation = JsonObject(explanation)
+
                 mutations.append(
                     (embedding_id, nid, node_type, emb, float(score), explanation, spanner_timestamp)
                 )

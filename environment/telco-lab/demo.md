@@ -5,9 +5,9 @@ This document contains ready-to-execute queries for demonstrating network topolo
 ## Prerequisites
 
 1. Network deployed: `kubectl apply -f environment/telco-lab/l3vpn-hub-spoke.yaml`
+2. Traffic running: `kubectl apply -f environment/telco-lab/l3vpn-test.yaml`
 2. Metrics being collected by metricscollector
-3. GNN model trained and generating embeddings via `/inference` endpoint
-4. Optional: Fault injected for before/after comparison
+3. GNN model trained and generating embeddings
 
 ---
 

@@ -959,7 +959,7 @@ Kill()
     gcloud run services delete network-dashboard --region=$GOOGLE_REGION --quiet
 
     # delete pubsub subscription and topic
-    
+    gcloud beta run worker-pools delete metricscollector --region=$GOOGLE_REGION --quiet
 
     echo "#####################"
     echo "Deleting GKE Cluster"

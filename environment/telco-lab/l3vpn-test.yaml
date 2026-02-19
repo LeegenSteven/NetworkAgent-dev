@@ -34,7 +34,7 @@ spec:
   destination_device: devhub
   protocol: TCP
   port: 5201 # base port, each source gets its own port
-  duration: 1800  # 30 minutes
+  duration: 3600  # 60 minutes
   bandwidth: 5Mbps  # Each source sends 5Mbps
   pattern_type: constant
   concurrent_users: 10

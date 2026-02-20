@@ -261,11 +261,13 @@ def capture_log(cloud_event: CloudEvent) -> None:
           message += ': ' + nwop_logging_json["jsonPayload"]["error"]
 
       # VYOS router messages
-      elif "msg_body" in nwop_logging_json["jsonPayload"] and "source" in nwop_logging_json["jsonPayload"] \
-            and nwop_logging_json["jsonPayload"]['source'] == "vyos":
-        message = nwop_logging_json["jsonPayload"]["msg_body"]
-        # In Spanner replace the source with the router name 
-        source = f"vyos:{nwop_logging_json["jsonPayload"]["host"]}"
+      # (See an example )
+      elif "jsonPayload" in nwop_logging_json['jsonPayload']:
+        vyos_json =  nwop_logging_json['jsonPayload']['jsonPayload']
+        if "msg_body" in vyos_json and "source" in vyos_json and vyos_json['source'] == "vyos":
+          message = vyos_json["msg_body"]
+          # In Spanner replace the source with the router name 
+          source = f"vyos:{vyos_json["host"]}"
 
       elif 'labels' in nwop_logging_json and 'python_logger' in nwop_logging_json['labels']:
         # this is from uetest or liveness probe, so bad things have happened

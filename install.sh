@@ -1146,7 +1146,7 @@ DeployLogCapture()
                  (((resource.labels.container_name=${NETWORK_OPERATOR} AND labels.python_logger!=kopf._cogs.clients.watching) OR
                  logName=\"projects/${GOOGLE_PROJECT}/logs/gcplogs-docker-driver\" OR
                  labels.python_logger=UERANSIMHEALTH OR labels.python_logger=CRITICALSERVICEERROR) OR
-                 jsonPayload.source=vyos)"
+                 jsonPayload.jsonPayload.source=vyos)"
     else
         echo "Logging sink '${SINK_NAME}' already exists..."
     fi

@@ -1133,22 +1133,29 @@ DeployLogCapture()
 
     # Create the logging sink if it doesn't exist yet
     gcloud logging sinks describe $SINK_NAME > /dev/null 2>&1
+    # The log sink filter captures:
+    # 1) all logs from the network operator except kopf logs
+    # and also
+    # 2) the error logs from the config manager in case something goes
+    #    wrong when GCP resources are instantiated or deleted
+    # 3) all logs from the vyos router containers (hosted on the networkvm VM)
+    log_filter=$(cat <<EOF
+        resource.labels.project_id=${GOOGLE_PROJECT} AND 
+        (((resource.labels.container_name=${NETWORK_OPERATOR} AND labels.python_logger!=kopf._cogs.clients.watching) OR
+            logName="projects/${GOOGLE_PROJECT}/logs/gcplogs-docker-driver" OR
+            labels.python_logger=UERANSIMHEALTH OR labels.python_logger=CRITICALSERVICEERROR) OR 
+            logName="projects/${GOOGLE_PROJECT}/logs/vyos_syslog")
+EOF
+    )
     if [[ $? -ne 0 ]]; then
         echo "Creating Logging sink '${SINK_NAME}'..."
-        # The log sink filter captures:
-        # 1) all logs from the network operator except kopf logs
-        # and also
-        # 2) the error logs from the config manager in case something goes
-        #    wrong when GCP resources are instantiated or deleted
         gcloud logging sinks create $SINK_NAME pubsub.googleapis.com/projects/${GOOGLE_PROJECT}/topics/${TOPIC_NAME} \
             --description="Network operator logs sink" \
-            --log-filter="resource.labels.project_id=${GOOGLE_PROJECT} AND 
-                 (((resource.labels.container_name=${NETWORK_OPERATOR} AND labels.python_logger!=kopf._cogs.clients.watching) OR
-                 logName=\"projects/${GOOGLE_PROJECT}/logs/gcplogs-docker-driver\" OR
-                 labels.python_logger=UERANSIMHEALTH OR labels.python_logger=CRITICALSERVICEERROR) OR
-                 jsonPayload.jsonPayload.source=vyos)"
+            --log-filter="${log_filter}"
     else
-        echo "Logging sink '${SINK_NAME}' already exists..."
+        # Update the log filter in case we updated it in the meantime
+        echo "Update existing sink '${SINK_NAME}' with filter..."
+        gcloud logging sinks update $SINK_NAME --log-filter="${log_filter}"
     fi
 
     # Grant the Cloud Logging service account used by the Log sink the right to publish 

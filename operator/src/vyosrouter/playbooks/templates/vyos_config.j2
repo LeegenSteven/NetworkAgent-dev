@@ -342,6 +342,36 @@ set nat source rule {{ nat_rule.rule }} translation address {{ nat_rule.address 
 set service ssh port {{ services.ssh.port | default(22) }}
 {% endif %}
 
+# Configure Traffic Policy (QoS / Fault Injection)
+{% if traffic_policy is defined %}
+{% for policy in traffic_policy.shaper | default([]) %}
+set traffic-policy shaper {{ policy.name }} bandwidth '{{ policy.bandwidth }}'
+set traffic-policy shaper {{ policy.name }} default bandwidth '{{ policy.default_bandwidth }}'
+{% for class in policy.classes | default([]) %}
+set traffic-policy shaper {{ policy.name }} class {{ class.id }} bandwidth '{{ class.bandwidth }}'
+set traffic-policy shaper {{ policy.name }} class {{ class.id }} match {{ class.match_name }} ip {{ class.match_ip | default('dscp') }} '{{ class.match_value }}'
+{% endfor %}
+{% endfor %}
+
+{% for policy in traffic_policy.network_emulator | default([]) %}
+set traffic-policy network-emulator {{ policy.name }} network-delay {{ policy.delay }}
+set traffic-policy network-emulator {{ policy.name }} packet-loss {{ policy.loss }}
+{% if policy.corruption is defined %}
+set traffic-policy network-emulator {{ policy.name }} packet-corruption {{ policy.corruption }}
+{% endif %}
+{% endfor %}
+
+# Apply traffic policies to interfaces
+{% for policy_apply in traffic_policy.apply | default([]) %}
+{% if policy_apply.out is defined %}
+set interfaces ethernet {{ policy_apply.interface }} traffic-policy out '{{ policy_apply.out }}'
+{% endif %}
+{% if policy_apply.in is defined %}
+set interfaces ethernet {{ policy_apply.interface }} traffic-policy in '{{ policy_apply.in }}'
+{% endif %}
+{% endfor %}
+{% endif %}
+
 commit
 save
 exit

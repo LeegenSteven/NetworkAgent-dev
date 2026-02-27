@@ -476,6 +476,10 @@ spec:
                             type: string
                             enum: ["in", "out", "local"]
                             description: "Traffic direction"
+                traffic_policy:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  description: "Traffic control policy properties"
             status:
               type: object
               properties:

@@ -66,6 +66,8 @@ async def create_vyosunderlay(body, spec, name, namespace, uid, logger, **kwargs
                     'protocols': router.get('protocols', {})
                 }
             }
+            if 'traffic_policy' in router:
+                router_patch['spec']['traffic_policy'] = router['traffic_policy']
             
             try:
                 await patch_vyos_router(router_name, namespace, router_patch)

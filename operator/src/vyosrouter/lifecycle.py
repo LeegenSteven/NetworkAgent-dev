@@ -58,7 +58,8 @@ async def create_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
         'protocols': spec.get('protocols', {}),
         'services': spec.get('services', {}),
         'qos': spec.get('qos', {}),
-        'firewall': spec.get('firewall', {})
+        'firewall': spec.get('firewall', {}),
+        'traffic_policy': spec.get('traffic_policy', {})
     }
 
     logger.info(f"VyOSRouter config: {router_config}")
@@ -162,7 +163,8 @@ async def update_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
             'protocols': spec.get('protocols', {}),
             'services': spec.get('services', {}),
             'qos': spec.get('qos', {}),
-            'firewall': spec.get('firewall', {})
+            'firewall': spec.get('firewall', {}),
+            'traffic_policy': spec.get('traffic_policy', {})
         }
         
         # Update the VyOS router using Ansible

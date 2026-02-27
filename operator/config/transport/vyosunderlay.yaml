@@ -265,6 +265,10 @@ spec:
                                     vrf:
                                       type: string
                                       description: "VRF name for VRF-specific routes"
+                          traffic_policy:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                            description: "Traffic control policy properties"
             status:
               type: object
               properties:

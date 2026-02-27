@@ -382,6 +382,7 @@ def generate_vyos_routers(spec: Dict[str, Any], parent_name: str, parent_namespa
                 'services': router.get('services', {}),
                 'qos': generate_router_qos_config(router),
                 'firewall': generate_router_firewall_config(router),
+                'traffic_policy': router.get('traffic_policy', {}),
                 'role': router.get('role', 'P')
             }
         }

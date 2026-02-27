@@ -359,7 +359,7 @@ Create()
         echo "Granting permissions to the GKE Cluster service account..."
         for role in "roles/editor" "roles/container.admin" "roles/compute.admin" \
             "roles/compute.networkAdmin" "roles/iam.serviceAccountAdmin" "roles/monitoring.metricWriter" \
-            "roles/aiplatform.user" "roles/logging.logWriter" "roles/run.admin" "roles/spanner.databaseUser" \
+            "roles/aiplatform.user" "roles/aiplatform.admin" "roles/logging.logWriter" "roles/run.admin" "roles/spanner.databaseUser" \
             "roles/pubsub.editor" "roles/pubsub.subscriber" "roles/monitoring.viewer"; do
             echo "$role"   
             gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" \
@@ -944,8 +944,45 @@ Kill()
     fi
 
     gcloud run services delete networktools --region=$GOOGLE_REGION --quiet
-    gcloud run services delete train-gnn --region=$GOOGLE_REGION --quiet
-    gcloud run services delete serve-gnn --region=$GOOGLE_REGION --quiet
+    
+    # Delete Vertex AI GNN resources
+    echo "Cleaning up Vertex AI GNN resources..."
+    
+    # Get all endpoints and undeploy models first
+    ENDPOINTS=$(gcloud ai endpoints list --region=$GOOGLE_REGION --format="value(name)" 2>/dev/null | grep "gnn-endpoint" || true)
+    if [ -n "$ENDPOINTS" ]; then
+        for endpoint in $ENDPOINTS; do
+            echo "Undeploying models from endpoint: $endpoint"
+            DEPLOYED_MODELS=$(gcloud ai endpoints describe $endpoint --region=$GOOGLE_REGION --format="value(deployedModels[].id)" 2>/dev/null || true)
+            if [ -n "$DEPLOYED_MODELS" ]; then
+                for model_id in $DEPLOYED_MODELS; do
+                    echo "  Undeploying model: $model_id"
+                    gcloud ai endpoints undeploy-model $endpoint --region=$GOOGLE_REGION --deployed-model-id=$model_id --quiet 2>/dev/null || true
+                done
+            fi
+            echo "Deleting endpoint: $endpoint"
+            gcloud ai endpoints delete $endpoint --region=$GOOGLE_REGION --quiet 2>/dev/null || true
+        done
+    fi
+    
+    # Delete Vertex AI models
+    MODELS=$(gcloud ai models list --region=$GOOGLE_REGION --format="value(name)" 2>/dev/null | grep "gnn-serve-model" || true)
+    if [ -n "$MODELS" ]; then
+        for model in $MODELS; do
+            echo "Deleting Vertex AI model: $model"
+            gcloud ai models delete $model --region=$GOOGLE_REGION --quiet 2>/dev/null || true
+        done
+    fi
+    
+    # Cancel any running GNN training jobs
+    JOBS=$(gcloud ai custom-jobs list --region=$GOOGLE_REGION --filter="displayName:gnn-training-job AND state:JOB_STATE_RUNNING" --format="value(name)" 2>/dev/null || true)
+    if [ -n "$JOBS" ]; then
+        for job in $JOBS; do
+            echo "Cancelling running training job: $job"
+            gcloud ai custom-jobs cancel $job --region=$GOOGLE_REGION --quiet 2>/dev/null || true
+        done
+    fi
+    
     gcloud run services delete engineeragent --region=$GOOGLE_REGION --quiet
     gcloud run services delete operationsagent --region=$GOOGLE_REGION --quiet
     gcloud run services delete orderagent --region=$GOOGLE_REGION --quiet
@@ -1309,33 +1346,39 @@ DeployGNN()
         gcloud builds submit --region=$GOOGLE_REGION --config=gnn/cloudbuild.yaml .
     fi
 
-    gcloud run deploy train-gnn \
-    --image $IMAGE_URI \
-    --region $GOOGLE_REGION \
-    --service-account $GOOGLE_SERVICE_ACCOUNT \
-    --timeout=3600 \
-    --min 1 \
-    --memory 2Gi \
-    --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
-    --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
-    --update-env-vars NETWORK_AGENT_FILE="/app/networkagent.json" \
-    --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/app/networkagent.json" \
-    --allow-unauthenticated 
+    echo "Submitting GNN Training as Vertex AI Custom Job"
+    gcloud ai custom-jobs create \
+      --region=$GOOGLE_REGION \
+      --display-name="gnn-training-job" \
+      --worker-pool-spec=machine-type=n1-standard-8,replica-count=1,container-image-uri=$IMAGE_URI
 
-    IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/servegnn:latest"
-    gcloud run deploy serve-gnn \
-    --image $IMAGE_URI \
-    --region $GOOGLE_REGION \
-    --service-account $GOOGLE_SERVICE_ACCOUNT \
-    --min 1 \
-    --memory 2Gi \
-    --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
-    --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
-    --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
-    --update-env-vars NETWORK_AGENT_FILE="/app/networkagent.json" \
-    --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/app/networkagent.json" \
-    --allow-unauthenticated 
-
+    SERVE_IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/servegnn:latest"
+    echo "Deploying GNN Serving to Vertex AI Endpoint"
+    
+    # 1. Upload Model to Registry
+    echo "Uploading serving model to Vertex AI Registry..."
+    MODEL_ID=$(gcloud ai models upload \
+      --region=$GOOGLE_REGION \
+      --display-name="gnn-serve-model" \
+      --container-image-uri=$SERVE_IMAGE_URI \
+      --format="value(model)")
+      
+    # 2. Create Endpoint
+    echo "Creating Vertex AI Endpoint..."
+    ENDPOINT_ID=$(gcloud ai endpoints create \
+      --region=$GOOGLE_REGION \
+      --display-name="gnn-endpoint" \
+      --format="value(name)")
+      
+    # 3. Deploy Model to Endpoint
+    echo "Deploying serving model to Endpoint (this takes a few minutes)..."
+    gcloud ai endpoints deploy-model $ENDPOINT_ID \
+      --region=$GOOGLE_REGION \
+      --model=$MODEL_ID \
+      --display-name="gnn-serve-deployment" \
+      --machine-type=n1-standard-4 \
+      --min-replica-count=1 \
+      --max-replica-count=1
 }
 
 ############################################################

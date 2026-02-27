@@ -148,8 +148,12 @@ spec:
       id STRING(MAX) NOT NULL,
       node_id STRING(MAX) NOT NULL,
       node_type STRING(MAX) NOT NULL,
-      embedding ARRAY<FLOAT64>,
-      anomaly_score FLOAT64,
+      stgnn_embedding ARRAY<FLOAT64>,
+      stgnn_score FLOAT64,
+      dgat_embedding ARRAY<FLOAT64>,
+      dgat_score FLOAT64,
+      hetgnn_embedding ARRAY<FLOAT64>,
+      hetgnn_score FLOAT64,
       anomaly_explanation JSON,
       timestamp TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true)
     ) PRIMARY KEY (node_id, timestamp DESC)"

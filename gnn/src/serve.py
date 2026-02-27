@@ -1,6 +1,8 @@
 import logging
 import os
+import sys
 import json
+import asyncio
 import torch
 import torch.nn as nn
 import numpy as np
@@ -8,46 +10,34 @@ from aiohttp import web
 import aiohttp_cors
 from google.cloud import storage
 from google.cloud import spanner
-from google.cloud.spanner_v1 import JsonObject
-import datetime
-from utils.gnn_utils import SPANNER_INSTANCE, SPANNER_DATABASE, GCS_BUCKET_NAME, INTERVAL_MINUTES, THGAT, GraphBuilder, HIDDEN_CHANNELS, OUT_CHANNELS, NUM_HEADS, NUM_LAYERS, explain_node_anomaly
+from utils.gnn_utils import SPANNER_INSTANCE, SPANNER_DATABASE, GCS_BUCKET_NAME, INTERVAL_MINUTES, GraphBuilder, HIDDEN_CHANNELS, OUT_CHANNELS, NUM_HEADS, NUM_LAYERS
 from utils.data import SpannerDataset
 
-log_format = "%(asctime)s::%(levelname)s::%(name)s::"\
-             "%(filename)s::%(lineno)d::%(message)s"
-logging.basicConfig(level=logging.INFO, format=log_format)
+# Enhanced logging configuration
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 logger = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
+from model.stgnn import STGNN
+from model.dgat import DGAT
+from model.hetgnn import HetGNN
+
 # Configuration
-MODEL_PATH = os.path.join(BASE_DIR, "model.pth")
-SCALER_PATH = os.path.join(BASE_DIR, "scalers.pkl")
+MODELS = {
+    "stgnn": {"class": STGNN, "file": "stgnn_model.pth", "scaler": "stgnn_scalers.pkl", "instance": None},
+    "dgat":  {"class": DGAT,  "file": "dgat_model.pth",  "scaler": "dgat_scalers.pkl",  "instance": None},
+    "hetgnn":{"class": HetGNN,"file": "hetgnn_model.pth","scaler": "hetgnn_scalers.pkl","instance": None}
+}
 ANOMALY_THRESHOLD = 0.5 
 
-# Initialize aiohttp application with no middleware
-app = web.Application()
-
-# Setup CORS for aiohttp routes
-cors = aiohttp_cors.setup(app, defaults={
-    "*": aiohttp_cors.ResourceOptions(
-        allow_credentials=True,
-        expose_headers="*",
-        allow_headers="*",
-        allow_methods="*"
-    )
-})
-
-# Global variables for model and graph builder
+# Shared dependencies
 gb = None
-model = None
-hidden_state = None  # For stateful inference if needed, though REST assumes stateless usually. 
-# However, THGAT is temporal. For a simple "snapshot inference", we might ignore prev state or keep it in memory.
-# Given the user asked for "takes a snapshot... returns embeddings", strict stateless might be expected, 
-# but statefulness improves accuracy. We'll keep it simple: stateless for now (reset hidden state) or 
-# ideally we'd cache it per graph ID? For this task, we will reset it or just pass None.
-# "runs through the trained GNN" implies we might want to capture context if it's a stream, 
-# but a POST endpoint suggests single-shot. 
-# We'll use None for hidden_state to treat it as a fresh sequence start or single step.
 
 # Background task control
 background_task_running = False
@@ -70,365 +60,384 @@ def download_blob(bucket_name, source_blob_name, destination_file_name):
         logger.error(f"Failed to download {source_blob_name} from GCS: {e}")
         return False
 
-def load_model():
-    global gb, model
-    logger.info("Loading GraphBuilder and Model...")
+def load_models():
+    global gb, MODELS
+    logger.info("Loading GraphBuilder and Models...")
+    
+    # Download a scaler file first (use DGAT scalers as the shared scaler)
+    scaler_file = os.path.join(BASE_DIR, "shared_scalers.pkl")
     
     if GCS_BUCKET_NAME:
-        logger.info(f"Attempting to download artifacts from GCS bucket: {GCS_BUCKET_NAME}")
-        download_blob(GCS_BUCKET_NAME, "models/thgat/scalers.pkl", SCALER_PATH)
-        download_blob(GCS_BUCKET_NAME, "models/thgat/model.pth", MODEL_PATH)
-
-    gb = GraphBuilder(SCALER_PATH)
-    gb.init_netbert()
+        logger.info("Downloading shared scaler file from GCS...")
+        # Try to download DGAT scaler as the shared scaler (all models should produce compatible scalers)
+        if download_blob(GCS_BUCKET_NAME, f"models/dgat/dgat_scalers.pkl", scaler_file):
+            logger.info("Using DGAT scalers as shared scalers")
+        elif download_blob(GCS_BUCKET_NAME, f"models/hetgnn/hetgnn_scalers.pkl", scaler_file):
+            logger.info("Using HetGNN scalers as shared scalers")
+        elif download_blob(GCS_BUCKET_NAME, f"models/stgnn/stgnn_scalers.pkl", scaler_file):
+            logger.info("Using STGNN scalers as shared scalers")
+        else:
+            logger.warning("No scaler files found in GCS, GraphBuilder will not have fitted scalers")
     
-    if not gb.load_scalers():
-        logger.warning(f"Scalers not found at {SCALER_PATH}. Inference might be inaccurate.")
-
-    # We need metadata to initialize the model. 
-    # If we don't have it, we can't load the model until we see data or save metadata.
-    # Matching gnn_utils.py training master types.
-    node_types = ["PE Router", "P Router", "CE Router", "Interface"]
+    gb = GraphBuilder(scaler_file)
+    gb.init_config_encoder()
+    
+    # Load scalers if available
+    if os.path.exists(scaler_file):
+        logger.info(f"Loading scalers from {scaler_file}")
+        gb.load_scalers()
+        logger.info("Scalers loaded successfully")
+    else:
+        logger.warning(f"Scaler file not found at {scaler_file}, GraphBuilder may not process snapshots correctly")
+    
+    # Node types match the updated GraphBuilder structure with sub-nodes
+    node_types = ["PE Router", "P Router", "CE Router", "Router_Config", "Protocol_State", "Interface", "Interface_Metrics"]
+    
+    # Edge types include structural edges and sub-node relationships
     edge_types = [
         ("PE Router", "Owns", "Interface"),
         ("P Router", "Owns", "Interface"),
         ("CE Router", "Owns", "Interface"),
-        ("Interface", "Connected", "Interface")
+        ("Interface", "Connected", "Interface"),
+        ("PE Router", "Has_Config", "Router_Config"),
+        ("PE Router", "Has_Protocol", "Protocol_State"),
+        ("P Router", "Has_Config", "Router_Config"),
+        ("P Router", "Has_Protocol", "Protocol_State"),
+        ("CE Router", "Has_Config", "Router_Config"),
+        ("CE Router", "Has_Protocol", "Protocol_State"),
+        ("Interface", "Has_Metrics", "Interface_Metrics")
     ]
     metadata = (node_types, edge_types)
     
-    model = THGAT(metadata, HIDDEN_CHANNELS, OUT_CHANNELS, NUM_HEADS, NUM_LAYERS)
+    # Input dimensions match the updated GraphBuilder structure
+    input_dims = {
+        "PE Router": 1,           # Just state
+        "P Router": 1,            # Just state
+        "CE Router": 1,           # Just state
+        "Router_Config": 128,     # Config embedding dimension
+        "Protocol_State": 3,      # ospf_neighbors, bgp_peers, mpls_routes
+        "Interface": 7,           # state + 6 metrics
+        "Interface_Metrics": 12   # 6 metrics + 6 velocities
+    }
     
-    # We need input dims to set projection layers (Linear)
-    # This is tricky without data. We can try to load state dict and infer, 
-    # or wait for first request.
-    # But `load_state_dict` requires the model structure to match.
-    # THGAT.set_input_dims creates the layers. We MUST know input dims before loading state dict.
-    # Code in `gnn_utils.py` shows `set_input_dims` creates `lin_dict` and `decoder_dict`.
-    # These are parameters.
-    
-    # Let's assume standard input dims or try to load them? 
-    # The `thgat-network-demo` reconstructs them from `input_dims`.
-    # We might need to save input_dims with the model or scalers.
-    # For now, let's lazy-load on first request or try to guess.
-    
-    if os.path.exists(MODEL_PATH):
-        try:
-            # Hardcoded standard dims based on gnn_utils.py
-            # Router: 1 + 128 = 129
-            # Interface: 4
-            input_dims = {
-                "PE Router": 129, 
-                "P Router": 129, 
-                "CE Router": 129,
-                "Interface": 4
-            }
-            
-            model.set_input_dims(input_dims)
-            model.load_state_dict(torch.load(MODEL_PATH))
-            model.eval()
-            logger.info("Model loaded successfully.")
-        except Exception as e:
-            logger.error(f"Failed to load model: {e}")
-            model = None
-    else:
-        logger.warning(f"Model file not found at {MODEL_PATH}")
+    for name, config in MODELS.items():
+        if GCS_BUCKET_NAME:
+            logger.info(f"Downloading {name} artifacts from GCS...")
+            download_blob(GCS_BUCKET_NAME, f"models/{name}/{config['scaler']}", os.path.join(BASE_DIR, config['scaler']))
+            download_blob(GCS_BUCKET_NAME, f"models/{name}/{config['file']}", os.path.join(BASE_DIR, config['file']))
 
+        # Initialize Model Struct
+        if name == "stgnn":
+            instance = config["class"](metadata, HIDDEN_CHANNELS, OUT_CHANNELS, NUM_LAYERS, 'gru', 12)
+        elif name == "dgat":
+            instance = config["class"](metadata, HIDDEN_CHANNELS, OUT_CHANNELS, NUM_HEADS, NUM_LAYERS)
+        elif name == "hetgnn":
+            instance = config["class"](metadata, HIDDEN_CHANNELS, OUT_CHANNELS, NUM_LAYERS)
+        else:
+            instance = config["class"](metadata, HIDDEN_CHANNELS, OUT_CHANNELS, NUM_HEADS, NUM_LAYERS)
+            
+        instance.set_input_dims(input_dims)
+        path = os.path.join(BASE_DIR, config['file'])
+        
+        if os.path.exists(path):
+            try:
+                instance.load_state_dict(torch.load(path))
+                instance.eval()
+                MODELS[name]["instance"] = instance
+                logger.info(f"{name.upper()} loaded successfully.")
+            except Exception as e:
+                logger.error(f"Failed to load {name.upper()}: {e}")
+        else:
+            logger.warning(f"Model file not found at {path}, {name.upper()} skipped.")
+            MODELS[name]["instance"] = instance # Instantiate anyway so it doesn't crash, just untrained
 
 async def run_inference():
-    global model, gb
-    logger.info("Executing inference run")
+    global MODELS, gb
+    logger.info("="*60)
+    logger.info("EXECUTING MULTI-MODEL INFERENCE RUN")
+    logger.info("="*60)
         
-    if not model or not gb:
-        # Try to reload
-        load_model()
-        if not model:
-            logger.error("Model not available for inference")
-            return {'error': 'Model not available'}
+    if not gb:
+        logger.info("GraphBuilder not initialized, loading models...")
+        load_models()
 
     try:
-        # Fetch the latest snapshot from Spanner
+        # Fetch latest Spanner topology
+        logger.info(f"Fetching latest snapshot from Spanner (instance={SPANNER_INSTANCE}, db={SPANNER_DATABASE})")
         dataset = SpannerDataset(
             instance_id=SPANNER_INSTANCE, 
             database_id=SPANNER_DATABASE, 
-            num_snapshots=1, interval_minutes=INTERVAL_MINUTES # We only need the latest one for inference
+            num_snapshots=1, interval_minutes=INTERVAL_MINUTES
         )
-        
-        # _get_timestamps returns a list ending at now()
         timestamps = dataset._get_timestamps()
         latest_ts = timestamps[-1]
+        logger.info(f"Latest timestamp: {latest_ts}")
         
-        logger.info(f"Fetching snapshot for timestamp: {latest_ts}")
         data = dataset.fetch_snapshot(latest_ts)
-        
         if not data["nodes"]:
             logger.warning("No data found in Spanner snapshot")
             return {'error': 'No data found in Spanner snapshot'}
 
-        # Process snapshot
+        logger.debug(f"Snapshot contains {len(data['nodes'])} nodes, {len(data.get('edges', []))} edges")
+        
         hdata, input_dims = gb.process_snapshot(data)
         
-        # Ensure model has input dims if not set (first run case)
-        if len(model.lin_dict) == 0:
-             logger.info("Setting input dims from request data")
-             model.set_input_dims(input_dims)
+        logger.info("Snapshot processed into HeteroData")
         
+        # Check if HeteroData has node features
+        if not hasattr(hdata, '_node_store_dict') or not any(hasattr(store, 'x') for store in hdata._node_store_dict.values()):
+            logger.error("HeteroData object has no node features ('x' attributes)")
+            logger.error("This usually means scalers are not fitted/loaded properly")
+            logger.error(f"GraphBuilder scaler path: {gb.scaler_path}")
+            logger.error(f"Scaler file exists: {os.path.exists(gb.scaler_path)}")
+            return {'error': 'No node features in processed snapshot - scalers may not be loaded'}
+        
+        # Get node types safely
+        node_types_in_snapshot = []
+        for node_type, store in hdata._node_store_dict.items():
+            if hasattr(store, 'x'):
+                node_types_in_snapshot.append(node_type)
+        
+        logger.debug(f"Node types in snapshot: {node_types_in_snapshot}")
+        logger.debug(f"Edge types in snapshot: {list(hdata.edge_index_dict.keys()) if hasattr(hdata, 'edge_index_dict') else []}")
+        
+        for nt in node_types_in_snapshot:
+            x = hdata[nt].x
+            logger.debug(f"  {nt}: {x.shape[0]} nodes, {x.shape[1]} features")
+        
+        # We process each model's forward pass sequentially 
+        # (could be asyncio.gather in actual remote serving, but PyTorch runs better synchronously on a single container)
+        model_results = {}
+        criterion = nn.MSELoss(reduction='none')
+            
+        # 1. DGAT Inference
+        logger.info("Running DGAT inference...")
+        # Extract edge attributes if available for asymmetry-aware attention
+        edge_attr_dict = hdata.edge_attr_dict if hasattr(hdata, 'edge_attr_dict') else None
         with torch.no_grad():
-            # Stateless run for single snapshot
-            # Capture state_dict (hidden state) which represents the node embeddings
-            recon_dict, state_dict = model(hdata.x_dict, hdata.edge_index_dict, None)
+            r_dict, s_dict = MODELS["dgat"]["instance"](hdata.x_dict, hdata.edge_index_dict, edge_attr_dict)
+            model_results["dgat"] = (r_dict, s_dict)
+            logger.debug(f"DGAT reconstruction node types: {list(r_dict.keys())}")
+            logger.debug(f"DGAT embedding node types: {list(s_dict.keys())}")
+            if edge_attr_dict:
+                logger.debug(f"DGAT used edge attributes for {len(edge_attr_dict)} edge types")
             
-            criterion = nn.MSELoss(reduction='none')
-            results = {
-                "nodes": [],
-                "global_anomaly": False,
-                "average_score": 0.0
-            }
+        # 2. HetGNN Inference
+        logger.info("Running HetGNN inference...")
+        with torch.no_grad():
+            r_dict, s_dict = MODELS["hetgnn"]["instance"](hdata.x_dict, hdata.edge_index_dict)
+            model_results["hetgnn"] = (r_dict, s_dict)
+            logger.debug(f"HetGNN reconstruction node types: {list(r_dict.keys())}")
+            logger.debug(f"HetGNN embedding node types: {list(s_dict.keys())}")
             
-            total_loss = 0
-            node_count = 0
-            
-            for node_type, recon_x in recon_dict.items():
-                if node_type in hdata.x_dict:
-                    # Using Sum Squared Error (SSE) instead of Mean Squared Error
-                    # This makes the score proportional to the number of mismatched features
-                    # which is better for sparse/binary feature vectors.
-                    loss = criterion(recon_x, hdata.x_dict[node_type]).sum(dim=1)
-                    
-                    # Get embeddings from state_dict
-                    # state_dict[node_type] is (num_layers, batch, hidden_channels) -> (1, N, 64)
-                    # We want (N, 64)
-                    if state_dict and node_type in state_dict:
-                        # Squeeze the first dimension (layers)
-                        embeddings = state_dict[node_type].squeeze(0).tolist()
-                    else:
-                         embeddings = []
+        # 3. STGNN Inference
+        logger.info("Running STGNN inference...")
+        # STGNN expects temporal sequence tensors `[N, T, F]`. We will fake a simple T=1 sequence here for single-snapshot inference,
+        # or in reality this would pull T-1 cached steps.
+        temporal_x = {k: v.unsqueeze(1) for k, v in hdata.x_dict.items()}
+        logger.debug(f"Created temporal sequences with T=1 for {len(temporal_x)} node types")
+        with torch.no_grad():
+            # returns recon_dict, out_embeddings, new_hidden_states
+            r_dict, s_dict, _ = MODELS["stgnn"]["instance"](temporal_x, hdata.edge_index_dict, None)
+            model_results["stgnn"] = (r_dict, s_dict)
+            logger.debug(f"STGNN reconstruction node types: {list(r_dict.keys())}")
+            logger.debug(f"STGNN embedding node types: {list(s_dict.keys())}")
 
-                    # Map back to IDs
-                    rev_id_map = {v: k for k, v in gb.global_id_map[node_type].items()}
+        # Merge Results mapped by Node ID
+        logger.info("Consolidating results from all models...")
+        consolidated_nodes = {}
+        
+        for name, (recon_dict, state_dict) in model_results.items():
+            logger.debug(f"Processing {name} results...")
+            for node_type, recon_x in recon_dict.items():
+                if node_type not in hdata.x_dict: 
+                    logger.debug(f"  Skipping {node_type} (not in input data)")
+                    continue
+                
+                # Check STGNN seq target
+                target_x = hdata.x_dict[node_type]
+                
+                loss = criterion(recon_x, target_x).sum(dim=1)
+                
+                embeddings_list = []
+                if name in ["dgat", "hetgnn", "stgnn"] and state_dict and node_type in state_dict:
+                    embeddings_list = state_dict[node_type].tolist()
                     
-                    for i in range(loss.size(0)):
-                        if i not in rev_id_map: continue
-                        nid = rev_id_map[i]
-                        score = loss[i].item()
-                        is_anomaly = score > ANOMALY_THRESHOLD
-                        
-                        # Always generate explanation for better insights
-                        explanation = explain_node_anomaly(node_type, hdata.x_dict[node_type][i], recon_x[i])
-                        
-                        node_result = {
+                rev_id_map = {v: k for k, v in gb.global_id_map[node_type].items()}
+                
+                for i in range(loss.size(0)):
+                    if i not in rev_id_map: continue
+                    nid = rev_id_map[i]
+                    score = loss[i].item()
+                    emb = embeddings_list[i] if i < len(embeddings_list) else []
+                    
+                    if nid not in consolidated_nodes:
+                        # Base definition established by the first model that processes this node
+                        consolidated_nodes[nid] = {
                             "id": nid,
                             "type": node_type,
-                            "score": score,
-                            "is_anomaly": is_anomaly,
-                            "explanation": explanation
+                            "stgnn_embedding": [], "stgnn_score": 0.0,
+                            "dgat_embedding": [], "dgat_score": 0.0,
+                            "hetgnn_embedding": [], "hetgnn_score": 0.0
                         }
-                        
-                        if i < len(embeddings):
-                            node_result["embedding"] = embeddings[i]
-                            
-                        results["nodes"].append(node_result)
-                        
-                        total_loss += score
-                        node_count += 1
-                        
-            # --- Write embeddings to Spanner ---
-            mutations = []
-            spanner_timestamp = spanner.COMMIT_TIMESTAMP
-            import uuid
-            
-            # Use results["nodes"] which already contains all computed info
-            for node in results["nodes"]:
-                if "embedding" not in node:
-                    continue
                     
-                embedding_id = str(uuid.uuid4())
-                nid = node["id"]
-                node_type = node["type"]
-                emb = node["embedding"]
-                score = node["score"]
-                # Spanner JSON column expects a JSON object (dict) or None
-                explanation = node.get("explanation")
-                
-                # Use JsonObject wrapper if needed, but dict is usually sufficient for client lib
-                # The error "Expected JSON" suggests the client expects a JSON-serializable object
-                if explanation is not None:
-                     explanation = JsonObject(explanation)
+                    if name == "stgnn":
+                        consolidated_nodes[nid]["stgnn_embedding"] = emb
+                        consolidated_nodes[nid]["stgnn_score"] = score
+                    elif name == "dgat":
+                        consolidated_nodes[nid]["dgat_embedding"] = emb
+                        consolidated_nodes[nid]["dgat_score"] = score
+                    elif name == "hetgnn":
+                        consolidated_nodes[nid]["hetgnn_embedding"] = emb
+                        consolidated_nodes[nid]["hetgnn_score"] = score
 
-                mutations.append(
-                    (embedding_id, nid, node_type, emb, float(score), explanation, spanner_timestamp)
-                )
+        logger.info(f"Consolidated {len(consolidated_nodes)} nodes with multi-model embeddings")
+        
+        # Log anomaly score statistics
+        if consolidated_nodes:
+            stgnn_scores = [n["stgnn_score"] for n in consolidated_nodes.values() if n["stgnn_score"] > 0]
+            dgat_scores = [n["dgat_score"] for n in consolidated_nodes.values() if n["dgat_score"] > 0]
+            hetgnn_scores = [n["hetgnn_score"] for n in consolidated_nodes.values() if n["hetgnn_score"] > 0]
             
-            if mutations:
-                logger.info(f"Writing {len(mutations)} embeddings to Spanner from inference...")
-                spanner_client = spanner.Client()
-                instance = spanner_client.instance(SPANNER_INSTANCE)
-                database = instance.database(SPANNER_DATABASE)
+            if stgnn_scores:
+                logger.info(f"STGNN scores - min: {min(stgnn_scores):.4f}, max: {max(stgnn_scores):.4f}, avg: {sum(stgnn_scores)/len(stgnn_scores):.4f}")
+            if dgat_scores:
+                logger.info(f"DGAT scores - min: {min(dgat_scores):.4f}, max: {max(dgat_scores):.4f}, avg: {sum(dgat_scores)/len(dgat_scores):.4f}")
+            if hetgnn_scores:
+                logger.info(f"HetGNN scores - min: {min(hetgnn_scores):.4f}, max: {max(hetgnn_scores):.4f}, avg: {sum(hetgnn_scores)/len(hetgnn_scores):.4f}")
+
+        # Create Mutations
+        mutations = []
+        spanner_timestamp = spanner.COMMIT_TIMESTAMP
+        import uuid
+        
+        for nid, val in consolidated_nodes.items():
+            embedding_id = str(uuid.uuid4())
+            
+            mutations.append((
+                embedding_id, nid, val["type"], 
+                val["stgnn_embedding"], float(val["stgnn_score"]),
+                val["dgat_embedding"], float(val["dgat_score"]),
+                val["hetgnn_embedding"], float(val["hetgnn_score"]),
+                None, spanner_timestamp
+            ))
+            
+        if mutations:
+            logger.info(f"Writing {len(mutations)} multi-model embeddings to Spanner NodeEmbedding table...")
+            spanner_client = spanner.Client()
+            instance = spanner_client.instance(SPANNER_INSTANCE)
+            database = instance.database(SPANNER_DATABASE)
+            try:
+                with database.batch() as batch:
+                    batch.insert(
+                        table="NodeEmbedding",
+                        columns=("id", "node_id", "node_type", 
+                                 "stgnn_embedding", "stgnn_score", "dgat_embedding", "dgat_score", 
+                                 "hetgnn_embedding", "hetgnn_score", "anomaly_explanation", "timestamp"),
+                        values=mutations
+                    )
+                logger.info("Successfully wrote embeddings to Spanner")
+            except Exception as e:
+                logger.error(f"Failed to write embeddings to Spanner: {e}")
+        else:
+            logger.warning("No mutations to write to Spanner")
                 
-                # Check if the table exists, assuming it might not yet or using a try-except
-                try:
-                    with database.batch() as batch:
-                        batch.insert(
-                            table="NodeEmbedding",
-                            columns=("id", "node_id", "node_type", "embedding", "anomaly_score", "anomaly_explanation", "timestamp"),
-                            values=mutations
-                        )
-                    logger.info("Successfully wrote embeddings to Spanner.")
-                except Exception as e:
-                    logger.error(f"Failed to write embeddings to Spanner: {e}")
-            
-            if node_count > 0:
-                results["average_score"] = total_loss / node_count
-                
-            results["global_anomaly"] = results["average_score"] > ANOMALY_THRESHOLD
-            
-            return results
+        # Return generic results array for the UI
+        logger.info(f"Inference complete, returning {len(consolidated_nodes)} nodes")
+        return {"nodes": list(consolidated_nodes.values()), "global_anomaly": False}
             
     except Exception as e:
         logger.error(f"Inference run failed: {e}", exc_info=True)
         return {'error': str(e)}
 
-async def inference_handler(request):
-    logger.info("Received REST inference request")
+async def predict_handler(request):
+    logger.info("Received Vertex AI prediction request")
+    # Vertex AI Prediction typically sends {"instances": [...]}
+    # For now, we ignore the payload and fetch from Spanner directly
+    try:
+        payload = await request.json()
+    except Exception:
+        pass
+        
     results = await run_inference()
     if 'error' in results:
         status = 500 if results['error'] != 'No data found in Spanner snapshot' else 404
         if results['error'] == 'Model not available': status = 503
-        return web.json_response(results, status=status)
-    return web.json_response(results)
+        return web.json_response({"predictions": [], "error": results['error']}, status=status)
+    return web.json_response({"predictions": results.get("nodes", [])})
 
-async def inference_loop(app):
-    import asyncio
+async def health_handler(request):
+    """Health check for Vertex AI"""
+    return web.json_response({"status": "healthy"}, status=200)
+
+async def background_inference_loop():
+    """
+    Background task that runs inference every 60 seconds.
+    Writes embeddings to Spanner NodeEmbedding table automatically.
+    """
     global background_task_running
-    logger.info("Starting background inference loop (every 60s)")
     background_task_running = True
-    try:
-        while True:
-            try:
-                await run_inference()
-            except asyncio.CancelledError:
-                logger.info("Background inference loop cancelled")
-                break
-            except Exception as e:
-                logger.error(f"Error in background inference loop: {e}", exc_info=True)
+    
+    logger.info("🚀 Background inference task started (60-second interval)")
+    
+    while background_task_running:
+        try:
+            logger.info("⏰ Background inference triggered")
+            await run_inference()
+            logger.info(f"✅ Background inference complete, sleeping 60 seconds...")
             await asyncio.sleep(60)
-    finally:
-        background_task_running = False
-        logger.info("Background inference loop stopped")
+        except Exception as e:
+            logger.error(f"❌ Background inference error: {e}", exc_info=True)
+            logger.info("Retrying in 60 seconds...")
+            await asyncio.sleep(60)  # Still sleep on error to avoid tight loop
+    
+    logger.info("Background inference task stopped")
 
 async def start_background_tasks(app):
-    import asyncio
-    global inference_task, background_task_running
-    
-    if inference_task and not inference_task.done():
-        logger.warning("Background task already running")
-        return False
-    
-    inference_task = asyncio.create_task(inference_loop(app))
-    logger.info("Background inference task started")
-    return True
+    """Called when aiohttp app starts - launches background inference loop"""
+    global inference_task
+    logger.info("Starting background tasks...")
+    inference_task = asyncio.create_task(background_inference_loop())
+    logger.info("Background inference task launched")
 
 async def cleanup_background_tasks(app):
-    global inference_task, background_task_running
-    import asyncio
-    
-    if inference_task and not inference_task.done():
-        inference_task.cancel()
-        await asyncio.gather(inference_task, return_exceptions=True)
-        background_task_running = False
-        logger.info("Background tasks cleaned up")
+    """Called when aiohttp app shuts down - gracefully stops background task"""
+    global background_task_running, inference_task
+    logger.info("Shutting down background tasks...")
+    background_task_running = False
+    if inference_task:
+        await inference_task
+    logger.info("Background tasks stopped")
 
-async def start_handler(request):
-    """REST endpoint to start the background inference loop"""
-    global inference_task, background_task_running
-    
-    if inference_task and not inference_task.done():
-        return web.json_response({
-            "status": "already_running",
-            "message": "Background inference task is already running"
-        }, status=200)
-    
-    success = await start_background_tasks(request.app)
-    
-    if success:
-        return web.json_response({
-            "status": "started",
-            "message": "Background inference task started successfully"
-        }, status=200)
-    else:
-        return web.json_response({
-            "status": "error",
-            "message": "Failed to start background inference task"
-        }, status=500)
+# Initialize aiohttp app and CORS
+app = web.Application()
+cors = aiohttp_cors.setup(app, defaults={
+    "*": aiohttp_cors.ResourceOptions(
+        allow_credentials=True,
+        expose_headers="*",
+        allow_headers="*"
+    )
+})
 
-async def stop_handler(request):
-    """REST endpoint to stop the background inference loop"""
-    global inference_task, background_task_running
-    
-    if not inference_task or inference_task.done():
-        return web.json_response({
-            "status": "not_running",
-            "message": "Background inference task is not running"
-        }, status=200)
-    
-    try:
-        inference_task.cancel()
-        import asyncio
-        await asyncio.gather(inference_task, return_exceptions=True)
-        background_task_running = False
-        
-        return web.json_response({
-            "status": "stopped",
-            "message": "Background inference task stopped successfully"
-        }, status=200)
-    except Exception as e:
-        logger.error(f"Error stopping background task: {e}", exc_info=True)
-        return web.json_response({
-            "status": "error",
-            "message": f"Error stopping background task: {str(e)}"
-        }, status=500)
-
-async def status_handler(request):
-    """REST endpoint to check the status of the background inference loop"""
-    global inference_task, background_task_running
-    
-    is_running = inference_task is not None and not inference_task.done()
-    
-    return web.json_response({
-        "status": "running" if is_running else "stopped",
-        "task_exists": inference_task is not None,
-        "task_done": inference_task.done() if inference_task else True,
-        "background_flag": background_task_running
-    }, status=200)
-
-
+# Wire background task lifecycle to app startup/cleanup
+app.on_startup.append(start_background_tasks)
+app.on_cleanup.append(cleanup_background_tasks)
 
 if __name__ == "__main__":
     # Load model on start
-    load_model()
+    load_models()
     
-    # Optional: Auto-start background tasks (set AUTO_START=true to enable)
-    auto_start = os.environ.get('AUTO_START', 'false').lower() == 'true'
-    if auto_start:
-        app.on_startup.append(start_background_tasks)
-        logger.info("Background tasks will auto-start on service startup")
-    else:
-        logger.info("Background tasks will NOT auto-start. Use POST /start to begin.")
+    # Add Vertex AI routes
+    predict_route_path = os.environ.get('AIP_PREDICT_ROUTE', '/predict')
+    health_route_path = os.environ.get('AIP_HEALTH_ROUTE', '/health')
     
-    app.on_cleanup.append(cleanup_background_tasks)
-    
-    # Add routes
-    inference_route = app.router.add_post('/inference', inference_handler)
-    start_route = app.router.add_get('/start', start_handler)
-    stop_route = app.router.add_get('/stop', stop_handler)
-    status_route = app.router.add_get('/status', status_handler)
+    predict_route = app.router.add_post(predict_route_path, predict_handler)
+    health_route = app.router.add_get(health_route_path, health_handler)
     
     # Add CORS to API routes
-    cors.add(inference_route)
-    cors.add(start_route)
-    cors.add(stop_route)
-    cors.add(status_route)
+    cors.add(predict_route)
+    cors.add(health_route)
 
-    logger.info("serving gnn...")
-    port = int(os.environ.get('PORT', 8082))
+    logger.info("Serving GNN on Vertex AI...")
+    port = int(os.environ.get('AIP_HTTP_PORT', 8080))
     web.run_app(app, port=port)

@@ -1,13 +1,9 @@
-
 import json
 import os
 import glob
 import numpy as np
 import torch
-import torch.nn as nn
 from torch_geometric.data import HeteroData
-from torch_geometric.nn import HGTConv, Linear
-from transformers import AutoTokenizer, AutoModel
 from sklearn.preprocessing import StandardScaler
 import joblib
 import logging
@@ -26,164 +22,6 @@ SPANNER_INSTANCE = os.getenv("SPANNER_INSTANCE", "networktopology-instance")
 SPANNER_DATABASE = os.getenv("SPANNER_DATABASE", "networktopology-db")
 GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "network-model-artifacts")
 
-
-# Mapping of node types to feature names for explainability
-# Updated to User Specs:
-# PE/P/CE Router: [State, Config (Semantic)]
-# Interface: [State, Errors, Rx, Tx]
-FEATURE_MAP = {
-    "PE Router": ["State", "Config (Semantic)"],
-    "P Router": ["State", "Config (Semantic)"],
-    "CE Router": ["State", "Config (Semantic)"],
-    "Interface": ["State", "Errors", "Rx", "Tx"]
-}
-
-def explain_node_anomaly(node_type, original_x, reconstructed_x):
-    """
-    Decomposes reconstruction error into per-feature contributions.
-    Returns a dict with detailed explanation.
-    """
-    logger.debug(f"Explaining anomaly for node type: {node_type}")
-    
-    if node_type not in FEATURE_MAP:
-        logger.warning(f"Unknown node type: {node_type}")
-        return {"error": "Unknown node type"}
-    
-    errors = (original_x - reconstructed_x) ** 2
-    labels = FEATURE_MAP[node_type]
-    
-    # Routers have embedding at the end
-    if node_type in ["PE Router", "P Router", "CE Router"]:
-        # Numeric features: State (1 dim)
-        # Config embedding: Remainder
-        numeric_errors = errors[:1] 
-        config_error = errors[1:].mean()
-        
-        collapsed_errors = torch.cat([numeric_errors, config_error.unsqueeze(0)])
-        max_idx = torch.argmax(collapsed_errors).item()
-        feature_label = labels[max_idx]
-        error_value = float(collapsed_errors[max_idx].item())
-        
-        logger.info(f"Node type '{node_type}' anomaly attributed to: {feature_label} (error={error_value:.6f})")
-        
-        return {
-            "primary_feature": feature_label,
-            "error_value": error_value,
-            "feature_errors": {
-                labels[0]: float(collapsed_errors[0].item()),
-                labels[1]: float(collapsed_errors[1].item())
-            }
-        }
-    else:
-        # Interface: All numeric
-        max_idx = torch.argmax(errors).item()
-        feature_label = labels[max_idx]
-        error_value = float(errors[max_idx].item())
-        
-        logger.info(f"Node type '{node_type}' anomaly attributed to: {feature_label} (error={error_value:.6f})")
-        
-        # Build feature errors dict
-        feature_errors = {}
-        for i, label in enumerate(labels):
-            if i < len(errors):
-                feature_errors[label] = float(errors[i].item())
-        
-        return {
-            "primary_feature": feature_label,
-            "error_value": error_value,
-            "feature_errors": feature_errors
-        }
-
-class THGAT(nn.Module):
-    def __init__(self, metadata, hidden_channels, out_channels, num_heads, num_layers):
-        super().__init__()
-        logger.info(f"Initializing THGAT model with hidden_channels={hidden_channels}, "
-                   f"out_channels={out_channels}, num_heads={num_heads}, num_layers={num_layers}")
-        
-        self.metadata = metadata
-        node_types, edge_types = metadata
-        logger.debug(f"Node types: {node_types}")
-        logger.debug(f"Edge types: {len(edge_types)} edge types")
-        
-        # 1. Feature Alignment (Projections)
-        self.lin_dict = nn.ModuleDict()
-        
-        # 2. Spatial Layer: HGT
-        self.convs = nn.ModuleList()
-        for i in range(num_layers):
-            conv = HGTConv(hidden_channels, hidden_channels, metadata, num_heads)
-            self.convs.append(conv)
-            logger.debug(f"Added HGT convolution layer {i+1}/{num_layers}")
-
-        # 3. Temporal Layer: GRU
-        self.gru_dict = nn.ModuleDict()
-        for node_type in node_types:
-            self.gru_dict[node_type] = nn.GRU(hidden_channels, hidden_channels, batch_first=True)
-            logger.debug(f"Added GRU layer for node type: {node_type}")
-    
-        # 4. Decoder (for Reconstruction)
-        self.decoder_dict = nn.ModuleDict()
-        logger.info("THGAT model initialization complete")
-        
-    def set_input_dims(self, input_dims):
-        """Initialize projection layers and decoders based on input feature dimensions."""
-        logger.info(f"Setting input dimensions for {len(input_dims)} node types")
-        for node_type, dim in input_dims.items():
-            self.lin_dict[node_type] = Linear(dim, HIDDEN_CHANNELS)
-            self.decoder_dict[node_type] = Linear(HIDDEN_CHANNELS, dim)
-            logger.debug(f"Node type '{node_type}': input_dim={dim}, hidden_dim={HIDDEN_CHANNELS}")
-        logger.info("Input dimensions set successfully")
-        # Log which input dim corresponds to which feature set
-        # Router: 1 + 128 = 129
-        # Interface: 4
-
-    def forward(self, x_dict, edge_index_dict, state_dict=None):
-        logger.debug(f"Forward pass - Processing {len(x_dict)} node types")
-        
-        # 1. Project inputs
-        h_dict = {}
-        for node_type, x in x_dict.items():
-            if node_type in self.lin_dict:
-                h_dict[node_type] = self.lin_dict[node_type](x).relu()
-                logger.debug(f"Projected {node_type}: {x.shape} -> {h_dict[node_type].shape}")
-        
-        # 2. Filter edges
-        filtered_edge_index_dict = {}
-        for edge_type, edge_index in edge_index_dict.items():
-            src_type, rel, dst_type = edge_type
-            if src_type in h_dict and dst_type in h_dict:
-                filtered_edge_index_dict[edge_type] = edge_index
-        logger.debug(f"Filtered edges: {len(filtered_edge_index_dict)}/{len(edge_index_dict)} edge types retained")
-        
-        # 3. Spatial Convolution (HGT)
-        for i, conv in enumerate(self.convs):
-            out_dict = conv(h_dict, filtered_edge_index_dict)
-            for node_type, h in out_dict.items():
-                h_dict[node_type] = h
-            logger.debug(f"HGT layer {i+1}/{len(self.convs)} completed")
-            
-        # 4. Temporal Update (GRU)
-        new_state_dict = {}
-        out_dict = {}
-        
-        for node_type, h in h_dict.items():
-            h_in = h.unsqueeze(1) 
-            h_prev = state_dict[node_type] if state_dict and node_type in state_dict else None
-            out, h_next = self.gru_dict[node_type](h_in, h_prev)
-            out_dict[node_type] = out.squeeze(1)
-            new_state_dict[node_type] = h_next
-            logger.debug(f"GRU update for {node_type}: output shape {out_dict[node_type].shape}")
-            
-        # 5. Decode
-        recon_dict = {}
-        for node_type, h in out_dict.items():
-            if node_type in self.decoder_dict:
-                recon_dict[node_type] = self.decoder_dict[node_type](h)
-                logger.debug(f"Decoded {node_type}: {h.shape} -> {recon_dict[node_type].shape}")
-        
-        logger.debug(f"Forward pass complete - reconstructed {len(recon_dict)} node types")
-        return recon_dict, new_state_dict
-
 class GraphBuilder:
     def __init__(self, scaler_path="scalers.pkl"):
         logger.info(f"Initializing GraphBuilder with scaler_path: {scaler_path}")
@@ -191,13 +29,21 @@ class GraphBuilder:
         self.scalers = {}
         self.tokenizer = None
         self.text_model = None
-        self.text_embed_dim = 768
+        self.text_embed_dim = 128
+        
+        # Updated to include semantic sub-nodes for HetGNN
         self.global_id_map = {
-            "PE Router": {}, "P Router": {}, "CE Router": {}, "Interface": {}
+            "PE Router": {}, "P Router": {}, "CE Router": {},
+            "Router_Config": {}, "Protocol_State": {}, "Interface_Metrics": {},
+            "Interface": {}
         }
+        
+        # Keep track of previous snapshot metrics for derivative (velocity/acceleration) calculation
+        self.previous_metrics = {}
+        
         logger.debug(f"Global ID map initialized with node types: {list(self.global_id_map.keys())}")
         
-    def init_netbert(self):
+    def init_config_encoder(self):
         # Using structured encoding instead of NetBERT
         # Dimensions: 128 hash buckets for robust feature hashing
         self.text_embed_dim = 128
@@ -209,69 +55,70 @@ class GraphBuilder:
         Returns a list of feature strings like 'rt_import:65035:1030', 'neighbor:10.0.0.1'.
         """
         features = []
-        
-        # Split into lines
         if not config_text:
             return features
             
         lines = config_text.split('\n')
-        
         for line in lines:
             line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-                
+            if not line or line.startswith('#'): continue
             parts = line.split()
             
-            # Pattern 1: Route Targets (Import/Export)
-            # set vrf name BLUE_SPOKE protocols bgp address-family ipv4-unicast route-target vpn import '65035:9999'
-            if "route-target" in line and "vpn" in line:
-                try:
-                    # Extract the target (last element usually)
-                    target = parts[-1].strip("'\"")
-                    if "import" in line:
-                        features.append(f"rt_import:{target}")
-                    elif "export" in line:
-                        features.append(f"rt_export:{target}")
-                except:
-                    pass
-                    
-            # Pattern 2: BGP Neighbors
-            # set protocols bgp neighbor 10.0.0.1 ...
-            elif "protocols bgp neighbor" in line:
-                try:
-                    # 'set', 'protocols', 'bgp', 'neighbor', '10.0.0.1', ...
-                    idx = parts.index("neighbor")
-                    if idx + 1 < len(parts):
-                        neighbor_ip = parts[idx + 1]
-                        features.append(f"bgp_neighbor:{neighbor_ip}")
-                except:
-                    pass
+            # Parse specific features as outlined by research doc
+            if "interfaces ethernet" in line:
+                if "mtu" in line:
+                    try:
+                        val = int(parts[-1].strip("'\""))
+                        normalized_mtu = min(val / 9000.0, 1.0)
+                        features.append(f"if_mtu:{normalized_mtu:.2f}")
+                    except ValueError: pass
+                elif "address" in line:
+                    features.append("if_has_address:1")
             
-            # Pattern 3: Interfaces
-            # set interfaces ethernet eth1 address 172.16.90.2/24
-            elif "set interfaces" in line and "address" in line:
-                try:
-                    # simplistic extraction
-                    # set interfaces ethernet eth1 address 172.16.90.2/24
-                    if "ethernet" in line:
-                        idx = parts.index("ethernet")
-                        if idx + 1 < len(parts):
-                            eth_name = parts[idx + 1]
-                            features.append(f"interface:{eth_name}")
-                except:
-                    pass
+            elif "protocols bgp" in line:
+                if "local-as" in line:
+                    try:
+                        val = int(parts[-1].strip("'\""))
+                        features.append(f"bgp_local_as:{(val/65535.0):.4f}")
+                    except ValueError: pass
+                elif "neighbor" in line and "remote-as" in line:
+                    try:
+                        val = int(parts[-1].strip("'\""))
+                        features.append(f"bgp_remote_as:{(val/65535.0):.4f}")
+                    except ValueError: pass
+            
+            elif "protocols ospf" in line:
+                if "area" in line and "network" in line:
+                    try:
+                        idx = parts.index("area")
+                        if idx + 1 < len(parts): 
+                            features.append(f"ospf_area_id:{parts[idx + 1]}")
+                    except ValueError: pass
+                elif "parameters router-id" in line:
+                    try:
+                        router_id = parts[-1].strip("'\"")
+                        features.append(f"ospf_router_id:{router_id}")
+                    except IndexError: pass
+            
+            elif "vrf name" in line and "protocols bgp" in line:
+                if "rd" in line:
+                    try:
+                        rd = parts[-1].strip("'\"")
+                        features.append(f"vrf_rd:{rd}")
+                    except IndexError: pass
+                elif "route-target" in line:
+                    try:
+                        target = parts[-1].strip("'\"")
+                        if "import" in line: features.append(f"vrf_rt_import:{target}")
+                        elif "export" in line: features.append(f"vrf_rt_export:{target}")
+                    except IndexError: pass
                     
-            # Pattern 4: VRF Definition
-            # set vrf name BLUE_SPOKE table 200
-            elif "set vrf name" in line:
+            elif "policy route-map" in line:
                 try:
-                    idx = parts.index("name")
-                    if idx + 1 < len(parts):
-                        vrf_name = parts[idx + 1]
-                        features.append(f"vrf:{vrf_name}")
-                except:
-                    pass
+                    idx = parts.index("route-map")
+                    if idx + 1 < len(parts): 
+                        features.append(f"has_route_map:{parts[idx + 1]}")
+                except ValueError: pass
 
         return features
 
@@ -280,15 +127,12 @@ class GraphBuilder:
         Generates a fixed-size embedding using hashing of configuration features.
         Robust to new/unseen values.
         """
-        # Ensure text is valid
         if text is None or text == "":
             return np.zeros(self.text_embed_dim)
         
-        # Extract content (Logic copied from previous fix)
         content_to_embed = text
         data_dict = None
         
-        # 1. Normalize input
         if isinstance(text, (dict, list)):
             data_dict = text
         elif hasattr(text, '__class__') and 'JsonObject' in text.__class__.__name__:
@@ -299,87 +143,140 @@ class GraphBuilder:
                 if text.strip().startswith('{'): data_dict = json.loads(text)
             except: pass
         
-        # 2. Extract specific fields
         if isinstance(data_dict, dict):
             if 'status' in data_dict and isinstance(data_dict['status'], dict) and 'applied_config' in data_dict['status']:
                 content_to_embed = data_dict['status']['applied_config']
             elif 'spec' in data_dict:
-                # Fallback: Convert spec to something resembling commands or just string
-                # Ideally we'd parse spec too, but for now stringify
                 content_to_embed = json.dumps(data_dict['spec'])
             else:
                 content_to_embed = json.dumps(data_dict)
         
-        # 3. Ensure string
         if not isinstance(content_to_embed, str):
             content_to_embed = str(content_to_embed)
 
-        # --- Structured Hashing Encoding ---
-        # 1. Parse features
         features = self._parse_vyos_commands(content_to_embed)
-        
-        # 2. Initialize zero vector
         embedding = np.zeros(self.text_embed_dim)
         
-        # 3. Hash features into buckets
-        # This is a simple "Hashing Vectorizer" / "Multi-hot Encoding"
         import hashlib
-        
         if not features:
-            # If parsing failed (e.g. JSON spec instead of commands), 
-            # fallback to hashing the raw tokens of the string
-            # to ensure we still detect changes
             features = content_to_embed.split()
         
         for feature in features:
-            # Deterministic hash to index
-            # MD5 is stable across runs/platforms
             hash_val = int(hashlib.md5(feature.encode('utf-8')).hexdigest(), 16)
             idx = hash_val % self.text_embed_dim
-            
-            # Binary presence (or count)
-            # Using 1.0 for presence creates a "multi-hot" vector
             embedding[idx] = 1.0
             
-        logger.debug(f"Encoded {len(features)} features into {self.text_embed_dim}-dim vector")
         return embedding
 
     def fit_scalers(self, snapshot_objects):
         logger.info(f"Fitting scalers on {len(snapshot_objects)} snapshot objects")
         
-        # We only really need to scale 'rx', 'tx', 'errors'. 'state' is usually 0/1.
         all_metrics = {
-            "Interface": {"rx": [], "tx": [], "errors": []}
+            "Interface": {"rx_bytes": [], "tx_bytes": [], "rx_drops": [], "tx_drops": [], "rx_errors": [], "tx_errors": []},
+            "Interface_Metrics": {"rx_bytes_velocity": [], "tx_bytes_velocity": [], "rx_drops_velocity": [], "tx_drops_velocity": [], "rx_errors_velocity": [], "tx_errors_velocity": []},
+            "Protocol_State": {"ospf_neighbors": [], "bgp_peers": [], "mpls_routes": []}
         }
         
+        self.previous_metrics = {}
+        
         for data in snapshot_objects:
+            # First pass: map nodes for relation building
+            node_map = {node["id"]: node for node in data["nodes"]}
+            edge_list = data.get("edges", [])
+            
             for node in data["nodes"]:
                 ntype = node["type"]
+                nid = node["id"]
+                
                 if ntype == "Interface":
-                    all_metrics["Interface"]["rx"].append(float(node.get("rx") or 0.0))
-                    all_metrics["Interface"]["tx"].append(float(node.get("tx") or 0.0))
-                    all_metrics["Interface"]["errors"].append(float(node.get("errors") or 0.0))
+                    rx_bytes = np.log1p(float(node.get("rx_bytes") or 0.0))
+                    tx_bytes = np.log1p(float(node.get("tx_bytes") or 0.0))
+                    rx_drops = np.log1p(float(node.get("rx_drops") or 0.0))
+                    tx_drops = np.log1p(float(node.get("tx_drops") or 0.0))
+                    rx_errors = np.log1p(float(node.get("rx_errors") or 0.0))
+                    tx_errors = np.log1p(float(node.get("tx_errors") or 0.0))
+                    
+                    all_metrics["Interface"]["rx_bytes"].append(rx_bytes)
+                    all_metrics["Interface"]["tx_bytes"].append(tx_bytes)
+                    all_metrics["Interface"]["rx_drops"].append(rx_drops)
+                    all_metrics["Interface"]["tx_drops"].append(tx_drops)
+                    all_metrics["Interface"]["rx_errors"].append(rx_errors)
+                    all_metrics["Interface"]["tx_errors"].append(tx_errors)
+                    
+                    # Calculate derivatives if we have previous state
+                    prev = self.previous_metrics.get(nid)
+                    if prev:
+                        rx_b_v = rx_bytes - prev["rx_bytes"]
+                        tx_b_v = tx_bytes - prev["tx_bytes"]
+                        rx_d_v = rx_drops - prev["rx_drops"]
+                        tx_d_v = tx_drops - prev["tx_drops"]
+                        rx_e_v = rx_errors - prev["rx_errors"]
+                        tx_e_v = tx_errors - prev["tx_errors"]
+                    else:
+                        rx_b_v, tx_b_v = 0.0, 0.0
+                        rx_d_v, tx_d_v = 0.0, 0.0
+                        rx_e_v, tx_e_v = 0.0, 0.0
+                        
+                    self.previous_metrics[nid] = {
+                        "rx_bytes": rx_bytes, "tx_bytes": tx_bytes,
+                        "rx_drops": rx_drops, "tx_drops": tx_drops,
+                        "rx_errors": rx_errors, "tx_errors": tx_errors
+                    }
+                    
+                    all_metrics["Interface_Metrics"]["rx_bytes_velocity"].append(rx_b_v)
+                    all_metrics["Interface_Metrics"]["tx_bytes_velocity"].append(tx_b_v)
+                    all_metrics["Interface_Metrics"]["rx_drops_velocity"].append(rx_d_v)
+                    all_metrics["Interface_Metrics"]["tx_drops_velocity"].append(tx_d_v)
+                    all_metrics["Interface_Metrics"]["rx_errors_velocity"].append(rx_e_v)
+                    all_metrics["Interface_Metrics"]["tx_errors_velocity"].append(tx_e_v)
+                    
+                elif "Router" in ntype and ntype in ["PE Router", "P Router", "CE Router"]:
+                    # Extract protocol state features from VyOS config/status
+                    config_str = str(node.get("config", ""))
+                    ospf_count = config_str.count("protocols ospf")
+                    bgp_count = config_str.count("protocols bgp neighbor")
+                    mpls_count = config_str.count("protocols mpls")
+                    
+                    all_metrics["Protocol_State"]["ospf_neighbors"].append(float(ospf_count))
+                    all_metrics["Protocol_State"]["bgp_peers"].append(float(bgp_count))
+                    all_metrics["Protocol_State"]["mpls_routes"].append(float(mpls_count))
 
-        for ntype, metrics in all_metrics.items():
-            self.scalers[ntype] = {}
+        for map_type, metrics in all_metrics.items():
+            if map_type not in self.scalers:
+                self.scalers[map_type] = {}
             for metric, values in metrics.items():
                 if values:
                     scaler = StandardScaler()
-                    # Reshape for fit
                     scaler.fit(np.array(values).reshape(-1, 1))
-                    self.scalers[ntype][metric] = scaler
-                    logger.debug(f"Fitted scaler for {ntype}.{metric} with {len(values)} values "
-                               f"(mean={scaler.mean_[0]:.4f}, std={np.sqrt(scaler.var_[0]):.4f})")
+                    self.scalers[map_type][metric] = scaler
+                    logger.debug(f"Fitted scaler for {map_type}.{metric} with {len(values)} values")
         
-        # Build global ID map
-        logger.info("Building global ID map")
+        logger.info("Building global ID map including sub-nodes")
+        # Reset ID map
+        self.global_id_map = {k: {} for k in self.global_id_map.keys()}
+        
         for data in snapshot_objects:
             for node in data["nodes"]:
                 ntype = node["type"]
                 nid = node["id"]
-                if ntype in self.global_id_map:
+                if ntype in ["PE Router", "P Router", "CE Router", "Interface"]:
                     if nid not in self.global_id_map[ntype]:
                         self.global_id_map[ntype][nid] = len(self.global_id_map[ntype])
+                        
+                    # Also create sub-node IDs for routers (for HetGNN)
+                    if "Router" in ntype:
+                        conf_id = f"{nid}_config"
+                        prot_id = f"{nid}_protocol"
+                        if conf_id not in self.global_id_map["Router_Config"]:
+                            self.global_id_map["Router_Config"][conf_id] = len(self.global_id_map["Router_Config"])
+                        if prot_id not in self.global_id_map["Protocol_State"]:
+                            self.global_id_map["Protocol_State"][prot_id] = len(self.global_id_map["Protocol_State"])
+                    
+                    # Create sub-node IDs for interfaces (for HetGNN)
+                    if ntype == "Interface":
+                        met_id = f"{nid}_metrics"
+                        if met_id not in self.global_id_map["Interface_Metrics"]:
+                            self.global_id_map["Interface_Metrics"][met_id] = len(self.global_id_map["Interface_Metrics"])
         
         for ntype, id_map in self.global_id_map.items():
             logger.info(f"Global ID map for {ntype}: {len(id_map)} unique nodes")
@@ -387,19 +284,13 @@ class GraphBuilder:
     def save_scalers(self):
         logger.info(f"Saving scalers and ID map to {self.scaler_path}")
         joblib.dump({"scalers": self.scalers, "id_map": self.global_id_map}, self.scaler_path)
-        logger.info("Scalers saved successfully")
         
     def load_scalers(self):
         if os.path.exists(self.scaler_path):
-            logger.info(f"Loading scalers from {self.scaler_path}")
             data = joblib.load(self.scaler_path)
             self.scalers = data["scalers"]
             self.global_id_map = data["id_map"]
-            logger.info("Scalers loaded successfully")
-            for ntype, id_map in self.global_id_map.items():
-                logger.debug(f"Loaded ID map for {ntype}: {len(id_map)} nodes")
             return True
-        logger.warning(f"Scaler file not found: {self.scaler_path}")
         return False
 
     def process_snapshot(self, data):
@@ -408,103 +299,207 @@ class GraphBuilder:
         features_dict = {}
         input_dims = {}
         
-        # Define dimensions
-        # Router: [State(1)] + [Config(128)] = 129
-        # Interface: [State(1), Errors(1), Rx(1), Tx(1)] = 4
-        
+        # Dimensions:
+        # Core: Router(1), Interface(4)
+        # Sub-nodes: Router_Config(128), Protocol_State(3), Interface_Metrics(6 - raw+velocity)
         for ntype, id_map in self.global_id_map.items():
             count = len(id_map)
-            if count == 0:
-                logger.debug(f"Skipping {ntype}: no nodes in ID map")
-                continue
             
             dim = 0
-            if "Router" in ntype: dim = 1 + self.text_embed_dim
-            elif ntype == "Interface": dim = 4
+            if ntype in ["PE Router", "P Router", "CE Router"]: dim = 1  # Just state
+            elif ntype == "Router_Config": dim = self.text_embed_dim
+            elif ntype == "Protocol_State": dim = 3
+            elif ntype == "Interface": dim = 7  # Baseline + 6 metrics
+            elif ntype == "Interface_Metrics": dim = 12 # 6 metrics + 6 velocities
             
-            features_dict[ntype] = np.zeros((count, dim), dtype=np.float32)
-            input_dims[ntype] = dim
-            logger.debug(f"Initialized feature array for {ntype}: shape ({count}, {dim})")
+            if count > 0:
+                features_dict[ntype] = np.zeros((count, dim), dtype=np.float32)
+                input_dims[ntype] = dim
 
-        node_count = 0
+        def get_scaled(map_type, metric, val):
+            if map_type in self.scalers and metric in self.scalers[map_type]:
+                return self.scalers[map_type][metric].transform([[val]])[0][0]
+            return val
+
+        # Map to find node info for edges later
+        id_to_type = {}
+        id_to_metrics = {}
+
         for node in data["nodes"]:
             ntype = node["type"]
             nid = node["id"]
-            if ntype not in self.global_id_map or nid not in self.global_id_map[ntype]:
-                logger.debug(f"Skipping unknown node: {nid} of type {ntype}")
-                continue
+            id_to_type[nid] = ntype
             
+            if ntype not in self.global_id_map or nid not in self.global_id_map[ntype]:
+                continue
+                
             idx = self.global_id_map[ntype][nid]
-            vec = []
+            state = node.get("state", 0.0)
             
             if "Router" in ntype:
-                logger.info(f"processing router {node.get('hostname')}")
-                # State
-                vec.append(node.get("state", 0.0))
-                # Config using structured encoding
+                # 1. Base Node
+                features_dict[ntype][idx] = np.array([state])
+                
+                # 2. Config Sub-node
+                conf_id = f"{nid}_config"
+                conf_idx = self.global_id_map["Router_Config"][conf_id]
                 config_text = node.get("config", "")
-                vec.extend(self.get_config_embedding(config_text))
+                features_dict["Router_Config"][conf_idx] = self.get_config_embedding(config_text)
+                
+                # 3. Protocol Sub-node
+                prot_id = f"{nid}_protocol"
+                prot_idx = self.global_id_map["Protocol_State"][prot_id]
+                o_c, b_c, m_c = str(config_text).count("protocols ospf"), str(config_text).count("protocols bgp neighbor"), str(config_text).count("protocols mpls")
+                features_dict["Protocol_State"][prot_idx] = np.array([
+                    get_scaled("Protocol_State", "ospf_neighbors", float(o_c)),
+                    get_scaled("Protocol_State", "bgp_peers", float(b_c)),
+                    get_scaled("Protocol_State", "mpls_routes", float(m_c))
+                ])
                 
             elif ntype == "Interface":
-                logger.info(f"interface {node.get('device_id')} {node.get('name')}")
-                # State
-                vec.append(node.get("state", 0.0))
+                rx_bytes = np.log1p(float(node.get("rx_bytes") or 0.0))
+                tx_bytes = np.log1p(float(node.get("tx_bytes") or 0.0))
+                rx_drops = np.log1p(float(node.get("rx_drops") or 0.0))
+                tx_drops = np.log1p(float(node.get("tx_drops") or 0.0))
+                rx_errors = np.log1p(float(node.get("rx_errors") or 0.0))
+                tx_errors = np.log1p(float(node.get("tx_errors") or 0.0))
+                
+                # Base node
+                features_dict[ntype][idx] = np.array([
+                    state, 
+                    get_scaled("Interface", "rx_bytes", rx_bytes),
+                    get_scaled("Interface", "tx_bytes", tx_bytes),
+                    get_scaled("Interface", "rx_drops", rx_drops),
+                    get_scaled("Interface", "tx_drops", tx_drops),
+                    get_scaled("Interface", "rx_errors", rx_errors),
+                    get_scaled("Interface", "tx_errors", tx_errors)
+                ])
+                
+                id_to_metrics[nid] = {
+                    "rx_bytes": rx_bytes, "tx_bytes": tx_bytes,
+                    "rx_drops": rx_drops, "tx_drops": tx_drops,
+                    "rx_errors": rx_errors, "tx_errors": tx_errors
+                }
+                
+                # Metrics Sub-node
+                met_id = f"{nid}_metrics"
+                met_idx = self.global_id_map["Interface_Metrics"][met_id]
+                
+                prev = self.previous_metrics.get(nid, {
+                    "rx_bytes": 0.0, "tx_bytes": 0.0,
+                    "rx_drops": 0.0, "tx_drops": 0.0,
+                    "rx_errors": 0.0, "tx_errors": 0.0
+                })
+                
+                rx_b_v = rx_bytes - prev["rx_bytes"]
+                tx_b_v = tx_bytes - prev["tx_bytes"]
+                rx_d_v = rx_drops - prev["rx_drops"]
+                tx_d_v = tx_drops - prev["tx_drops"]
+                rx_e_v = rx_errors - prev["rx_errors"]
+                tx_e_v = tx_errors - prev["tx_errors"]
+                
+                self.previous_metrics[nid] = {
+                    "rx_bytes": rx_bytes, "tx_bytes": tx_bytes,
+                    "rx_drops": rx_drops, "tx_drops": tx_drops,
+                    "rx_errors": rx_errors, "tx_errors": tx_errors
+                } # Update state for next snapshot
+                
+                features_dict["Interface_Metrics"][met_idx] = np.array([
+                    get_scaled("Interface", "rx_bytes", rx_bytes),
+                    get_scaled("Interface", "tx_bytes", tx_bytes),
+                    get_scaled("Interface", "rx_drops", rx_drops),
+                    get_scaled("Interface", "tx_drops", tx_drops),
+                    get_scaled("Interface", "rx_errors", rx_errors),
+                    get_scaled("Interface", "tx_errors", tx_errors),
+                    get_scaled("Interface_Metrics", "rx_bytes_velocity", rx_b_v),
+                    get_scaled("Interface_Metrics", "tx_bytes_velocity", tx_b_v),
+                    get_scaled("Interface_Metrics", "rx_drops_velocity", rx_d_v),
+                    get_scaled("Interface_Metrics", "tx_drops_velocity", tx_d_v),
+                    get_scaled("Interface_Metrics", "rx_errors_velocity", rx_e_v),
+                    get_scaled("Interface_Metrics", "tx_errors_velocity", tx_e_v)
+                ])
 
-                # Scaled metrics: Errors, Rx, Tx
-                # Handle missing scaler gracefully if we fit on empty data
-                def get_scaled(metric):
-                    val = float(node.get(metric, 0.0) or 0.0)
-                    if "Interface" in self.scalers and metric in self.scalers["Interface"]:
-                        scaled_val = self.scalers["Interface"][metric].transform([[val]])[0][0]
-                        return scaled_val
-                    return val # Fallback unscaled
-                    
-                vec.append(get_scaled("errors"))
-                vec.append(get_scaled("rx"))
-                vec.append(get_scaled("tx"))
-            
-            features_dict[ntype][idx] = np.array(vec)
-            node_count += 1
-
-        logger.info(f"Processed {node_count} nodes")
-        
         for ntype, feat_array in features_dict.items():
-            if np.isnan(feat_array).any():
-                logger.warning(f"NaN values detected in {ntype} features, replacing with zeros")
-                feat_array = np.nan_to_num(feat_array, nan=0.0)
+            feat_array = np.nan_to_num(feat_array, nan=0.0)
             hetero_data[ntype].x = torch.from_numpy(feat_array).float()
-            logger.debug(f"Created tensor for {ntype}: shape {hetero_data[ntype].x.shape}")
             
         # Edge Processing
         edge_indices = {}
-        id_to_type = {n["id"]: n["type"] for n in data["nodes"]}
+        edge_attr_dict = {} # For D-GAT asymmetry
         
-        edge_count = 0
+        # We process the base structural edges, and infer the sub-node edges
         for edge in data["edges"]:
-            src, tgt = edge["source"], edge["target"]
-            rel = edge["relation"]
-            if src not in id_to_type or tgt not in id_to_type:
-                logger.debug(f"Skipping edge: source or target node not found")
-                continue
+            src, tgt, rel = edge["source"], edge["target"], edge["relation"]
             
-            src_type = id_to_type[src]
-            tgt_type = id_to_type[tgt]
+            if src not in id_to_type or tgt not in id_to_type: continue
+            
+            src_type, tgt_type = id_to_type[src], id_to_type[tgt]
             edge_type = (src_type, rel, tgt_type)
             
-            if edge_type not in edge_indices: edge_indices[edge_type] = [[], []]
+            if edge_type not in edge_indices:
+                edge_indices[edge_type] = [[], []]
+                edge_attr_dict[edge_type] = []
+                
+            src_idx = self.global_id_map[src_type].get(src)
+            tgt_idx = self.global_id_map[tgt_type].get(tgt)
             
-            if src in self.global_id_map[src_type] and tgt in self.global_id_map[tgt_type]:
-                src_idx = self.global_id_map[src_type][src]
-                tgt_idx = self.global_id_map[tgt_type][tgt]
+            if src_idx is not None and tgt_idx is not None:
                 edge_indices[edge_type][0].append(src_idx)
                 edge_indices[edge_type][1].append(tgt_idx)
-                edge_count += 1
-        
-        logger.info(f"Processed {edge_count} edges across {len(edge_indices)} edge types")
+                
+                # Edge Attributes for D-GAT (Asymmetry)
+                if src_type == "Interface" and tgt_type == "Interface":
+                    src_m = id_to_metrics.get(src, {"tx_bytes":0,"rx_bytes":0,"tx_drops":0,"rx_drops":0})
+                    tgt_m = id_to_metrics.get(tgt, {"tx_bytes":0,"rx_bytes":0,"tx_drops":0,"rx_drops":0})
+                    
+                    # Traffic asymmetry formula: |tx_rate_A - rx_rate_B| / max(tx_rate_A, rx_rate_B)
+                    tx_a = src_m["tx_bytes"]
+                    rx_b = tgt_m["rx_bytes"]
+                    max_traffic = max(tx_a, rx_b)
+                    traffic_asym = abs(tx_a - rx_b) / max_traffic if max_traffic > 0 else 0.0
+                    
+                    # Drop asymmetry formula: |drops_A->B - drops_B->A| / max(drops_A->B, drops_B->A)
+                    # We approximate directed drops as A's tx drops vs B's tx drops
+                    # (ideally we'd have explicit directed metrics, but interface tx drop is closest)
+                    drops_ab = src_m["tx_drops"]
+                    drops_ba = tgt_m["tx_drops"]
+                    max_drops = max(drops_ab, drops_ba)
+                    drop_asym = abs(drops_ab - drops_ba) / max_drops if max_drops > 0 else 0.0
+                    
+                    edge_attr_dict[edge_type].append([traffic_asym, drop_asym])
+                else:
+                    edge_attr_dict[edge_type].append([0.0, 0.0]) # Default weights
+                
+        # Inject structural edges for the sub-nodes (HetGNN requirement)
+        # Router -> Config/Protocol
+        for r_type in ["PE Router", "P Router", "CE Router"]:
+            conf_rel = (r_type, "Has_Config", "Router_Config")
+            prot_rel = (r_type, "Has_Protocol", "Protocol_State")
+            edge_indices[conf_rel], edge_indices[prot_rel] = [[], []], [[], []]
+            
+            for nid, idx in self.global_id_map[r_type].items():
+                conf_id, prot_id = f"{nid}_config", f"{nid}_protocol"
+                if conf_id in self.global_id_map["Router_Config"]:
+                    edge_indices[conf_rel][0].append(idx)
+                    edge_indices[conf_rel][1].append(self.global_id_map["Router_Config"][conf_id])
+                if prot_id in self.global_id_map["Protocol_State"]:
+                    edge_indices[prot_rel][0].append(idx)
+                    edge_indices[prot_rel][1].append(self.global_id_map["Protocol_State"][prot_id])
+                    
+        # Interface -> Metrics
+        met_rel = ("Interface", "Has_Metrics", "Interface_Metrics")
+        edge_indices[met_rel] = [[], []]
+        for nid, idx in self.global_id_map["Interface"].items():
+            met_id = f"{nid}_metrics"
+            if met_id in self.global_id_map["Interface_Metrics"]:
+                edge_indices[met_rel][0].append(idx)
+                edge_indices[met_rel][1].append(self.global_id_map["Interface_Metrics"][met_id])
             
         for etype, indices in edge_indices.items():
-            hetero_data[etype].edge_index = torch.tensor(indices, dtype=torch.long)
-            logger.debug(f"Edge type {etype}: {len(indices[0])} edges")
-        
-        logger.info("Snapshot processing complete")
+            if indices[0]:  # Only add if edges exist
+                hetero_data[etype].edge_index = torch.tensor(indices, dtype=torch.long)
+                if etype in edge_attr_dict and edge_attr_dict[etype]:
+                    att = np.nan_to_num(np.array(edge_attr_dict[etype]), nan=0.0)
+                    hetero_data[etype].edge_attr = torch.from_numpy(att).float()
+            
         return hetero_data, input_dims

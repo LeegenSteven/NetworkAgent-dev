@@ -18,4 +18,5 @@ RUN pip install -r /requirements.txt
 ADD gnn/src/ /app
 WORKDIR /app
 
-CMD ["python", "train.py"]
+# Run a simple bash loop to execute all three training scripts
+CMD ["sh", "-c", "python train/train_dgat.py && python train/train_hetgnn.py && python train/train_stgnn.py"]

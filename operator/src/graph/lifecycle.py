@@ -63,3 +63,29 @@ async def obj_vyosl3vpn(body, spec, name, uid, logger, event, **kwargs):
        await delete_l3vpn_service(uid)
     else:
        await sync_l3vpn_service(body, spec, name, uid, logger)
+
+# --- Device Handlers ---
+
+@kopf.on.create('devices.google.dev', id='device-create-graph')
+async def obj_device_create(body, spec, name, uid, logger, **kwargs):
+    """Sync new Device to Spanner"""
+    logger.debug(f"Device {name} created - syncing to Spanner")
+    await sync_device(body, spec, name, uid, logger)
+
+@kopf.on.update('devices.google.dev', field='spec', id='device-spec-graph')
+async def obj_device_spec_update(body, spec, name, uid, logger, **kwargs):
+    """Sync Device spec changes to Spanner"""
+    logger.debug(f"Device {name} spec updated - syncing to Spanner")
+    await sync_device(body, spec, name, uid, logger)
+
+@kopf.on.update('devices.google.dev', field='status', id='device-status-graph')
+async def obj_device_status_update(body, spec, name, uid, logger, **kwargs):
+    """Sync Device status changes to Spanner"""
+    logger.debug(f"Device {name} status updated - syncing to Spanner")
+    await sync_device(body, spec, name, uid, logger)
+
+@kopf.on.delete('devices.google.dev', id='device-delete-graph')
+async def obj_device_delete(name, uid, logger, **kwargs):
+    """Delete Device from Spanner"""
+    logger.debug(f"Device {name} deleted - removing from Spanner")
+    await delete_device(uid, name=name)

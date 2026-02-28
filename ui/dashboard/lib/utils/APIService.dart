@@ -544,6 +544,32 @@ class APIService{
     }
   }
 
+  Future<Map<String, dynamic>> fetchDeviceDetails(String deviceId) async {
+    try {
+      var url = Uri.parse('${config.EnvironmentConfig.agentUrl}/device/$deviceId');
+      print('Fetching device details from: $url');
+      
+      final http.Response response = await http.get(url, headers: getRequestHeaders);
+      
+      if (response.statusCode == 200) {
+        final dynamic decodedData = jsonDecode(response.body);
+        if (decodedData is Map<String, dynamic>) {
+          return decodedData;
+        } else {
+          print('Device details data is not a Map: ${decodedData.runtimeType}');
+          throw Exception('Invalid device details data format');
+        }
+      } else {
+        print('Failed to load device details: ${response.statusCode}');
+        print('Response body: ${response.body}');
+        throw Exception('Failed to load device details');
+      }
+    } catch (e) {
+      print('Error fetching device details: $e');
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>> fetchNodeEmbeddings(String nodeId) async {
     try {
       var url = Uri.parse('${config.EnvironmentConfig.agentUrl}/embeddings/$nodeId');

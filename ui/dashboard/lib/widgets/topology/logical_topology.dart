@@ -49,11 +49,20 @@ class _LogicalTopologyWidgetState extends State<LogicalTopologyWidget>
   void didUpdateWidget(LogicalTopologyWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.topology != oldWidget.topology) {
-       setState(() {
-         _isSettled = false;
-       });
-       _initializePositions();
-       _precomputeLayout();
+       // Only update if nodes have been added or removed
+       final currentNodeIds = widget.topology.nodes.map((n) => n.id).toSet();
+       final oldNodeIds = oldWidget.topology.nodes.map((n) => n.id).toSet();
+       
+       if (!currentNodeIds.containsAll(oldNodeIds) || !oldNodeIds.containsAll(currentNodeIds)) {
+         // Nodes have changed - update positions for new nodes only
+         _updatePositions();
+         // Only re-settle if topology structure actually changed
+         setState(() {
+           _isSettled = false;
+         });
+         _precomputeLayout();
+       }
+       // If only connection or property changes, keep existing positions
     }
   }
 
@@ -68,6 +77,26 @@ class _LogicalTopologyWidgetState extends State<LogicalTopologyWidget>
         random.nextDouble() * 400 + 100,
       );
       _velocities[node.id] = Offset.zero;
+    }
+  }
+  
+  void _updatePositions() {
+    final random = Random();
+    final currentNodeIds = widget.topology.nodes.map((n) => n.id).toSet();
+    
+    // Remove positions for deleted nodes
+    _positions.removeWhere((id, _) => !currentNodeIds.contains(id));
+    _velocities.removeWhere((id, _) => !currentNodeIds.contains(id));
+    
+    // Add positions for new nodes only
+    for (var node in widget.topology.nodes) {
+      if (!_positions.containsKey(node.id)) {
+        _positions[node.id] = Offset(
+          random.nextDouble() * 400 + 100,
+          random.nextDouble() * 400 + 100,
+        );
+        _velocities[node.id] = Offset.zero;
+      }
     }
   }
 

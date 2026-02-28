@@ -100,6 +100,12 @@ SQL_TEMPLATES = {
   'insert_bgp_peering': "INSERT BGP_Peering (session_id_a, session_id_b, valid_start_ts, valid_end_ts) VALUES (@id_a, @id_b, PENDING_COMMIT_TIMESTAMP(), NULL)",
   'delete_bgp_peering_by_id': "UPDATE BGP_Peering SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE (session_id_a = @id OR session_id_b = @id) AND valid_end_ts IS NULL",
 
+  # Device SCD
+  'get_active_device': "SELECT router_id, network_name, ip_address, gateway, vlan, status, config FROM Device WHERE id = @id AND valid_end_ts IS NULL",
+  'close_device': "UPDATE Device SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE id = @id AND valid_end_ts IS NULL",
+  'insert_device': "INSERT Device (id, name, router_id, network_name, ip_address, gateway, vlan, status, config, valid_start_ts, valid_end_ts) VALUES (@id, @name, @router_id, @network_name, @ip_address, @gateway, @vlan, @status, @config, PENDING_COMMIT_TIMESTAMP(), NULL)",
+  'delete_device': "UPDATE Device SET valid_end_ts = PENDING_COMMIT_TIMESTAMP() WHERE id = @id AND valid_end_ts IS NULL",
+
   'upsert_service_perf': "INSERT OR UPDATE ServicePerformance (id, service_type, response_time_ms, timestamp, userid, error, node, vpn_id) VALUES (@id, @service_type, @response_time_ms, @timestamp, @userid, @error, @node, @vpn_id)",
   'upsert_incident': "INSERT OR UPDATE Incident (id, recordedTimestamp, agentTaskId, issue, strategy, root_cause, resolution, resolvedTimestamp) VALUES (@id, @recordedTimestamp, @agentTaskId, @issue, @strategy, @root_cause, @resolution, @resolvedTimestamp)",
   'upsert_network_metrics': "INSERT OR UPDATE NetworkMetrics (id, kind, name, timestamp, metrics, interface_id) VALUES (@id, @kind, @name, @timestamp, @metrics, @interface_id)",
@@ -1368,4 +1374,153 @@ async def _create_bgp_peering(bgp_session_id, peer_ip, vrf_name, logger):
                 
     except Exception as e:
         logger.debug(f"Could not create BGP peering for {bgp_session_id}: {e}")
+
+
+# ------------------------------------------
+# Sync Device
+# ------------------------------------------
+async def sync_device(body, spec, name, uid, logger):
+    """Sync Device to Spanner database (SCD Type 2)"""
+    logger.debug(f"Syncing Device {name}")
+    
+    device_id = f"device:{name}"
+    network_name = spec.get('network_name', '')
+    ip_address = spec.get('ip_address', '')
+    gateway = spec.get('gateway')
+    vlan = spec.get('vlan')
+    
+    # Extract status from CRD
+    device_status = 'Unknown'
+    status_obj = body.get('status', {})
+    if 'phase' in status_obj:
+        device_status = status_obj['phase']
+    
+    # Prepare config (sanitized body)
+    # Convert kopf Body object to dict first
+    body_dict = dict(body) if not isinstance(body, dict) else body
+    sanitized_body = sanitize_k8s_body(body_dict)
+    config_json = json.dumps(sanitized_body)
+    
+    # Find the router this device connects to
+    # Match by gateway IP - the gateway should be a router interface IP
+    router_id = None
+    
+    if gateway:
+        # Query to find router with interface matching the gateway IP
+        sql_find_router = """
+            SELECT DISTINCT r.id 
+            FROM PhysicalRouter r
+            JOIN PhysicalInterface i ON r.id = i.router_id
+            WHERE i.ip_address = @gateway_ip
+              AND r.valid_end_ts IS NULL
+              AND i.valid_end_ts IS NULL
+            LIMIT 1
+        """
+        
+        try:
+            with database.snapshot() as snapshot:
+                results = snapshot.execute_sql(
+                    sql_find_router,
+                    params={'gateway_ip': gateway},
+                    param_types={'gateway_ip': spanner.param_types.STRING}
+                )
+                row = results.one_or_none()
+                if row:
+                    router_id = row[0]
+                    logger.debug(f"Found router {router_id} for device {name} via gateway {gateway}")
+                else:
+                    logger.warning(f"No router found with interface IP {gateway} for device {name}")
+        except Exception as e:
+            logger.warning(f"Could not find router for device {name} via gateway {gateway}: {e}")
+    else:
+        logger.warning(f"Device {name} has no gateway specified, cannot determine connected router")
+    
+    def sql_upsert_device(transaction):
+        # 1. Get active device
+        results = transaction.execute_sql(
+            SQL_TEMPLATES['get_active_device'],
+            params={'id': device_id},
+            param_types={'id': spanner.param_types.STRING}
+        )
+        row = results.one_or_none()
+        
+        need_insert = True
+        if row:
+            # SELECT router_id, network_name, ip_address, gateway, vlan, status, config
+            existing_router_id = row[0]
+            existing_network = row[1]
+            existing_ip = row[2]
+            existing_gateway = row[3]
+            existing_vlan = row[4]
+            existing_status = row[5]
+            existing_config = row[6]
+            
+            # Compare content
+            if (existing_router_id == router_id and
+                existing_network == network_name and
+                existing_ip == ip_address and
+                existing_gateway == gateway and
+                existing_vlan == vlan and
+                existing_status == device_status and
+                existing_config == sanitized_body):
+                need_insert = False
+            else:
+                # Close existing row
+                transaction.execute_update(
+                    SQL_TEMPLATES['close_device'],
+                    params={'id': device_id},
+                    param_types={'id': spanner.param_types.STRING}
+                )
+        
+        if need_insert:
+            transaction.execute_update(
+                SQL_TEMPLATES['insert_device'],
+                params={
+                    'id': device_id,
+                    'name': name,
+                    'router_id': router_id,
+                    'network_name': network_name,
+                    'ip_address': ip_address,
+                    'gateway': gateway,
+                    'vlan': vlan,
+                    'status': device_status,
+                    'config': config_json
+                },
+                param_types={
+                    'id': spanner.param_types.STRING,
+                    'name': spanner.param_types.STRING,
+                    'router_id': spanner.param_types.STRING,
+                    'network_name': spanner.param_types.STRING,
+                    'ip_address': spanner.param_types.STRING,
+                    'gateway': spanner.param_types.STRING,
+                    'vlan': spanner.param_types.INT64,
+                    'status': spanner.param_types.STRING,
+                    'config': spanner.param_types.JSON
+                }
+            )
+    
+    try:
+        database.run_in_transaction(sql_upsert_device)
+        logger.info(f"Successfully synced Device {name} to Spanner")
+    except Exception as e:
+        logger.error(f"Failed to sync Device {name} to Spanner: {e}")
+
+
+async def delete_device(uid, name=None):
+    """Delete device from Spanner (SCD Type 2 - close the row)"""
+    device_id = f"device:{name}" if name else uid
+    logger.debug(f"Deleting Device {device_id}")
+    
+    def sql_delete_device(transaction):
+        transaction.execute_update(
+            SQL_TEMPLATES['delete_device'],
+            params={'id': device_id},
+            param_types={'id': spanner.param_types.STRING}
+        )
+    
+    try:
+        database.run_in_transaction(sql_delete_device)
+        logger.info(f"Successfully closed Device {device_id} in Spanner")
+    except Exception as e:
+        logger.error(f"Failed to delete Device {device_id} from Spanner: {e}")
 

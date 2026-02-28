@@ -364,33 +364,49 @@ class Appstate extends ChangeNotifier {
         final status = nodeData['status'] ?? 'unknown';
         final location = nodeData['location'];
         
-        // Extract embeddings data
-        final double? routerMSE = nodeData['router_mse'] != null 
-            ? (nodeData['router_mse'] as num).toDouble() 
+        // Extract embeddings data (all 3 GNN models)
+        final double? stgnnScore = nodeData['stgnn_score'] != null
+            ? (nodeData['stgnn_score'] as num).toDouble()
+            : null;
+        final double? dgatScore = nodeData['dgat_score'] != null
+            ? (nodeData['dgat_score'] as num).toDouble()
+            : null;
+        final double? hetgnnScore = nodeData['hetgnn_score'] != null
+            ? (nodeData['hetgnn_score'] as num).toDouble()
             : null;
         final routerRCA = nodeData['router_rca'];
         final embeddingTimestamp = nodeData['embedding_timestamp'];
         
-        // Parse interface MSEs
-        Map<String, double>? interfaceMSEs;
-        if (nodeData['interface_mses'] != null && nodeData['interface_mses'] is Map) {
+        // Parse interface MSEs (now contains all 3 model scores)
+        Map<String, Map<String, double>>? interfaceMSEs;
+        if (nodeData['interface_mses'] != null) {
           interfaceMSEs = {};
           final interfaceMSEsData = nodeData['interface_mses'] as Map<String, dynamic>;
-          interfaceMSEsData.forEach((interfaceId, data) {
-            if (data is Map && data['mse'] != null) {
-              interfaceMSEs![interfaceId] = (data['mse'] as num).toDouble();
-            }
-          });
+          for (var entry in interfaceMSEsData.entries) {
+            final scores = entry.value as Map<String, dynamic>;
+            interfaceMSEs[entry.key] = {
+              'stgnn_score': (scores['stgnn_score'] as num?)?.toDouble() ?? 0.0,
+              'dgat_score': (scores['dgat_score'] as num?)?.toDouble() ?? 0.0,
+              'hetgnn_score': (scores['hetgnn_score'] as num?)?.toDouble() ?? 0.0,
+            };
+          }
         }
         
-        // Physical topology typically consists of routers (default) and switches
-        NodeType type = NodeType.P; 
-        final roleStr = role.toString().toLowerCase();
+        // Determine node type - check for device type first
+        NodeType type = NodeType.P;  // Default to P router
+        final nodeType = nodeData['type']?.toString().toLowerCase();
         
-        if (roleStr == 'pe' || roleStr == 'provider_edge') {
-          type = NodeType.PE;
-        } else if (roleStr == 'ce' || roleStr == 'customer_edge') {
-          type = NodeType.CE;
+        if (nodeType == 'device') {
+          type = NodeType.Device;
+        } else {
+          // Physical topology typically consists of routers (default) and switches
+          final roleStr = role.toString().toLowerCase();
+          
+          if (roleStr == 'pe' || roleStr == 'provider_edge') {
+            type = NodeType.PE;
+          } else if (roleStr == 'ce' || roleStr == 'customer_edge') {
+            type = NodeType.CE;
+          }
         }
         
         nodes.add(NetworkNode(
@@ -398,13 +414,20 @@ class Appstate extends ChangeNotifier {
           name: name,
           type: type,
           properties: {
-            'kind': 'Router', // Assuming mostly routers for now
+            'kind': nodeType == 'device' ? 'Device' : 'Router',
             'role': role,
             'status': status,
             'location': location,
             'interfaces': nodeData['interfaces'],
+            'router_id': nodeData['router_id'],  // For devices
+            'network_name': nodeData['network_name'],  // For devices
+            'ip_address': nodeData['ip_address'],  // For devices
+            'gateway': nodeData['gateway'],  // For devices
+            'vlan': nodeData['vlan'],  // For devices
           },
-          routerMSE: routerMSE,
+          stgnnScore: stgnnScore,
+          dgatScore: dgatScore,
+          hetgnnScore: hetgnnScore,
           interfaceMSEs: interfaceMSEs,
           routerRCA: routerRCA,
           embeddingTimestamp: embeddingTimestamp,
@@ -415,24 +438,39 @@ class Appstate extends ChangeNotifier {
       
       for (var connData in connectionsData) {
         final id = connData['id'];
-        final sourceId = connData['source_router_id'];
-        final targetId = connData['target_router_id'];
+        final connType = connData['type'] ?? '';
+        String? sourceId;
+        String? targetId;
+        
+        // Handle both router-to-router and device-to-router connections
+        if (connType == 'device_to_router') {
+          sourceId = connData['source_device_id'];
+          targetId = connData['target_router_id'];
+        } else {
+          sourceId = connData['source_router_id'];
+          targetId = connData['target_router_id'];
+        }
+        
         final name = connData['name'] ?? '';
         
-        if (nodeIds.contains(sourceId) && nodeIds.contains(targetId)) {
+        if (sourceId != null && targetId != null && 
+            nodeIds.contains(sourceId) && nodeIds.contains(targetId)) {
           connections.add(NetworkConnection(
             id: id,
             sourceId: sourceId,
             targetId: targetId,
             label: name,
+            properties: {'type': connType},
           ));
         }
       }
       
       _topology = NetworkTopology(nodes: nodes, connections: connections);
       
-      // Log embedding stats
-      final nodesWithMSE = nodes.where((n) => n.routerMSE != null).length;
+      // Log embedding stats (check any of the 3 models)
+      final nodesWithMSE = nodes.where((n) => 
+        n.stgnnScore != null || n.dgatScore != null || n.hetgnnScore != null
+      ).length;
       final nodesWithHighMSE = nodes.where((n) => n.hasHighMSE).length;
       print('Updated topology with ${nodes.length} nodes and ${connections.length} connections');
       print('Embeddings: $nodesWithMSE nodes have MSE data, $nodesWithHighMSE have high MSE');

@@ -80,13 +80,38 @@ class AnomalyPanel extends StatelessWidget {
               final List<Map<String, dynamic>> anomalies = [];
               
               for (var node in topology.nodes) {
-                // Add router-level anomaly if MSE exists
-                if (node.routerMSE != null && node.routerMSE! > 0.5) {
+                // Calculate average score from all 3 models for router
+                double? routerAvgScore;
+                int scoreCount = 0;
+                double scoreSum = 0.0;
+                
+                if (node.stgnnScore != null) {
+                  scoreSum += node.stgnnScore!;
+                  scoreCount++;
+                }
+                if (node.dgatScore != null) {
+                  scoreSum += node.dgatScore!;
+                  scoreCount++;
+                }
+                if (node.hetgnnScore != null) {
+                  scoreSum += node.hetgnnScore!;
+                  scoreCount++;
+                }
+                
+                if (scoreCount > 0) {
+                  routerAvgScore = scoreSum / scoreCount;
+                }
+                
+                // Add router-level anomaly if average MSE exists and is high
+                if (routerAvgScore != null && routerAvgScore > 0.5) {
                   anomalies.add({
                     'node_id': node.id,
                     'name': node.name,
                     'node_type': 'Router',
-                    'anomaly_score': node.routerMSE,
+                    'anomaly_score': routerAvgScore,
+                    'stgnn_score': node.stgnnScore,
+                    'dgat_score': node.dgatScore,
+                    'hetgnn_score': node.hetgnnScore,
                     'root_cause': node.routerRCA?.toString() ?? 'No root cause analysis available',
                     'timestamp': node.embeddingTimestamp,
                   });
@@ -94,13 +119,41 @@ class AnomalyPanel extends StatelessWidget {
                 
                 // Add interface-level anomalies if they exist
                 if (node.interfaceMSEs != null) {
-                  node.interfaceMSEs!.forEach((interfaceId, mse) {
-                    if (mse > 0.5) {
+                  node.interfaceMSEs!.forEach((interfaceId, scores) {
+                    // Calculate average score from all 3 models for interface
+                    double interfaceAvgScore = 0.0;
+                    int interfaceScoreCount = 0;
+                    
+                    final stgnn = scores['stgnn_score'];
+                    final dgat = scores['dgat_score'];
+                    final hetgnn = scores['hetgnn_score'];
+                    
+                    if (stgnn != null) {
+                      interfaceAvgScore += stgnn;
+                      interfaceScoreCount++;
+                    }
+                    if (dgat != null) {
+                      interfaceAvgScore += dgat;
+                      interfaceScoreCount++;
+                    }
+                    if (hetgnn != null) {
+                      interfaceAvgScore += hetgnn;
+                      interfaceScoreCount++;
+                    }
+                    
+                    if (interfaceScoreCount > 0) {
+                      interfaceAvgScore /= interfaceScoreCount;
+                    }
+                    
+                    if (interfaceAvgScore > 0.5) {
                       anomalies.add({
                         'node_id': interfaceId,
                         'name': '${node.name} - Interface',
                         'node_type': 'Interface',
-                        'anomaly_score': mse,
+                        'anomaly_score': interfaceAvgScore,
+                        'stgnn_score': stgnn,
+                        'dgat_score': dgat,
+                        'hetgnn_score': hetgnn,
                         'root_cause': 'Interface anomaly detected',
                         'router_id': node.id,
                         'router_name': node.name,

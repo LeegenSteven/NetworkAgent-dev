@@ -33,96 +33,88 @@ def spanner_connect():
 
 database = spanner_connect()
 
-def fetch_last_metrics_for_id(id):
+def _format_metrics_results(results):
+    nodes_data = {}
+    for row in results:
+        node_name, interface, metric_name, value, timestamp = row
+        if not node_name:
+            continue
+            
+        if node_name not in nodes_data:
+            nodes_data[node_name] = {
+                'timestamp': int(timestamp.timestamp() * 1000) if timestamp else 0,
+                'metrics': {
+                    'interfaces': {},
+                    'cpu': {}
+                }
+            }
+            
+        if interface:
+            if interface not in nodes_data[node_name]['metrics']['interfaces']:
+                nodes_data[node_name]['metrics']['interfaces'][interface] = {}
+            
+            short_metric_name = metric_name.replace('node_network_', '')
+            nodes_data[node_name]['metrics']['interfaces'][interface][short_metric_name] = value
+        else:
+            nodes_data[node_name]['metrics']['cpu'][metric_name] = value
+
+    last_metrics = {}
+    for node_name, data in nodes_data.items():
+        last_metrics[node_name] = [{
+            'timestamp': data['timestamp'],
+            'metrics': data['metrics']
+        }]
+    return last_metrics
+
+def fetch_last_metrics_for_id(node_id):
   with database.snapshot() as snapshot:
     try:
-      sql = f"""SELECT id, kind, name, timestamp, metrics
+      sql = f"""SELECT t1.node_name, t1.interface, t1.metric_name, t1.value, t1.timestamp 
+      FROM NetworkMetrics t1 
+      JOIN (
+        SELECT node_name, interface, metric_name, MAX(timestamp) as max_ts 
         FROM NetworkMetrics 
-        WHERE id = '{id}' ORDER BY timestamp DESC LIMIT 1"""
-      results = snapshot.execute_sql(sql)
+        WHERE node_name = @node_id
+        GROUP BY node_name, interface, metric_name
+      ) t2 
+      ON t1.node_name = t2.node_name AND t1.interface = t2.interface AND t1.metric_name = t2.metric_name AND t1.timestamp = t2.max_ts"""
       
-      # Convert to a dcitionary with resource uid as key
-      last_metrics = {}
-      for row in results:
-        id, kind, name, timestamp, metrics = row
-        if id not in last_metrics: last_metrics[id] = []
-        last_metrics[id].append({'kind': kind, 'name': name, 'timestamp': timestamp, 'metrics': metrics})
-      
-      return last_metrics
+      results = snapshot.execute_sql(
+          sql, 
+          params={"node_id": node_id}, 
+          param_types={"node_id": spanner.param_types.STRING}
+      )
+      return {"node_metrics": _format_metrics_results(results)}
     except Exception as e:
       logger.error("Metrics SQL error: {}".format(e))
-      return []  # Return empty list on error
-    
-def fetch_all_metrics_for_id(id):
-  with database.snapshot() as snapshot:
-    try:
-      sql = f"""SELECT id, kind, name, timestamp, metrics
-        FROM NetworkMetrics 
-        WHERE id = '{id}' ORDER BY timestamp DESC"""
-      results = snapshot.execute_sql(sql)
-      
-      # Convert to a dictionary with resource uid as key
-      last_metrics = {}
-      for row in results:
-        id, kind, name, timestamp, metrics = row
-        if id not in last_metrics: last_metrics[id] = []
-        last_metrics[id].append({'kind': kind, 'name': name, 'timestamp': timestamp, 'metrics': metrics})
+      return {}
 
-      return last_metrics
-    except Exception as e:
-      logger.error("Metrics SQL error: {}".format(e))
-      return []  # Return empty list on error
-
+def fetch_all_metrics_for_id(node_id):
+  # Legacy support fallback mapping to last metrics to prevent query explosion
+  return fetch_last_metrics_for_id(node_id)
 
 
 def fetch_all_last_metrics():
   with database.snapshot() as snapshot:
     try:
-      sql = """SELECT t1.id AS id, t1.kind AS kind, t1.name AS name, t1.timestamp AS timestamp, t1.metrics AS metrics
-      FROM NetworkMetrics AS t1
-      INNER JOIN (
-        SELECT id, MAX(timestamp) AS max_timestamp
-        FROM NetworkMetrics
-        GROUP BY id
-      ) AS t2 ON t1.id = t2.id AND t1.timestamp = t2.max_timestamp;"""
+      sql = """SELECT t1.node_name, t1.interface, t1.metric_name, t1.value, t1.timestamp 
+      FROM NetworkMetrics t1 
+      JOIN (
+        SELECT node_name, interface, metric_name, MAX(timestamp) as max_ts 
+        FROM NetworkMetrics 
+        GROUP BY node_name, interface, metric_name
+      ) t2 
+      ON t1.node_name = t2.node_name AND t1.interface = t2.interface AND t1.metric_name = t2.metric_name AND t1.timestamp = t2.max_ts"""
+      
       results = snapshot.execute_sql(sql)
-      
-      # Convert to a dictionary with resource uid as key
-      last_metrics = {}
-      for row in results:
-        id, kind, name, timestamp, metrics = row
-        if id not in last_metrics: last_metrics[id] = []
-        last_metrics[id].append({'kind': kind, 'name': name, 'timestamp': timestamp, 'metrics': metrics})
-      
-      return last_metrics
+      return {"node_metrics": _format_metrics_results(results)}
     except Exception as e:
       logger.error("Metrics SQL error: {}".format(e))
-      return {}  # Return empty list on error
+      return {}
     
 def fetch_all_metrics():
-  """
-  Fetch all metrics captured for network service and connectivity services
-  Returns:
-    List of JSON objects representing each metric
-    
-  """
-  with database.snapshot() as snapshot:
-    try:
-      sql = """SELECT id, kind, name, timestamp, metrics
-        FROM NetworkMetrics ORDER BY id, timestamp DESC"""
-      results = snapshot.execute_sql(sql)
-
-      # Convert to a dcitionary with resource uid as key
-      last_metrics = {}
-      for row in results:
-        id, kind, name, timestamp, metrics = row
-        if id not in last_metrics: last_metrics[id] = []
-        last_metrics[id].append({'kind': kind, 'name': name, 'timestamp': timestamp, 'metrics': metrics})
- 
-      return last_metrics
-    except Exception as e:
-      logger.error("Metrics SQL error: {}".format(e))
-      return {}  # Return empty list on error
+  # Legacy support fallback mapping to last metrics to prevent query explosion
+  return fetch_all_last_metrics()
 
 def clear_network_metrics():
   """
@@ -145,3 +137,4 @@ def clear_network_metrics():
   except Exception as e:
     logger.error(f"Failed to clear NetworkMetrics table: {e}")
     return False
+

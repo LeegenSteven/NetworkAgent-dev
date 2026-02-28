@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 enum NodeType {
   P,
   PE,
-  CE
+  CE,
+  Device
 }
 
 class NetworkNode {
@@ -20,7 +21,9 @@ class NetworkNode {
     this.anomalyScore,
     this.isAnomaly = false,
     this.rootCause,
-    this.routerMSE,
+    this.stgnnScore,
+    this.dgatScore,
+    this.hetgnnScore,
     this.interfaceMSEs,
     this.routerRCA,
     this.embeddingTimestamp,
@@ -30,24 +33,30 @@ class NetworkNode {
   final bool isAnomaly;
   final String? rootCause;
   
-  // Embeddings data
-  final double? routerMSE;
-  final Map<String, double>? interfaceMSEs; // interface_id -> MSE
+  // Embeddings data - all 3 GNN models
+  final double? stgnnScore;
+  final double? dgatScore;
+  final double? hetgnnScore;
+  final Map<String, Map<String, double>>? interfaceMSEs; // interface_id -> {stgnn_score, dgat_score, hetgnn_score}
   final dynamic routerRCA; // Root Cause Analysis (can be JSON object)
   final String? embeddingTimestamp;
   
-  // Computed property to check if router or any interface has high MSE
+  // Computed property to check if router or any interface has high MSE (any of the 3 models)
   bool get hasHighMSE {
     const double threshold = 2.0;
     
-    // Check router MSE
-    if (routerMSE != null && routerMSE! > threshold) {
-      return true;
-    }
+    // Check router scores from any of the 3 models
+    if (stgnnScore != null && stgnnScore! > threshold) return true;
+    if (dgatScore != null && dgatScore! > threshold) return true;
+    if (hetgnnScore != null && hetgnnScore! > threshold) return true;
     
-    // Check interface MSEs
+    // Check interface scores from any of the 3 models
     if (interfaceMSEs != null) {
-      return interfaceMSEs!.values.any((mse) => mse > threshold);
+      for (var scores in interfaceMSEs!.values) {
+        if ((scores['stgnn_score'] ?? 0.0) > threshold) return true;
+        if ((scores['dgat_score'] ?? 0.0) > threshold) return true;
+        if ((scores['hetgnn_score'] ?? 0.0) > threshold) return true;
+      }
     }
     
     return false;
@@ -61,8 +70,10 @@ class NetworkNode {
     double? anomalyScore,
     bool? isAnomaly,
     String? rootCause,
-    double? routerMSE,
-    Map<String, double>? interfaceMSEs,
+    double? stgnnScore,
+    double? dgatScore,
+    double? hetgnnScore,
+    Map<String, Map<String, double>>? interfaceMSEs,
     dynamic routerRCA,
     String? embeddingTimestamp,
   }) {
@@ -74,7 +85,9 @@ class NetworkNode {
       anomalyScore: anomalyScore ?? this.anomalyScore,
       isAnomaly: isAnomaly ?? this.isAnomaly,
       rootCause: rootCause ?? this.rootCause,
-      routerMSE: routerMSE ?? this.routerMSE,
+      stgnnScore: stgnnScore ?? this.stgnnScore,
+      dgatScore: dgatScore ?? this.dgatScore,
+      hetgnnScore: hetgnnScore ?? this.hetgnnScore,
       interfaceMSEs: interfaceMSEs ?? this.interfaceMSEs,
       routerRCA: routerRCA ?? this.routerRCA,
       embeddingTimestamp: embeddingTimestamp ?? this.embeddingTimestamp,

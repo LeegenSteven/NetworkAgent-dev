@@ -76,6 +76,19 @@ spec:
       valid_start_ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
       valid_end_ts TIMESTAMP OPTIONS (allow_commit_timestamp=true)
     ) PRIMARY KEY (id, valid_start_ts DESC)"
+  - "CREATE TABLE Device (
+      id STRING(MAX) NOT NULL,
+      name STRING(MAX) NOT NULL,
+      router_id STRING(MAX),
+      network_name STRING(MAX),
+      ip_address STRING(MAX),
+      gateway STRING(MAX),
+      vlan INT64,
+      status STRING(MAX),
+      config JSON,
+      valid_start_ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
+      valid_end_ts TIMESTAMP OPTIONS (allow_commit_timestamp=true)
+    ) PRIMARY KEY (id, valid_start_ts DESC)"
   - "CREATE TABLE Customer (
       id STRING(MAX) NOT NULL,
       name STRING(MAX) NOT NULL,
@@ -324,11 +337,22 @@ spec:
        WHERE i.valid_start_ts < IFNULL(s.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
        AND IFNULL(i.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > s.valid_start_ts
        GROUP BY interface_id, interface_ts, subnet_id, subnet_ts"
+  - "CREATE VIEW ConnectedTo_Edge SQL SECURITY INVOKER AS
+       SELECT
+         d.id AS device_id, d.valid_start_ts AS device_ts,
+         r.id AS router_id, r.valid_start_ts AS router_ts
+       FROM Device d
+       JOIN PhysicalRouter r
+       ON d.router_id = r.id
+       AND d.valid_start_ts < IFNULL(r.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z'))
+       AND IFNULL(d.valid_end_ts, TIMESTAMP('9999-12-31T23:59:59Z')) > r.valid_start_ts
+       GROUP BY device_id, device_ts, router_id, router_ts"
   - "CREATE OR REPLACE PROPERTY GRAPH networkGraph
        NODE TABLES (
          PhysicalRouter,
          PhysicalInterface,
          PhysicalLink,
+         Device,
          Customer,
          L3VPNService,
          VRF,
@@ -398,6 +422,11 @@ spec:
            KEY (interface_id, interface_ts, subnet_id, subnet_ts)
            SOURCE KEY (interface_id, interface_ts) REFERENCES PhysicalInterface (id, valid_start_ts)
            DESTINATION KEY (subnet_id, subnet_ts) REFERENCES LogicalSubnet (id, valid_start_ts),
+         ConnectedTo_Edge 
+           AS ConnectedTo
+           KEY (device_id, device_ts, router_id, router_ts)
+           SOURCE KEY (device_id, device_ts) REFERENCES Device (id, valid_start_ts)
+           DESTINATION KEY (router_id, router_ts) REFERENCES PhysicalRouter (id, valid_start_ts),
          Orders AS PlacedBy
            SOURCE KEY (customer_id) REFERENCES Customer (id)
            DESTINATION KEY (id) REFERENCES Orders (id)

@@ -19,7 +19,7 @@ import aiohttp_cors
 from aiohttp import web
 from agent.host_agent import HostAgent
 from endpoints.socketendpoint import SocketEndpoint
-from tools.topology import fetch_physical_topology, fetch_router_details, fetch_node_embeddings, fetch_snapshots, fetch_anomalies
+from tools.topology import fetch_physical_topology, fetch_router_details, fetch_device_details, fetch_node_embeddings, fetch_snapshots, fetch_anomalies
 from tools.metrics import (
     fetch_all_last_metrics,
     fetch_all_metrics,
@@ -103,6 +103,9 @@ class RestEndpoint:
         getRouterDetailsRoute = self.app.router.add_get("/router/{router_id}", self.getRouterDetails)
         self.cors.add(getRouterDetailsRoute, corsConfig)
 
+        getDeviceDetailsRoute = self.app.router.add_get("/device/{device_id}", self.getDeviceDetails)
+        self.cors.add(getDeviceDetailsRoute, corsConfig)
+
         getSnapshotsRoute = self.app.router.add_get("/snapshots", self.getSnapshots)
         self.cors.add(getSnapshotsRoute, corsConfig)
 
@@ -173,6 +176,42 @@ class RestEndpoint:
             logger.error(f"Error fetching router details: {str(e)}", exc_info=True)
             return web.json_response(
                 {"error": f"Error fetching router details: {str(e)}"},
+                status=500
+            )
+
+    #################################################################
+    # Get device details
+    #################################################################
+    async def getDeviceDetails(self, request):
+        """
+        Get detailed information for a specific device by ID.
+        
+        Args:
+            request: The HTTP request object with device_id in the URL path
+            
+        Returns:
+            aiohttp.web.Response: JSON response with device details
+        """
+        logger.info("REST endpoint: get device details")
+        try:
+            device_id = request.match_info.get('device_id')
+            if not device_id:
+                return web.json_response(
+                    {"error": "No device ID provided"},
+                    status=400
+                )
+
+            device_details = fetch_device_details(device_id)
+            
+            if 'error' in device_details:
+                return web.json_response(device_details, status=404)
+            
+            return web.json_response(device_details)
+            
+        except Exception as e:
+            logger.error(f"Error fetching device details: {str(e)}", exc_info=True)
+            return web.json_response(
+                {"error": f"Error fetching device details: {str(e)}"},
                 status=500
             )
 

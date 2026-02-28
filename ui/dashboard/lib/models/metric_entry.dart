@@ -45,11 +45,38 @@ class MetricEntry {
   });
 
   factory MetricEntry.fromJson(Map<String, dynamic> json) {
+    // Normalize interface data to map backend field names to UI expectations
+    Map<String, dynamic> normalizedInterfaces = {};
+    final rawInterfaces = json['interfaces'] ?? {};
+    
+    if (rawInterfaces is Map) {
+      rawInterfaces.forEach((interfaceName, interfaceData) {
+        if (interfaceData is Map) {
+          // Create a copy of the interface data
+          final normalizedData = Map<String, dynamic>.from(interfaceData);
+          
+          // Map backend field names to UI field names
+          // Backend provides: transmit_bytes_total, receive_bytes_total (already as rates)
+          // UI expects: byte_sent_throughput, byte_recv_throughput
+          if (normalizedData.containsKey('transmit_bytes_total')) {
+            normalizedData['byte_sent_throughput'] = normalizedData['transmit_bytes_total'];
+          }
+          if (normalizedData.containsKey('receive_bytes_total')) {
+            normalizedData['byte_recv_throughput'] = normalizedData['receive_bytes_total'];
+          }
+          
+          normalizedInterfaces[interfaceName] = normalizedData;
+        } else {
+          normalizedInterfaces[interfaceName] = interfaceData;
+        }
+      });
+    }
+    
     return MetricEntry(
       hostname: json['hostname'] ?? '',
       interval: json['interval'] ?? 0,
       cpu: json['cpu'] ?? {},
-      interfaces: json['interfaces'] ?? {},
+      interfaces: normalizedInterfaces,
       timestamp: json['timestamp'] ?? 0,
     );
   }

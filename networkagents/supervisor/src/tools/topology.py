@@ -198,7 +198,11 @@ def fetch_physical_topology(timestamp_str: str = None):
         # Convert routers dict to list
         topology['nodes'] = list(routers.values())
         
-        logger.info(f"Retrieved {len(topology['nodes'])} routers and {len(topology['connections'])} connections with embeddings")
+        # Now fetch devices connected to routers
+        logger.info("Fetching devices connected to routers")
+        _add_devices_to_topology(database, topology, target_timestamp)
+        
+        logger.info(f"Retrieved {len(topology['nodes'])} nodes (routers + devices) and {len(topology['connections'])} connections with embeddings")
         return topology
         
     except Exception as e:
@@ -216,13 +220,15 @@ def _add_embeddings_to_routers(database, routers, target_timestamp=None):
         target_timestamp: Optional datetime for exact snapshot timestamp match
     """
     try:
-        # Build query to fetch router embeddings
+        # Build query to fetch router embeddings (all 3 GNN models)
         if target_timestamp:
             # Historical: Use EXACT timestamp match for snapshot
             router_embedding_query = """
                 SELECT 
                     e.node_id,
-                    e.anomaly_score,
+                    e.stgnn_score,
+                    e.dgat_score,
+                    e.hetgnn_score,
                     TO_JSON_STRING(e.anomaly_explanation) AS anomaly_explanation,
                     e.timestamp
                 FROM NodeEmbedding e
@@ -236,7 +242,9 @@ def _add_embeddings_to_routers(database, routers, target_timestamp=None):
                     i.router_id,
                     e.node_id AS interface_id,
                     i.name AS interface_name,
-                    e.anomaly_score,
+                    e.stgnn_score,
+                    e.dgat_score,
+                    e.hetgnn_score,
                     TO_JSON_STRING(e.anomaly_explanation) AS anomaly_explanation,
                     e.timestamp
                 FROM NodeEmbedding e
@@ -250,7 +258,9 @@ def _add_embeddings_to_routers(database, routers, target_timestamp=None):
             router_embedding_query = """
                 SELECT 
                     e.node_id,
-                    e.anomaly_score,
+                    e.stgnn_score,
+                    e.dgat_score,
+                    e.hetgnn_score,
                     TO_JSON_STRING(e.anomaly_explanation) AS anomaly_explanation,
                     e.timestamp
                 FROM NodeEmbedding e
@@ -267,7 +277,9 @@ def _add_embeddings_to_routers(database, routers, target_timestamp=None):
                     i.router_id,
                     e.node_id AS interface_id,
                     i.name AS interface_name,
-                    e.anomaly_score,
+                    e.stgnn_score,
+                    e.dgat_score,
+                    e.hetgnn_score,
                     TO_JSON_STRING(e.anomaly_explanation) AS anomaly_explanation,
                     e.timestamp
                 FROM NodeEmbedding e
@@ -302,33 +314,31 @@ def _add_embeddings_to_routers(database, routers, target_timestamp=None):
                 
                 if router_id in routers:
                     anomaly_explanation = None
-                    if row[2]:
+                    if row[4]:  # anomaly_explanation is now at index 4
                         try:
-                            anomaly_explanation = json.loads(row[2])
+                            anomaly_explanation = json.loads(row[4])
                         except (json.JSONDecodeError, TypeError):
                             pass
                     
-                    routers[router_id]['router_mse'] = row[1]  # anomaly_score
+                    # Store all 3 model scores
+                    routers[router_id]['stgnn_score'] = row[1]
+                    routers[router_id]['dgat_score'] = row[2]
+                    routers[router_id]['hetgnn_score'] = row[3]
                     routers[router_id]['router_rca'] = anomaly_explanation
-                    routers[router_id]['embedding_timestamp'] = row[3].isoformat() if row[3] else None
+                    routers[router_id]['embedding_timestamp'] = row[5].isoformat() if row[5] else None
         
         # Fetch interface embeddings
         with database.snapshot() as snapshot:
             results = snapshot.execute_sql(interface_embedding_query, params=params, param_types=param_types)
             
             for row in results:
-                if target_timestamp:
-                    router_id = row[0] if len(row) > 5 else None
-                    interface_id = row[1] if len(row) > 5 else row[0]
-                    interface_name = row[2] if len(row) > 5 else None
-                    anomaly_score = row[3] if len(row) > 5 else row[1]
-                    anomaly_explanation_str = row[4] if len(row) > 5 else row[2]
-                else:
-                    router_id = row[0]
-                    interface_id = row[1]
-                    interface_name = row[2]
-                    anomaly_score = row[3]
-                    anomaly_explanation_str = row[4]
+                router_id = row[0]
+                interface_id = row[1]
+                interface_name = row[2]
+                stgnn_score = row[3]
+                dgat_score = row[4]
+                hetgnn_score = row[5]
+                anomaly_explanation_str = row[6]
                 
                 if router_id and router_id in routers:
                     if 'interface_mses' not in routers[router_id]:
@@ -342,16 +352,112 @@ def _add_embeddings_to_routers(database, routers, target_timestamp=None):
                             pass
                     
                     routers[router_id]['interface_mses'][interface_id] = {
-                        'mse': anomaly_score,
                         'name': interface_name,
+                        'stgnn_score': stgnn_score,
+                        'dgat_score': dgat_score,
+                        'hetgnn_score': hetgnn_score,
                         'rca': anomaly_explanation
                     }
         
-        logger.info(f"Added embeddings to {len([r for r in routers.values() if 'router_mse' in r])} routers")
+        logger.info(f"Added embeddings to {len([r for r in routers.values() if 'stgnn_score' in r])} routers")
         
     except Exception as e:
         logger.error(f"Error fetching embeddings: {e}", exc_info=True)
         # Continue without embeddings rather than failing
+
+
+def _add_devices_to_topology(database, topology, target_timestamp=None):
+    """
+    Add devices to topology dict in-place.
+    
+    Args:
+        database: Spanner database connection
+        topology: Topology dict with 'nodes' list and 'connections' list
+        target_timestamp: Optional datetime for exact snapshot timestamp match
+    """
+    try:
+        # Build query to fetch devices
+        if target_timestamp:
+            # Historical mode
+            device_query = """
+                SELECT 
+                    d.id,
+                    d.name,
+                    d.router_id,
+                    d.network_name,
+                    d.ip_address,
+                    d.gateway,
+                    d.vlan,
+                    d.status
+                FROM Device d
+                WHERE d.valid_start_ts <= @target_timestamp
+                  AND (d.valid_end_ts > @target_timestamp OR d.valid_end_ts IS NULL)
+            """
+            params = {"target_timestamp": target_timestamp}
+            param_types = {"target_timestamp": spanner.param_types.TIMESTAMP}
+        else:
+            # Current mode - only get currently valid devices
+            device_query = """
+                SELECT 
+                    d.id,
+                    d.name,
+                    d.router_id,
+                    d.network_name,
+                    d.ip_address,
+                    d.gateway,
+                    d.vlan,
+                    d.status
+                FROM Device d
+                WHERE d.valid_end_ts IS NULL
+            """
+            params = {}
+            param_types = {}
+        
+        with database.snapshot() as snapshot:
+            results = snapshot.execute_sql(device_query, params=params, param_types=param_types)
+            
+            for row in results:
+                device_id = row[0]
+                device_name = row[1]
+                router_id = row[2]
+                network_name = row[3]
+                ip_address = row[4]
+                gateway = row[5]
+                vlan = row[6]
+                status = row[7]
+                
+                # Add device as a node
+                device_node = {
+                    'id': device_id,
+                    'name': device_name,
+                    'type': 'device',
+                    'router_id': router_id,
+                    'network_name': network_name,
+                    'ip_address': ip_address,
+                    'gateway': gateway,
+                    'vlan': vlan,
+                    'status': status if status else 'unknown'
+                }
+                
+                topology['nodes'].append(device_node)
+                
+                # Add connection from device to router if router_id exists
+                if router_id:
+                    connection_id = f"device_conn:{device_id}"
+                    topology['connections'].append({
+                        'id': connection_id,
+                        'name': f"{device_name} -> Router",
+                        'source_device_id': device_id,
+                        'source_device_name': device_name,
+                        'target_router_id': router_id,
+                        'type': 'device_to_router'
+                    })
+        
+        logger.info(f"Added {len([n for n in topology['nodes'] if n.get('type') == 'device'])} devices to topology")
+        
+    except Exception as e:
+        logger.error(f"Error fetching devices: {e}", exc_info=True)
+        # Continue without devices rather than failing
 
 
 def fetch_router_details(router_id):
@@ -461,28 +567,107 @@ def fetch_router_details(router_id):
         return {'error': str(e)}
 
 
+def fetch_device_details(device_id):
+    """
+    Fetch detailed information for a specific device by ID.
+    
+    Args:
+        device_id: The ID of the device to fetch
+        
+    Returns:
+        dict: Device details including network info, connected router, and config
+    """
+    logger.info(f"Fetching device details for device_id: {device_id}")
+    
+    try:
+        database = spanner_connect()
+        
+        # Query to get device details
+        device_query = """
+            SELECT 
+                d.id,
+                d.name,
+                d.router_id,
+                d.network_name,
+                d.ip_address,
+                d.gateway,
+                d.vlan,
+                d.status,
+                TO_JSON_STRING(d.config) AS device_config
+            FROM Device d
+            WHERE d.id = @device_id
+              AND d.valid_end_ts IS NULL
+        """
+        
+        logger.info("Executing query for device details")
+        
+        params = {"device_id": device_id}
+        param_types = {"device_id": spanner.param_types.STRING}
+        
+        device_detail = None
+        
+        with database.snapshot() as snapshot:
+            results = snapshot.execute_sql(device_query, params=params, param_types=param_types)
+            
+            for row in results:
+                device_config = {}
+                if row[8]:  # device_config
+                    try:
+                        device_config = json.loads(row[8])
+                    except (json.JSONDecodeError, TypeError):
+                        device_config = {}
+                
+                device_detail = {
+                    'id': row[0],
+                    'name': row[1],
+                    'router_id': row[2],
+                    'network_name': row[3] if row[3] else 'unknown',
+                    'ip_address': row[4] if row[4] else 'unknown',
+                    'gateway': row[5] if row[5] else 'unknown',
+                    'vlan': row[6],
+                    'status': row[7] if row[7] else 'unknown',
+                    'config': device_config
+                }
+                break
+        
+        if device_detail is None:
+            logger.warning(f"Device with ID {device_id} not found")
+            return {'error': f'Device with ID {device_id} not found'}
+        
+        logger.info(f"Retrieved details for device {device_id}")
+        return device_detail
+        
+    except Exception as e:
+        logger.error(f"Error fetching device details: {e}", exc_info=True)
+        return {'error': str(e)}
+
+
 def fetch_node_embeddings(node_id):
     """
-    Fetch the latest embeddings for a router and its interfaces.
+    Fetch the latest embeddings for a router and its interfaces (all 3 GNN models).
     
     Args:
         node_id: The ID of the router to fetch embeddings for
         
     Returns:
-        dict: Embeddings data including router embedding and interface embeddings with MSE
+        dict: Embeddings data including router embedding and interface embeddings with all 3 model scores
     """
     logger.info(f"Fetching embeddings for node_id: {node_id}")
     
     try:
         database = spanner_connect()
         
-        # Query to get the latest embedding for the router
+        # Query to get the latest embedding for the router (all 3 models)
         router_embedding_query = """
             SELECT 
                 e.node_id,
                 e.node_type,
-                e.anomaly_score,
-                e.embedding,
+                e.stgnn_score,
+                e.stgnn_embedding,
+                e.dgat_score,
+                e.dgat_embedding,
+                e.hetgnn_score,
+                e.hetgnn_embedding,
                 e.timestamp,
                 TO_JSON_STRING(e.anomaly_explanation) AS anomaly_explanation
             FROM NodeEmbedding e
@@ -491,13 +676,17 @@ def fetch_node_embeddings(node_id):
             LIMIT 1
         """
         
-        # Query to get the latest embeddings for all interfaces of this router
+        # Query to get the latest embeddings for all interfaces of this router (all 3 models)
         interface_embeddings_query = """
             SELECT 
                 i.id AS interface_id,
                 i.name AS interface_name,
-                e.anomaly_score,
-                e.embedding,
+                e.stgnn_score,
+                e.stgnn_embedding,
+                e.dgat_score,
+                e.dgat_embedding,
+                e.hetgnn_score,
+                e.hetgnn_embedding,
                 e.timestamp,
                 TO_JSON_STRING(e.anomaly_explanation) AS anomaly_explanation
             FROM PhysicalInterface i
@@ -531,18 +720,22 @@ def fetch_node_embeddings(node_id):
             
             for row in router_results:
                 anomaly_explanation = None
-                if row[5]:
+                if row[9]:
                     try:
-                        anomaly_explanation = json.loads(row[5])
+                        anomaly_explanation = json.loads(row[9])
                     except (json.JSONDecodeError, TypeError):
                         anomaly_explanation = None
                 
                 result['router_embedding'] = {
                     'node_id': row[0],
                     'node_type': row[1],
-                    'mse': row[2],  # anomaly_score is the MSE
-                    'embedding_vector': row[3],  # The actual embedding array
-                    'timestamp': row[4].isoformat() if row[4] else None,
+                    'stgnn_score': row[2],
+                    'stgnn_embedding': row[3],
+                    'dgat_score': row[4],
+                    'dgat_embedding': row[5],
+                    'hetgnn_score': row[6],
+                    'hetgnn_embedding': row[7],
+                    'timestamp': row[8].isoformat() if row[8] else None,
                     'anomaly_explanation': anomaly_explanation
                 }
                 break
@@ -557,18 +750,22 @@ def fetch_node_embeddings(node_id):
             
             for row in interface_results:
                 anomaly_explanation = None
-                if row[5]:
+                if row[9]:
                     try:
-                        anomaly_explanation = json.loads(row[5])
+                        anomaly_explanation = json.loads(row[9])
                     except (json.JSONDecodeError, TypeError):
                         anomaly_explanation = None
                 
                 result['interface_embeddings'].append({
                     'interface_id': row[0],
                     'interface_name': row[1],
-                    'mse': row[2],  # anomaly_score is the MSE
-                    'embedding_vector': row[3],  # The actual embedding array
-                    'timestamp': row[4].isoformat() if row[4] else None,
+                    'stgnn_score': row[2],
+                    'stgnn_embedding': row[3],
+                    'dgat_score': row[4],
+                    'dgat_embedding': row[5],
+                    'hetgnn_score': row[6],
+                    'hetgnn_embedding': row[7],
+                    'timestamp': row[8].isoformat() if row[8] else None,
                     'anomaly_explanation': anomaly_explanation
                 })
         
@@ -656,7 +853,7 @@ def fetch_snapshots():
 
 def fetch_anomalies(limit: int = 50, timestamp_str: str = None):
     """
-    Fetch top anomalies from NodeEmbedding.
+    Fetch top anomalies from NodeEmbedding (using average of 3 model scores for ranking).
     """
     logger.info(f"Fetching anomalies (limit={limit}, timestamp={timestamp_str})")
     try:
@@ -674,26 +871,42 @@ def fetch_anomalies(limit: int = 50, timestamp_str: str = None):
                 param_types["timestamp"] = spanner.param_types.TIMESTAMP
                 
                 query = """
-                    SELECT e.node_id, e.node_type, e.anomaly_score, e.anomaly_explanation AS root_cause, 
-                           COALESCE(r.name, i.name) as name, e.timestamp
+                    SELECT 
+                        e.node_id, 
+                        e.node_type,
+                        e.stgnn_score,
+                        e.dgat_score,
+                        e.hetgnn_score,
+                        (e.stgnn_score + e.dgat_score + e.hetgnn_score) / 3.0 AS avg_score,
+                        e.anomaly_explanation AS root_cause, 
+                        COALESCE(r.name, i.name) as name, 
+                        e.timestamp
                     FROM NodeEmbedding e
                     LEFT JOIN PhysicalRouter r ON e.node_id = r.id
                     LEFT JOIN PhysicalInterface i ON e.node_id = i.id
                     WHERE e.timestamp = @timestamp
-                    ORDER BY e.anomaly_score DESC
+                    ORDER BY avg_score DESC
                     LIMIT @limit
                 """
             except ValueError:
                 return {"error": "Invalid timestamp format"}
         else:
             query = """
-                SELECT e.node_id, e.node_type, e.anomaly_score, e.anomaly_explanation AS root_cause, 
-                       COALESCE(r.name, i.name) as name, e.timestamp
+                SELECT 
+                    e.node_id, 
+                    e.node_type,
+                    e.stgnn_score,
+                    e.dgat_score,
+                    e.hetgnn_score,
+                    (e.stgnn_score + e.dgat_score + e.hetgnn_score) / 3.0 AS avg_score,
+                    e.anomaly_explanation AS root_cause, 
+                    COALESCE(r.name, i.name) as name, 
+                    e.timestamp
                 FROM NodeEmbedding e
                 LEFT JOIN PhysicalRouter r ON e.node_id = r.id
                 LEFT JOIN PhysicalInterface i ON e.node_id = i.id
                 WHERE e.timestamp = (SELECT MAX(timestamp) FROM NodeEmbedding)
-                ORDER BY e.anomaly_score DESC
+                ORDER BY avg_score DESC
                 LIMIT @limit
             """
             
@@ -704,10 +917,13 @@ def fetch_anomalies(limit: int = 50, timestamp_str: str = None):
                 anomalies.append({
                     "node_id": row[0],
                     "node_type": row[1],
-                    "anomaly_score": row[2],
-                    "root_cause": row[3],
-                    "name": row[4] if row[4] else "Unknown",
-                    "timestamp": row[5].isoformat() if row[5] else None
+                    "stgnn_score": row[2],
+                    "dgat_score": row[3],
+                    "hetgnn_score": row[4],
+                    "anomaly_score": row[5],  # Average score for sorting/display
+                    "root_cause": row[6],
+                    "name": row[7] if row[7] else "Unknown",
+                    "timestamp": row[8].isoformat() if row[8] else None
                 })
                 
         return {"anomalies": anomalies}

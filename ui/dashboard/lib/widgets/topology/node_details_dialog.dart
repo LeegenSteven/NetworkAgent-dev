@@ -6,7 +6,7 @@ import '../../appstate.dart';
 import '../../models/network_node.dart';
 import '../../utils/APIService.dart';
 import '../../utils/node_visuals.dart';
-import '../performance/node_performance.dart';
+import '../performance/node_performance_card.dart';
 import '../../screens/notification_screen.dart';
 
 class NodeDetailsDialog extends StatefulWidget {
@@ -58,10 +58,18 @@ class _NodeDetailsDialogState extends State<NodeDetailsDialog> {
       // check if node is a router based on properties
       bool isRouter = widget.node.properties['kind'] == 'Router' ||
                      widget.node.properties['kind'] == 'PhysicalRouter';
+      bool isDevice = widget.node.properties['kind'] == 'Device';
       
       if (isRouter) {
         final details = await _apiService.fetchRouterDetails(widget.node.id);
         final summary = _formatRouterDetails(details);
+        setState(() {
+          _isLoading = false;
+          _markdownSummary = summary;
+        });
+      } else if (isDevice) {
+        final details = await _apiService.fetchDeviceDetails(widget.node.id);
+        final summary = _formatDeviceDetails(details);
         setState(() {
           _isLoading = false;
           _markdownSummary = summary;
@@ -82,6 +90,36 @@ class _NodeDetailsDialogState extends State<NodeDetailsDialog> {
     }
   }
 
+  String _formatDeviceDetails(Map<String, dynamic> data) {
+    final buffer = StringBuffer();
+    
+    buffer.writeln('### ${data['name'] ?? 'Device Details'}');
+    buffer.writeln('');
+    buffer.writeln('**ID**: `${data['id']}`');
+    buffer.writeln('**Status**: ${data['status'] ?? 'Unknown'}');
+    buffer.writeln('**Network**: ${data['network_name'] ?? 'Unknown'}');
+    buffer.writeln('**IP Address**: ${data['ip_address'] ?? 'Unknown'}');
+    buffer.writeln('**Gateway**: ${data['gateway'] ?? 'Unknown'}');
+    
+    if (data['vlan'] != null) {
+      buffer.writeln('**VLAN**: ${data['vlan']}');
+    }
+    
+    if (data['router_id'] != null) {
+      buffer.writeln('**Connected Router**: ${data['router_id']}');
+    }
+    
+    if (data['config'] != null && (data['config'] as Map).isNotEmpty) {
+      buffer.writeln('');
+      buffer.writeln('### Configuration');
+      buffer.writeln('```json');
+      buffer.writeln(data['config'].toString());
+      buffer.writeln('```');
+    }
+    
+    return buffer.toString();
+  }
+  
   String _formatRouterDetails(Map<String, dynamic> data) {
     final buffer = StringBuffer();
     
@@ -480,57 +518,72 @@ class _NodeDetailsDialogState extends State<NodeDetailsDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Router embedding
+        // Router embeddings (all 3 models)
         if (routerEmbedding != null) ...[
           Text(
-            'Router MSE: ${_formatMSE(routerEmbedding['mse'])}',
+            'Router Anomaly Scores:',
             style: TextStyle(
               fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: _getMSEColor(routerEmbedding['mse']),
+              fontWeight: FontWeight.bold,
+              color: Color(0xFFE65100),
             ),
           ),
+          SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildModelScore('STGNN', routerEmbedding['stgnn_score']),
+                _buildModelScore('DGAT', routerEmbedding['dgat_score']),
+                _buildModelScore('HetGNN', routerEmbedding['hetgnn_score']),
+              ],
+            ),
+          ),
+          SizedBox(height: 4),
           if (routerEmbedding['timestamp'] != null)
             Text(
               'Last updated: ${_formatTimestamp(routerEmbedding['timestamp'])}',
               style: TextStyle(fontSize: 11, color: Colors.grey[600]),
             ),
-          if (routerEmbedding['embedding_vector'] != null)
+          if (routerEmbedding['stgnn_embedding'] != null)
             Text(
-              'Embedding dim: ${(routerEmbedding['embedding_vector'] as List).length}',
+              'Embedding dim: ${(routerEmbedding['stgnn_embedding'] as List).length}',
               style: TextStyle(fontSize: 11, color: Colors.grey[600]),
             ),
         ],
         
-        // Interface embeddings
+        // Interface embeddings (all 3 models)
         if (interfaceEmbeddings.isNotEmpty) ...[
-          SizedBox(height: 8),
+          SizedBox(height: 12),
           Text(
-            'Interface MSEs:',
+            'Interface Anomaly Scores:',
             style: TextStyle(
               fontSize: 12,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.bold,
               color: Color(0xFFE65100),
             ),
           ),
           SizedBox(height: 4),
           ...interfaceEmbeddings.map((iface) {
             return Padding(
-              padding: const EdgeInsets.only(left: 8.0, top: 2.0),
-              child: Row(
+              padding: const EdgeInsets.only(left: 8.0, top: 4.0, bottom: 4.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      '${iface['interface_name']}: ',
-                      style: TextStyle(fontSize: 11),
-                    ),
-                  ),
                   Text(
-                    _formatMSE(iface['mse']),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: _getMSEColor(iface['mse']),
+                    '${iface['interface_name']}:',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0, top: 2.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildModelScore('STGNN', iface['stgnn_score'], fontSize: 10),
+                        _buildModelScore('DGAT', iface['dgat_score'], fontSize: 10),
+                        _buildModelScore('HetGNN', iface['hetgnn_score'], fontSize: 10),
+                      ],
                     ),
                   ),
                 ],
@@ -545,6 +598,31 @@ class _NodeDetailsDialogState extends State<NodeDetailsDialog> {
             style: TextStyle(fontSize: 12, color: Colors.grey),
           ),
       ],
+    );
+  }
+
+  Widget _buildModelScore(String modelName, dynamic score, {double fontSize = 11}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2.0),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 60,
+            child: Text(
+              '$modelName:',
+              style: TextStyle(fontSize: fontSize, color: Colors.grey[700]),
+            ),
+          ),
+          Text(
+            _formatMSE(score),
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: FontWeight.w600,
+              color: _getMSEColor(score),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

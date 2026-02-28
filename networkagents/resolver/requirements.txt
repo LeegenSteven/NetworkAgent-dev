@@ -1,6 +1,0 @@
-a2a-sdk==0.3.11
-uvicorn==0.35.0
-google-adk==1.18.0
-pydantic==2.11.9
-py-gitea==0.2.10
-requests==2.32.5

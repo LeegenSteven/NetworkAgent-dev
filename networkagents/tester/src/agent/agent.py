@@ -49,14 +49,21 @@ class TestAgent:
         self.root_agent = LlmAgent(
             name="TestAgent",
             description=description,
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             instruction=root_prompt,
             tools=[
                 MCPToolset(
                     connection_params=SseConnectionParams(
                         url=os.getenv("AGENT_MCP_TOOLS_ADDRESS", "http://127.0.0.1:8080/sse")
                     ),
-                    tool_filter=["getRunningTests","runTest","deleteTest", "getServices"]
+                    tool_filter=[
+                        "getTrafficTestDefinition", 
+                        "getRunningTests", 
+                        "runTest", 
+                        "deleteTest", 
+                        "getDevices",
+                        "getDeviceByName"
+                    ]
                 )
             ],
         )

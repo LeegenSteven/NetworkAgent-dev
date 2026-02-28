@@ -732,8 +732,8 @@ spec:
                     - Enable for long-term monitoring and trend analysis
                     
                     Integration:
-                    - Metrics stored in InfluxDB time-series database
-                    - Compatible with Grafana for visualization and alerting
+                    - Metrics can be stored in time-series database
+                    - Compatible with visualization and alerting tools
                     - Supports automated analysis and reporting workflows
                 metrics_interval:
                   type: integer
@@ -770,40 +770,6 @@ spec:
                     - 1: One-second intervals for high-precision analysis
                     - 5: Five-second intervals for standard performance testing
                     - 30: Thirty-second intervals for long-term monitoring
-                influxdb_bucket:
-                  type: string
-                  default: "telegraf"
-                  description: |
-                    InfluxDB bucket name for storing traffic test metrics.
-                    
-                    Bucket Configuration:
-                    - Specifies the InfluxDB storage bucket for metrics data
-                    - Enables organization and separation of different test data
-                    - Supports data retention policies and access control
-                    - Allows integration with existing monitoring infrastructure
-                    
-                    Bucket Organization Strategies:
-                    - Single bucket: "telegraf" for all traffic test metrics
-                    - Test-specific buckets: "traffic-test-prod", "traffic-test-dev"
-                    - Customer-specific buckets: "customer-a-metrics", "customer-b-metrics"
-                    - Time-based buckets: "traffic-2024-01", "traffic-2024-02"
-                    
-                    Data Management Benefits:
-                    - Separate retention policies for different data types
-                    - Access control and security isolation
-                    - Query performance optimization through data partitioning
-                    - Simplified data lifecycle management
-                    
-                    Integration Considerations:
-                    - Bucket must exist in InfluxDB before test execution
-                    - Requires appropriate write permissions for metrics ingestion
-                    - Consider backup and disaster recovery requirements
-                    - Plan for data growth and storage capacity
-                    
-                    Examples:
-                    - "telegraf": Default bucket for general metrics
-                    - "network-performance": Dedicated bucket for traffic tests
-                    - "sla-monitoring": Bucket for SLA compliance data
             status:
               type: object
               description: |

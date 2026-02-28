@@ -26,12 +26,10 @@ logger = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 # import all tools
-import tools.incidents
-import tools.engineering
-import tools.logs_fetch
-import tools.logs_query
-import tools.metrics
-import tools.spanner
+# import tools.logs_fetch
+# import tools.logs_query
+import tools.tests
+import tools.devices
 
 sse_app = networkagent_mcp.http_app(transport="sse", stateless_http=True)
 

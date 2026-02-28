@@ -13,15 +13,29 @@
 # limitations under the License.
 
 description="""
-A test agent. The test agent helps the user to run and delete network tests. 
+A test agent that helps users manage traffic tests across their network infrastructure. 
 
-The test agent can help the user fulfill tasks such as:
-- create network test
-- delete running network tests
+The test agent can help with:
+- Creating traffic tests between network devices with various traffic patterns
+- Configuring test parameters (bandwidth, duration, protocol, concurrent users)
+- Monitoring running traffic tests and viewing their status
+- Deleting traffic tests
+- Multi-source load testing scenarios
+
+Supports multiple traffic patterns:
+- Constant: Steady bandwidth throughout test
+- Periodic: Sine/square/sawtooth wave patterns for business hours simulation
+- Burst: High-traffic bursts with idle periods
+- Poisson: Realistic user arrival patterns
 """
 
-tags=['chat']
+tags=['chat', 'network-testing', 'performance-testing']
 
 examples=[
-    "Create a network test between UERanSim cellsite 1 and dnn internet?",
+    "Create a multi-source load test from dev1 and dev2 to devhub using TCP with 5Mbps bandwidth for 2 hours",
+    "Run a constant traffic test from dev1 to devhub at 10Mbps for 5 minutes",
+    "Set up a burst pattern test with 100Mbps bursts every 5 minutes between spoke devices and hub-router",
+    "Create a periodic sine wave traffic test from customer-a-device to customer-b-device simulating daily usage patterns",
+    "Show me all running traffic tests",
+    "Delete the traffic test named multi-source-load-test",
 ]

@@ -389,15 +389,8 @@ Create()
         cp networkagent.json tools/src
         cp networkagent.json gnn/src
         cp networkagent.json networkagents/supervisor/src
-        cp networkagent.json networkagents/engineer/src
-        cp networkagent.json networkagents/orderagent/src
-        cp networkagent.json networkagents/operations/src
         cp networkagent.json networkagents/tester/src
         cp networkagent.json networkagents/logs/src
-        cp networkagent.json networkagents/resolver/src
-        cp networkagent.json ui/incident/src
-        cp networkagent.json ui/portal/src
-        cp networkagent.json logservices/faultservice/src
         cp networkagent.json logservices/metricscollector/src
     else
         echo "#############################################################"
@@ -424,17 +417,10 @@ Create()
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO operator/cloudbuild.j2 > operator/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO tools/cloudbuild.j2 > tools/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO gnn/cloudbuild.j2 > gnn/cloudbuild.yaml
-    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/engineer/cloudbuild.j2 > networkagents/engineer/cloudbuild.yaml
-    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/orderagent/cloudbuild.j2 > networkagents/orderagent/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/tester/cloudbuild.j2 > networkagents/tester/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/logs/cloudbuild.j2 > networkagents/logs/cloudbuild.yaml
-    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/resolver/cloudbuild.j2 > networkagents/resolver/cloudbuild.yaml
-    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/operations/cloudbuild.j2 > networkagents/operations/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/supervisor/cloudbuild.j2 > networkagents/supervisor/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO ui/dashboard/cloudbuild.j2 > ui/dashboard/cloudbuild.yaml
-    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO ui/incident/cloudbuild.j2 > ui/incident/cloudbuild.yaml
-    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO ui/portal/cloudbuild.j2 > ui/portal/cloudbuild.yaml
-    jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO logservices/faultservice/cloudbuild.j2 > logservices/faultservice/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO logservices/metricscollector/cloudbuild.j2 > logservices/metricscollector/cloudbuild.yaml
 
 }
@@ -852,28 +838,12 @@ Delete()
         gnn/cloudbuild.yaml \
         networkagents/supervisor/src/networkagent.json \
         networkagents/supervisor/cloudbuild.yaml \
-        networkagents/engineer/src/networkagent.json \
-        networkagents/engineer/cloudbuild.yaml \
-        networkagents/orderagent/src/networkagent.json \
-        networkagents/orderagent/cloudbuild.yaml \
-        networkagents/operations/src/networkagent.json \
-        networkagents/operations/cloudbuild.yaml \
         networkagents/tester/src/networkagent.json \
         networkagents/tester/cloudbuild.yaml \
         networkagents/logs/src/networkagent.json \
         networkagents/logs/cloudbuild.yaml \
-        networkagents/resolver/src/networkagent.json \
-        networkagents/resolver/cloudbuild.yaml \
         \
-        ui/incident/src/networkagent.json \
-        ui/incident/src/google-compute* \
-        ui/incident/cloudbuild.yaml \
-        ui/portal/src/networkagent.json \
-        ui/portal/cloudbuild.yaml \
         ui/dashboard/cloudbuild.yaml \
-        \
-        logservices/faultservice/src/networkagent.json \
-        logservices/faultservice/cloudbuild.yaml \
         \
         logservices/metricscollector/src/networkagent.json \
         logservices/metricscollector/cloudbuild.yaml \
@@ -922,14 +892,7 @@ Kill()
     gcloud pubsub topics delete $TOPIC_NAME --quiet
     gcloud functions delete $CAPTURE_LOG_FUNCTION --region=$GOOGLE_REGION  --quiet
 
-    # delete the fault service    
-    FAULT_TRIGGER_NAME="network-fault-trigger"
-    (gcloud eventarc triggers describe $FAULT_TRIGGER_NAME --location=$GOOGLE_REGION > /dev/null 2>&1) && gcloud eventarc triggers delete $FAULT_TRIGGER_NAME --location=$GOOGLE_REGION --quiet
-    (gcloud logging sinks describe $FAULT_SINK_NAME > /dev/null 2>&1) && gcloud logging sinks delete $FAULT_SINK_NAME --quiet
-    (gcloud pubsub topics describe $FAULT_TOPIC_NAME > /dev/null 2>&1) && gcloud pubsub topics delete $FAULT_TOPIC_NAME --quiet    
-    (gcloud run services describe faultservice --region=$GOOGLE_REGION > /dev/null 2>&1) && gcloud run services delete faultservice --region=$GOOGLE_REGION --quiet
-
-    # Launch the kubectl command in the backgroun
+    # Launch the kubectl command in the background
     kubectl delete -f environment/networks.yaml &
     job_id=$!
 
@@ -943,8 +906,6 @@ Kill()
       kubectl patch computenetworks dataplane --patch '{"metadata":{"finalizers":[]}}'  --type=merge
     fi
 
-    gcloud run services delete networktools --region=$GOOGLE_REGION --quiet
-    
     # Delete Vertex AI GNN resources
     echo "Cleaning up Vertex AI GNN resources..."
     
@@ -983,15 +944,9 @@ Kill()
         done
     fi
     
-    gcloud run services delete engineeragent --region=$GOOGLE_REGION --quiet
-    gcloud run services delete operationsagent --region=$GOOGLE_REGION --quiet
-    gcloud run services delete orderagent --region=$GOOGLE_REGION --quiet
+    gcloud run services delete networktools --region=$GOOGLE_REGION --quiet
     gcloud run services delete testagent --region=$GOOGLE_REGION --quiet
     gcloud run services delete logsagent --region=$GOOGLE_REGION --quiet
-    gcloud run services delete resolveragent --region=$GOOGLE_REGION --quiet
-    # gcloud run services update incidentagent --region=$GOOGLE_REGION --clear-vpc-connector --quiet
-    gcloud run services delete incidentagent --region=$GOOGLE_REGION --quiet
-    gcloud run services delete portal --region=$GOOGLE_REGION --quiet
     gcloud run services delete network-agent-supervisor --region=$GOOGLE_REGION --quiet
     gcloud run services delete network-dashboard --region=$GOOGLE_REGION --quiet
 
@@ -1058,7 +1013,6 @@ DeployOperator()
     kubectl apply -f config/vyosvm.yaml
     kubectl apply -f config/device.yaml
     kubectl apply -f config/traffic.yaml
-    kubectl apply -f config/connectivity/
     kubectl apply -f config/free5gc/
     kubectl apply -f config/transport/
 
@@ -1226,107 +1180,6 @@ EOF
 }
 
 ############################################################
-# Build and deploy the liveness probe for UERANSIM         #
-############################################################
-DeployFaultCapture()
-{
-    # Create the Cloud Run service that receives the eventarc
-    # events from pub/pub
-    echo "Deploying Fault capture service..." 
-
-    export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter="networkagent@${GOOGLE_PROJECT}."`
-    RESOLVER_URL=$(gcloud run services describe resolveragent --region=$GOOGLE_REGION --format="value(status.url)")
-    if [[ $? -ne 0 ]]; then
-        echo
-        echo "**ERROR** cannot determine the resolver agent URL required by the fault service. Exiting"
-        exit 1
-    fi
-    SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
-    if [[ $? -ne 0 ]]; then
-        echo
-        echo "**ERROR** cannot determine the supervisor agent URL required by the fault service. Exiting"
-        exit 1
-    fi
-
-    cd logservices/faultservice
-    IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/faultservice:latest"
-    if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-        read -p "Fault service image already exists. Rebuild? (y/n) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
-        fi
-    elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-        echo "Fault service image already exists - not building the image (NO_FLAG set)"
-    elif [[ $NO_FLAG != "y" ]]; then
-        gcloud builds submit --region=$GOOGLE_REGION --config cloudbuild.yaml
-    fi
-    gcloud run deploy faultservice \
-    --image $GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/faultservice:latest \
-    --region $GOOGLE_REGION \
-    --service-account $GOOGLE_SERVICE_ACCOUNT \
-    --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
-    --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
-    --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
-    --update-env-vars RESOLVER_URL=${RESOLVER_URL} \
-    --update-env-vars SUPERVISOR_URL=${SUPERVISOR_URL} \
-    --update-env-vars NETWORK_AGENT_FILE="/app/networkagent.json" \
-    --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/app/networkagent.json" \
-    --allow-unauthenticated 
-    cd ../..
-    sleep 5
-
-    # Create the pubsub topic if it doesn't exist yet
-    gcloud pubsub topics describe $FAULT_TOPIC_NAME > /dev/null 2>&1
-    if [[ $? -ne 0 ]]; then
-        echo "Creating Pub/Sub topic '${FAULT_TOPIC_NAME}'..."
-        gcloud pubsub topics create $FAULT_TOPIC_NAME --project=${GOOGLE_PROJECT}
-    else
-        echo "Pub/Sub topic '${FAULT_TOPIC_NAME}' already exists..."
-    fi
-
-    # Create the logging sink if it doesn't exist yet
-    gcloud logging sinks describe $FAULT_SINK_NAME > /dev/null 2>&1
-    if [[ $? -ne 0 ]]; then
-        echo "Creating Fault logging sink '${FAULT_SINK_NAME}'..."
-        gcloud logging sinks create $FAULT_SINK_NAME pubsub.googleapis.com/projects/${GOOGLE_PROJECT}/topics/${FAULT_TOPIC_NAME} \
-            --description="Network fault sink" \
-            --log-filter="labels.python_logger=UERANSIMHEALTH OR labels.python_logger=CRITICALSERVICEERROR"
-    else
-        echo "Logging sink '${FAULT_SINK_NAME}' already exists..."
-    fi
-
-    # Grant the Cloud Logging service account used by the Log sink the right to publish 
-    # log entries to the PubSub topic
-    gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
-        --member="serviceAccount:service-${GOOGLE_PROJECT_NUMBER}@gcp-sa-logging.iam.gserviceaccount.com" \
-        --role="roles/pubsub.publisher" --condition=None --no-user-output-enabled
-
-    # Create an Eventarc trigger to connect Pub/Sub to Cloud Run
-    FAULT_TRIGGER_NAME="network-fault-trigger"
-    gcloud eventarc triggers describe $FAULT_TRIGGER_NAME --location=$GOOGLE_REGION > /dev/null 2>&1
-    if [[ $? -ne 0 ]]; then
-        echo "Creating Eventarc trigger '${FAULT_TRIGGER_NAME}'..."
-        gcloud eventarc triggers create ${FAULT_TRIGGER_NAME} \
-            --location=${GOOGLE_REGION} \
-            --destination-run-service=faultservice \
-            --destination-run-region=${GOOGLE_REGION} \
-            --event-filters="type=google.cloud.pubsub.topic.v1.messagePublished" \
-            --transport-topic=projects/${GOOGLE_PROJECT}/topics/$FAULT_TOPIC_NAME \
-            --service-account=${GOOGLE_SERVICE_ACCOUNT}
-    else
-        echo "Eventarc trigger '${FAULT_TRIGGER_NAME}' already exists..."
-    fi
-
-    # Grant the Eventarc service account permission to invoke the Cloud Run service
-    gcloud projects add-iam-policy-binding ${GOOGLE_PROJECT} \
-        --member="serviceAccount:${GOOGLE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
-        --role="roles/run.invoker" --condition=None --no-user-output-enabled
-
-    echo "Fault capture service setup completed successfully!"
-}
-
-############################################################
 # Build and deploy the GNN services                        #
 ############################################################
 DeployGNN()
@@ -1482,68 +1335,6 @@ Networkagent()
         fi
     fi
 
-    # deploy the engineer agent
-    if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"engineer"* ]]; then
-        agent_processed=true
-        SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
-        IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/engineeragent:latest"
-        if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-            read -p "Engineer agent image already exists. Rebuild? (y/n) " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                gcloud builds submit --region=$GOOGLE_REGION --config=networkagents/engineer/cloudbuild.yaml .
-            fi
-        elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-            echo "Engineer agent image already exists - not building the image (NO_FLAG set)"
-        elif [[ $NO_FLAG != "y" ]]; then
-            gcloud builds submit --region=$GOOGLE_REGION --config=networkagents/engineer/cloudbuild.yaml .
-        fi
-        gcloud run deploy engineeragent \
-        --image $IMAGE_URI \
-        --region $GOOGLE_REGION \
-        --service-account $GOOGLE_SERVICE_ACCOUNT \
-        --min 1 \
-        --memory 2Gi \
-        --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
-        --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
-        --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
-        --update-env-vars SUPERVISOR_URL=$SUPERVISOR_URL \
-        --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL/sse \
-        --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
-        --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
-        --allow-unauthenticated 
-    fi
-
-    # deploy the order agent
-    if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"order"* ]]; then
-        agent_processed=true
-        ENGINEER_URL=$(gcloud run services describe engineeragent --region=$GOOGLE_REGION --format="value(status.url)")
-        IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/orderagent:latest"
-        if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-            read -p "Order agent image already exists. Rebuild? (y/n) " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                gcloud builds submit --region=$GOOGLE_REGION --config=networkagents/orderagent/cloudbuild.yaml .
-            fi
-        elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-            echo "Operations agent image already exists - not building the image (NO_FLAG set)"
-        elif [[ $NO_FLAG != "y" ]]; then
-            gcloud builds submit --region=$GOOGLE_REGION --config=networkagents/orderagent/cloudbuild.yaml .
-        fi
-        gcloud run deploy orderagent \
-        --image $IMAGE_URI \
-        --region $GOOGLE_REGION \
-        --service-account $GOOGLE_SERVICE_ACCOUNT \
-        --min 1 \
-        --update-env-vars ENGINEER_URL=$ENGINEER_URL \
-        --update-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_PROJECT \
-        --update-env-vars GOOGLE_CLOUD_LOCATION=$GOOGLE_REGION \
-        --update-env-vars GOOGLE_GENAI_USE_VERTEXAI=1 \
-        --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL/sse \
-        --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
-        --allow-unauthenticated 
-    fi
-
     # deploy the tester agent
     if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"test"* ]]; then 
         agent_processed=true
@@ -1569,138 +1360,6 @@ Networkagent()
         --update-env-vars GOOGLE_GENAI_USE_VERTEXAI=1 \
         --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL/sse \
         --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
-        --allow-unauthenticated 
-    fi
-
-    # deploy the incident agent
-    if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"incident"* ]]; then 
-        agent_processed=true
-        SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
-        IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/incidentagent:latest"
-        if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-            read -p "Incident agent image already exists. Rebuild? (y/n) " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                gcloud builds submit --region=$GOOGLE_REGION --config ui/incident/cloudbuild.yaml .
-            fi
-        elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-            echo "Incident agent image already exists - not building the image (NO_FLAG set)"
-        elif [[ $NO_FLAG != "y" ]]; then
-            gcloud builds submit --region=$GOOGLE_REGION --config ui/incident/cloudbuild.yaml .
-        fi
-        gcloud run deploy incidentagent \
-        --image $IMAGE_URI \
-        --region $GOOGLE_REGION \
-        --service-account $GOOGLE_SERVICE_ACCOUNT \
-        --network mgmt \
-        --subnet mgmt-subnet \
-        --min 1 \
-        --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
-        --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
-        --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
-        --update-env-vars GOOGLE_VM_USER=$GOOGLE_VM_USER \
-        --update-env-vars WEBAPPS_PWD=${WEBAPPS_PWD} \
-        --update-env-vars WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
-        --update-env-vars NETWORK_AGENT_FILE="/agent/src/networkagent.json" \
-        --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/src/networkagent.json" \
-        --allow-unauthenticated 
-    fi
-
-    # deploy the portal agent
-    if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"portal"* ]]; then 
-        agent_processed=true
-        ORDERAGENT_URL=$(gcloud run services describe orderagent --region=$GOOGLE_REGION --format="value(status.url)")
-        IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/portal:latest"
-        if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-            read -p "Portal agent image already exists. Rebuild? (y/n) " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                gcloud builds submit --region=$GOOGLE_REGION --config ui/portal/cloudbuild.yaml .
-            fi
-        elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-            echo "Portal agent image already exists - not building the image (NO_FLAG set)"
-        elif [[ $NO_FLAG != "y" ]]; then
-            gcloud builds submit --region=$GOOGLE_REGION --config ui/portal/cloudbuild.yaml .
-        fi
-        gcloud run deploy portal \
-        --image $IMAGE_URI \
-        --region $GOOGLE_REGION \
-        --service-account $GOOGLE_SERVICE_ACCOUNT \
-        --network mgmt \
-        --subnet mgmt-subnet \
-        --min 1 \
-        --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
-        --update-env-vars GOOGLE_REGION=$GOOGLE_REGION \
-        --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
-        --update-env-vars GOOGLE_VM_USER=$GOOGLE_VM_USER \
-        --update-env-vars WEBAPPS_PWD=${WEBAPPS_PWD} \
-        --update-env-vars WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
-        --update-env-vars NETWORK_AGENT_FILE="/agent/src/networkagent.json" \
-        --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/src/networkagent.json" \
-        --update-env-vars ORDERAGENT_URL=$ORDERAGENT_URL \
-        --allow-unauthenticated 
-    fi
-
-    # deploy the operations agent
-    if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"operations"* ]]; then
-        agent_processed=true
-        IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/operationsagent:latest"
-        if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-            read -p "Operations agent image already exists. Rebuild? (y/n) " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                gcloud builds submit --region=$GOOGLE_REGION --config=networkagents/operations/cloudbuild.yaml .
-            fi
-        elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-            echo "Operations agent image already exists - not building the image (NO_FLAG set)"
-        elif [[ $NO_FLAG != "y" ]]; then
-            gcloud builds submit --region=$GOOGLE_REGION --config=networkagents/operations/cloudbuild.yaml .
-        fi
-        gcloud run deploy operationsagent \
-        --image $IMAGE_URI \
-        --region $GOOGLE_REGION \
-        --service-account $GOOGLE_SERVICE_ACCOUNT \
-        --min 1 \
-        --update-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_PROJECT \
-        --update-env-vars GOOGLE_CLOUD_LOCATION=$GOOGLE_REGION \
-        --update-env-vars GOOGLE_GENAI_USE_VERTEXAI=1 \
-        --update-env-vars AGENT_MCP_TOOLS_ADDRESS=$TOOLS_URL/sse \
-        --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
-        --allow-unauthenticated 
-    fi
-
-    # deploy the resolver agent
-    if [[ "$AGENT_NAMES" == "all" ]] || [[ "$AGENT_NAMES" == *"resolver"* ]]; then
-        agent_processed=true
-        SUPERVISOR_URL=$(gcloud run services describe network-agent-supervisor --region=$GOOGLE_REGION --format="value(status.url)")
-        ENGINEER_URL=$(gcloud run services describe engineeragent --region=$GOOGLE_REGION --format="value(status.url)")
-        IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/resolveragent:latest"
-        if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-            read -p "Resolver agent image already exists. Rebuild? (y/n) " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                gcloud builds submit --region=$GOOGLE_REGION --config=networkagents/resolver/cloudbuild.yaml .
-            fi
-        elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-            echo "Resolver agent image already exists - not building the image (NO_FLAG set)"
-        elif [[ $NO_FLAG != "y" ]]; then
-            gcloud builds submit --region=$GOOGLE_REGION --config=networkagents/resolver/cloudbuild.yaml .
-        fi
-        gcloud run deploy resolveragent \
-        --image $IMAGE_URI \
-        --region $GOOGLE_REGION \
-        --service-account $GOOGLE_SERVICE_ACCOUNT \
-        --min 1 \
-        --memory 1Gi \
-        --update-env-vars GOOGLE_CLOUD_PROJECT=$GOOGLE_PROJECT \
-        --update-env-vars GOOGLE_CLOUD_LOCATION=$GOOGLE_REGION \
-        --update-env-vars GOOGLE_GENAI_USE_VERTEXAI=1 \
-        --update-env-vars GOOGLE_APPLICATION_CREDENTIALS="/agent/networkagent.json" \
-        --update-env-vars NETWORK_AGENT_FILE="/agent/networkagent.json" \
-        --update-env-vars GOOGLE_ZONE=$GOOGLE_ZONE \
-        --update-env-vars SUPERVISOR_URL=$SUPERVISOR_URL \
-        --update-env-vars ENGINEER_URL=$ENGINEER_URL \
-        --update-env-vars TOOLS_URL=$TOOLS_URL/sse \
         --allow-unauthenticated 
     fi
 
@@ -1810,13 +1469,8 @@ DisplayDemoInfo()
 {
     echo "Gathering demo information..."
     DASHBOARD_URL=$(gcloud run services describe network-dashboard --region=$GOOGLE_REGION --format="value(status.url)")
-    GITEA_HOST=$(kubectl get gitea gitea -o 'jsonpath={..status.create_gitea.external_ip_address}')
-    OPERATIONS_URL=$(gcloud run services describe operationsagent --region=$GOOGLE_REGION --format="value(status.url)")
-    ENGINEER_URL=$(gcloud run services describe engineeragent --region=$GOOGLE_REGION --format="value(status.url)")
     TESTER_URL=$(gcloud run services describe testagent --region=$GOOGLE_REGION --format="value(status.url)")
     LOGS_URL=$(gcloud run services describe logsagent --region=$GOOGLE_REGION --format="value(status.url)")
-    INCIDENT_URL=$(gcloud run services describe incidentagent --region=$GOOGLE_REGION --format="value(status.url)")
-    PORTAL_URL=$(gcloud run services describe portal --region=$GOOGLE_REGION --format="value(status.url)")
     TOOLS_URL=$(gcloud run services describe networktools --region=$GOOGLE_REGION --format="value(status.url)")
 
     echo "============================================================"
@@ -1824,11 +1478,6 @@ DisplayDemoInfo()
     echo "============================================================"
     echo ""
     echo "Network Agent Dashboard: ${DASHBOARD_URL}"
-    echo "Incident Agent: ${INCIDENT_URL}"
-    echo "Customer Portal: ${PORTAL_URL}"
-    echo "GITEA Host: https://${GITEA_HOST}:3000"
-    echo "  git clone https://$GITEA_HOST:3000/${WEBAPPS_LOGIN}/network -c http.sslVerify=false"
-    echo ""
     echo "Username/password: ${WEBAPPS_LOGIN}/${WEBAPPS_PWD}"
     echo ""
 }
@@ -1867,9 +1516,6 @@ InstallAll()
     AGENT_NAMES="all"
     Networkagent
 
-    echo "Deploying the fault notification service"
-    DeployFaultCapture
-
     echo "Deploying the metrics collector service"
     DeployMetricsCollector
 
@@ -1885,66 +1531,6 @@ InstallAll()
 }
 
 ############################################################
-# Wipe out all resources deployed by the Agent demo        #
-############################################################
-DemoWipeOut()
-{
-    patch_timeout=30 # seconds
-    for kind in uetest ueransim ptp mesh userplanefunction controlplane datanetwork; do
-        RSC_NAMES=$(kubectl get $kind -n network -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
-        echo -n "$kind objects: "
-        if [ -n "$RSC_NAMES" ]; then
-            echo "$RSC_NAMES"
-            for name in $RSC_NAMES; do
-                kubectl delete $kind "$name" -n network &
-                job_id=$!
-                echo "Waiting $patch_timeout s for deletion to complete"
-                timeout "${patch_timeout}s" sh -c "while kill -0 $job_id 2>/dev/null; do sleep 1; done"
-                code=$?
-                if [ $code -eq 124 ]; then
-                    echo "Patching $name finalizers to force deletion..."
-                    kubectl patch $kind $name -n network --patch '{"metadata":{"finalizers":[]}}' --type=merge
-                elif [ $code -eq 0 ]; then
-                    echo "Successfully deleted $kind $name"
-                else
-                    echo "Failed to delete $kind $name (exit code $code)"
-                fi
-            done
-        else
-            echo "None"
-        fi
-    done
-
-    # Delete all cellsite locations
-    for name in cellsite1 cellsite2; do
-    echo "Deleting resources of $name location... "
-        for kind in ComputeFirewall ComputeSubnetwork ComputeNetwork; do
-            kubectl get $kind $name -n network 2>/dev/null || continue
-            # Resource still exists. Proceed with deletion
-            echo "Deleting $kind $name..."
-            kubectl delete $kind $name -n network 2>/dev/null &
-            job_id=$!
-            echo "Waiting $patch_timeout s for deletion to complete"
-            timeout "${patch_timeout}s" sh -c "while kill -0 $job_id 2>/dev/null; do sleep 1; done"
-            code=$?
-            if [ $code -eq 124 ]; then
-                echo "Patching $name finalizers to force deletion..."
-                kubectl patch $kind $name -n network --patch '{"metadata":{"finalizers":[]}}' --type=merge
-            elif [ $code -eq 0 ]; then
-                echo "Successfully deleted $kind $name"
-            else
-                echo "Failed to delete $kind $name (exit code $code)"
-            fi
-        done
-    done
-
-    # bounce the operator in case of config connector issues
-    kubectl delete -f operator/deployment.yaml
-    kubectl apply -f operator/deployment.yaml
-
-}
-
-############################################################
 # Help                                                     #
 ############################################################
 Help()
@@ -1952,7 +1538,7 @@ Help()
    # Display Help
    echo "Network Agent environment manager."
    echo
-   echo "Syntax: install.sh [-c|-s|-b|-o|-l|-f|-r|-n|-k|-d|-g|-i|-w|--all|--deploy] [-y|-N]"
+   echo "Syntax: install.sh [-c|-s|-b|-o|-l|-r|-n|-k|-d|-g|-i|-w|--all|--deploy] [-y|-N]"
    echo 
    echo "long options:"
    echo "-------------"
@@ -1968,16 +1554,15 @@ Help()
    echo "  -b     build the Virtual Network Function image with Free5GC, UERANSIM, Docker, and Wireguard"
    echo "  -o     build and deploy the network operator (same as --deploy operator)"
    echo "  -l     build and deploy the logs capture function (same as --deploy logcapture)"
-   echo "  -f     build and deploy the fault capture and trigger service"
    echo "  -n     build and deploy the network dashboard and network agents"
    echo "         can be followed by a comma-separated list of agent names to (re)deploy selectively"
-   echo "         valid agent names: all, networktools, supervisor, engineer, dashboard, operations, test, resolver"
+   echo "         valid agent names: all, networktools, supervisor, dashboard, test"
    echo "         example: -n dashboard,operations or -n all (to deploy all agents)"
    echo "  -k     stop and delete the network agent runtime (GKE cluster, VMS, DB, etc..)"
    echo "  -d     delete the network agent environment (keys, manifests...)."
    echo "  -g     display active GCP environment (user, project, GKE cluster,...)"
    echo "  -i     display demo information"
-   echo "  -w     wipe out the entire autonomous network agent demo resources (ptp, mesh, uetest,...)"
+   echo "  -w     wipe out the entire autonomous network agent demo resources"
    echo "  -y     answer 'yes' to all questions (no ask for confirmation)"
    echo "  -N     answer 'no' to all questions (no ask for confirmation)"
    echo 
@@ -2053,10 +1638,6 @@ if [[ "$1" == "--deploy" ]]; then
                 func_calls="${func_calls} DeployMetricsCollector"
                 shift
                 ;;
-            faultcapture)
-                func_calls="${func_calls} DeployFaultCapture"
-                shift
-                ;;
             git)
                 func_calls="${func_calls} DeployGit"
                 shift
@@ -2072,7 +1653,7 @@ fi
 
 # If func_calls is already set (from -all), skip getopts
 if [[ -z $func_calls ]]; then
-    while getopts "hcsfolmbn:kdpgiwyN" option; do
+    while getopts "hcsolmbn:kdpgiyN" option; do
        case $option in
           h) 
             func_calls="Help"
@@ -2095,9 +1676,6 @@ if [[ -z $func_calls ]]; then
           m) 
             func_calls="CheckGCPEnv SetDemoEnv DeployMetricsCollector"
             ;;
-          f) 
-            func_calls="CheckGCPEnv SetDemoEnv DeployFaultCapture"
-            ;;
           n) 
             AGENT_NAMES=$OPTARG
             func_calls="CheckGCPEnv SetDemoEnv Networkagent"
@@ -2113,9 +1691,6 @@ if [[ -z $func_calls ]]; then
             ;;
           i)
             func_calls="CheckGCPEnv SetDemoEnv DisplayDemoInfo"
-            ;;
-          w)
-            func_calls="CheckGCPEnv SetDemoEnv DemoWipeOut"
             ;;
           y)
             # Say yes to all questions (no ask for confirmation)

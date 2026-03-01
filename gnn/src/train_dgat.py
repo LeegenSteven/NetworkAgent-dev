@@ -23,11 +23,11 @@ logger = logging.getLogger(__name__)
 # Configuration
 MODEL_SAVE_PATH = "dgat_model.pth"
 SCALER_PATH = "dgat_scalers.pkl"
-EPOCHS = 50
+EPOCHS = 20  # Reduced from 50 - DGAT with attention is expensive
 LEARNING_RATE = 0.001
-TRAINING_SNAPSHOTS = 20
+TRAINING_SNAPSHOTS = 30  # Reduced from 60 - still enough for healthy baseline
 VALIDATION_SPLIT = 0.2  # 20% for validation
-EARLY_STOPPING_PATIENCE = 10  # Stop if no improvement for 10 epochs
+EARLY_STOPPING_PATIENCE = 5  # Reduced from 10 - stop earlier if not improving
 MIN_DELTA = 0.001  # Minimum change to qualify as an improvement
 
 def upload_blob(bucket_name, source_file_name, destination_blob_name):
@@ -247,9 +247,68 @@ def run_training_pipeline():
         logger.info(f"Saving model locally to {MODEL_SAVE_PATH}...")
         torch.save(model.state_dict(), MODEL_SAVE_PATH)
         
+        # === NEW: Compute cluster statistics for anomaly detection ===
+        logger.info("Computing healthy embedding cluster statistics...")
+        from collections import defaultdict
+        
+        node_embeddings = defaultdict(lambda: defaultdict(list))
+        
+        with torch.no_grad():
+            model.eval()
+            for snapshot in train_snapshots:
+                edge_attr_dict = snapshot.edge_attr_dict if hasattr(snapshot, 'edge_attr_dict') else None
+                recon_dict, embeddings = model(snapshot.x_dict, snapshot.edge_index_dict, edge_attr_dict)
+                
+                for node_type, emb_tensor in embeddings.items():
+                    for node_idx in range(emb_tensor.size(0)):
+                        node_embeddings[node_type][node_idx].append(
+                            emb_tensor[node_idx].cpu()
+                        )
+        
+        # Compute per-node-type global statistics
+        cluster_stats = {}
+        for node_type, node_dict in node_embeddings.items():
+            all_embeddings = []
+            for node_idx, emb_list in node_dict.items():
+                all_embeddings.extend(emb_list)
+            
+            if all_embeddings:
+                stacked = torch.stack(all_embeddings)
+                cluster_stats[node_type] = {
+                    'mean': stacked.mean(dim=0),
+                    'std': stacked.std(dim=0),
+                    'cov': torch.cov(stacked.T) if stacked.size(0) > 1 else torch.eye(stacked.size(1)),
+                    'sample_count': len(all_embeddings)
+                }
+                logger.info(f"  {node_type}: {len(all_embeddings)} healthy samples, embedding_dim={stacked.size(1)}")
+        
+        # Compute per-node statistics (for nodes appearing consistently)
+        node_stats = {}
+        for node_type, node_dict in node_embeddings.items():
+            node_stats[node_type] = {}
+            for node_idx, emb_list in node_dict.items():
+                if len(emb_list) >= 5:
+                    stacked = torch.stack(emb_list)
+                    node_stats[node_type][node_idx] = {
+                        'mean': stacked.mean(dim=0),
+                        'std': stacked.std(dim=0)
+                    }
+        
+        # Save statistics
+        stats_data = {
+            'cluster_stats': cluster_stats,
+            'node_stats': node_stats,
+            'gb_id_map': gb.global_id_map
+        }
+        
+        STATS_SAVE_PATH = MODEL_SAVE_PATH.replace('.pth', '_stats.pth')
+        torch.save(stats_data, STATS_SAVE_PATH)
+        logger.info(f"Saved cluster statistics to {STATS_SAVE_PATH}")
+        
         if GCS_BUCKET_NAME:
             upload_blob(GCS_BUCKET_NAME, MODEL_SAVE_PATH, f"models/dgat/{MODEL_SAVE_PATH}")
             upload_blob(GCS_BUCKET_NAME, SCALER_PATH, f"models/dgat/{SCALER_PATH}")
+            upload_blob(GCS_BUCKET_NAME, STATS_SAVE_PATH, f"models/dgat/{STATS_SAVE_PATH}")
             
     except Exception as e:
         logger.error(f"Training pipeline failed: {e}")

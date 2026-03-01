@@ -45,8 +45,8 @@ class GraphBuilder:
         
     def init_config_encoder(self):
         # Using structured encoding instead of NetBERT
-        # Dimensions: 128 hash buckets for robust feature hashing
-        self.text_embed_dim = 128
+        # Dimensions: 128 hash buckets + 4 explicit RT features (import AS/val, export AS/val)
+        self.text_embed_dim = 132
         logger.info(f"Using Structured Config Encoder with dimension: {self.text_embed_dim}")
         
     def _parse_vyos_commands(self, config_text):
@@ -125,6 +125,7 @@ class GraphBuilder:
     def get_config_embedding(self, text):
         """
         Generates a fixed-size embedding using hashing of configuration features.
+        Plus explicit RT features (last 4 dimensions).
         Robust to new/unseen values.
         """
         if text is None or text == "":
@@ -155,6 +156,30 @@ class GraphBuilder:
             content_to_embed = str(content_to_embed)
 
         features = self._parse_vyos_commands(content_to_embed)
+        
+        # Extract RT values for explicit features (last 4 dimensions)
+        rt_import_as, rt_import_val = 0.0, 0.0
+        rt_export_as, rt_export_val = 0.0, 0.0
+        
+        for feature in features:
+            if feature.startswith("vrf_rt_import:"):
+                rt_str = feature.split(":", 1)[1]  # e.g., "65035:1030"
+                try:
+                    as_num, val_num = rt_str.split(":")
+                    rt_import_as = float(as_num) / 65535.0  # Normalize AS number
+                    rt_import_val = float(val_num) / 10000.0  # Normalize RT value
+                except:
+                    pass
+            elif feature.startswith("vrf_rt_export:"):
+                rt_str = feature.split(":", 1)[1]
+                try:
+                    as_num, val_num = rt_str.split(":")
+                    rt_export_as = float(as_num) / 65535.0
+                    rt_export_val = float(val_num) / 10000.0
+                except:
+                    pass
+        
+        # Hash embedding (first 128 dimensions)
         embedding = np.zeros(self.text_embed_dim)
         
         import hashlib
@@ -162,9 +187,16 @@ class GraphBuilder:
             features = content_to_embed.split()
         
         for feature in features:
+            # Hash into first 128 buckets
             hash_val = int(hashlib.md5(feature.encode('utf-8')).hexdigest(), 16)
-            idx = hash_val % self.text_embed_dim
+            idx = hash_val % 128  # Only use first 128 dimensions for hashing
             embedding[idx] = 1.0
+        
+        # Explicit RT features (last 4 dimensions: [128, 129, 130, 131])
+        embedding[128] = rt_import_as
+        embedding[129] = rt_import_val
+        embedding[130] = rt_export_as
+        embedding[131] = rt_export_val
             
         return embedding
 

@@ -102,8 +102,9 @@ class AnomalyPanel extends StatelessWidget {
                   routerAvgScore = scoreSum / scoreCount;
                 }
                 
-                // Add router-level anomaly if average MSE exists and is high
-                if (routerAvgScore != null && routerAvgScore > 0.5) {
+                // Add router-level anomaly if average score exceeds threshold
+                // Threshold: 3.0 matches Mahalanobis distance (3 sigma) from GNN serve.py
+                if (routerAvgScore != null && routerAvgScore > 3.0) {
                   anomalies.add({
                     'node_id': node.id,
                     'name': node.name,
@@ -145,7 +146,8 @@ class AnomalyPanel extends StatelessWidget {
                       interfaceAvgScore /= interfaceScoreCount;
                     }
                     
-                    if (interfaceAvgScore > 0.5) {
+                    // Threshold: 3.0 matches Mahalanobis distance (3 sigma) from GNN serve.py
+                    if (interfaceAvgScore > 3.0) {
                       anomalies.add({
                         'node_id': interfaceId,
                         'name': '${node.name} - Interface',
@@ -188,11 +190,11 @@ class AnomalyPanel extends StatelessWidget {
                   
                   return Card(
                     margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    elevation: score > 2.0 ? 2 : 0,
+                    elevation: score > 5.0 ? 2 : 0,
                     shape: RoundedRectangleBorder(
                       side: BorderSide(
-                        color: score > 2.0 ? Colors.red.shade300 : Colors.orange.shade200,
-                        width: score > 2.0 ? 2 : 1,
+                        color: score > 5.0 ? Colors.red.shade300 : Colors.orange.shade200,
+                        width: score > 5.0 ? 2 : 1,
                       ),
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -201,7 +203,7 @@ class AnomalyPanel extends StatelessWidget {
                         alignment: Alignment.center,
                         children: [
                           CircleAvatar(
-                            backgroundColor: score > 2.0 ? Colors.red : Colors.orange,
+                            backgroundColor: score > 5.0 ? Colors.red : Colors.orange,
                             radius: 22,
                             child: Text(
                               score.toStringAsFixed(2),
@@ -257,9 +259,9 @@ class AnomalyPanel extends StatelessWidget {
                                 children: [
                                   const Text('MSE Score: ', style: TextStyle(fontWeight: FontWeight.bold)),
                                   Text(
-                                    score.toStringAsFixed(4),
+                                    score.toStringAsFixed(2),
                                     style: TextStyle(
-                                      color: score > 2.0 ? Colors.red : Colors.orange,
+                                      color: score > 5.0 ? Colors.red : Colors.orange,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -267,15 +269,15 @@ class AnomalyPanel extends StatelessWidget {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                     decoration: BoxDecoration(
-                                      color: score > 2.0 ? Colors.red.shade100 : Colors.orange.shade100,
+                                      color: score > 5.0 ? Colors.red.shade100 : Colors.orange.shade100,
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Text(
-                                      score > 2.0 ? 'HIGH' : 'MODERATE',
+                                      score > 5.0 ? 'HIGH' : 'MODERATE',
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold,
-                                        color: score > 2.0 ? Colors.red.shade900 : Colors.orange.shade900,
+                                        color: score > 5.0 ? Colors.red.shade900 : Colors.orange.shade900,
                                       ),
                                     ),
                                   ),

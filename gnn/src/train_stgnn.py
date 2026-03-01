@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 MODEL_SAVE_PATH = "stgnn_model.pth"
 SCALER_PATH = "stgnn_scalers.pkl"
-EPOCHS = 50
+EPOCHS = 30
 LEARNING_RATE = 0.001
 TRAINING_SNAPSHOTS = 24  # 24 snapshots = 24 minutes of temporal data history (at 1-min intervals)
 TEMPORAL_STEPS = 12 # 12-minute sequence window (12 timesteps at 1-min intervals)
@@ -291,9 +291,71 @@ def run_training_pipeline():
         logger.info(f"Saving model to {MODEL_SAVE_PATH}...")
         torch.save(model.state_dict(), MODEL_SAVE_PATH)
         
+        # === NEW: Compute cluster statistics for anomaly detection ===
+        logger.info("Computing healthy embedding cluster statistics...")
+        from collections import defaultdict
+        
+        node_embeddings = defaultdict(lambda: defaultdict(list))
+        
+        with torch.no_grad():
+            model.eval()
+            for block in train_blocks:
+                hidden_state = None
+                if hidden_state:
+                    hidden_state = {k: v.detach() for k, v in hidden_state.items()}
+                    
+                recon_dict, embeddings, hidden_state = model(block["x_dict_seq"], block["edge_index_dict"], hidden_state)
+                
+                for node_type, emb_tensor in embeddings.items():
+                    for node_idx in range(emb_tensor.size(0)):
+                        node_embeddings[node_type][node_idx].append(
+                            emb_tensor[node_idx].cpu()
+                        )
+        
+        # Compute per-node-type global statistics
+        cluster_stats = {}
+        for node_type, node_dict in node_embeddings.items():
+            all_embeddings = []
+            for node_idx, emb_list in node_dict.items():
+                all_embeddings.extend(emb_list)
+            
+            if all_embeddings:
+                stacked = torch.stack(all_embeddings)
+                cluster_stats[node_type] = {
+                    'mean': stacked.mean(dim=0),
+                    'std': stacked.std(dim=0),
+                    'cov': torch.cov(stacked.T) if stacked.size(0) > 1 else torch.eye(stacked.size(1)),
+                    'sample_count': len(all_embeddings)
+                }
+                logger.info(f"  {node_type}: {len(all_embeddings)} healthy samples, embedding_dim={stacked.size(1)}")
+        
+        # Compute per-node statistics (for nodes appearing consistently)
+        node_stats = {}
+        for node_type, node_dict in node_embeddings.items():
+            node_stats[node_type] = {}
+            for node_idx, emb_list in node_dict.items():
+                if len(emb_list) >= 5:
+                    stacked = torch.stack(emb_list)
+                    node_stats[node_type][node_idx] = {
+                        'mean': stacked.mean(dim=0),
+                        'std': stacked.std(dim=0)
+                    }
+        
+        # Save statistics
+        stats_data = {
+            'cluster_stats': cluster_stats,
+            'node_stats': node_stats,
+            'gb_id_map': gb.global_id_map
+        }
+        
+        STATS_SAVE_PATH = MODEL_SAVE_PATH.replace('.pth', '_stats.pth')
+        torch.save(stats_data, STATS_SAVE_PATH)
+        logger.info(f"Saved cluster statistics to {STATS_SAVE_PATH}")
+        
         if GCS_BUCKET_NAME:
             upload_blob(GCS_BUCKET_NAME, MODEL_SAVE_PATH, f"models/stgnn/{MODEL_SAVE_PATH}")
             upload_blob(GCS_BUCKET_NAME, SCALER_PATH, f"models/stgnn/{SCALER_PATH}")
+            upload_blob(GCS_BUCKET_NAME, STATS_SAVE_PATH, f"models/stgnn/{STATS_SAVE_PATH}")
             
     except Exception as e:
         logger.error(f"Training pipeline failed: {e}")

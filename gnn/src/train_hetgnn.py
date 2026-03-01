@@ -25,7 +25,7 @@ MODEL_SAVE_PATH = "hetgnn_model.pth"
 SCALER_PATH = "hetgnn_scalers.pkl"
 EPOCHS = 50
 LEARNING_RATE = 0.001
-TRAINING_SNAPSHOTS = 20
+TRAINING_SNAPSHOTS = 100
 VALIDATION_SPLIT = 0.2  # 20% for validation
 EARLY_STOPPING_PATIENCE = 10  # Stop if no improvement for 10 epochs
 MIN_DELTA = 0.001  # Minimum change to qualify as an improvement
@@ -34,6 +34,44 @@ MIN_DELTA = 0.001  # Minimum change to qualify as an improvement
 ALPHA = 0.4  # Weight for Config Schema Loss
 BETA = 0.4   # Weight for Protocol State Schema Loss
 GAMMA = 0.2  # Weight for Interface Metrics Loss
+DIVERSITY_WEIGHT = 0.1  # Weight for contrastive diversity penalty (10%)
+
+def contrastive_diversity_loss(embeddings_dict):
+    """
+    Penalizes embeddings that are too similar within a node type.
+    Encourages diversity in the latent space to prevent representation collapse.
+    
+    Args:
+        embeddings_dict: Dictionary of {node_type: embedding_tensor}
+    
+    Returns:
+        Scalar diversity loss (higher = more similar = worse)
+    """
+    diversity_loss = 0.0
+    count = 0
+    
+    for node_type, emb_tensor in embeddings_dict.items():
+        if emb_tensor.size(0) > 1:  # Need at least 2 nodes to compute similarity
+            # Normalize embeddings to unit length for cosine similarity
+            normalized = torch.nn.functional.normalize(emb_tensor, p=2, dim=1)
+            
+            # Compute pairwise cosine similarity matrix
+            similarity_matrix = normalized @ normalized.T
+            
+            # Create mask to exclude diagonal (self-similarity = 1.0)
+            mask = 1 - torch.eye(emb_tensor.size(0), device=emb_tensor.device)
+            
+            # Sum off-diagonal similarities
+            # High similarity between different nodes = bad (we want diversity)
+            off_diagonal_sim = (similarity_matrix * mask).sum()
+            
+            # Average over all pairs
+            num_pairs = emb_tensor.size(0) * (emb_tensor.size(0) - 1)
+            diversity_loss += off_diagonal_sim / num_pairs
+            count += 1
+    
+    # Average across all node types that had multiple nodes
+    return diversity_loss / count if count > 0 else torch.tensor(0.0)
 
 def upload_blob(bucket_name, source_file_name, destination_blob_name):
     """Uploads a file to the bucket."""
@@ -133,7 +171,7 @@ def run_training_pipeline():
         logger.info(f"Learning rate scheduler: ReduceLROnPlateau (factor=0.5, patience=5)")
         
         logger.info(f"Starting training for up to {EPOCHS} epochs with early stopping (patience={EARLY_STOPPING_PATIENCE})")
-        logger.info(f"Multi-task weights: α={ALPHA} (config), β={BETA} (protocol), γ={GAMMA} (metrics)")
+        logger.info(f"Multi-task weights: α={ALPHA} (config), β={BETA} (protocol), γ={GAMMA} (metrics), diversity={DIVERSITY_WEIGHT}")
         
         # Early stopping variables
         best_val_loss = float('inf')
@@ -147,6 +185,7 @@ def run_training_pipeline():
             train_config_tensors = []
             train_protocol_tensors = []
             train_metrics_tensors = []
+            train_diversity_tensors = []
             
             for snap_idx, snapshot in enumerate(train_snapshots):
                 optimizer.zero_grad()
@@ -181,26 +220,33 @@ def run_training_pipeline():
                         else:
                             # Interface, Interface_Metrics, and Router nodes go to metrics
                             loss_metrics += node_loss
-                            
-                total_weighted_loss = (ALPHA * loss_config) + (BETA * loss_protocol) + (GAMMA * loss_metrics)
                 
-                total_weighted_loss.backward()
+                # Compute contrastive diversity loss to prevent representation collapse
+                diversity_loss = contrastive_diversity_loss(embeddings)
+                
+                # Total loss combines reconstruction + diversity penalty
+                total_weighted_loss = (ALPHA * loss_config) + (BETA * loss_protocol) + (GAMMA * loss_metrics)
+                total_loss = total_weighted_loss + (DIVERSITY_WEIGHT * diversity_loss)
+                
+                total_loss.backward()
                 optimizer.step()
                 
                 # Accumulate losses as tensors (detached from computation graph)
-                train_loss_tensors.append(total_weighted_loss.detach())
+                train_loss_tensors.append(total_loss.detach())
                 if isinstance(loss_config, torch.Tensor) and loss_config.numel() > 0:
                     train_config_tensors.append(loss_config.detach())
                 if isinstance(loss_protocol, torch.Tensor) and loss_protocol.numel() > 0:
                     train_protocol_tensors.append(loss_protocol.detach())
                 if isinstance(loss_metrics, torch.Tensor) and loss_metrics.numel() > 0:
                     train_metrics_tensors.append(loss_metrics.detach())
+                train_diversity_tensors.append(diversity_loss.detach())
             
             # Calculate training losses
             train_loss = torch.stack(train_loss_tensors).sum().item()
             train_loss_config = torch.stack(train_config_tensors).sum().item() if train_config_tensors else 0.0
             train_loss_protocol = torch.stack(train_protocol_tensors).sum().item() if train_protocol_tensors else 0.0
             train_loss_metrics = torch.stack(train_metrics_tensors).sum().item() if train_metrics_tensors else 0.0
+            train_loss_diversity = torch.stack(train_diversity_tensors).mean().item() if train_diversity_tensors else 0.0
             
             # ============ VALIDATION PHASE ============
             model.eval()
@@ -208,6 +254,7 @@ def run_training_pipeline():
             val_config_tensors = []
             val_protocol_tensors = []
             val_metrics_tensors = []
+            val_diversity_tensors = []
             
             with torch.no_grad():
                 for snapshot in val_snapshots:
@@ -228,20 +275,26 @@ def run_training_pipeline():
                             else:
                                 loss_metrics += node_loss
                     
-                    total_weighted_loss = (ALPHA * loss_config) + (BETA * loss_protocol) + (GAMMA * loss_metrics)
+                    # Compute diversity loss for validation
+                    diversity_loss = contrastive_diversity_loss(embeddings)
                     
-                    val_loss_tensors.append(total_weighted_loss.detach())
+                    total_weighted_loss = (ALPHA * loss_config) + (BETA * loss_protocol) + (GAMMA * loss_metrics)
+                    total_loss = total_weighted_loss + (DIVERSITY_WEIGHT * diversity_loss)
+                    
+                    val_loss_tensors.append(total_loss.detach())
                     if isinstance(loss_config, torch.Tensor) and loss_config.numel() > 0:
                         val_config_tensors.append(loss_config.detach())
                     if isinstance(loss_protocol, torch.Tensor) and loss_protocol.numel() > 0:
                         val_protocol_tensors.append(loss_protocol.detach())
                     if isinstance(loss_metrics, torch.Tensor) and loss_metrics.numel() > 0:
                         val_metrics_tensors.append(loss_metrics.detach())
+                    val_diversity_tensors.append(diversity_loss.detach())
             
             val_loss = torch.stack(val_loss_tensors).sum().item()
             val_loss_config = torch.stack(val_config_tensors).sum().item() if val_config_tensors else 0.0
             val_loss_protocol = torch.stack(val_protocol_tensors).sum().item() if val_protocol_tensors else 0.0
             val_loss_metrics = torch.stack(val_metrics_tensors).sum().item() if val_metrics_tensors else 0.0
+            val_loss_diversity = torch.stack(val_diversity_tensors).mean().item() if val_diversity_tensors else 0.0
             
             # Step the learning rate scheduler
             scheduler.step(val_loss)
@@ -250,8 +303,8 @@ def run_training_pipeline():
             # ============ LOGGING ============
             if (epoch + 1) % 5 == 0:
                 logger.info(f"Epoch {epoch+1}/{EPOCHS}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, LR: {current_lr:.6f}")
-                logger.info(f"  Train - Config: {train_loss_config:.4f}, Protocol: {train_loss_protocol:.4f}, Metrics: {train_loss_metrics:.4f}")
-                logger.info(f"  Val   - Config: {val_loss_config:.4f}, Protocol: {val_loss_protocol:.4f}, Metrics: {val_loss_metrics:.4f}")
+                logger.info(f"  Train - Config: {train_loss_config:.4f}, Protocol: {train_loss_protocol:.4f}, Metrics: {train_loss_metrics:.4f}, Diversity: {train_loss_diversity:.4f}")
+                logger.info(f"  Val   - Config: {val_loss_config:.4f}, Protocol: {val_loss_protocol:.4f}, Metrics: {val_loss_metrics:.4f}, Diversity: {val_loss_diversity:.4f}")
             else:
                 logger.debug(f"Epoch {epoch+1}/{EPOCHS}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
             
@@ -275,9 +328,67 @@ def run_training_pipeline():
         logger.info(f"Saving model locally to {MODEL_SAVE_PATH}...")
         torch.save(model.state_dict(), MODEL_SAVE_PATH)
         
+        # === NEW: Compute cluster statistics for anomaly detection ===
+        logger.info("Computing healthy embedding cluster statistics...")
+        from collections import defaultdict
+        
+        node_embeddings = defaultdict(lambda: defaultdict(list))
+        
+        with torch.no_grad():
+            model.eval()
+            for snapshot in train_snapshots:
+                recon_dict, embeddings = model(snapshot.x_dict, snapshot.edge_index_dict)
+                
+                for node_type, emb_tensor in embeddings.items():
+                    for node_idx in range(emb_tensor.size(0)):
+                        node_embeddings[node_type][node_idx].append(
+                            emb_tensor[node_idx].cpu()
+                        )
+        
+        # Compute per-node-type global statistics
+        cluster_stats = {}
+        for node_type, node_dict in node_embeddings.items():
+            all_embeddings = []
+            for node_idx, emb_list in node_dict.items():
+                all_embeddings.extend(emb_list)
+            
+            if all_embeddings:
+                stacked = torch.stack(all_embeddings)
+                cluster_stats[node_type] = {
+                    'mean': stacked.mean(dim=0),
+                    'std': stacked.std(dim=0),
+                    'cov': torch.cov(stacked.T) if stacked.size(0) > 1 else torch.eye(stacked.size(1)),
+                    'sample_count': len(all_embeddings)
+                }
+                logger.info(f"  {node_type}: {len(all_embeddings)} healthy samples, embedding_dim={stacked.size(1)}")
+        
+        # Compute per-node statistics (for nodes appearing consistently)
+        node_stats = {}
+        for node_type, node_dict in node_embeddings.items():
+            node_stats[node_type] = {}
+            for node_idx, emb_list in node_dict.items():
+                if len(emb_list) >= 5:
+                    stacked = torch.stack(emb_list)
+                    node_stats[node_type][node_idx] = {
+                        'mean': stacked.mean(dim=0),
+                        'std': stacked.std(dim=0)
+                    }
+        
+        # Save statistics
+        stats_data = {
+            'cluster_stats': cluster_stats,
+            'node_stats': node_stats,
+            'gb_id_map': gb.global_id_map
+        }
+        
+        STATS_SAVE_PATH = MODEL_SAVE_PATH.replace('.pth', '_stats.pth')
+        torch.save(stats_data, STATS_SAVE_PATH)
+        logger.info(f"Saved cluster statistics to {STATS_SAVE_PATH}")
+        
         if GCS_BUCKET_NAME:
             upload_blob(GCS_BUCKET_NAME, MODEL_SAVE_PATH, f"models/hetgnn/{MODEL_SAVE_PATH}")
             upload_blob(GCS_BUCKET_NAME, SCALER_PATH, f"models/hetgnn/{SCALER_PATH}")
+            upload_blob(GCS_BUCKET_NAME, STATS_SAVE_PATH, f"models/hetgnn/{STATS_SAVE_PATH}")
             
     except Exception as e:
         logger.error(f"Training pipeline failed: {e}")

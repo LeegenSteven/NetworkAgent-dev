@@ -155,6 +155,12 @@ class GraphBuilder:
         if not isinstance(content_to_embed, str):
             content_to_embed = str(content_to_embed)
 
+        # DEBUG: Log what we're parsing for the first PE router we see
+        if "pe1" in str(text).lower() or "pe2" in str(text).lower() or "pe3" in str(text).lower():
+            logger.debug(f"DEBUG config_to_parse (first 500 chars): {content_to_embed[:500]}")
+            if data_dict:
+                logger.debug(f"DEBUG parsed as dict, keys: {list(data_dict.keys())[:10]}")
+
         features = self._parse_vyos_commands(content_to_embed)
         
         # Extract RT values for explicit features (last 4 dimensions)

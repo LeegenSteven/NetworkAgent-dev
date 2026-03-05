@@ -393,6 +393,28 @@ async def run_inference():
         
         logger.debug(f"HetGNN embeddings: {list(embeddings.keys())}")
         
+        # DEBUG: Log RT features for all Router_Config nodes (from INPUT features, not output embeddings)
+        if "Router_Config" in hdata.x_dict:
+            logger.info("=" * 60)
+            logger.info("DEBUG: Router_Config RT Features (dims 128-131 of INPUT)")
+            logger.info("=" * 60)
+            rev_id_map_config = {v: k for k, v in gb.global_id_map["Router_Config"].items()}
+            input_features = hdata.x_dict["Router_Config"]
+            for node_idx in range(input_features.size(0)):
+                node_id = rev_id_map_config.get(node_idx, f"unknown_{node_idx}")
+                # Get RT features from input (last 4 dimensions of 132-dim input)
+                if input_features.size(1) >= 132:
+                    rt_import_as = input_features[node_idx, 128].item()
+                    rt_import_val = input_features[node_idx, 129].item()
+                    rt_export_as = input_features[node_idx, 130].item()
+                    rt_export_val = input_features[node_idx, 131].item()
+                    logger.info(f"  {node_id}:")
+                    logger.info(f"    RT_import_AS={rt_import_as:.4f}, RT_import_val={rt_import_val:.4f}")
+                    logger.info(f"    RT_export_AS={rt_export_as:.4f}, RT_export_val={rt_export_val:.4f}")
+                else:
+                    logger.warning(f"  {node_id}: Input dimension is {input_features.size(1)}, expected 132")
+            logger.info("=" * 60)
+        
         # Compute anomaly scores with adaptive thresholds
         hetgnn_scores, hetgnn_thresholds = compute_anomaly_scores(embeddings, hetgnn_stats, "hetgnn")
         

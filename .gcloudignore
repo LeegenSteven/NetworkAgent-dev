@@ -12,7 +12,6 @@ setenv.sh
 docs/
 drawings/
 environment/
-image/
 operator/
 logservices/
 **/__pycache__/

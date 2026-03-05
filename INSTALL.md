@@ -21,7 +21,6 @@ At the end of the installation you'll see a recap of the key URLs to access the 
 For your information, the full installation process goes through the following steps:
 - Check that your GCP environment is set properly (project, org policies, permissions, APIs,...)
 - Create the demo environment configuration if needed
-- Build the Virtual Network Function image to run the Free5GC Core and UERANSIM simulator if needed  
 - Start the runtime services
 - Deploy all network agents and dashboard
 
@@ -92,7 +91,6 @@ short options:
 --------------
   -c     create network agent environment (keys, manifests,..)
   -s     build and start network agent runtime (incl. the operator)
-  -b     build the Virtual Network Function image with Free5GC, UERANSIM, Docker, and Wireguard
   -o     build and deploy the network operator (same as --deploy operator)
   -l     build and deploy the logs capture function (same as --deploy logcapture)
   -f     build and deploy the fault capture and trigger service
@@ -145,12 +143,7 @@ If you prefer more control over the installation process:
    ./install.sh -s
    ```
 
-3. **Build the Free5GC network virtual machine (only needed once):**
-   ```bash
-   ./install.sh -b
-   ```
-
-4. **Deploy all Network Agents and Dashboard:**
+3. **Deploy all Network Agents and Dashboard:**
    ```bash
    ./install.sh -n all
    ```
@@ -162,12 +155,6 @@ You can deploy specific agents individually:
 ```bash
 # Deploy only the dashboard and operations agent
 ./install.sh -n dashboard,operations
-
-# Deploy only the supervisor agent
-./install.sh -n supervisor
-
-# Deploy specific agents (incident and logs agents)
-./install.sh -n incident,logs
 
 # Deploy network tools
 ./install.sh -n networktools

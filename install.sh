@@ -484,143 +484,6 @@ DeploySpanner()
     echo "Spanner database ready !"
 }
 
-
-#################################################
-# Build the Virtual Network Function image      #
-#################################################
-Build()
-{
-    echo "########################################"
-    echo "Building Virtual Network Function image"
-    echo "########################################"
-
-    # check if ansible is installed
-    if ! command -v ansible-playbook &> /dev/null
-    then
-        echo "ansible-playbook could not be found, you must install it"
-        echo "You can install it with: pip install ansible"
-        exit 1
-    fi
-
-    # Check if mgmt subnet exists (required for VM creation)
-    if ! gcloud compute networks subnets describe mgmt-subnet --region=$GOOGLE_REGION --project=$GOOGLE_PROJECT > /dev/null 2>&1; then
-        echo "**ERROR** The mgmt subnet does not exist. This is required for VM creation."
-        echo "Please run './install.sh -s' first to create the necessary network infrastructure."
-        exit 1
-    fi
-
-    # Use a consistent VM name for idempotency
-    VM_NAME="networkagent-build"
-    
-    # Check if VM already exists
-    if gcloud compute instances describe $VM_NAME --zone=$GOOGLE_ZONE > /dev/null 2>&1; then
-        echo "VM $VM_NAME already exists, skipping creation"
-    else
-        echo "Creating temporary VM: $VM_NAME"        
-        # Create a new Ubuntu 22.04 virtual machine in GCP with a public ip address and 200G drive
-        gcloud compute instances create $VM_NAME \
-            --project=$GOOGLE_PROJECT \
-            --zone=$GOOGLE_ZONE \
-            --machine-type=n1-standard-4 \
-            --subnet=mgmt-subnet \
-            --create-disk=auto-delete=yes,boot=yes,device-name=$VM_NAME,image=projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts,mode=rw,size=200,type=projects/$GOOGLE_PROJECT/zones/$GOOGLE_ZONE/diskTypes/pd-standard \
-
-        if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to create VM $VM_NAME"
-            exit 1
-        fi
-
-        echo "Waiting for VM to be ready..."
-        sleep 60
-    fi
-
-    # Get the public IP address of the VM when it's booted
-    VM_IP=$(gcloud compute instances describe $VM_NAME --zone=$GOOGLE_ZONE --project=$GOOGLE_PROJECT --format="get(networkInterfaces[0].accessConfigs[0].natIP)")
-    
-    if [ -z "$VM_IP" ]; then
-        echo "ERROR: Could not get VM IP address"
-        gcloud compute instances delete $VM_NAME --zone=$GOOGLE_ZONE --project=$GOOGLE_PROJECT --quiet
-        exit 1
-    fi
-
-    echo "VM IP address: $VM_IP"
-    echo "Waiting for SSH to be available..."
-    
-    # Wait for SSH to be available
-    max_attempts=30
-    attempt=0
-    while [ $attempt -lt $max_attempts ]; do
-        if gcloud compute ssh $VM_NAME --zone=$GOOGLE_ZONE --project=$GOOGLE_PROJECT --command="echo 'SSH is ready'" --ssh-key-file=google-compute --quiet > /dev/null 2>&1; then
-            echo "SSH is ready!"
-            break
-        fi
-        attempt=$((attempt + 1))
-        echo "Waiting for SSH... (attempt $attempt/$max_attempts)"
-        sleep 10
-    done
-
-    if [ $attempt -eq $max_attempts ]; then
-        echo "ERROR: SSH connection failed after $max_attempts attempts"
-        echo "If you install from within the Google network,"
-        echo "make sure to first run gcert on your machine"
-        gcloud compute instances delete $VM_NAME --zone=$GOOGLE_ZONE --project=$GOOGLE_PROJECT --quiet
-        exit 1
-    fi
-
-    # Create temporary inventory file for ansible
-    INVENTORY_FILE=$(mktemp)
-    cat > $INVENTORY_FILE << EOF
-[all]
-$VM_IP ansible_user=$GOOGLE_VM_USER ansible_ssh_private_key_file=../google-compute ansible_ssh_common_args='-o StrictHostKeyChecking=no'
-
-[all:vars]
-GOOGLE_PROJECT=$GOOGLE_PROJECT
-GOOGLE_REGION=$GOOGLE_REGION
-GOOGLE_ZONE=$GOOGLE_ZONE
-EOF
-
-    echo "Running ansible playbooks..."
-    # Copy networkagent.json to the ansible files directory so it can be found by the playbook
-    cp networkagent.json image/playbooks/roles/free5gc/files/
-    
-    # Run the ansible playbooks in the image directory with the ip address of the VM and passing in the google-compute public key for ssh credentials
-    cd image
-    ansible-playbook -i $INVENTORY_FILE playbooks/install.yaml
-    ansible_result=$?
-    cd ..
-
-    # Clean up inventory file
-    rm -f $INVENTORY_FILE
-
-    if [ $ansible_result -ne 0 ]; then
-        echo "ERROR: Ansible playbook execution failed"
-        gcloud compute instances delete $VM_NAME --zone=$GOOGLE_ZONE --project=$GOOGLE_PROJECT --quiet
-        exit 1
-    fi
-
-    echo "Ansible playbooks completed successfully"
-
-    # Stop the VM
-    echo "Stopping VM..."
-    gcloud compute instances stop $VM_NAME --zone=$GOOGLE_ZONE --project=$GOOGLE_PROJECT --quiet
-
-    # Wait for VM to be stopped
-    echo "Waiting for VM to stop..."
-    while [[ $(gcloud compute instances describe $VM_NAME --zone=$GOOGLE_ZONE --project=$GOOGLE_PROJECT --format="get(status)") != "TERMINATED" ]]; do
-        sleep 10
-        echo "Still stopping..."
-    done
-
-    # Clean up: delete the VM and its disk
-    echo "Cleaning up temporary VM and disk..."
-    gcloud compute instances delete $VM_NAME --zone=$GOOGLE_ZONE --project=$GOOGLE_PROJECT --quiet
-    gcloud compute disks delete $VM_NAME --zone=$GOOGLE_ZONE --project=$GOOGLE_PROJECT --quiet
-
-    echo "####################################################"
-    echo "Built free5gc images !  #"
-    echo "####################################################"
-}
-
 ############################################################
 # Start GKE, config connector and customer sites           #
 ############################################################
@@ -814,15 +677,6 @@ Delete()
     echo "######################"
     (gcloud artifacts repositories describe $GOOGLE_REPO --location=$GOOGLE_REGION > /dev/null 2>&1) && \
     gcloud artifacts repositories delete $GOOGLE_REPO --location=$GOOGLE_REGION --quiet
-
-    # Delete the custom image created in the build step
-    if false; then # LJ too long to compile. Do not delete this image
-    echo "######################"
-    echo "Deleting custom image"
-    echo "######################"
-    (gcloud compute images describe networkagent --project=$GOOGLE_PROJECT > /dev/null 2>&1) && \
-    gcloud compute images delete networkagent --project=$GOOGLE_PROJECT --quiet
-    fi
 
     echo "#######################################"
     echo "Deleting environment manifests and keys"
@@ -1503,14 +1357,6 @@ InstallAll()
     echo "Running Start function..."
     Start
 
-    # Check if networkagent image exists, if not run Build function
-    if ! gcloud compute images describe networkagent --project=$GOOGLE_PROJECT > /dev/null 2>&1; then
-        echo "networkagent image not found, running Build function..."
-        Build
-    else
-        echo "networkagent image found, skipping Build function"
-    fi
-
     # Run Networkagent function with all agents
     echo "Running Networkagent function with all agents..."
     AGENT_NAMES="all"
@@ -1538,7 +1384,7 @@ Help()
    # Display Help
    echo "Network Agent environment manager."
    echo
-   echo "Syntax: install.sh [-c|-s|-b|-o|-l|-r|-n|-k|-d|-g|-i|-w|--all|--deploy] [-y|-N]"
+   echo "Syntax: install.sh [-c|-s|-o|-l|-r|-n|-k|-d|-g|-i|-w|--all|--deploy] [-y|-N]"
    echo 
    echo "long options:"
    echo "-------------"
@@ -1551,7 +1397,6 @@ Help()
    echo "--------------"
    echo "  -c     create network agent environment (keys, manifests,..)"
    echo "  -s     build and start network agent runtime (incl. the operator)"
-   echo "  -b     build the Virtual Network Function image with Free5GC, UERANSIM, Docker, and Wireguard"
    echo "  -o     build and deploy the network operator (same as --deploy operator)"
    echo "  -l     build and deploy the logs capture function (same as --deploy logcapture)"
    echo "  -n     build and deploy the network dashboard and network agents"
@@ -1663,9 +1508,6 @@ if [[ -z $func_calls ]]; then
             ;;
           s) 
             func_calls="CheckGCPEnv SetDemoEnv Start"
-            ;;
-          b) 
-            func_calls="SetDemoEnv Build"
             ;;
           o) 
             func_calls="CheckGCPEnv SetDemoEnv DeployOperator"

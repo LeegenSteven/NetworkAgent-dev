@@ -2,25 +2,7 @@
 
 This kubernetes operator manages the lifecycle of network functions and network services used in the demo, along with automation of some of the demo infrastructure itself.
 
-The operator code is based on the [kopf](https://kopf.readthedocs.io/en/latest/) operator framework and embeds [ansible playbooks](https://docs.ansible.com/) to run commands inside the network VMs.
-
-The following resources have lifecycles managed by the operator. 
-
-### Connectivity Services
-
-* __WireguardAppliance__: Wireguard based VPN appliance. 
-* __PointToPointService__: A VPN tunnel between two customer sites
-
-### Free5gc Network Functions
-
-* __ControlPlane__: Free5gc control plane set of network functions. 
-* __UserPlaneFunction__: A user plane function
-* __DataNetwork__: A data network that mimicks the internet. 
-
-### Gitea Repository
-
-* __Git__: Gitea instance provisioned with a set of network function repositories. 
-
+The operator code is based on the [kopf](https://kopf.readthedocs.io/en/latest/) operator framework and embeds [ansible playbooks](https://docs.ansible.com/) to run commands inside the network VM.
 
 ## Build and deploy the operator
 

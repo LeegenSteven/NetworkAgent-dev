@@ -404,7 +404,6 @@ Create()
     echo "####################################################"
     echo "generating environment yaml files"
     echo "####################################################"
-    jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/bigquery.j2 >  environment/bigquery.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_PROJECT_NUMBER -E GOOGLE_SERVICE_ACCOUNT environment/logsink.j2 >  environment/logsink.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_SPANNER_DATABASE -E GOOGLE_SPANNER_INSTANCE -E GOOGLE_NAMESPACE environment/spanner.j2 >  environment/spanner.yaml
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE environment/configconnector.j2 > environment/configconnector.yaml

@@ -699,16 +699,20 @@ async def sync_physical_router(body, spec, name, uid, logger):
         iface_status = 'Unknown'
         if status_obj and 'interfaces' in status_obj:
             for iface_status_obj in status_obj['interfaces']:
+                if not isinstance(iface_status_obj, dict):
+                    logger.warning(f"Skipping non-dict entry in interfaces status (got {type(iface_status_obj).__name__}): {iface_status_obj!r}")
+                    continue
                 if iface_status_obj.get('name') == iface_name:
                     iface_status = iface_status_obj.get('status', 'Unknown')
                     break
         
         # If no specific status, use enabled flag or default to UP if router is running
+        # Normalise to uppercase to match Ansible operstate values (UP / DOWN / UNKNOWN)
         if iface_status == 'Unknown':
             if iface_data.get('enabled', True):
-                iface_status = 'up' if router_status in ['Running', 'Ready'] else 'admin-down'
+                iface_status = 'UP' if router_status in ['Running', 'Ready'] else 'DOWN'
             else:
-                iface_status = 'admin-down'
+                iface_status = 'ADMIN_DOWN'
         
         # Extract speed and media type with better defaults
         speed = iface_data.get('speed', '1G')  # More realistic default
@@ -1523,4 +1527,391 @@ async def delete_device(uid, name=None):
         logger.info(f"Successfully closed Device {device_id} in Spanner")
     except Exception as e:
         logger.error(f"Failed to delete Device {device_id} from Spanner: {e}")
+
+# ------------------------------------------
+# Sync Linux Network Bridge to Spanner
+# ------------------------------------------
+async def sync_host_network_bridge(body, spec, name, namespace, bridge_status, logger):
+    """Sync Linux bridge state to LogicalSubnet table (SCD Type 2)"""
+    logger.debug(f"Syncing bridge state for {name}")
+    
+    subnet_id = f"subnet:{spec.get('name', name)}"
+    
+    # Extract state from bridge_status
+    operational_state = bridge_status.get('operational_state', 'unknown').upper()
+    mtu = bridge_status.get('mtu', 1500)
+    mac_address = bridge_status.get('mac_address', '')
+    bridge_ip = bridge_status.get('ip_address', '')
+    host_device_name = spec.get('name', name)
+    
+    # Structural properties only — these drive the SCD change detection.
+    # Metrics (counters) are intentionally excluded: they change every monitoring
+    # cycle and belong in NetworkMetrics, not in the topology SCD row.
+    properties = {
+        'network_type': spec.get('network_type'),
+        'bandwidth': spec.get('bandwidth'),
+        'gateway': spec.get('gateway'),
+        'vlan': spec.get('vlan'),
+    }
+    
+    def sql_upsert_subnet(transaction):
+        # Get active subnet - extended query for bridge fields
+        results = transaction.execute_sql(
+            """SELECT operational_state, mtu, mac_address, bridge_ip, host_device_name, properties 
+               FROM LogicalSubnet 
+               WHERE id = @id AND valid_end_ts IS NULL""",
+            params={'id': subnet_id},
+            param_types={'id': spanner.param_types.STRING}
+        )
+        row = results.one_or_none()
+        
+        need_insert = True
+        if row:
+            existing_state = row[0] if row[0] else 'unknown'
+            existing_mtu = row[1] if row[1] else 0
+            existing_mac = row[2] if row[2] else ''
+            existing_ip = row[3] if row[3] else ''
+            existing_device = row[4] if row[4] else ''
+            existing_props = row[5] if row[5] else {}
+            
+            # Compare
+            if (existing_state == operational_state and
+                existing_mtu == mtu and
+                existing_mac == mac_address and
+                existing_ip == bridge_ip and
+                existing_device == host_device_name and
+                existing_props == properties):
+                need_insert = False
+                logger.debug(f"LogicalSubnet {subnet_id} unchanged, skipping Spanner write")
+            else:
+                # Close existing
+                logger.debug(f"Bridge state changed for {subnet_id}, closing old row")
+                transaction.execute_update(
+                    SQL_TEMPLATES['close_subnet'],
+                    params={'id': subnet_id},
+                    param_types={'id': spanner.param_types.STRING}
+                )
+        
+        if need_insert:
+            # Insert new row with bridge operational state
+            # Note: Assumes LogicalSubnet table has these columns
+            logger.debug(f"Inserting new LogicalSubnet row for {subnet_id}")
+            transaction.execute_update(
+                """INSERT LogicalSubnet 
+                   (id, cidr, network_type, description, operational_state, mtu, mac_address, 
+                    bridge_ip, host_device_name, properties, valid_start_ts, valid_end_ts) 
+                   VALUES (@id, @cidr, @network_type, @description, @operational_state, @mtu, 
+                           @mac_address, @bridge_ip, @host_device_name, @properties, 
+                           PENDING_COMMIT_TIMESTAMP(), NULL)""",
+                params={
+                    'id': subnet_id,
+                    'cidr': spec.get('subnet', ''),
+                    'network_type': spec.get('network_type', 'unknown'),
+                    'description': f"Bridge: {host_device_name}",
+                    'operational_state': operational_state,
+                    'mtu': mtu,
+                    'mac_address': mac_address,
+                    'bridge_ip': bridge_ip,
+                    'host_device_name': host_device_name,
+                    'properties': json.dumps(properties)
+                },
+                param_types={
+                    'id': spanner.param_types.STRING,
+                    'cidr': spanner.param_types.STRING,
+                    'network_type': spanner.param_types.STRING,
+                    'description': spanner.param_types.STRING,
+                    'operational_state': spanner.param_types.STRING,
+                    'mtu': spanner.param_types.INT64,
+                    'mac_address': spanner.param_types.STRING,
+                    'bridge_ip': spanner.param_types.STRING,
+                    'host_device_name': spanner.param_types.STRING,
+                    'properties': spanner.param_types.JSON
+                }
+            )
+    
+    try:
+        database.run_in_transaction(sql_upsert_subnet)
+        logger.debug(f"Successfully synced LogicalSubnet {subnet_id} with bridge state")
+    except Exception as e:
+        logger.error(f"Failed to sync LogicalSubnet {subnet_id}: {e}")
+        return
+    
+    # Sync veth pairs as host-side PhysicalInterfaces and PhysicalLinks
+    veth_pairs = bridge_status.get('veth_pairs', [])
+    if veth_pairs:
+        await sync_veth_pairs(subnet_id, veth_pairs, logger)
+    
+    # Sync metrics to NetworkMetrics table (optional)
+    if bridge_status.get('metrics'):
+        await sync_network_metrics(subnet_id, 'LogicalSubnet', bridge_status['metrics'], logger)
+
+
+async def _resolve_container_interface_id(router_prefix: str, interface_name: str, logger) -> str:
+    """
+    Look up the correct container PhysicalInterface ID from Spanner using the truncated
+    router name prefix extracted from the veth name.
+
+    Veth names are created as '{router_name[:8]}-{iface_name}', so the prefix stored in the
+    veth name is only 8 characters of the full router name.  We query Spanner for a
+    PhysicalInterface whose name matches the interface name and whose router_id starts with
+    'router:{router_prefix}', giving us the correct full-name-based ID.
+
+    Falls back to the prefix-based ID string if no match is found (so the link is still
+    written to Spanner and can be repaired once the router is created).
+    """
+    fallback = f"router:{router_prefix}:interface:{interface_name}"
+    try:
+        with database.snapshot() as snapshot:
+            results = snapshot.execute_sql(
+                """SELECT id FROM PhysicalInterface
+                   WHERE name = @iface_name
+                     AND router_id LIKE @router_pattern
+                     AND valid_end_ts IS NULL
+                   LIMIT 1""",
+                params={
+                    'iface_name': interface_name,
+                    'router_pattern': f'router:{router_prefix}%'
+                },
+                param_types={
+                    'iface_name': spanner.param_types.STRING,
+                    'router_pattern': spanner.param_types.STRING
+                }
+            )
+            row = results.one_or_none()
+            if row:
+                resolved = row[0]
+                if resolved != fallback:
+                    logger.debug(
+                        f"Resolved container interface id {resolved} "
+                        f"(prefix '{router_prefix}' → full router name)"
+                    )
+                return resolved
+    except Exception as e:
+        logger.debug(f"Could not resolve container interface for {router_prefix}/{interface_name}: {e}")
+    
+    logger.debug(
+        f"No PhysicalInterface found for prefix '{router_prefix}' / iface '{interface_name}', "
+        f"using fallback id '{fallback}' – will heal once router is created"
+    )
+    return fallback
+
+
+async def sync_veth_pairs(subnet_id, veth_pairs, logger):
+    """Sync veth pairs as PhysicalLinks (SCD Type 2).
+
+    Each veth pair is modelled as:
+      - PhysicalLink  — the virtual cable between the bridge and the container interface.
+      - Interface_Link  — container-side PhysicalInterface → PhysicalLink.
+      - Subnet_Association  — container-side PhysicalInterface → bridge LogicalSubnet.
+
+    The Linux host VM is NOT modelled as a PhysicalRouter entity; the host-side veth
+    name is stored in PhysicalLink.properties for reference only.  Connectivity queries
+    ("what interfaces are connected to this bridge?") use the Subnet_Association edge.
+    """
+    for veth_data in veth_pairs:
+        if not isinstance(veth_data, dict):
+            logger.warning(f"Skipping non-dict entry in veth_pairs (got {type(veth_data).__name__}): {veth_data!r}")
+            continue
+        veth_name = veth_data.get('VETH')
+        if not veth_name:
+            continue
+
+        # Parse router name prefix and interface name from veth name.
+        # Veth names are created as '{router_name[:8]}-{iface_name}' so the prefix is
+        # only 8 chars of the full router name.  We resolve the real interface ID via
+        # a Spanner lookup in _resolve_container_interface_id.
+        try:
+            router_part = veth_name.rsplit('-', 1)[0]
+            interface_part = veth_name.rsplit('-', 1)[1]
+
+            # host_veth_name is a label stored in PhysicalLink.properties — not a Spanner entity
+            host_veth_name = f"host:veth:{veth_name}"
+            veth_link_id = f"link:veth:{router_part}:{interface_part}"
+
+            # Resolve the correct full-name container interface ID from Spanner
+            container_interface_id = await _resolve_container_interface_id(
+                router_part, interface_part, logger
+            )
+        except Exception:
+            logger.warning(f"Could not parse router/interface from veth name: {veth_name}")
+            continue
+
+        host_state = veth_data.get('STATE', 'unknown')
+        bandwidth_limit = veth_data.get('BW', 'none')
+
+        # 1. Sync veth pair as PhysicalLink (topology/state only — no counters)
+        await _sync_veth_link(
+            veth_link_id, host_veth_name, container_interface_id,
+            bandwidth_limit, host_state, logger
+        )
+
+        # 2. Associate the container interface with the bridge LogicalSubnet so that
+        #    graph queries can answer "which interfaces are on bridge X?" via
+        #    the AssociatedWith_Edge (PhysicalInterface → LogicalSubnet).
+        await _sync_container_bridge_association(container_interface_id, subnet_id, logger)
+
+        # 3. Send per-cycle veth counters to NetworkMetrics (time-series, not topology SCD)
+        veth_counters = {
+            'rx_packets': int(veth_data.get('RX_PKTS', 0)),
+            'tx_packets': int(veth_data.get('TX_PKTS', 0)),
+            'rx_bytes':   int(veth_data.get('RX_BYTES', 0)),
+            'tx_bytes':   int(veth_data.get('TX_BYTES', 0)),
+        }
+        await sync_network_metrics(veth_link_id, 'PhysicalLink', veth_counters, logger)
+
+
+async def _sync_container_bridge_association(container_interface_id, subnet_id, logger):
+    """Create (or confirm) the Subnet_Association between a container interface and its bridge.
+
+    This is the SCD-safe version: if the association already exists it is left unchanged;
+    otherwise a new row is inserted.  The bridge LogicalSubnet is identified by subnet_id
+    (e.g. 'subnet:mgmt-net') — it must already exist in Spanner before this is called.
+    """
+    def sql_upsert_assoc(transaction):
+        results = transaction.execute_sql(
+            SQL_TEMPLATES['get_active_subnet_assoc'],
+            params={'entity_id': container_interface_id, 'subnet_id': subnet_id},
+            param_types={
+                'entity_id': spanner.param_types.STRING,
+                'subnet_id': spanner.param_types.STRING
+            }
+        )
+        if not results.one_or_none():
+            transaction.execute_update(
+                SQL_TEMPLATES['insert_subnet_assoc'],
+                params={
+                    'entity_id': container_interface_id,
+                    'subnet_id': subnet_id,
+                    'entity_type': 'Interface'
+                },
+                param_types={
+                    'entity_id': spanner.param_types.STRING,
+                    'subnet_id': spanner.param_types.STRING,
+                    'entity_type': spanner.param_types.STRING
+                }
+            )
+
+    try:
+        database.run_in_transaction(sql_upsert_assoc)
+        logger.debug(f"Associated container interface {container_interface_id} with bridge {subnet_id}")
+    except Exception as e:
+        logger.error(f"Failed to associate {container_interface_id} with bridge {subnet_id}: {e}")
+
+
+async def _sync_veth_link(link_id, host_veth_name, container_iface_id, bandwidth, state, logger):
+    """Sync veth pair as PhysicalLink (SCD Type 2).
+
+    Only structural/topology fields are stored in PhysicalLink.properties and used for
+    change detection.  Per-cycle counter data (rx/tx bytes/packets) is intentionally
+    excluded from here — callers must send those to NetworkMetrics separately via
+    sync_network_metrics() to avoid creating a new SCD row on every monitoring cycle.
+    """
+    
+    # Structural properties only — drives SCD equality check.
+    # host_veth_name is stored as a reference label; it is NOT a Spanner entity.
+    properties = {
+        'host_veth': host_veth_name,
+        'container_interface': container_iface_id,
+    }
+    
+    def sql_upsert_link(transaction):
+        results = transaction.execute_sql(
+            SQL_TEMPLATES['get_active_phy_link'],
+            params={'id': link_id},
+            param_types={'id': spanner.param_types.STRING}
+        )
+        row = results.one_or_none()
+        
+        need_insert = True
+        if row and row[1] == state and row[0] == properties:
+            need_insert = False
+            logger.debug(f"Veth link {link_id} unchanged, skipping write")
+        else:
+            if row:
+                logger.debug(f"Veth link {link_id} changed, closing old row")
+                transaction.execute_update(
+                    SQL_TEMPLATES['close_phy_link'],
+                    params={'id': link_id},
+                    param_types={'id': spanner.param_types.STRING}
+                )
+        
+        if need_insert:
+            logger.debug(f"Inserting new PhysicalLink for veth {link_id}")
+            transaction.execute_update(
+                SQL_TEMPLATES['insert_phy_link'],
+                params={
+                    'id': link_id,
+                    'name': f"veth: {host_veth_name} ↔ {container_iface_id}",
+                    'bandwidth': bandwidth if bandwidth != 'none' else 'N/A',
+                    'status': state,
+                    'properties': json.dumps(properties)
+                },
+                param_types={
+                    'id': spanner.param_types.STRING,
+                    'name': spanner.param_types.STRING,
+                    'bandwidth': spanner.param_types.STRING,
+                    'status': spanner.param_types.STRING,
+                    'properties': spanner.param_types.JSON
+                }
+            )
+            
+            # Create Interface_Link for the container-side interface only.
+            # The host-side veth is NOT a Spanner PhysicalInterface entity; connectivity
+            # to the bridge is expressed via Subnet_Association (see sync_veth_pairs).
+            def sql_create_link_assoc(transaction2):
+                results = transaction2.execute_sql(
+                    SQL_TEMPLATES['get_active_interface_link'],
+                    params={'interface_id': container_iface_id, 'link_id': link_id},
+                    param_types={'interface_id': spanner.param_types.STRING, 'link_id': spanner.param_types.STRING}
+                )
+                if not results.one_or_none():
+                    transaction2.execute_update(
+                        SQL_TEMPLATES['insert_interface_link'],
+                        params={'interface_id': container_iface_id, 'link_id': link_id},
+                        param_types={'interface_id': spanner.param_types.STRING, 'link_id': spanner.param_types.STRING}
+                    )
+            
+            # Run link association in same transaction
+            sql_create_link_assoc(transaction)
+    
+    try:
+        database.run_in_transaction(sql_upsert_link)
+        logger.debug(f"Synced veth link {link_id}")
+    except Exception as e:
+        logger.error(f"Failed to sync veth link {link_id}: {e}")
+
+
+async def sync_network_metrics(entity_id, entity_type, metrics, logger):
+    """Sync network metrics to NetworkMetrics table"""
+    from datetime import datetime
+    
+    timestamp = datetime.utcnow()
+    metrics_id = f"{entity_id}:{timestamp.isoformat()}"
+    
+    def sql_insert_metrics(transaction):
+        transaction.execute_update(
+            SQL_TEMPLATES['upsert_network_metrics'],
+            params={
+                'id': metrics_id,
+                'kind': entity_type,
+                'name': entity_id,
+                'timestamp': timestamp.isoformat(),
+                'metrics': json.dumps(metrics),
+                'interface_id': entity_id
+            },
+            param_types={
+                'id': spanner.param_types.STRING,
+                'kind': spanner.param_types.STRING,
+                'name': spanner.param_types.STRING,
+                'timestamp': spanner.param_types.TIMESTAMP,
+                'metrics': spanner.param_types.JSON,
+                'interface_id': spanner.param_types.STRING
+            }
+        )
+    
+    try:
+        database.run_in_transaction(sql_insert_metrics)
+        logger.debug(f"Successfully synced metrics for {entity_id}")
+    except Exception as e:
+        logger.error(f"Failed to sync metrics for {entity_id}: {e}")
 

@@ -133,6 +133,19 @@ async def delete_vyos_router(ip_address:str, router_name: str, interfaces: list 
         'error': result.get('error') if not result['success'] else None
     }
 
+async def get_vyos_router_status(ip_address:str, router_name: str) -> Dict[str, Any]:
+    """Get VyOS router status using Ansible"""
+    logger.debug(f"Getting VyOS router status: {router_name}")
+    
+    extravars = {
+        'router_name': router_name,
+        'operation': 'status'
+    }
+    
+    result = await _run_ansible_playbook(ip_address, 'router_management.yaml', extravars)
+    
+    return result
+
 #########################################################################
 # Ansible Execution Helper
 #########################################################################
@@ -212,18 +225,20 @@ async def _run_ansible_playbook(ip_address:str, playbook: str, extravars: Dict[s
                         result_data['management_ip'] = res['management_ip']
                     if 'running' in res:
                         result_data['running'] = res['running']
-                    if 'container_info' in res:
-                        result_data['container_info'] = res['container_info']
-                    if 'protocols' in res:
-                        result_data['protocols'] = res['protocols']
-                    if 'ospf_status' in res:
-                        result_data['ospf_status'] = res['ospf_status']
-                    if 'bgp_status' in res:
-                        result_data['bgp_status'] = res['bgp_status']
-                    if 'mpls_status' in res:
-                        result_data['mpls_status'] = res['mpls_status']
-                    if 'interface_status' in res:
-                        result_data['interface_status'] = res['interface_status']
+                    
+                    # Extract from ansible_facts if they exist
+                    if 'ansible_facts' in res:
+                        ansible_facts = res['ansible_facts']
+                        if 'running' in ansible_facts:
+                            result_data['running'] = ansible_facts['running']
+                        if 'interface_status' in ansible_facts:
+                            raw = ansible_facts['interface_status']
+                            result_data['interface_status'] = raw if isinstance(raw, list) else []
+                            if not isinstance(raw, list):
+                                logger.warning(f"interface_status Ansible fact is not a list (got {type(raw).__name__}), ignoring")
+            
+            logger.info(f"Extracted VyOS status data: running={result_data.get('running')}, "
+                       f"interfaces={len(result_data.get('interface_status', []))}")
             
             return {
                 'success': True,

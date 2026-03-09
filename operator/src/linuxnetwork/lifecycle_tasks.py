@@ -79,20 +79,27 @@ async def delete_linux_network(ip_address:str, spec: Dict[str, Any], status: Dic
         'error': result.get('error') if not result['success'] else None
     }
 
-async def get_network_status(ip_address:str, network_name: str) -> Dict[str, Any]:
-    """Get Docker network status using Ansible"""
-    logger.info(f"Checking status of Docker network: {network_name}")
+
+async def get_detailed_network_status(ip_address: str, network_name: str) -> Dict[str, Any]:
+    """Get detailed network status including bridge and veth state"""
+    logger.info(f"Getting detailed status for network: {network_name}")
     
     extravars = {
         'network_name': network_name
     }
     
-    result = await _run_ansible_playbook(ip_address, 'status_network.yaml', extravars)
+    result = await _run_ansible_playbook(ip_address, 'detailed_status_network.yaml', extravars)
     
+    # Extract detailed bridge state from ansible_facts
     return {
-        'exists': result.get('exists', False),
-        'network_info': result.get('network_info', {}),
-        'error': result.get('error') if not result['success'] else None
+        'exists': result.get('bridge_exists', False),
+        'operational_state': result.get('bridge_state', 'unknown'),
+        'mtu': result.get('bridge_mtu', 1500),
+        'mac_address': result.get('bridge_mac', ''),
+        'ip_address': result.get('bridge_ip', ''),
+        'metrics': result.get('bridge_metrics', {}),
+        'veth_pairs': result.get('veth_pairs', []),
+        'error': result.get('error') if not result.get('success', True) else None
     }
 
 #########################################################################
@@ -181,6 +188,50 @@ async def _run_ansible_playbook(ip_address:str, playbook: str, extravars: Dict[s
                         if 'interface_ip' in ansible_facts:
                             result_data['interface_ip'] = ansible_facts['interface_ip']
                             logger.info(f"Captured interface_ip: {ansible_facts['interface_ip']}")
+                        
+                        # Extract exists fact (for status check)
+                        if 'exists' in ansible_facts:
+                            result_data['exists'] = ansible_facts['exists']
+                            logger.info(f"Captured exists: {ansible_facts['exists']}")
+                        
+                        # Extract network_info (for status check)
+                        if 'network_info' in ansible_facts:
+                            result_data['network_info'] = ansible_facts['network_info']
+                            logger.info(f"Captured network_info: {ansible_facts['network_info']}")
+                        
+                        # Extract detailed bridge status (for detailed_status_network.yaml)
+                        if 'bridge_exists' in ansible_facts:
+                            result_data['bridge_exists'] = ansible_facts['bridge_exists']
+                            logger.info(f"Captured bridge_exists: {ansible_facts['bridge_exists']}")
+                        
+                        if 'bridge_state' in ansible_facts:
+                            result_data['bridge_state'] = ansible_facts['bridge_state']
+                            logger.info(f"Captured bridge_state: {ansible_facts['bridge_state']}")
+                        
+                        if 'bridge_mtu' in ansible_facts:
+                            result_data['bridge_mtu'] = ansible_facts['bridge_mtu']
+                            logger.info(f"Captured bridge_mtu: {ansible_facts['bridge_mtu']}")
+                        
+                        if 'bridge_mac' in ansible_facts:
+                            result_data['bridge_mac'] = ansible_facts['bridge_mac']
+                            logger.info(f"Captured bridge_mac: {ansible_facts['bridge_mac']}")
+                        
+                        if 'bridge_ip' in ansible_facts:
+                            result_data['bridge_ip'] = ansible_facts['bridge_ip']
+                            logger.info(f"Captured bridge_ip: {ansible_facts['bridge_ip']}")
+                        
+                        if 'bridge_metrics' in ansible_facts:
+                            result_data['bridge_metrics'] = ansible_facts['bridge_metrics']
+                            logger.info(f"Captured bridge_metrics: {ansible_facts['bridge_metrics']}")
+                        
+                        if 'veth_pairs' in ansible_facts:
+                            veth_pairs_raw = ansible_facts['veth_pairs']
+                            if isinstance(veth_pairs_raw, list):
+                                result_data['veth_pairs'] = veth_pairs_raw
+                            else:
+                                logger.warning(f"veth_pairs Ansible fact is not a list (got {type(veth_pairs_raw).__name__}), ignoring")
+                                result_data['veth_pairs'] = []
+                            logger.info(f"Captured veth_pairs: {result_data['veth_pairs']}")
 
             logger.info(f"Final extracted data: {result_data}")
             return {

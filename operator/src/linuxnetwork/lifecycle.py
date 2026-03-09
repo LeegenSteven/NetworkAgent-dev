@@ -17,7 +17,7 @@ import kubernetes
 from linuxnetwork.lifecycle_tasks import (
     create_linux_network,
     delete_linux_network,
-    get_network_status
+    get_detailed_network_status
 )
 from utils.compute import get_ip
 
@@ -100,27 +100,66 @@ async def delete_linuxnetwork(body, spec, status, name, namespace, logger, **kwa
         logger.error(f"Error during DockerNetwork deletion {name}: {e}")
         # Don't raise error on delete failure
 
-# @kopf.on.field('google.dev', 'v1', 'linuxnetwork', field='status.phase')
-async def monitor_linuxnetwork(old, new, body, spec, name, namespace, logger, **kwargs):
-    """Monitor LinuxNetwork status and update accordingly"""
+@kopf.timer('google.dev', 'v1', 'linuxnetwork', interval=120.0)
+async def monitor_linuxnetwork(body, spec, name, namespace, uid, logger, **kwargs):
+    """Monitor LinuxNetwork status with detailed state tracking"""
+
+    # Do not monitor until after first successful install
+    status_dict = body.get('status', {})
+    if not status_dict or status_dict.get('phase') in ["Pending", "Creating", None]:
+        logger.debug(f"Skipping monitor for {name}, network not fully created yet")
+        return
 
     ip_address = await get_ip("automation", "networkvm")
     if ip_address is None:
-        raise kopf.TemporaryError("No ip address found on Network VM yet, temporary error - waiting", 10)
-    logger.info(f"network vm address = {ip_address}")
+        logger.warning("No ip address found on Network VM yet, skipping monitoring check")
+        return
 
-    if new == "Ready":
-        # Periodically check network status
-        try:
-            network_name = spec.get('name', name)
-            status = await get_network_status(ip_address, network_name)
+    try:
+        network_name = spec.get('name', name)
+        
+        # Get detailed status including bridge and veth state
+        status = await get_detailed_network_status(ip_address, network_name)
+        
+        # Get previous state
+        previous_phase = status_dict.get('phase')
+        previous_exists = previous_phase == "Ready"
+        previous_state = status_dict.get('operational_state', 'unknown')
+        
+        current_exists = status['exists']
+        current_state = status.get('operational_state', 'unknown')
+        
+        state_changed = False
+        
+        # Check existence change
+        if not current_exists and previous_exists:
+            state_changed = True
+            logger.warning(f"LinuxNetwork {name} state changed: Ready -> Failed (deleted)")
+            await update_status(name, namespace, "Failed", "Linux network no longer exists")
+        
+        elif current_exists and not previous_exists:
+            state_changed = True
+            logger.info(f"LinuxNetwork {name} state changed: Failed -> Ready (restored)")
+            await update_status(name, namespace, "Ready", "Linux network is available",
+                              extra_status={'operational_state': current_state})
+        
+        # Check operational state change
+        elif current_exists and previous_exists and current_state != previous_state:
+            state_changed = True
+            logger.info(f"LinuxNetwork {name} operational state changed: {previous_state} -> {current_state}")
+            await update_status(name, namespace, "Ready", f"Bridge state: {current_state}",
+                              extra_status={'operational_state': current_state})
+        
+        if not state_changed:
+            logger.debug(f"LinuxNetwork {name} state unchanged, skipping K8s status update")
+        
+        # Sync to Spanner - sync function has its own state change detection
+        # Only writes to Spanner if bridge/veth state has changed (SCD Type 2)
+        from graph.lifecycle_tasks import sync_host_network_bridge
+        await sync_host_network_bridge(body, spec, name, namespace, status, logger)
             
-            if not status['exists']:
-                await update_status(name, namespace, "Failed", "Linux network no longer exists")
-                logger.warning(f"LinuxNetwork {name} no longer exists in Docker")
-                
-        except Exception as e:
-            logger.error(f"Failed to check network status for {name}: {e}")
+    except Exception as e:
+        logger.error(f"Failed to check network status for {name}: {e}")
 
 #########################################################################
 # Status Management
@@ -146,11 +185,9 @@ async def update_status(name: str, namespace: str, phase: str, message: str, ext
     if extra_status:
         status.update(extra_status)
 
-    logger.info(f"Updating status for LinuxNetwork {name}: {status}")
+    logger.debug(f"Updating status for LinuxNetwork {name}: {status}")
 
     resource_dict['status'].update(status)
-
-    logger.info(resource_dict['status'])
 
     try:
         api.patch(

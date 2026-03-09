@@ -134,6 +134,11 @@ spec:
       cidr STRING(MAX) NOT NULL,
       network_type STRING(MAX),
       description STRING(MAX),
+      operational_state STRING(MAX),
+      mtu INT64,
+      mac_address STRING(MAX),
+      bridge_ip STRING(MAX),
+      host_device_name STRING(MAX),
       properties JSON,
       valid_start_ts TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
       valid_end_ts TIMESTAMP OPTIONS (allow_commit_timestamp=true)
@@ -193,15 +198,18 @@ spec:
   - "CREATE TABLE NetworkMetrics (
         id STRING(36) NOT NULL DEFAULT (GENERATE_UUID()),
         timestamp TIMESTAMP NOT NULL,
-        node_name STRING(MAX) NOT NULL,
-        metric_name STRING(MAX) NOT NULL,
-        metric_type STRING(MAX) NOT NULL,
         kind STRING(MAX) NOT NULL,
-        value FLOAT64 NOT NULL,
+        name STRING(MAX),
+        metrics JSON,
+        interface_id STRING(MAX),
+        node_name STRING(MAX),
+        metric_name STRING(MAX),
+        metric_type STRING(MAX),
+        value FLOAT64,
         labels JSON,
         interface STRING(MAX)
     ) PRIMARY KEY (id, timestamp)"
-  - "CREATE INDEX NetworkMetricsIdx1 ON NetworkMetrics(timestamp DESC) STORING (interface, kind, labels, metric_name, metric_type, node_name, value)"
+  - "CREATE INDEX NetworkMetricsIdx1 ON NetworkMetrics(timestamp DESC) STORING (interface_id, name, kind, node_name, metric_name, metric_type, value, labels, interface)"
   - "CREATE TABLE ServicePerformance (
         id STRING(36) NOT NULL,
         service_type STRING(MAX) NOT NULL,

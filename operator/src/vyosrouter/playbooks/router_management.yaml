@@ -14,22 +14,39 @@
     # CREATE OPERATION
     - block:
 
+        # --- Idempotency check: if the container already exists and is running, skip creation ---
+        - name: Check if router container already exists
+          docker_container_info:
+            name: "{{ router_name }}"
+          register: existing_container
+          ignore_errors: true
+
+        - name: Set container already running flag
+          set_fact:
+            container_already_running: "{{ existing_container.exists | default(false) and existing_container.container.State.Running | default(false) }}"
+
+        - name: Skip container creation (already running from previous attempt)
+          debug:
+            msg: "Container {{ router_name }} already exists and is running, skipping creation (idempotent retry)"
+          when: container_already_running | bool
+
         - name: Check if Docker is installed
           command: docker --version
           register: docker_check
           ignore_errors: true
+          when: not container_already_running | bool
 
         - name: Add Docker GPG apt Key
           apt_key:
             url: https://download.docker.com/linux/ubuntu/gpg
             state: present
-          when: docker_check.rc != 0
+          when: not container_already_running | bool and docker_check.rc != 0
 
         - name: Add Docker Repository
           apt_repository:
             repo: deb https://download.docker.com/linux/ubuntu focal stable
             state: present
-          when: docker_check.rc != 0
+          when: not container_already_running | bool and docker_check.rc != 0
 
         - name: Install docker-ce
           apt:
@@ -39,7 +56,7 @@
               - containerd.io
             state: latest
             update_cache: true
-          when: docker_check.rc != 0
+          when: not container_already_running | bool and docker_check.rc != 0
 
         - name: Create VyOS router container with first network only
           docker_container:
@@ -64,10 +81,8 @@
               vyos.router.hostname: "{{ router_hostname }}"
               vyos.router.id: "{{ router_id }}"
               vyos.source.network: "{{ source_network | default('') }}"
-            ports:
-              - "9100:9100"
-              - "9101:9101"
           register: container_result
+          when: not container_already_running | bool
 
         - name: Sequentially create veth pair for all non lo networks and attach to linux network bridge
           shell: |
@@ -212,14 +227,21 @@
             name: "{{ router_name }}"
           register: container_info
 
-        - name: Set router creation facts
+        - name: Set router creation facts (new container)
           set_fact:
             container_id: "{{ container_result.container.Id }}"
             management_ip: "{{ container_info.container.NetworkSettings.IPAddress | default('') }}"
+          when: not container_already_running | bool
+
+        - name: Set router creation facts (existing container)
+          set_fact:
+            container_id: "{{ existing_container.container.Id }}"
+            management_ip: "{{ container_info.container.NetworkSettings.IPAddress | default('') }}"
+          when: container_already_running | bool
 
         - name: Display router creation result
           debug:
-            msg: "VyOS router {{ router_name }} created with container ID {{ container_id }}"
+            msg: "VyOS router {{ router_name }} ready with container ID {{ container_id }} ({{ 'pre-existing' if container_already_running else 'newly created' }})"
 
       when: operation == 'create'
 
@@ -284,28 +306,27 @@
         - name: Set router status facts
           set_fact:
             running: "{{ router_status.exists and router_status.container.State.Running | default(false) }}"
-            container_info: "{{ router_status.container | default({}) }}"
 
-        - name: Get basic protocol status if container is running
+        - name: Get interface statuses
           shell: |
-            if docker exec {{ router_name }} vtysh -c "show version" >/dev/null 2>&1; then
-              echo "vyos_ready=true"
-            else
-              echo "vyos_ready=false"
-            fi
-          register: vyos_ready_check
+            docker exec {{ router_name }} ip -j link show 2>/dev/null | \
+              jq '[.[] | {"name": .ifname, "status": .operstate}]' 2>/dev/null || echo "[]"
+          register: ip_link_out
           when: running | default(false)
           ignore_errors: true
+          changed_when: false
 
-        - name: Set protocol status
+        - name: Parse and return interface statuses
           set_fact:
-            protocols:
-              vyos_ready: "{{ 'vyos_ready=true' in vyos_ready_check.stdout | default(false) }}"
-          when: running | default(false)
+            interface_status: "{{ ip_link_out.stdout | from_json }}"
+          when: running | default(false) and ip_link_out is defined and ip_link_out.rc == 0
 
-        - name: Display router status
+        - name: Return status information
           debug:
-            msg: "Router {{ router_name }} running: {{ running }}"
+            msg:
+              running: "{{ running }}"
+              interface_status: "{{ interface_status | default([]) }}"
+          register: status_output
 
       when: operation == 'status'
 

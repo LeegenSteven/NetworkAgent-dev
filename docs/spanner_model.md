@@ -20,68 +20,107 @@ To find the state of an entity at any given time `T`, you must filter for rows w
 valid_start_ts <= @T AND (valid_end_ts > @T OR valid_end_ts IS NULL)
 ```
 
+---
+
 ## 2. Data Dictionary & Relationships
 
 ### Physical Layer
 These tables represent the physical infrastructure of the network.
 
-| Table | Description | Key Relationships |
-| :--- | :--- | :--- |
-| `PhysicalRouter` | Represents a physical router device. | **Parent** of `PhysicalInterface`. Hosted `VRF`s located here. |
-| `PhysicalInterface` | specialized hardware interface on a router. | **Child** of `PhysicalRouter`. Connects to `PhysicalLink`. Associated with `LogicalSubnet`. |
-| `PhysicalLink` | Cable or fiber connecting two interfaces. | Connects two `PhysicalInterface`s. |
-| `LogicalSubnet` | IPv4/IPv6 subnet defined on an interface. | Associated with `PhysicalInterface`. |
-| `Interface_Link` | **Edge Table (Temporal)**: Resolves many-to-many between Interface and Link. | Joins `PhysicalInterface` and `PhysicalLink`. |
-| `Subnet_Association` | **Edge Table (Temporal)**: Maps Subnets to Interfaces or other entities. | Joins `PhysicalInterface` and `LogicalSubnet`. |
+| Table | Description | Key Fields | Key Relationships |
+| :--- | :--- | :--- | :--- |
+| `PhysicalRouter` | A physical router device. | `id`, `name`, `vendor`, `model`, `location_city`, `location_lat`, `location_lon`, `role`, `status`, `config` | **Parent** of `PhysicalInterface`. Hosts `VRF`s. |
+| `PhysicalInterface` | A hardware interface on a router. | `id`, `router_id`, `name`, `speed`, `media_type`, `ip_address`, `mac_address`, `status` | **Child** of `PhysicalRouter`. Connects to `PhysicalLink`. Associated with `LogicalSubnet`. |
+| `PhysicalLink` | A cable or fiber connecting two interfaces. | `id`, `name`, `bandwidth`, `status`, `properties` | Connects two `PhysicalInterface`s via `Interface_Link`. |
+| `LogicalSubnet` | An IPv4/IPv6 subnet defined on an interface. | `id`, `cidr`, `network_type`, `description`, `operational_state`, `mtu`, `mac_address`, `bridge_ip`, `host_device_name`, `properties` | Associated with `PhysicalInterface` via `Subnet_Association`. |
+| `Device` | A network device (e.g., VM or host) connected to a router. | `id`, `name`, `router_id`, `network_name`, `ip_address`, `gateway`, `vlan`, `status`, `config` | Connected to `PhysicalRouter` via `ConnectedTo`. |
+| `Interface_Link` | **Edge Table (Temporal)**: Resolves many-to-many between `PhysicalInterface` and `PhysicalLink`. | `interface_id`, `link_id` | Joins `PhysicalInterface` and `PhysicalLink`. |
+| `Subnet_Association` | **Edge Table (Temporal)**: Maps `LogicalSubnet`s to interfaces or other entities. | `entity_id`, `subnet_id`, `entity_type` | Joins `PhysicalInterface` and `LogicalSubnet`. |
 
-### Logical Layer
+### Logical / Service Layer
 These tables represent the virtualized network services (L3VPN, BGP).
 
-| Table | Description | Key Relationships |
-| :--- | :--- | :--- |
-| `Customer` | The entity owning the VPN service. | Owns `L3VPNService`. |
-| `L3VPNService` | A logical VPN instance (e.g., "Finance VPN"). | Owned by `Customer`. Contains `VRF`s. |
-| `VRF` | Virtual Routing and Forwarding instance on a router. | Belongs to `L3VPNService`. Located on `PhysicalRouter`. Contains `BGPSession`s. |
-| `BGPSession` | A BGP neighbor configuration. | Belongs to `VRF`. Peers with another `BGPSession`. |
-| `BGP_Peering` | **Edge Table (Temporal)**: Represents an active BGP session state between two neighbors. | Joins two `BGPSession`s. |
-
-### Observability & Metrics
-Tables tracking events, metrics, and performance data.
-
-| Table | Description | Key Relationships |
-| :--- | :--- | :--- |
-| `NetworkMetrics` | Time-series metrics (throughput, error rates). | Linked to `PhysicalInterface`. |
-| `ServicePerformance` | End-to-end service latency/availability. | Linked to `L3VPNService`. |
-| `Incident` | Operational incidents/alerts. | (Self-contained) |
-| `AgentTrace` | Tracing data for the Operator/Agent actions. | (Self-contained) |
-
-## 3. Property Graph Definition (`networkGraph`)
-
-The Spanner Graph feature layers a property graph model over these tables. The graph is defined in the schema with the `CREATE PROPERTY GRAPH` statement.
-
-### Nodes
-Nodes map directly to the underlying tables.
-- `PhysicalRouter`
-- `PhysicalInterface`
-- `PhysicalLink`
-- `L3VPNService`
-- `VRF`
-- `BGPSession`
-- ... and more.
-
-### Edges
-Edges are defined as **Views** that dynamically join the underlying tables while respecting the SCD Type 2 constraints.
-
-| Edge Name | Source | Target | Description |
+| Table | Description | Key Fields | Key Relationships |
 | :--- | :--- | :--- | :--- |
-| `HasInterface` | `PhysicalRouter` | `PhysicalInterface` | Router owns Interface |
-| `ConnectsTo` | `PhysicalInterface` | `PhysicalLink` | Interface connects to Link |
-| `LinkedTo` | `PhysicalLink` | `PhysicalInterface` | Link connects to Interface |
-| `LocatedOn` | `VRF` | `PhysicalRouter` | VRF is configured on Router |
-| `RealizesVPN` | `VRF` | `L3VPNService` | VRF belongs to VPN Service |
-| `PeersWith` | `BGPSession` | `BGPSession` | BGP Session logical peering |
+| `Customer` | The entity owning a VPN service. | `id`, `name`, `type`, `properties` | Owns `L3VPNService`. Places `Orders`. |
+| `L3VPNService` | A logical VPN instance (e.g., "Finance VPN"). | `id`, `customer_id`, `name`, `service_type`, `topology`, `status`, `config` | Owned by `Customer`. Contains `VRF`s. |
+| `VRF` | Virtual Routing and Forwarding instance on a router. | `id`, `router_id`, `vpn_id`, `name`, `rd`, `status`, `config` | Belongs to `L3VPNService`. Located on `PhysicalRouter`. Contains `BGPSession`s. |
+| `BGPSession` | A BGP neighbor configuration within a VRF. | `id`, `vrf_id`, `local_as`, `remote_as`, `peer_ip`, `status`, `config` | Belongs to `VRF`. Peers with another `BGPSession`. |
+| `BGP_Peering` | **Edge Table (Temporal)**: Represents an active BGP session between two neighbors. | `session_id_a`, `session_id_b` | Joins two `BGPSession`s. |
+| `Orders` | Customer orders placed against the system. | `id`, `timestamp`, `customer_id`, `customer` | Linked to `Customer` via `PlacedBy`. |
 
-## 3. Querying the Data
+### Observability, Metrics & AI
+Tables tracking events, metrics, embeddings, and performance data.
+
+| Table | Description | Key Fields | Key Relationships |
+| :--- | :--- | :--- | :--- |
+| `NetworkMetrics` | Time-series metrics (throughput, error rates, etc.). | `id`, `timestamp`, `kind`, `name`, `metrics`, `interface_id`, `node_name`, `metric_name`, `metric_type`, `value`, `labels`, `interface` | Linked to `PhysicalInterface` via `interface_id`. |
+| `ServicePerformance` | End-to-end service latency and availability records. | `id`, `service_type`, `response_time_ms`, `timestamp`, `userid`, `error`, `node`, `vpn_id` | Linked to `L3VPNService` via `vpn_id`. |
+| `Incident` | Operational incidents or alerts. | `id`, `recordedTimestamp`, `agentTaskId`, `issue`, `strategy`, `root_cause`, `resolution`, `resolvedTimestamp` | Self-contained. |
+| `AgentTrace` | OpenTelemetry-style tracing data for Operator/Agent actions. | `id`, `event_type`, `trace_id`, `span_id`, `parent_span_id`, `operation_name`, `timestamp`, `details` | Self-contained. Streamed via `AgentTraceStream`. |
+| `KgLogEntryNode` | Raw log entries stored as knowledge graph nodes with embeddings. | `id`, `timestamp`, `severity`, `source`, `message`, `content`, `embedding` | Self-contained; indexed by `KgLogEntryNodeIdx1`. |
+| `NodeEmbedding` | GNN-generated vector embeddings and anomaly scores for graph nodes. | `id`, `node_id`, `node_type`, `stgnn_embedding`, `stgnn_score`, `dgat_embedding`, `dgat_score`, `hetgnn_embedding`, `hetgnn_score`, `anomaly_explanation`, `timestamp` | Linked to `PhysicalRouter` via `RouterHasEmbedding`. Linked to `PhysicalInterface` via `InterfaceHasEmbedding`. |
+
+---
+
+## 3. Indexes & Change Streams
+
+| Object | Type | Table | Description |
+| :--- | :--- | :--- | :--- |
+| `KgLogEntryNodeIdx1` | Index | `KgLogEntryNode` | Index on `timestamp DESC`, storing `severity`, `source`, `message`, `content`, `embedding` for efficient log queries. |
+| `NetworkMetricsIdx1` | Index | `NetworkMetrics` | Index on `timestamp DESC`, storing `interface_id`, `name`, `kind`, `node_name`, `metric_name`, `metric_type`, `value`, `labels`, `interface`. |
+| `AgentTraceStream` | Change Stream | `AgentTrace` | Captures new rows on `AgentTrace` with a 7-day retention window (`NEW_ROW` capture). |
+
+---
+
+## 4. Property Graph Definition (`networkGraph`)
+
+The Spanner Graph feature layers a property graph model over these tables. The graph is defined in the schema with the `CREATE OR REPLACE PROPERTY GRAPH` statement.
+
+### Node Tables
+All of the following tables are registered as node types in the graph:
+
+| Node Type | Underlying Table |
+| :--- | :--- |
+| `PhysicalRouter` | `PhysicalRouter` |
+| `PhysicalInterface` | `PhysicalInterface` |
+| `PhysicalLink` | `PhysicalLink` |
+| `Device` | `Device` |
+| `Customer` | `Customer` |
+| `L3VPNService` | `L3VPNService` |
+| `VRF` | `VRF` |
+| `BGPSession` | `BGPSession` |
+| `LogicalSubnet` | `LogicalSubnet` |
+| `Incident` | `Incident` |
+| `ServicePerformance` | `ServicePerformance` |
+| `Orders` | `Orders` |
+| `AgentTrace` | `AgentTrace` |
+| `NetworkMetrics` | `NetworkMetrics` |
+| `KgLogEntryNode` | `KgLogEntryNode` |
+| `NodeEmbedding` | `NodeEmbedding` |
+
+### Edge Tables (Views)
+Edges are defined as SQL **Views** that dynamically join the underlying tables while respecting SCD Type 2 temporal constraints. Each view is then registered as a named edge type in the property graph.
+
+| Edge Name | View | Source Node | Destination Node | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `HasInterface` | `HasInterface_Edge` | `PhysicalRouter` | `PhysicalInterface` | Router owns an interface. |
+| `ConnectsTo` | `ConnectsTo_Edge` | `PhysicalInterface` | `PhysicalLink` | Interface connects to a physical link. |
+| `LinkedTo` | `LinkedTo_Edge` | `PhysicalLink` | `PhysicalInterface` | Link connects back to an interface (reverse of ConnectsTo). |
+| `RouterHasEmbedding` | `RouterHasEmbedding_Edge` | `PhysicalRouter` | `NodeEmbedding` | Associates a router with its GNN embedding snapshot. |
+| `InterfaceHasEmbedding` | `InterfaceHasEmbedding_Edge` | `PhysicalInterface` | `NodeEmbedding` | Associates an interface with its GNN embedding snapshot. |
+| `OwnedBy` | `OwnedBy_Edge` | `L3VPNService` | `Customer` | VPN service is owned by a customer. |
+| `RealizesVPN` | `RealizesVPN_Edge` | `VRF` | `L3VPNService` | VRF realizes (implements) the VPN service. |
+| `LocatedOn` | `LocatedOn_Edge` | `VRF` | `PhysicalRouter` | VRF is configured on a physical router. |
+| `BelongsToVRF` | `BelongsToVRF_Edge` | `BGPSession` | `VRF` | BGP session belongs to a VRF. |
+| `PeersWith` | `PeersWith_Edge` | `BGPSession` | `BGPSession` | BGP session peers with another BGP session. |
+| `AssociatedWith` | `AssociatedWith_Edge` | `PhysicalInterface` | `LogicalSubnet` | Interface is associated with a logical subnet. |
+| `ConnectedTo` | `ConnectedTo_Edge` | `Device` | `PhysicalRouter` | A device is connected to a router. |
+| `PlacedBy` | `Orders` (direct) | `Customer` | `Orders` | A customer placed an order. |
+
+---
+
+## 5. Querying the Data
 
 You can query the data using standard GoogleSQL or the Graph Query Language (GQL).
 
@@ -89,14 +128,15 @@ You can query the data using standard GoogleSQL or the Graph Query Language (GQL
 
 To reconstruct the graph manually (e.g., for ML training pipelines), you select from tables implementing the time-slice logic.
 
-**Example: Get all active Routers and their Interfaces at 2023-10-27 10:00:00 UTC**
+**Example: Get all active Routers and their Interfaces at a given timestamp**
 
 ```sql
--- Parameters: @ts = TIMESTAMP('2023-10-27 10:00:00')
+-- Parameters: @ts = TIMESTAMP('2025-01-01 10:00:00')
 
 SELECT 
   r.name AS router_name,
-  i.name AS interface_name
+  i.name AS interface_name,
+  i.ip_address
 FROM PhysicalRouter r
 JOIN PhysicalInterface i ON r.id = i.router_id
 WHERE 
@@ -106,11 +146,27 @@ WHERE
   AND i.valid_start_ts <= @ts AND (i.valid_end_ts > @ts OR i.valid_end_ts IS NULL)
 ```
 
+**Example: Get all VRFs for a VPN service with their router locations**
+
+```sql
+SELECT
+  vpn.name AS vpn_name,
+  vrf.name AS vrf_name,
+  r.name AS router_name,
+  r.location_city
+FROM L3VPNService vpn
+JOIN VRF vrf ON vpn.id = vrf.vpn_id
+JOIN PhysicalRouter r ON vrf.router_id = r.id
+WHERE
+  vpn.valid_end_ts IS NULL
+  AND vrf.valid_end_ts IS NULL
+  AND r.valid_end_ts IS NULL
+  AND vpn.customer_id = @customer_id
+```
+
 ### GQL: Graph Traversal
 
-GQL allows for more expressive path traversals. Since the graph is defined over SCD Type 2 tables, you must ensure you are matching consistent versions of nodes and edges.
-
-*Note: As of early 2025, Spanner Graph GQL support for temporal views is evolving. Check the latest documentation for `FOR SYSTEM_TIME AS OF` support.*
+GQL allows for more expressive path traversals over the `networkGraph` property graph.
 
 **Example: Find all Interfaces connected to a Router**
 
@@ -118,25 +174,51 @@ GQL allows for more expressive path traversals. Since the graph is defined over 
 GRAPH networkGraph
 MATCH (r:PhysicalRouter)-[e:HasInterface]->(i:PhysicalInterface)
 WHERE r.name = "router-1"
-  -- Filter for current version (simplify if just wanting latest)
   AND r.valid_end_ts IS NULL 
   AND i.valid_end_ts IS NULL
-RETURN i.name, i.speed
+RETURN i.name, i.speed, i.ip_address
 ```
 
-**Example: Find End-to-End Path (Router -> Interface -> Link -> Interface -> Router)**
+**Example: Find End-to-End Path (Router → Interface → Link → Interface → Router)**
 
 ```sql
 GRAPH networkGraph
-MATCH (src:PhysicalRouter)-[:HasInterface]->(i1)-[:ConnectsTo]->(l:PhysicalLink)-[:LinkedTo]->(i2)<-[:HasInterface]-(dst:PhysicalRouter)
+MATCH (src:PhysicalRouter)-[:HasInterface]->(i1:PhysicalInterface)
+      -[:ConnectsTo]->(l:PhysicalLink)
+      -[:LinkedTo]->(i2:PhysicalInterface)<-[:HasInterface]-(dst:PhysicalRouter)
 WHERE src.name = "edge-router-a"
 RETURN dst.name AS connected_router, l.bandwidth
 ```
 
-## 4. Derived Edges without Foreign Keys
+**Example: Trace full L3VPN service topology**
+
+```sql
+GRAPH networkGraph
+MATCH (c:Customer)<-[:OwnedBy]-(vpn:L3VPNService)<-[:RealizesVPN]-(vrf:VRF)-[:LocatedOn]->(r:PhysicalRouter)
+WHERE c.name = "acme-corp"
+  AND vpn.valid_end_ts IS NULL
+  AND vrf.valid_end_ts IS NULL
+  AND r.valid_end_ts IS NULL
+RETURN vpn.name, vrf.name, vrf.rd, r.name, r.location_city
+```
+
+**Example: Find anomalous nodes via NodeEmbedding scores**
+
+```sql
+GRAPH networkGraph
+MATCH (r:PhysicalRouter)-[:RouterHasEmbedding]->(e:NodeEmbedding)
+WHERE e.dgat_score > 0.8
+RETURN r.name, e.dgat_score, e.anomaly_explanation, e.timestamp
+ORDER BY e.dgat_score DESC
+```
+
+---
+
+## 6. Derived Edges without Foreign Keys
 
 In our schema, we removed rigid Foreign Key constraints to increase write throughput and flexibility for the SCD model. Relationships are maintained via:
-1.  **Logical IDs**: `router_id` column in `PhysicalInterface` table contains the ID of the router.
-2.  **Edge Views**: The `CREATE VIEW ... AS SELECT ... JOIN ...` statements in `spanner.j2` explicitly define how these logical IDs resolve to edges, handling the timestamp logic automatically.
 
-When you query the **Graph** (GQL), these Views are used, so you don't need to manually write the complex time-window JOINs every time.
+1. **Logical IDs**: e.g., `router_id` in `PhysicalInterface` contains the ID of the parent router; `vpn_id` in `VRF` references `L3VPNService`.
+2. **Edge Views**: The `CREATE VIEW ... AS SELECT ... JOIN ...` statements in `spanner.j2` define how logical IDs resolve to graph edges, handling the timestamp overlap logic automatically.
+
+When querying the **Graph** (GQL), these Views are used transparently — you do not need to manually write the complex time-window JOINs for every query.

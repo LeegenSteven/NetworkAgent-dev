@@ -125,18 +125,46 @@ async def create_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
                 )
                 logger.info(f"Successfully created and configured VyOSRouter {name}")
             else:
-                await update_status(name, namespace, "Failed", f"Configuration failed: {config_result['error']}",
-                                   body=body, spec=spec, uid=uid, logger_obj=logger)
-                raise kopf.PermanentError(f"VyOS router configuration failed: {config_result['error']}")
+                # Configuration errors - check if transient or permanent
+                error_msg = config_result.get('error', 'Unknown configuration error')
+                if _is_transient_error(error_msg):
+                    logger.warning(f"Transient configuration error for {name}, will retry: {error_msg}")
+                    await update_status(name, namespace, "Pending", f"Configuration pending retry: {error_msg}",
+                                       body=body, spec=spec, uid=uid, logger_obj=logger)
+                    raise kopf.TemporaryError(f"Transient configuration error: {error_msg}", delay=30)
+                else:
+                    await update_status(name, namespace, "Failed", f"Configuration failed: {error_msg}",
+                                       body=body, spec=spec, uid=uid, logger_obj=logger)
+                    raise kopf.PermanentError(f"VyOS router configuration failed: {error_msg}")
         else:
-            await update_status(name, namespace, "Failed", f"Failed to create container: {result['error']}",
-                               body=body, spec=spec, uid=uid, logger_obj=logger)
-            raise kopf.PermanentError(f"VyOS router creation failed: {result['error']}")
-    except Exception as e:
-        logger.error(f"Failed to create VyOSRouter {name}: {e}")
-        await update_status(name, namespace, "Failed", str(e),
-                           body=body, spec=spec, uid=uid, logger_obj=logger)
+            # Container creation failed - check if transient or permanent
+            error_msg = result.get('error', 'Unknown creation error')
+            if _is_transient_error(error_msg):
+                logger.warning(f"Transient creation error for {name}, will retry: {error_msg}")
+                await update_status(name, namespace, "Pending", f"Creation pending retry: {error_msg}",
+                                   body=body, spec=spec, uid=uid, logger_obj=logger)
+                raise kopf.TemporaryError(f"Transient creation error: {error_msg}", delay=30)
+            else:
+                await update_status(name, namespace, "Failed", f"Failed to create container: {error_msg}",
+                                   body=body, spec=spec, uid=uid, logger_obj=logger)
+                raise kopf.PermanentError(f"VyOS router creation failed: {error_msg}")
+
+    except (kopf.TemporaryError, kopf.PermanentError):
+        # Re-raise kopf control exceptions without double-handling
         raise
+    except Exception as e:
+        # Unexpected exception - check if it looks transient before permanently failing
+        error_msg = str(e)
+        logger.error(f"Unexpected error creating VyOSRouter {name}: {error_msg}")
+        if _is_transient_error(error_msg):
+            logger.warning(f"Treating as transient error, will retry: {error_msg}")
+            await update_status(name, namespace, "Pending", f"Retrying after error: {error_msg}",
+                               body=body, spec=spec, uid=uid, logger_obj=logger)
+            raise kopf.TemporaryError(error_msg, delay=30)
+        else:
+            await update_status(name, namespace, "Failed", error_msg,
+                               body=body, spec=spec, uid=uid, logger_obj=logger)
+            raise
 
 @kopf.on.update('google.dev', 'v1', 'vyosrouter', field='spec')
 async def update_vyosrouter(body, spec, name, namespace, uid, logger, **kwargs):
@@ -212,6 +240,148 @@ async def delete_vyosrouter(body, spec, name, namespace, logger, **kwargs):
     except Exception as e:
         logger.error(f"Error during VyOSRouter deletion {name}: {e}")
         # Don't raise error on delete failure
+
+@kopf.timer('google.dev', 'v1', 'vyosrouter', interval=120.0)
+async def monitor_vyosrouter(body, spec, name, namespace, logger, **kwargs):
+    """Monitor VyOSRouter status periodically and report only on state changes"""
+
+    # Do not monitor until after first successful install
+    status_dict = body.get('status', {})
+    if not status_dict or status_dict.get('phase') in ["Pending", "Creating", "Configuring", "Updating", None]:
+        logger.debug(f"Skipping monitor for {name}, router not fully configured yet")
+        return
+
+    ip_address = await get_ip("automation", "networkvm")
+    if ip_address is None:
+        logger.warning(f"No ip address found on Network VM yet, skipping monitoring check for {name}")
+        return
+
+    try:
+        from vyosrouter.lifecycle_tasks import get_vyos_router_status
+        result = await get_vyos_router_status(ip_address, name)
+        
+        if not result.get('success', False):
+            logger.warning(f"Failed to get router status for {name}: {result.get('error')}")
+            return
+            
+        running = result.get('running', False)
+        
+        # Get previous state from status
+        previous_phase = status_dict.get('phase')
+        previous_running = previous_phase == "Running"
+        
+        if not running:
+            # Container is down - only update if state changed
+            if previous_running:
+                logger.warning(f"VyOSRouter {name} state changed: Running -> Failed")
+                await update_status(name, namespace, "Failed", "VyOS router container is not running",
+                                   body=body, spec=spec, uid=kwargs.get('uid'), logger_obj=logger)
+            return
+
+        # Container is running, extract protocols/interface status
+        protocols = result.get('protocols', {})
+        ospf_status = result.get('ospf_status', {})
+        bgp_status = result.get('bgp_status', {})
+        mpls_status = result.get('mpls_status', {})
+        interface_status = result.get('interface_status', [])
+
+        # Update protocols dict
+        if ospf_status:
+            protocols['ospf'] = ospf_status
+        if bgp_status:
+            protocols['bgp'] = bgp_status
+        if mpls_status:
+            protocols['mpls'] = mpls_status
+
+        # If we have interface status, we can update it
+        status_interfaces = []
+        if interface_status:
+           status_interfaces = interface_status
+
+        # Compare with previous state to detect changes
+        previous_interfaces = status_dict.get('interfaces', [])
+        
+        # Check if state has changed
+        state_changed = False
+        
+        # Check if phase changed from Failed back to Running
+        if not previous_running:
+            state_changed = True
+            logger.info(f"VyOSRouter {name} state changed: Failed -> Running")
+        
+        # Check if interfaces changed
+        if _interfaces_changed(previous_interfaces, status_interfaces):
+            state_changed = True
+            logger.info(f"VyOSRouter {name} interface state changed")
+        
+        # Only update status if something changed
+        if state_changed:
+            await update_status(name, namespace, "Running", "VyOS router container is running",
+                               body=body, spec=spec, uid=kwargs.get('uid'), logger_obj=logger,
+                               interfaces=status_interfaces if status_interfaces else None)
+        else:
+            logger.debug(f"VyOSRouter {name} state unchanged, skipping status update")
+            
+    except Exception as e:
+        logger.error(f"Failed to monitor VyOSRouter {name}: {e}")
+
+def _is_transient_error(error_msg: str) -> bool:
+    """
+    Determine if an error is transient (worth retrying) vs permanent.
+    
+    Transient errors include:
+    - SSH/network connectivity issues to the VM
+    - Docker daemon temporarily unavailable
+    - Image pull timeouts or retryable failures
+    - Container name conflict (previous partial creation - idempotent retry)
+    - Ansible connection timeout
+    """
+    error_lower = error_msg.lower()
+    transient_patterns = [
+        'ssh',
+        'connection refused',
+        'connection timed out',
+        'connection reset',
+        'timeout',
+        'unreachable',
+        'temporarily unavailable',
+        'docker daemon',
+        'failed to execute ansible',
+        'ansible playbook failed with status: failed',  # Generic Ansible failure - often transient
+        'already in use',           # Container name conflict - idempotent retry
+        'already exists',           # Container already exists - idempotent retry
+        'no such host',
+        'network is unreachable',
+        'pulling image',
+        'pull access denied',       # Docker pull issue - may be transient
+        'toomanyrequests',          # Docker Hub rate limit
+        'i/o timeout',
+        'broken pipe',
+        'eof',
+    ]
+    
+    return any(pattern in error_lower for pattern in transient_patterns)
+
+
+def _interfaces_changed(previous: list, current: list) -> bool:
+    """Compare interface lists to detect changes"""
+    if len(previous) != len(current):
+        return True
+    
+    # Create comparable representations
+    prev_set = set()
+    curr_set = set()
+    
+    for iface in previous:
+        # Create a hashable representation of interface
+        key = (iface.get('name'), iface.get('status'), iface.get('linux_network'))
+        prev_set.add(key)
+    
+    for iface in current:
+        key = (iface.get('name'), iface.get('status'), iface.get('linux_network'))
+        curr_set.add(key)
+    
+    return prev_set != curr_set
 
 #########################################################################
 # Status Management

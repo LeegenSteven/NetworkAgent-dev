@@ -6,6 +6,7 @@ import '../../models/network_node.dart';
 import 'node_details_dialog.dart';
 import 'dart:ui' as ui;
 import 'dart:async';
+import 'dart:typed_data';
 
 class GoogleMapsTopologyWidget extends StatefulWidget {
   final NetworkTopology topology;
@@ -64,17 +65,9 @@ class _GoogleMapsTopologyWidgetState extends State<GoogleMapsTopologyWidget> {
       final Color statusColor = NetworkNode.getStatusColor(node.properties['status']);
       final bool hasIncident = _hasMatchingIncident(node);
 
-      // Use color-coded default markers based on status, but prioritize anomaly
-      BitmapDescriptor markerColor;
-      if (node.isAnomaly) {
-        markerColor = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
-      } else if (statusColor == Colors.green) {
-        markerColor = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
-      } else if (statusColor == Colors.orange) {
-        markerColor = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
-      } else {
-        markerColor = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue);
-      }
+      final String statusText = node.properties['status']?.toString() ?? 'unknown';
+      final Color baseColor = node.isAnomaly ? Colors.red : statusColor;
+      final BitmapDescriptor markerIcon = await _createCustomMarkerIconWithText(baseColor, node.isAnomaly || hasIncident, statusText);
 
       markers.add(
         Marker(
@@ -82,9 +75,10 @@ class _GoogleMapsTopologyWidgetState extends State<GoogleMapsTopologyWidget> {
           position: position,
           infoWindow: InfoWindow(
             title: node.name,
-            snippet: '${node.properties['role'] ?? 'Router'} - ${node.properties['status'] ?? 'unknown'}',
+            snippet: '${node.properties['role'] ?? 'Router'} - $statusText',
           ),
-          icon: markerColor,
+          icon: markerIcon,
+          anchor: const Offset(0.5, 0.5), // Center the marker over coordinate
           onTap: () => _showNodeDetails(node),
         ),
       );
@@ -183,50 +177,77 @@ class _GoogleMapsTopologyWidgetState extends State<GoogleMapsTopologyWidget> {
     return null;
   }
 
-  Future<BitmapDescriptor> _createCustomMarkerIcon(Color color, bool hasIncident) async {
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    final paint = Paint()..color = color;
-    final size = 48.0;
+  Future<BitmapDescriptor> _createCustomMarkerIconWithText(Color color, bool hasIncident, String text) async {
+    final ui.PictureRecorder recorder = ui.PictureRecorder();
+    final Canvas canvas = Canvas(recorder);
+    final Paint paint = Paint()..color = color;
+    
+    // We need more height to accommodate the text.
+    final double markerSize = 48.0;
+    final double textHeight = 40.0; // Give plenty of height for large font
+    final double width = 160.0; // Wide enough for text
+    final double height = markerSize + textHeight + 10.0;
+    
+    // Center the circle horizontally
+    final double circleX = width / 2;
+    final double circleY = markerSize / 2;
 
     // Draw outer circle
-    canvas.drawCircle(
-      Offset(size / 2, size / 2),
-      size / 2,
-      paint,
-    );
+    canvas.drawCircle(Offset(circleX, circleY), markerSize / 2, paint);
 
     // Draw white inner circle
-    final whitePaint = Paint()..color = Colors.white;
-    canvas.drawCircle(
-      Offset(size / 2, size / 2),
-      size / 2 - 4,
-      whitePaint,
-    );
+    final Paint whitePaint = Paint()..color = Colors.white;
+    canvas.drawCircle(Offset(circleX, circleY), markerSize / 2 - 4, whitePaint);
 
     // Draw status color center
-    canvas.drawCircle(
-      Offset(size / 2, size / 2),
-      size / 2 - 8,
-      paint,
-    );
+    canvas.drawCircle(Offset(circleX, circleY), markerSize / 2 - 8, paint);
 
     // If has incident, draw red border
     if (hasIncident) {
-      final redPaint = Paint()
+      final Paint redPaint = Paint()
         ..color = Colors.red
         ..style = PaintingStyle.stroke
         ..strokeWidth = 4;
-      canvas.drawCircle(
-        Offset(size / 2, size / 2),
-        size / 2 - 2,
-        redPaint,
-      );
+      canvas.drawCircle(Offset(circleX, circleY), markerSize / 2 - 2, redPaint);
     }
+    
+    // Draw text
+    final TextSpan span = TextSpan(
+      style: const TextStyle(
+        color: Colors.black,
+        fontSize: 24.0, // Large enough to be readable when scaled down by Maps
+        fontWeight: FontWeight.bold,
+      ),
+      text: text,
+    );
+    
+    final TextPainter textPainter = TextPainter(
+      text: span,
+      textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout(minWidth: 0, maxWidth: width);
+    
+    // Center text below the circle
+    final double textX = (width - textPainter.width) / 2;
+    final double textY = markerSize + 4.0;
+    
+    // Draw a subtle background for text readability
+    final Rect textBgRect = Rect.fromLTWH(
+       textX - 8, textY - 4, textPainter.width + 16, textPainter.height + 8
+    );
+    final Paint bgPaint = Paint()..color = Colors.white;
+    final RRect rRect = RRect.fromRectAndRadius(textBgRect, const Radius.circular(8));
+    
+    // Shadow for text bg
+    canvas.drawShadow(Path()..addRRect(rRect), Colors.black, 4.0, true);
+    canvas.drawRRect(rRect, bgPaint);
+    
+    textPainter.paint(canvas, Offset(textX, textY));
 
-    final picture = recorder.endRecording();
-    final image = await picture.toImage(size.toInt(), size.toInt());
-    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    final ui.Picture picture = recorder.endRecording();
+    final ui.Image image = await picture.toImage(width.toInt(), height.toInt());
+    final ByteData? bytes = await image.toByteData(format: ui.ImageByteFormat.png);
 
     return BitmapDescriptor.fromBytes(bytes!.buffer.asUint8List());
   }

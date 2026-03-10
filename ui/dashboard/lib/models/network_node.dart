@@ -101,16 +101,26 @@ class NetworkNode {
     }
     
     switch (status.toLowerCase()) {
+      case 'failed':
       case 'error':
+      case 'notfound':
+      case 'notready':
         return Colors.red;
-      case 'initializing':
-      case 'starting':
-      case 'starting up':
-      case 'running':
-      case 'updatefailed':
-      case 'uptodate':
+      case 'pending':
+      case 'creating':
+      case 'terminating':
       case 'updating':
-        return Colors.green; // Green for UpToDate nodes
+      case 'configuring':
+      case 'validating':
+      case 'processing':
+      case 'waiting':
+      case 'deploying':
+        return Colors.orange;
+      case 'ready':
+      case 'running':
+      case 'succeeded':
+        return Colors.green; // Green for Operational nodes
+      case 'unknown':
       default:
         return Colors.grey; // Default color for unknown status
     }

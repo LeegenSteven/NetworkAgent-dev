@@ -321,36 +321,69 @@ class _LogicalTopologyWidgetState extends State<LogicalTopologyWidget>
                                  },
                                  child: Column(
                                     children: [
-                                       Container(
-                                         decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            boxShadow: node.isAnomaly
-                                              ? [
-                                                  BoxShadow(
-                                                    color: Colors.red.withOpacity(0.8),
-                                                    blurRadius: 15,
-                                                    spreadRadius: 5,
-                                                  ),
-                                                ]
-                                              : [],
-                                         ),
-                                         child: CircleAvatar(
-                                            backgroundColor: getNodeColor(node),
-                                            radius: 20,
-                                            child: Icon(
-                                               getNodeIcon(node),
-                                               color: Colors.white,
-                                               size: 24,
-                                            ),
-                                         ),
+                                       Stack(
+                                         clipBehavior: Clip.none,
+                                         children: [
+                                           Container(
+                                             decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                boxShadow: node.isAnomaly
+                                                  ? [
+                                                      BoxShadow(
+                                                        color: Colors.red.withOpacity(0.8),
+                                                        blurRadius: 15,
+                                                        spreadRadius: 5,
+                                                      ),
+                                                    ]
+                                                  : [],
+                                             ),
+                                             child: CircleAvatar(
+                                                backgroundColor: getNodeColor(node),
+                                                radius: 20,
+                                                child: Icon(
+                                                   getNodeIcon(node),
+                                                   color: Colors.white,
+                                                   size: 24,
+                                                ),
+                                             ),
+                                           ),
+                                           Positioned(
+                                             right: -2,
+                                             bottom: -2,
+                                             child: Container(
+                                               width: 14,
+                                               height: 14,
+                                               decoration: BoxDecoration(
+                                                 color: NetworkNode.getStatusColor(node.properties['status']?.toString()),
+                                                 shape: BoxShape.circle,
+                                                 border: Border.all(color: Colors.white, width: 2),
+                                               ),
+                                             ),
+                                           ),
+                                         ],
                                        ),
                                        const SizedBox(height: 4),
-                                       Text(
-                                          node.name,
-                                          style: TextStyle(
-                                             color: node.isAnomaly ? Colors.red : Colors.black87,
-                                             fontSize: 10,
-                                             fontWeight: node.isAnomaly ? FontWeight.w900 : FontWeight.bold,
+                                       RichText(
+                                          textAlign: TextAlign.center,
+                                          text: TextSpan(
+                                             children: [
+                                                TextSpan(
+                                                   text: '${node.name}\n',
+                                                   style: TextStyle(
+                                                      color: node.isAnomaly ? Colors.red : Colors.black87,
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.bold,
+                                                   ),
+                                                ),
+                                                TextSpan(
+                                                   text: '${node.properties['status'] ?? 'Unknown'}',
+                                                   style: TextStyle(
+                                                      color: node.isAnomaly ? Colors.red : Colors.black54,
+                                                      fontSize: 9,
+                                                      fontWeight: FontWeight.normal,
+                                                   ),
+                                                ),
+                                             ],
                                           ),
                                        )
                                     ],
@@ -362,6 +395,43 @@ class _LogicalTopologyWidgetState extends State<LogicalTopologyWidget>
                    ),
                 ),
               ),
+            // Legend positioned in bottom-left corner
+            Positioned(
+              bottom: 16,
+              left: 16,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Status',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    _buildLegendItem(Colors.green, 'Operational'),
+                    _buildLegendItem(Colors.orange, 'Degraded'),
+                    _buildLegendItem(Colors.red, 'Failed'),
+                    _buildLegendItem(Colors.grey, 'Unknown'),
+                  ],
+                ),
+              ),
+            ),
             // Floating restart physics button
             Positioned(
                bottom: 16,
@@ -382,6 +452,29 @@ class _LogicalTopologyWidgetState extends State<LogicalTopologyWidget>
             )
          ],
        ),
+    );
+  }
+  Widget _buildLegendItem(Color color, String label) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11),
+          ),
+        ],
+      ),
     );
   }
 }

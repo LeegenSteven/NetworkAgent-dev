@@ -1,5 +1,6 @@
 import os
 import sys
+import pickle
 import torch
 import torch.nn as nn
 from tqdm import tqdm
@@ -19,6 +20,29 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Vertex AI env vars — set by the KFP training component
+SNAPSHOTS_GCS_PATH = os.getenv("SNAPSHOTS_GCS_PATH", "")
+SCALERS_GCS_PATH = os.getenv("SCALERS_GCS_PATH", "")
+AIP_MODEL_DIR = os.getenv("AIP_MODEL_DIR", "")  # Vertex AI canonical output dir
+
+
+def load_snapshots_from_gcs(gcs_path: str) -> list:
+    """Download serialised snapshot dicts from GCS (set by ingest_snapshots KFP component)."""
+    storage_client = storage.Client()
+    bucket_name = gcs_path.replace("gs://", "").split("/")[0]
+    prefix = "/".join(gcs_path.replace("gs://", "").split("/")[1:])
+    bucket = storage_client.bucket(bucket_name)
+    blobs = sorted(
+        [b for b in bucket.list_blobs(prefix=prefix) if b.name.endswith(".pkl")],
+        key=lambda b: b.name,
+    )
+    snapshots = []
+    for blob in blobs:
+        snapshots.append(pickle.loads(blob.download_as_bytes()))
+    logger.info(f"Loaded {len(snapshots)} snapshots from {gcs_path}")
+    return snapshots
+
 
 # Configuration
 MODEL_SAVE_PATH = "hetgnn_model.pth"
@@ -94,18 +118,22 @@ def run_training_pipeline():
         gb = GraphBuilder(SCALER_PATH)
         gb.init_config_encoder()
 
-        dataset = SpannerDataset(SPANNER_INSTANCE, SPANNER_DATABASE, num_snapshots=TRAINING_SNAPSHOTS, interval_minutes=INTERVAL_MINUTES)
-        
-        timestamps = dataset._get_timestamps()
-        snapshot_objects = []
-        
-        for ts in tqdm(timestamps, desc="Fetching Snapshots"):
-            try:
-                snapshot = dataset.fetch_snapshot(ts)
-                if snapshot["nodes"]:
-                    snapshot_objects.append(snapshot)
-            except Exception as e:
-                logger.error(f"Error fetching snapshot at {ts}: {e}")
+        # ── Data loading: GCS path (Vertex AI pipeline) or live Spanner (local/legacy) ──
+        if SNAPSHOTS_GCS_PATH:
+            logger.info(f"Loading pre-fetched snapshots from GCS: {SNAPSHOTS_GCS_PATH}")
+            snapshot_objects = load_snapshots_from_gcs(SNAPSHOTS_GCS_PATH)
+        else:
+            logger.info(f"Fetching snapshots live from Spanner: {SPANNER_INSTANCE}/{SPANNER_DATABASE}")
+            dataset = SpannerDataset(SPANNER_INSTANCE, SPANNER_DATABASE, num_snapshots=TRAINING_SNAPSHOTS, interval_minutes=INTERVAL_MINUTES)
+            timestamps = dataset._get_timestamps()
+            snapshot_objects = []
+            for ts in tqdm(timestamps, desc="Fetching Snapshots"):
+                try:
+                    snapshot = dataset.fetch_snapshot(ts)
+                    if snapshot["nodes"]:
+                        snapshot_objects.append(snapshot)
+                except Exception as e:
+                    logger.error(f"Error fetching snapshot at {ts}: {e}")
                 
         if not snapshot_objects:
             logger.error("Error: No data found. Exiting.")
@@ -389,6 +417,19 @@ def run_training_pipeline():
             upload_blob(GCS_BUCKET_NAME, MODEL_SAVE_PATH, f"models/hetgnn/{MODEL_SAVE_PATH}")
             upload_blob(GCS_BUCKET_NAME, SCALER_PATH, f"models/hetgnn/{SCALER_PATH}")
             upload_blob(GCS_BUCKET_NAME, STATS_SAVE_PATH, f"models/hetgnn/{STATS_SAVE_PATH}")
+
+        # ── Vertex AI: copy artefacts to AIP_MODEL_DIR (canonical output for KFP component) ──
+        if AIP_MODEL_DIR:
+            logger.info(f"Copying artefacts to Vertex AI model dir: {AIP_MODEL_DIR}")
+            bucket_name = AIP_MODEL_DIR.replace("gs://", "").split("/")[0]
+            prefix = "/".join(AIP_MODEL_DIR.replace("gs://", "").split("/")[1:]).rstrip("/")
+            for local_path, dest_name in [
+                (MODEL_SAVE_PATH, "model.pth"),
+                (SCALER_PATH, "scalers.pkl"),
+                (STATS_SAVE_PATH, "model_stats.pth"),
+            ]:
+                upload_blob(bucket_name, local_path, f"{prefix}/{dest_name}")
+            logger.info(f"Artefacts copied to {AIP_MODEL_DIR}")
             
     except Exception as e:
         logger.error(f"Training pipeline failed: {e}")

@@ -63,6 +63,14 @@ CheckGCPEnv()
         exit 1
     fi
 
+    # test if kfp (Kubeflow Pipelines SDK) is installed — required by DeployGNN
+    if ! python3 -c "import kfp" &> /dev/null
+    then
+        echo "kfp Python SDK could not be found."
+        echo "Install it with: python3 -m pip install -r gnn/requirements.vertex.txt"
+        exit 1
+    fi
+
     # The WEBAPPS_PWD and WEBAPPS_LOGIN used for all web front ends like Gitea, Streamlit NW Agent
     # This is to avoid hard coding the passwd in source code
     if [ -z "${GOOGLE_PROJECT}" ] || [ -z "${GOOGLE_REGION}" ] || \
@@ -208,6 +216,8 @@ SetDemoEnv()
     export GOOGLE_NAMESPACE="automation"
     export GOOGLE_SPANNER_INSTANCE="networktopology-instance"
     export GOOGLE_SPANNER_DATABASE="networktopology-db"
+    export GOOGLE_GNN_BUCKET="${GOOGLE_PROJECT}-gnn-artifacts"
+    export GOOGLE_PIPELINE_ROOT="gs://${GOOGLE_GNN_BUCKET}/pipeline-runs"
     export GOOGLE_ORG_NAME=$(gcloud organizations list --format "value(name)")
 
     export SINK_NAME="nwoplogs-sink"
@@ -278,6 +288,9 @@ Create()
     gcloud services enable --project=$GOOGLE_PROJECT dataform.googleapis.com
     # For Free5GC london cluster resources management
     gcloud services enable --project=$GOOGLE_PROJECT cloudresourcemanager.googleapis.com
+    # For Vertex AI Pipelines (KFP) and Cloud Scheduler (GNN inference trigger)
+    gcloud services enable --project=$GOOGLE_PROJECT cloudscheduler.googleapis.com
+    gcloud services enable --project=$GOOGLE_PROJECT storage.googleapis.com
 
     # Configure Cloud Build service account
     echo "########################################"
@@ -360,11 +373,20 @@ Create()
         for role in "roles/editor" "roles/container.admin" "roles/compute.admin" \
             "roles/compute.networkAdmin" "roles/iam.serviceAccountAdmin" "roles/monitoring.metricWriter" \
             "roles/aiplatform.user" "roles/aiplatform.admin" "roles/logging.logWriter" "roles/run.admin" "roles/spanner.databaseUser" \
-            "roles/pubsub.editor" "roles/pubsub.subscriber" "roles/monitoring.viewer"; do
+            "roles/pubsub.editor" "roles/pubsub.subscriber" "roles/monitoring.viewer" \
+            "roles/storage.objectAdmin" "roles/iam.serviceAccountTokenCreator"; do
             echo "$role"   
             gcloud projects add-iam-policy-binding $GOOGLE_PROJECT --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" \
               --role="$role" --no-user-output-enabled
         done
+
+        # Allow GOOGLE_USER to act as the networkagent SA (required by Vertex AI
+        # pipeline submission and Cloud Run deployments using --service-account)
+        echo "Granting $GOOGLE_USER permission to act as $GOOGLE_SERVICE_ACCOUNT..."
+        gcloud iam service-accounts add-iam-policy-binding $GOOGLE_SERVICE_ACCOUNT \
+            --member="user:$GOOGLE_USER" \
+            --role="roles/iam.serviceAccountUser" \
+            --project=$GOOGLE_PROJECT --no-user-output-enabled
 
     fi
 
@@ -421,6 +443,13 @@ Create()
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO networkagents/supervisor/cloudbuild.j2 > networkagents/supervisor/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO ui/dashboard/cloudbuild.j2 > ui/dashboard/cloudbuild.yaml
     jinja -E GOOGLE_VM_USER -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_REPO logservices/metricscollector/cloudbuild.j2 > logservices/metricscollector/cloudbuild.yaml
+
+    echo "##############################################################"
+    echo "generating GNN pipeline submission script from template"
+    echo "##############################################################"
+    jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_PIPELINE_ROOT -E GOOGLE_GNN_BUCKET -E GOOGLE_REPO \
+        gnn/src/pipeline/submit_pipeline.j2 > gnn/src/pipeline/submit_pipeline.py
+    echo "  -> generated gnn/src/pipeline/submit_pipeline.py"
 
 }
 
@@ -491,15 +520,6 @@ Start()
     echo "####################################"
     echo "Starting the network agent services"
     echo "####################################"
-
-    # Create bucket
-    echo "###########################"
-    echo "Create GNN Bucket          "
-    echo "###########################"
-    gcloud storage buckets describe gs://network-model-artifacts --location=$GOOGLE_REGION > /dev/null 2>&1
-    if [[ $? -ne 0 ]]; then
-        gcloud storage buckets create gs://network-model-artifacts --location=$GOOGLE_REGION --project=$GOOGLE_PROJECT
-    fi
 
    # Create artifact repository
     echo "###########################"
@@ -707,7 +727,8 @@ Delete()
         environment/logsink.yaml \
         \
         networkagent.json \
-        google-compute*
+        google-compute* \
+        gnn/src/pipeline/submit_pipeline.py
 
 }
 
@@ -779,8 +800,8 @@ Kill()
         done
     fi
     
-    # Delete Vertex AI models
-    MODELS=$(gcloud ai models list --region=$GOOGLE_REGION --format="value(name)" 2>/dev/null | grep "gnn-serve-model" || true)
+    # Delete Vertex AI models registered by the KFP pipeline
+    MODELS=$(gcloud ai models list --region=$GOOGLE_REGION --format="value(name)" 2>/dev/null | grep -E "gnn-(dgat|hetgnn|stgnn)" || true)
     if [ -n "$MODELS" ]; then
         for model in $MODELS; do
             echo "Deleting Vertex AI model: $model"
@@ -788,15 +809,26 @@ Kill()
         done
     fi
     
-    # Cancel any running GNN training jobs
-    JOBS=$(gcloud ai custom-jobs list --region=$GOOGLE_REGION --filter="displayName:gnn-training-job AND state:JOB_STATE_RUNNING" --format="value(name)" 2>/dev/null || true)
-    if [ -n "$JOBS" ]; then
-        for job in $JOBS; do
-            echo "Cancelling running training job: $job"
-            gcloud ai custom-jobs cancel $job --region=$GOOGLE_REGION --quiet 2>/dev/null || true
+    # Cancel any running Vertex AI Pipeline runs (GNN training pipeline)
+    PIPELINE_RUNS=$(gcloud ai pipeline-jobs list --region=$GOOGLE_REGION \
+        --filter="displayName:gnn-training-pipeline AND state:PIPELINE_STATE_RUNNING" \
+        --format="value(name)" 2>/dev/null || true)
+    if [ -n "$PIPELINE_RUNS" ]; then
+        for run in $PIPELINE_RUNS; do
+            echo "Cancelling running pipeline job: $run"
+            gcloud ai pipeline-jobs cancel "$run" --region=$GOOGLE_REGION --quiet 2>/dev/null || true
         done
     fi
-    
+
+    # Delete Cloud Scheduler GNN inference trigger
+    echo "Deleting Cloud Scheduler job gnn-inference-scheduler..."
+    gcloud scheduler jobs delete gnn-inference-scheduler \
+        --location=$GOOGLE_REGION --quiet 2>/dev/null || true
+
+    # Delete GNN inference Cloud Run Job
+    echo "Deleting Cloud Run Job gnn-infer..."
+    gcloud run jobs delete gnn-infer --region=$GOOGLE_REGION --quiet 2>/dev/null || true
+
     gcloud run services delete networktools --region=$GOOGLE_REGION --quiet
     gcloud run services delete testagent --region=$GOOGLE_REGION --quiet
     gcloud run services delete logsagent --region=$GOOGLE_REGION --quiet
@@ -1033,58 +1065,133 @@ EOF
 }
 
 ############################################################
-# Build and deploy the GNN services                        #
+# Build and deploy the GNN services (Vertex AI Pipelines)  #
 ############################################################
 DeployGNN()
 {
     export GOOGLE_SERVICE_ACCOUNT=`gcloud iam service-accounts list --format="value(email)" --filter="networkagent@${GOOGLE_PROJECT}."`
+    TRAIN_VERTEX_IMAGE="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/traingnn-vertex:latest"
+    INFER_IMAGE="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/infergnn-cloudrun:latest"
 
-    IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/traingnn:latest"
-    if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-        read -p "GNN image already exists. Rebuild? (y/n) " -n 1 -r
+    # ── 1. Build all GNN Docker images via Cloud Build ─────────────────────────
+    if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && \
+       $(gcloud artifacts docker images describe $TRAIN_VERTEX_IMAGE >/dev/null 2>&1); then
+        read -p "GNN Vertex AI images already exist. Rebuild? (y/n) " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             gcloud builds submit --region=$GOOGLE_REGION --config=gnn/cloudbuild.yaml .
         fi
-    elif [[ $NO_FLAG == "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
-        echo "GNN image already exists - not building the image (NO_FLAG set)"
-    elif [[ $NO_FLAG != "y" ]]; then
+    elif [[ $NO_FLAG == "y" ]] && \
+         $(gcloud artifacts docker images describe $TRAIN_VERTEX_IMAGE >/dev/null 2>&1); then
+        echo "GNN images already exist - not rebuilding (NO_FLAG set)"
+    else
+        echo "Building all GNN Docker images (Vertex AI training + serving + Cloud Run inference)..."
         gcloud builds submit --region=$GOOGLE_REGION --config=gnn/cloudbuild.yaml .
     fi
 
-    echo "Submitting GNN Training as Vertex AI Custom Job"
-    gcloud ai custom-jobs create \
-      --region=$GOOGLE_REGION \
-      --display-name="gnn-training-job" \
-      --worker-pool-spec=machine-type=n1-standard-8,replica-count=1,container-image-uri=$IMAGE_URI
+    # ── 2. Create GNN artefacts GCS bucket ─────────────────────────────────────
+    echo "Ensuring GNN artefacts bucket gs://$GOOGLE_GNN_BUCKET exists..."
+    gcloud storage buckets describe gs://$GOOGLE_GNN_BUCKET > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        gcloud storage buckets create gs://$GOOGLE_GNN_BUCKET \
+            --location=$GOOGLE_REGION \
+            --project=$GOOGLE_PROJECT \
+            --uniform-bucket-level-access
+        echo "  Created gs://$GOOGLE_GNN_BUCKET"
+    fi
+    # Grant service account write access to the bucket
+    gcloud storage buckets add-iam-policy-binding gs://$GOOGLE_GNN_BUCKET \
+        --member="serviceAccount:$GOOGLE_SERVICE_ACCOUNT" \
+        --role="roles/storage.objectAdmin" > /dev/null 2>&1
 
-    SERVE_IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/servegnn:latest"
-    echo "Deploying GNN Serving to Vertex AI Endpoint"
-    
-    # 1. Upload Model to Registry
-    echo "Uploading serving model to Vertex AI Registry..."
-    MODEL_ID=$(gcloud ai models upload \
-      --region=$GOOGLE_REGION \
-      --display-name="gnn-serve-model" \
-      --container-image-uri=$SERVE_IMAGE_URI \
-      --format="value(model)")
-      
-    # 2. Create Endpoint
-    echo "Creating Vertex AI Endpoint..."
-    ENDPOINT_ID=$(gcloud ai endpoints create \
-      --region=$GOOGLE_REGION \
-      --display-name="gnn-endpoint" \
-      --format="value(name)")
-      
-    # 3. Deploy Model to Endpoint
-    echo "Deploying serving model to Endpoint (this takes a few minutes)..."
-    gcloud ai endpoints deploy-model $ENDPOINT_ID \
-      --region=$GOOGLE_REGION \
-      --model=$MODEL_ID \
-      --display-name="gnn-serve-deployment" \
-      --machine-type=n1-standard-4 \
-      --min-replica-count=1 \
-      --max-replica-count=1
+    # Grant the Vertex AI Service Agent read access to Artifact Registry so it
+    # can pull the GNN training/serving container images when creating pipeline jobs.
+    echo "Granting Vertex AI Service Agent read access to Artifact Registry..."
+    gcloud artifacts repositories add-iam-policy-binding $GOOGLE_REPO \
+        --location=$GOOGLE_REGION \
+        --member="serviceAccount:service-${GOOGLE_PROJECT_NUMBER}@gcp-sa-aiplatform-cc.iam.gserviceaccount.com" \
+        --role="roles/artifactregistry.reader" \
+        --project=$GOOGLE_PROJECT > /dev/null 2>&1
+
+    # ── 3. Generate submit_pipeline.py from Jinja template ─────────────────────
+    echo "Regenerating gnn/src/pipeline/submit_pipeline.py..."
+    jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_PIPELINE_ROOT -E GOOGLE_GNN_BUCKET -E GOOGLE_REPO \
+        gnn/src/pipeline/submit_pipeline.j2 > gnn/src/pipeline/submit_pipeline.py
+
+    # ── 3b. Ensure current user can act as the networkagent SA ─────────────────
+    # Required for job.submit(service_account=...) in submit_pipeline.py
+    echo "Ensuring $GOOGLE_USER can act as $GOOGLE_SERVICE_ACCOUNT..."
+    gcloud iam service-accounts add-iam-policy-binding $GOOGLE_SERVICE_ACCOUNT \
+        --member="user:$GOOGLE_USER" \
+        --role="roles/iam.serviceAccountUser" \
+        --project=$GOOGLE_PROJECT --no-user-output-enabled
+
+    # ── 4. Install pipeline submission deps and submit the training pipeline ───
+    # Use python3 -m pip so the packages land in the same interpreter that will
+    # run submit_pipeline.py.  requirements.vertex.txt is the single source of
+    # truth for KFP SDK + Vertex AI pipeline deps.
+    echo "Installing pipeline submission dependencies (requirements.vertex.txt)..."
+    python3 -m pip install --quiet -r gnn/requirements.vertex.txt
+
+    echo "Submitting GNN training pipeline to Vertex AI Pipelines..."
+    # Use the networkagent SA key so the Vertex AI SDK authenticates as the SA rather
+    # than falling back to gcloud ADC (which may be a different Google account).
+    # The SA has storage.objectAdmin on the bucket and can act as itself.
+    GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/gnn/src/networkagent.json" \
+    python3 gnn/src/pipeline/submit_pipeline.py \
+        --project "$GOOGLE_PROJECT" \
+        --region "$GOOGLE_REGION" \
+        --pipeline-root "$GOOGLE_PIPELINE_ROOT" \
+        --spanner-instance "$GOOGLE_SPANNER_INSTANCE" \
+        --spanner-database "$GOOGLE_SPANNER_DATABASE" \
+        --gcs-bucket "$GOOGLE_GNN_BUCKET" \
+        --service-account "$GOOGLE_SERVICE_ACCOUNT"
+    echo "  Pipeline submitted — monitor at: https://console.cloud.google.com/vertex-ai/pipelines?project=$GOOGLE_PROJECT"
+
+    # ── 5. Deploy GNN inference Cloud Run Job ──────────────────────────────────
+    echo "Deploying GNN inference Cloud Run Job (gnn-infer)..."
+    gcloud run jobs deploy gnn-infer \
+        --image "$INFER_IMAGE" \
+        --region "$GOOGLE_REGION" \
+        --service-account "$GOOGLE_SERVICE_ACCOUNT" \
+        --set-env-vars "GCS_BUCKET_NAME=$GOOGLE_GNN_BUCKET" \
+        --set-env-vars "SPANNER_INSTANCE=$GOOGLE_SPANNER_INSTANCE" \
+        --set-env-vars "SPANNER_DATABASE=$GOOGLE_SPANNER_DATABASE" \
+        --set-env-vars "GOOGLE_PROJECT=$GOOGLE_PROJECT" \
+        --set-env-vars "GOOGLE_REGION=$GOOGLE_REGION" \
+        --max-retries 2 \
+        --task-timeout 300 \
+        --memory 2Gi \
+        --cpu 2
+
+    # ── 6. Create Cloud Scheduler job to trigger inference every 60 seconds ───
+    # Cloud Scheduler minimum granularity is 1 minute (cron "* * * * *")
+    INFER_JOB_URI="https://run.googleapis.com/v2/projects/$GOOGLE_PROJECT/locations/$GOOGLE_REGION/jobs/gnn-infer:run"
+    echo "Creating/updating Cloud Scheduler job gnn-inference-scheduler..."
+    gcloud scheduler jobs describe gnn-inference-scheduler --location=$GOOGLE_REGION > /dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+        gcloud scheduler jobs create http gnn-inference-scheduler \
+            --location "$GOOGLE_REGION" \
+            --schedule "* * * * *" \
+            --uri "$INFER_JOB_URI" \
+            --http-method POST \
+            --oauth-service-account-email "$GOOGLE_SERVICE_ACCOUNT" \
+            --message-body '{}' \
+            --attempt-deadline 320s \
+            --description "Trigger GNN inference Cloud Run Job every 60 seconds"
+    else
+        echo "  Scheduler job already exists — updating schedule..."
+        gcloud scheduler jobs update http gnn-inference-scheduler \
+            --location "$GOOGLE_REGION" \
+            --schedule "* * * * *" \
+            --uri "$INFER_JOB_URI"
+    fi
+    echo "  Cloud Scheduler job gnn-inference-scheduler configured."
+    echo ""
+    echo "GNN deployment complete!"
+    echo "  Pipeline:   https://console.cloud.google.com/vertex-ai/pipelines?project=$GOOGLE_PROJECT"
+    echo "  Infer job:  https://console.cloud.google.com/run/jobs?project=$GOOGLE_PROJECT"
+    echo "  Scheduler:  https://console.cloud.google.com/cloudscheduler?project=$GOOGLE_PROJECT"
 }
 
 ############################################################

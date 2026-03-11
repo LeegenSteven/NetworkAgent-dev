@@ -16,10 +16,16 @@ class SpannerDataset:
                    f"num_snapshots={num_snapshots}, interval_minutes={interval_minutes}")
         
         creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "/agent/networkagent.json")
-        logger.debug(f"Loading credentials from: {creds_path}")
-        credentials, _ = google.auth.load_credentials_from_file(creds_path, scopes=["https://www.googleapis.com/auth/cloud-platform"])
-        
-        self.client = spanner.Client(credentials=credentials)
+        if creds_path and os.path.exists(creds_path):
+            logger.debug(f"Loading credentials from file: {creds_path}")
+            credentials, _ = google.auth.load_credentials_from_file(
+                creds_path, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+            self.client = spanner.Client(credentials=credentials)
+        else:
+            # Running on Vertex AI / Cloud Run with ADC (no key file mounted)
+            logger.debug("GOOGLE_APPLICATION_CREDENTIALS not set or file absent — using ADC")
+            self.client = spanner.Client()
         self.instance = self.client.instance(instance_id)
         self.database = self.instance.database(database_id)
         self.num_snapshots = num_snapshots
@@ -127,9 +133,12 @@ class SpannerDataset:
                     "name": row[2],
                     "device_id": row[1],
                     "state": state_val,
-                    "errors": 0.0,      # Placeholder
-                    "rx": 0.0,          # Placeholder
-                    "tx": 0.0           # Placeholder
+                    "rx_bytes": 0.0,   # populated below from NetworkMetrics
+                    "tx_bytes": 0.0,
+                    "rx_errors": 0.0,
+                    "tx_errors": 0.0,
+                    "rx_drops": 0.0,   # not available in current DB schema
+                    "tx_drops": 0.0,
                 })
                 interface_count += 1
             
@@ -243,9 +252,13 @@ class SpannerDataset:
                     key = (hostname, node.get("name"))
                     if key in metrics_map:
                         m = metrics_map[key]
-                        node["errors"] = float(m.get("node_network_receive_errs_total", 0.0)) + float(m.get("node_network_transmit_errs_total", 0.0))
-                        node["rx"] = float(m.get("node_network_receive_bytes_total", 0.0))
-                        node["tx"] = float(m.get("node_network_transmit_bytes_total", 0.0))
+                        node["rx_bytes"]  = float(m.get("node_network_receive_bytes_total", 0.0))
+                        node["tx_bytes"]  = float(m.get("node_network_transmit_bytes_total", 0.0))
+                        node["rx_errors"] = float(m.get("node_network_receive_errs_total", 0.0))
+                        node["tx_errors"] = float(m.get("node_network_transmit_errs_total", 0.0))
+                        # rx_drops / tx_drops are not captured by the current NetworkMetrics schema
+                        node["rx_drops"]  = 0.0
+                        node["tx_drops"]  = 0.0
                         metrics_applied += 1
                 
                 logger.info(f"Applied metrics to {metrics_applied}/{interface_count} interfaces")

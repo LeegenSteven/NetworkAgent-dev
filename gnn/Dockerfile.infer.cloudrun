@@ -1,13 +1,9 @@
 FROM python:3.13.2-slim
 
-# Set default env vars (can be overridden at runtime)
 ENV SPANNER_INSTANCE=networktopology-instance
 ENV SPANNER_DATABASE=networktopology-db
 ENV GCS_BUCKET_NAME=network-model-artifacts
 
-ENV PORT = 8080
-
-# Install system dependencies if needed (e.g. for numpy/scikit-learn build)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
@@ -16,7 +12,10 @@ ADD gnn/requirements.txt /
 RUN pip install -r /requirements.txt
 
 ADD gnn/src/ /app
+ADD networkagent.json /app/networkagent.json
 WORKDIR /app
 
-# Run a simple bash loop to execute all three training scripts
-CMD ["sh", "-c", "python train/train_dgat.py && python train/train_hetgnn.py && python train/train_stgnn.py"]
+# Stateless: reads latest models from GCS, fetches snapshot from Spanner,
+# runs inference, writes embeddings back to Spanner, then exits.
+# Triggered by Cloud Scheduler every 60 seconds via Cloud Run Job.
+CMD ["python", "infer.py"]

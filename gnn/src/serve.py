@@ -40,9 +40,9 @@ ANOMALY_THRESHOLD_MULTIPLIER = 2.5  # Multiplier for std deviation-based thresho
 # Shared dependencies
 gb = None
 
-# Background task control
-background_task_running = False
-inference_task = None
+# NOTE: Background inference loop removed — inference now runs as a
+# stateless Cloud Run Job triggered by Cloud Scheduler every 60 seconds.
+# See gnn/src/infer.py and Dockerfile.infer.cloudrun.
 
 def download_blob(bucket_name, source_blob_name, destination_file_name):
     """Downloads a blob from the bucket."""
@@ -594,35 +594,6 @@ async def predict_handler(request):
 async def health_handler(request):
     return web.json_response({"status": "healthy"}, status=200)
 
-async def background_inference_loop():
-    global background_task_running
-    background_task_running = True
-    logger.info("🚀 Background inference task started (60-second interval)")
-    
-    while background_task_running:
-        try:
-            logger.info("⏰ Background inference triggered")
-            await run_inference()
-            logger.info(f"✅ Background inference complete, sleeping 60 seconds...")
-            await asyncio.sleep(60)
-        except Exception as e:
-            logger.error(f"❌ Background inference error: {e}", exc_info=True)
-            await asyncio.sleep(60)
-    
-    logger.info("Background inference task stopped")
-
-async def start_background_tasks(app):
-    global inference_task
-    logger.info("Starting background tasks...")
-    inference_task = asyncio.create_task(background_inference_loop())
-
-async def cleanup_background_tasks(app):
-    global background_task_running, inference_task
-    logger.info("Shutting down background tasks...")
-    background_task_running = False
-    if inference_task:
-        await inference_task
-
 app = web.Application()
 cors = aiohttp_cors.setup(app, defaults={
     "*": aiohttp_cors.ResourceOptions(
@@ -631,9 +602,6 @@ cors = aiohttp_cors.setup(app, defaults={
         allow_headers="*"
     )
 })
-
-app.on_startup.append(start_background_tasks)
-app.on_cleanup.append(cleanup_background_tasks)
 
 if __name__ == "__main__":
     load_models()

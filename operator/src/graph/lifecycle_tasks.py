@@ -1895,7 +1895,7 @@ async def sync_network_metrics(entity_id, entity_type, metrics, logger):
                 'id': metrics_id,
                 'kind': entity_type,
                 'name': entity_id,
-                'timestamp': timestamp.isoformat(),
+                'timestamp': timestamp,
                 'metrics': json.dumps(metrics),
                 'interface_id': entity_id
             },

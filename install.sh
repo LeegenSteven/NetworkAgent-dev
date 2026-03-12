@@ -25,7 +25,7 @@ DisplayGCPEnv()
     echo "  - GCP user: $(gcloud config list account --format="value(core.account)")"
     echo "  - GCP project: $(gcloud config get-value project 2>/dev/null)"
     echo "  - Active configuration: $(gcloud config configurations list --filter="IS_ACTIVE=True" --format="value(NAME)")"
-    echo "  - GKE context: $(kubectl config current-context)"
+    echo "  - GKE context: $(kubectl config current-context 2>/dev/null || echo "Not set yet")"
 }
 
 ############################################################

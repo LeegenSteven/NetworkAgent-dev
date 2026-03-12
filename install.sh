@@ -1049,7 +1049,7 @@ DeployOperator()
 DeployGit()
 {
     # Delete current instance
-    echo "Deleting current spanner DB..."
+    echo "Deleting current Gitea server..."
     kubectl delete -f environment/git.yaml
 
     echo "#####################################"

@@ -110,7 +110,7 @@ async def configure(settings: kopf.OperatorSettings, **_):
     # settings.watching.retry_delay = startup_config.watcher_retry_delay
     # settings.watching.backoff_factor = startup_config.watcher_backoff_factor
     # settings.watching.max_delay = startup_config.watcher_max_delay
-    # settings.watching.reconnect_backoff = startup_config.watcher_reconnect_backoff
+    settings.watching.reconnect_backoff = startup_config.watcher_reconnect_backoff
     
     # Rate limiting settings
     # ----------------------

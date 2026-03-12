@@ -446,8 +446,7 @@ DeploySpanner()
 {
     # Delete current instance
     echo "Deleting current spanner DB..."
-    kubectl delete -f environment/spanner.yaml
-    # regenerate the spanner spec file
+    kubectl delete -f environment/spanner.yaml 2>/dev/null || echo "No existing spanner instance found, skipping deletion."
     echo "Regenerating spanner manifest file..."
     jinja -E GOOGLE_PROJECT -E GOOGLE_REGION -E GOOGLE_ZONE -E GOOGLE_SPANNER_DATABASE -E GOOGLE_SPANNER_INSTANCE environment/spanner.j2 >  environment/spanner.yaml
 

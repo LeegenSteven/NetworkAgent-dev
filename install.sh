@@ -1049,7 +1049,7 @@ DeployGit()
 {
     # Delete current instance
     echo "Deleting current Gitea server..."
-    kubectl delete -f environment/git.yaml
+    kubectl delete -f environment/git.yaml 2>/dev/null || echo "No existing gitea instance found, skipping deletion."
 
     echo "#####################################"
     echo "Create The gitea server and git repo"

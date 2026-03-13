@@ -29,9 +29,13 @@
   ansible.builtin.shell: bash /tmp/add-google-cloud-ops-agent-repo.sh --also-install
   when: ops_agent_check.rc != 0
 
-- name: Configure Ops Agent to receive VyOS logs
-  ansible.builtin.template:
-    src: ops-agent-config.yaml.j2
+- name: Apply minimal Ops Agent config (logging only)
+  # The full config including Prometheus scrape targets is written later by
+  # the VyOSInfrastructure operator so it can be kept in sync with the
+  # actual router inventory.  This task just provides a safe default that
+  # enables syslog collection without any (potentially stale) scrape targets.
+  ansible.builtin.copy:
+    src: default-config.yaml
     dest: /etc/google-cloud-ops-agent/config.yaml
     owner: root
     group: root

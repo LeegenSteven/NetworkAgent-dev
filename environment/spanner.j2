@@ -198,18 +198,15 @@ spec:
   - "CREATE TABLE NetworkMetrics (
         id STRING(36) NOT NULL DEFAULT (GENERATE_UUID()),
         timestamp TIMESTAMP NOT NULL,
-        kind STRING(MAX) NOT NULL,
-        name STRING(MAX),
-        metrics JSON,
-        interface_id STRING(MAX),
         node_name STRING(MAX),
         metric_name STRING(MAX),
         metric_type STRING(MAX),
+        kind STRING(MAX) NOT NULL,
         value FLOAT64,
         labels JSON,
         interface STRING(MAX)
     ) PRIMARY KEY (id, timestamp)"
-  - "CREATE INDEX NetworkMetricsIdx1 ON NetworkMetrics(timestamp DESC) STORING (interface_id, name, kind, node_name, metric_name, metric_type, value, labels, interface)"
+  - "CREATE INDEX NetworkMetricsIdx1 ON NetworkMetrics(timestamp DESC) STORING (node_name, metric_name, metric_type, kind, value, labels, interface)"
   - "CREATE TABLE ServicePerformance (
         id STRING(36) NOT NULL,
         service_type STRING(MAX) NOT NULL,

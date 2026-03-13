@@ -1,31 +1,43 @@
 
 import datetime
 import logging
+import os
+from typing import List, Dict, Optional
+
 import google.auth
 from google.cloud import spanner
-from typing import List, Dict, Optional
-import os
 
 logger = logging.getLogger(__name__)
 
 class SpannerDataset:
     """Loads snapshots from Google Spanner using SCD Type 2 query logic."""
     
-    def __init__(self, instance_id: str, database_id: str, num_snapshots: int = 50, interval_minutes: int = 5):
+    def __init__(self, instance_id: str, database_id: str, num_snapshots: int = 50, interval_minutes: int = 5, project_id: Optional[str] = None):
         logger.info(f"Initializing SpannerDataset: instance_id={instance_id}, database_id={database_id}, "
-                   f"num_snapshots={num_snapshots}, interval_minutes={interval_minutes}")
+                   f"num_snapshots={num_snapshots}, interval_minutes={interval_minutes}, project_id={project_id}")
         
         creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "/agent/networkagent.json")
         if creds_path and os.path.exists(creds_path):
             logger.debug(f"Loading credentials from file: {creds_path}")
-            credentials, _ = google.auth.load_credentials_from_file(
+            credentials, detected_project = google.auth.load_credentials_from_file(
                 creds_path, scopes=["https://www.googleapis.com/auth/cloud-platform"]
             )
-            self.client = spanner.Client(credentials=credentials)
+            effective_project = project_id or detected_project
+            self.client = spanner.Client(project=effective_project, credentials=credentials)
         else:
-            # Running on Vertex AI / Cloud Run with ADC (no key file mounted)
+            # Running on Vertex AI / Cloud Run with ADC (no key file mounted).
+            # Explicitly resolve credentials + project via google.auth.default() so we
+            # can override the project with the caller-supplied project_id.  Without
+            # this override the Spanner client can pick up the Vertex AI *tenant*
+            # project (e.g. g83b4821cc8e8a159-tp) instead of the user's project,
+            # causing spanner.sessions.create 403 errors.
             logger.debug("GOOGLE_APPLICATION_CREDENTIALS not set or file absent — using ADC")
-            self.client = spanner.Client()
+            credentials, detected_project = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+            effective_project = project_id or detected_project
+            logger.debug(f"ADC resolved project: {detected_project!r}, effective project: {effective_project!r}")
+            self.client = spanner.Client(project=effective_project, credentials=credentials)
         self.instance = self.client.instance(instance_id)
         self.database = self.instance.database(database_id)
         self.num_snapshots = num_snapshots
@@ -33,9 +45,46 @@ class SpannerDataset:
         
         logger.info("SpannerDataset initialized successfully")
         
+    def _get_latest_timestamp(self) -> datetime.datetime:
+        """Query Spanner for the most recent data timestamp across topology and metrics tables.
+
+        Returns the latest `valid_start_ts` from PhysicalRouter / PhysicalInterface and
+        the latest `timestamp` from NetworkMetrics, taking the overall maximum.  Falls
+        back to `datetime.utcnow()` if the tables are empty or the query fails.
+        """
+        query = """
+            SELECT MAX(ts) FROM (
+                SELECT MAX(valid_start_ts) AS ts FROM PhysicalRouter
+                UNION ALL
+                SELECT MAX(valid_start_ts) AS ts FROM PhysicalInterface
+                UNION ALL
+                SELECT MAX(timestamp)      AS ts FROM NetworkMetrics
+            )
+        """
+        try:
+            with self.database.snapshot() as sn:
+                results = sn.execute_sql(query)
+                row = results.one_or_none()
+                if row and row[0] is not None:
+                    ts = row[0]
+                    # Spanner returns timezone-aware datetimes; strip tzinfo for
+                    # consistency with the rest of the codebase (naive UTC).
+                    if hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
+                        ts = ts.replace(tzinfo=None)
+                    logger.debug(f"Latest data timestamp from Spanner: {ts.isoformat()}")
+                    return ts
+        except Exception as e:
+            logger.warning(f"Could not determine latest data timestamp, falling back to utcnow(): {e}")
+        fallback = datetime.datetime.utcnow()
+        logger.debug(f"Using fallback timestamp: {fallback.isoformat()}")
+        return fallback
+
     def _get_timestamps(self) -> List[datetime.datetime]:
-        """Generates a list of timestamps ending at now(), spaced by interval_minutes."""
-        end_time = datetime.datetime.utcnow()
+        """Generates a list of timestamps ending at the latest data timestamp in Spanner,
+        spaced by interval_minutes.  Anchoring to the last known data point (rather than
+        utcnow()) ensures the most-recent snapshot always contains data and avoids
+        trailing empty windows caused by collection lag."""
+        end_time = self._get_latest_timestamp()
         logger.debug(f"Generating {self.num_snapshots} timestamps ending at {end_time.isoformat()}")
         
         timestamps = []
@@ -188,83 +237,168 @@ class SpannerDataset:
             
             logger.debug(f"Created {connected_edge_count} 'Connected' edges")
 
-            # 5. Connect Metrics
+            # 5. Apply Prometheus metrics (metricscollector)
+            # Rows written by the metricscollector have node_name (router hostname),
+            # interface (interface name), metric_name, and value columns.
+            # PhysicalInterface ID = "router:{node_name}:interface:{interface}".
             t_start = timestamp - datetime.timedelta(minutes=self.interval_minutes)
-            logger.debug(f"Querying NetworkMetrics table for time range: {t_start.isoformat()} to {timestamp.isoformat()}")
-            
-            # Gather physical router names and map interface properties
-            physical_router_names = []
-            router_id_to_hostname = {}
-            for node in snapshot_data["nodes"]:
-                if node["type"] in ["PE Router", "P Router", "CE Router"]:
-                    if node.get("hostname"):
-                        physical_router_names.append(node["hostname"])
-                        router_id_to_hostname[node["id"]] = node["hostname"]
-            
+            logger.debug(f"Querying Prometheus NetworkMetrics for time range: {t_start.isoformat()} to {timestamp.isoformat()}")
+
             interface_nodes = [n for n in snapshot_data["nodes"] if n["type"] == "Interface"]
-            
-            if physical_router_names:
-                params_metrics = {
-                    "t_start": t_start, 
-                    "t_end": timestamp,
-                    "node_names": physical_router_names
-                }
-                param_types_metrics = {
-                    "t_start": spanner.param_types.TIMESTAMP, 
-                    "t_end": spanner.param_types.TIMESTAMP,
-                    "node_names": spanner.param_types.Array(spanner.param_types.STRING)
-                }
-                
-                query_metrics = """
-                    SELECT node_name, interface, metric_name, AVG(value) as agg_value
-                    FROM NetworkMetrics
-                    WHERE timestamp > @t_start AND timestamp <= @t_end
-                    AND node_name IN UNNEST(@node_names)
-                    AND interface IS NOT NULL
-                    GROUP BY node_name, interface, metric_name
-                """
-                
-                results = sn.execute_sql(query_metrics, params=params_metrics, param_types=param_types_metrics)
-                
-                # Dictionary mapping (node_name, interface_name) -> {metric_name: agg_value}
-                metrics_map = {} 
-                
-                for row in results:
-                    node_name = row[0]
-                    interface_name = row[1]
-                    metric_name = row[2]
-                    value = row[3]
-                    
-                    key = (node_name, interface_name)
-                    if key not in metrics_map:
-                        metrics_map[key] = {}
-                    
-                    metrics_map[key][metric_name] = value
-                
-                logger.debug(f"Fetched metrics for {len(metrics_map)} interfaces")
-                
-                metrics_applied = 0
-                for node in interface_nodes:
-                    hostname = router_id_to_hostname.get(node.get("device_id"))
-                    if not hostname:
-                        continue
-                    
-                    key = (hostname, node.get("name"))
-                    if key in metrics_map:
-                        m = metrics_map[key]
-                        node["rx_bytes"]  = float(m.get("node_network_receive_bytes_total", 0.0))
-                        node["tx_bytes"]  = float(m.get("node_network_transmit_bytes_total", 0.0))
-                        node["rx_errors"] = float(m.get("node_network_receive_errs_total", 0.0))
-                        node["tx_errors"] = float(m.get("node_network_transmit_errs_total", 0.0))
-                        # rx_drops / tx_drops are not captured by the current NetworkMetrics schema
-                        node["rx_drops"]  = 0.0
-                        node["tx_drops"]  = 0.0
-                        metrics_applied += 1
-                
-                logger.info(f"Applied metrics to {metrics_applied}/{interface_count} interfaces")
+
+            PROMETHEUS_METRIC_MAP = {
+                "node_network_receive_bytes_total":  "rx_bytes",
+                "node_network_transmit_bytes_total": "tx_bytes",
+                "node_network_receive_errs_total":   "rx_errors",
+                "node_network_transmit_errs_total":  "tx_errors",
+                "node_network_receive_drop_total":   "rx_drops",
+                "node_network_transmit_drop_total":  "tx_drops",
+            }
+
+            query_prom_metrics = """
+                SELECT node_name, interface, metric_name, value
+                FROM NetworkMetrics
+                WHERE timestamp > @t_start AND timestamp <= @t_end
+                AND node_name IS NOT NULL
+                AND interface IS NOT NULL
+                AND metric_name IN UNNEST(@metric_names)
+            """
+            params_prom = {
+                "t_start": t_start,
+                "t_end": timestamp,
+                "metric_names": list(PROMETHEUS_METRIC_MAP.keys()),
+            }
+            param_types_prom = {
+                "t_start": spanner.param_types.TIMESTAMP,
+                "t_end": spanner.param_types.TIMESTAMP,
+                "metric_names": spanner.param_types.Array(spanner.param_types.STRING),
+            }
+
+            prom_results = sn.execute_sql(query_prom_metrics, params=params_prom, param_types=param_types_prom)
+
+            # Aggregate multiple samples in the window by averaging per interface/metric.
+            prom_agg: Dict[str, Dict[str, list]] = {}
+            for row in prom_results:
+                node_name, iface_name, metric_name, value = row
+                if not node_name or not iface_name or value is None:
+                    continue
+                iface_id = f"router:{node_name}:interface:{iface_name}"
+                metric_key = PROMETHEUS_METRIC_MAP.get(metric_name)
+                if metric_key:
+                    prom_agg.setdefault(iface_id, {}).setdefault(metric_key, []).append(float(value))
+
+            avg_metrics: Dict[str, Dict[str, float]] = {
+                iface_id: {k: sum(vs) / len(vs) for k, vs in metrics_by_key.items() if vs}
+                for iface_id, metrics_by_key in prom_agg.items()
+            }
+            logger.debug(f"Prometheus metrics resolved for {len(avg_metrics)} interface IDs")
+
+            # Apply averaged metrics to interface nodes.
+            metrics_applied = 0
+            for node in interface_nodes:
+                node_id = node.get("id", "")
+                m = avg_metrics.get(node_id, {})
+                node["rx_bytes"]  = m.get("rx_bytes",  0.0)
+                node["tx_bytes"]  = m.get("tx_bytes",  0.0)
+                node["rx_errors"] = m.get("rx_errors", 0.0)
+                node["tx_errors"] = m.get("tx_errors", 0.0)
+                node["rx_drops"]  = m.get("rx_drops",  0.0)
+                node["tx_drops"]  = m.get("tx_drops",  0.0)
+                if m:
+                    metrics_applied += 1
+
+            logger.info(f"Applied metrics to {metrics_applied}/{interface_count} interfaces")
 
         total_edges = len(snapshot_data["edges"])
         total_nodes = len(snapshot_data["nodes"])
         logger.info(f"Snapshot complete: {total_nodes} nodes, {total_edges} edges at {timestamp.isoformat()}")
         
         return snapshot_data
+
+
+if __name__ == "__main__":
+    import sys
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
+
+    # ── Configuration ──────────────────────────────────────────────────────────
+    INSTANCE_ID      = os.getenv("SPANNER_INSTANCE", "networktopology-instance")
+    DATABASE_ID      = os.getenv("SPANNER_DATABASE", "networktopology-db")
+    PROJECT_ID       = os.getenv("GOOGLE_CLOUD_PROJECT", None)
+    NUM_SNAPSHOTS    = 20
+    INTERVAL_MINUTES = 1
+    # ───────────────────────────────────────────────────────────────────────────
+
+    print("=" * 70)
+    print(f"SpannerDataset smoke-test")
+    print(f"  Instance : {INSTANCE_ID}")
+    print(f"  Database : {DATABASE_ID}")
+    print(f"  Project  : {PROJECT_ID or '(from credentials)'}")
+    print(f"  Snapshots: {NUM_SNAPSHOTS}  x  every {INTERVAL_MINUTES} min")
+    print("=" * 70)
+
+    dataset = SpannerDataset(
+        instance_id=INSTANCE_ID,
+        database_id=DATABASE_ID,
+        num_snapshots=NUM_SNAPSHOTS,
+        interval_minutes=INTERVAL_MINUTES,
+        project_id=PROJECT_ID,
+    )
+
+    timestamps = dataset._get_timestamps()
+    print(f"\nTimestamp window: {timestamps[0].isoformat()}  →  {timestamps[-1].isoformat()}\n")
+
+    snapshots = []
+    for i, ts in enumerate(timestamps):
+        try:
+            snap = dataset.fetch_snapshot(ts)
+            snapshots.append(snap)
+
+            node_types: Dict[str, int] = {}
+            for n in snap["nodes"]:
+                node_types[n["type"]] = node_types.get(n["type"], 0) + 1
+
+            edge_types: Dict[str, int] = {}
+            for e in snap["edges"]:
+                edge_types[e["relation"]] = edge_types.get(e["relation"], 0) + 1
+
+            print(f"[{i+1:02d}/{NUM_SNAPSHOTS}]  {ts.isoformat()}")
+            print(f"         Nodes  ({sum(node_types.values())}): " +
+                  "  ".join(f"{k}={v}" for k, v in sorted(node_types.items())))
+            print(f"         Edges  ({sum(edge_types.values())}): " +
+                  "  ".join(f"{k}={v}" for k, v in sorted(edge_types.items())))
+
+            # Print metrics for every interface node
+            iface_nodes = [n for n in snap["nodes"] if n["type"] == "Interface"]
+            if iface_nodes:
+                print(f"         Interface metrics ({len(iface_nodes)} interfaces):")
+                print(f"           {'Name':<30} {'State':<6} {'rx_bytes':>12} {'tx_bytes':>12} "
+                      f"{'rx_errors':>10} {'tx_errors':>10} {'rx_drops':>10} {'tx_drops':>10}")
+                print(f"           {'-'*30} {'-'*6} {'-'*12} {'-'*12} {'-'*10} {'-'*10} {'-'*10} {'-'*10}")
+                for iface in iface_nodes:
+                    name  = iface.get("name", iface["id"])[:30]
+                    state = "up" if iface.get("state") == 1.0 else "down"
+                    print(
+                        f"           {name:<30} {state:<6} "
+                        f"{iface.get('rx_bytes', 0):>12.0f} {iface.get('tx_bytes', 0):>12.0f} "
+                        f"{iface.get('rx_errors', 0):>10.0f} {iface.get('tx_errors', 0):>10.0f} "
+                        f"{iface.get('rx_drops', 0):>10.0f} {iface.get('tx_drops', 0):>10.0f}"
+                    )
+            else:
+                print("         No interface nodes found in this snapshot.")
+        except Exception as exc:
+            print(f"[{i+1:02d}/{NUM_SNAPSHOTS}]  {ts.isoformat()}  ERROR: {exc}")
+
+    print("\n" + "=" * 70)
+    print(f"Fetched {len(snapshots)}/{NUM_SNAPSHOTS} snapshots successfully.")
+    empty = NUM_SNAPSHOTS - len(snapshots)
+    if empty:
+        print(f"WARNING: {empty} snapshot(s) were empty or failed.")
+    print("=" * 70)
+
+
+

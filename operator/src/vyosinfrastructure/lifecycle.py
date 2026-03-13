@@ -10,6 +10,10 @@ from utils.vyosnetwork import (
     update_status,
     check_and_update_parent_status
 )
+from vyosinfrastructure.lifecycle_tasks import (
+    extract_routers_from_spec,
+    update_opsagent_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,17 +55,35 @@ async def create_vyosinfrastructure(body, spec, name, namespace, uid, logger, **
                           networks=[n['metadata']['name'] for n in linux_networks],
                           routers=created_routers)
 
+        # Update the Ops Agent on the monitoring VM so it scrapes the new routers
+        routers = extract_routers_from_spec(spec)
+        await update_opsagent_config(namespace, routers)
+
     except Exception as e:
         error_msg = f"Failed to create VyOSInfrastructure: {str(e)}"
         logger.error(error_msg)
         await update_status(name, namespace, "VyOSInfrastructure", "Error", error_msg)
         raise kopf.PermanentError(error_msg)
 
+@kopf.on.resume('google.dev', 'v1', 'vyosinfrastructure')
+async def resume_vyosinfrastructure(body, spec, name, namespace, logger, **kwargs):
+    """Re-sync the Ops Agent config when the operator restarts against existing resources."""
+    logger.info(f"Resuming VyOSInfrastructure: {name} - syncing Ops Agent config")
+    routers = extract_routers_from_spec(spec)
+    await update_opsagent_config(namespace, routers)
+
 @kopf.on.update('google.dev', 'v1', 'vyosinfrastructure')
 async def update_vyosinfrastructure(body, spec, name, namespace, uid, logger, **kwargs):
     logger.info(f"Updating VyOSInfrastructure: {name}")
     # Reuse creation logic to reconcile resources
     await create_vyosinfrastructure(body, spec, name, namespace, uid, logger, **kwargs)
+
+@kopf.on.delete('google.dev', 'v1', 'vyosinfrastructure')
+async def delete_vyosinfrastructure(body, spec, name, namespace, logger, **kwargs):
+    """Handle VyOSInfrastructure deletion - remove router scrape targets from Ops Agent"""
+    logger.info(f"Deleting VyOSInfrastructure: {name}")
+    # Pass an empty router list to clear the Prometheus scrape config
+    await update_opsagent_config(namespace, [])
 
 @kopf.on.event('google.dev', 'v1', 'vyosrouter')
 async def on_vyosrouter_status_change(body, spec, name, namespace, logger, **kwargs):

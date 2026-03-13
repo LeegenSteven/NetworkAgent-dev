@@ -114,3 +114,4 @@ lib/build
 
 
 gnn/src/pipeline/submit_pipeline.py
+gnn_pipeline.yaml

@@ -108,7 +108,6 @@ SQL_TEMPLATES = {
 
   'upsert_service_perf': "INSERT OR UPDATE ServicePerformance (id, service_type, response_time_ms, timestamp, userid, error, node, vpn_id) VALUES (@id, @service_type, @response_time_ms, @timestamp, @userid, @error, @node, @vpn_id)",
   'upsert_incident': "INSERT OR UPDATE Incident (id, recordedTimestamp, agentTaskId, issue, strategy, root_cause, resolution, resolvedTimestamp) VALUES (@id, @recordedTimestamp, @agentTaskId, @issue, @strategy, @root_cause, @resolution, @resolvedTimestamp)",
-  'upsert_network_metrics': "INSERT OR UPDATE NetworkMetrics (id, kind, name, timestamp, metrics, interface_id) VALUES (@id, @kind, @name, @timestamp, @metrics, @interface_id)",
 }
 
 # Connect to Spanner database
@@ -1882,36 +1881,59 @@ async def _sync_veth_link(link_id, host_veth_name, container_iface_id, bandwidth
 
 
 async def sync_network_metrics(entity_id, entity_type, metrics, logger):
-    """Sync network metrics to NetworkMetrics table"""
+    """Sync network metrics to NetworkMetrics table. (Currently disabled.)"""
+    return  # Operator-sourced NetworkMetrics writes are disabled; remove this line to re-enable.
+
+    """Writes one row per metric key-value pair, matching the schema and format
+    produced by the metricscollector service:
+      columns: (timestamp, node_name, metric_name, metric_type, kind, value, labels, interface)
+
+    Args:
+        entity_id:   ID of the entity being measured (used as node_name and interface).
+        entity_type: Type of entity (e.g. 'PhysicalLink', 'LogicalSubnet') — stored as kind.
+        metrics:     Dict of {metric_name: numeric_value} pairs.
+        logger:      Logger instance.
+    """
     from datetime import datetime
-    
+
+    if not metrics:
+        return
+
     timestamp = datetime.utcnow()
-    metrics_id = f"{entity_id}:{timestamp.isoformat()}"
-    
-    def sql_insert_metrics(transaction):
-        transaction.execute_update(
-            SQL_TEMPLATES['upsert_network_metrics'],
-            params={
-                'id': metrics_id,
-                'kind': entity_type,
-                'name': entity_id,
-                'timestamp': timestamp,
-                'metrics': json.dumps(metrics),
-                'interface_id': entity_id
-            },
-            param_types={
-                'id': spanner.param_types.STRING,
-                'kind': spanner.param_types.STRING,
-                'name': spanner.param_types.STRING,
-                'timestamp': spanner.param_types.TIMESTAMP,
-                'metrics': spanner.param_types.JSON,
-                'interface_id': spanner.param_types.STRING
-            }
-        )
-    
+    labels_json = json.dumps({})  # No additional labels for operator-collected metrics
+
+    # Build one row per metric in the metricscollector column order:
+    # (timestamp, node_name, metric_name, metric_type, kind, value, labels, interface)
+    rows = []
+    for metric_name, raw_value in metrics.items():
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            logger.warning(f"Skipping non-numeric metric {metric_name}={raw_value} for {entity_id}")
+            continue
+        rows.append((
+            timestamp,
+            entity_id,    # node_name
+            metric_name,  # metric_name
+            "gauge",      # metric_type — bridge/veth counters are instantaneous snapshots
+            entity_type,  # kind
+            value,        # value
+            labels_json,  # labels
+            entity_id,    # interface
+        ))
+
+    if not rows:
+        return
+
     try:
-        database.run_in_transaction(sql_insert_metrics)
-        logger.debug(f"Successfully synced metrics for {entity_id}")
+        with database.batch() as batch:
+            batch.insert(
+                table="NetworkMetrics",
+                columns=("timestamp", "node_name", "metric_name", "metric_type",
+                         "kind", "value", "labels", "interface"),
+                values=rows
+            )
+        logger.debug(f"Inserted {len(rows)} metric row(s) for {entity_id}")
     except Exception as e:
         logger.error(f"Failed to sync metrics for {entity_id}: {e}")
 

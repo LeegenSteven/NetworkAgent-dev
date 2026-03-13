@@ -53,13 +53,14 @@ def train_model(
 
     output_path = f"gs://{gcs_bucket}/models/{model_name}/{run_id}"
 
+    machine_spec: dict = {"machine_type": machine_type}
+    if accelerator_count > 0 and accelerator_type:
+        machine_spec["accelerator_type"] = accelerator_type
+        machine_spec["accelerator_count"] = accelerator_count
+
     worker_pool_specs = [
         {
-            "machine_spec": {
-                "machine_type": machine_type,
-                "accelerator_type": accelerator_type,
-                "accelerator_count": accelerator_count,
-            },
+            "machine_spec": machine_spec,
             "replica_count": 1,
             "disk_spec": {
                 "boot_disk_type": "pd-ssd",

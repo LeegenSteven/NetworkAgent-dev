@@ -30,6 +30,7 @@ _BASE_IMAGE = os.environ.get("GNN_TRAIN_IMAGE_URI", "python:3.12-slim")
 def ingest_snapshots(
     spanner_instance: str,
     spanner_database: str,
+    project: str,
     num_snapshots: int,
     interval_minutes: int,
     gcs_bucket: str,
@@ -82,6 +83,7 @@ def ingest_snapshots(
         database_id=spanner_database,
         num_snapshots=num_snapshots,
         interval_minutes=interval_minutes,
+        project_id=project,
     )
 
     timestamps = dataset._get_timestamps()

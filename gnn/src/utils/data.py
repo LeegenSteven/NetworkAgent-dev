@@ -146,8 +146,8 @@ class SpannerDataset:
                 
                 router_types[node_type] += 1
                 
-                # Encode state/status?
-                state_val = 1.0 if row[4] and row[4].lower() == "active" else 0.0
+                # Encode state/status — Spanner stores "Running", "Failed", "Pending"
+                state_val = 1.0 if row[4] and row[4].lower() == "running" else 0.0
                 
                 snapshot_data["nodes"].append({
                     "id": row[0],
@@ -192,8 +192,37 @@ class SpannerDataset:
                 interface_count += 1
             
             logger.info(f"Fetched {interface_count} interfaces ({interface_up_count} up, {interface_count - interface_up_count} down)")
-            
-            # 3. Router -> Interface Edges (Owns)
+
+            # 3. Fetch BGP Sessions
+            logger.debug("Querying BGPSession table")
+            query_bgp = f"""
+                SELECT id, vrf_id, local_as, remote_as, peer_ip, status
+                FROM BGPSession WHERE {valid_filter}
+            """
+            results = sn.execute_sql(query_bgp, params=params, param_types=param_types)
+            bgp_count = 0
+            bgp_established_count = 0
+
+            for row in results:
+                status = row[5]
+                state_val = 1.0 if status and status.lower() == "established" else 0.0
+                if state_val == 1.0:
+                    bgp_established_count += 1
+
+                snapshot_data["nodes"].append({
+                    "id": row[0],
+                    "type": "BGP_Session",
+                    "vrf_id": row[1],
+                    "local_as": int(row[2]) if row[2] else 0,
+                    "remote_as": int(row[3]) if row[3] else 0,
+                    "peer_ip": row[4] or "",
+                    "state": state_val,
+                })
+                bgp_count += 1
+
+            logger.info(f"Fetched {bgp_count} BGP sessions ({bgp_established_count} established, {bgp_count - bgp_established_count} idle/down)")
+
+            # 4. Router -> Interface Edges (Owns)
             logger.debug("Creating Router -> Interface 'Owns' edges")
             owns_edge_count = 0
             for node in snapshot_data["nodes"]:
@@ -204,10 +233,10 @@ class SpannerDataset:
                         "relation": "Owns"
                     })
                     owns_edge_count += 1
-            
+
             logger.debug(f"Created {owns_edge_count} 'Owns' edges")
 
-            # 4. Interface <-> Interface Edges (Connected)
+            # 5. Interface <-> Interface Edges (Connected)
             # Find interfaces sharing a link
             logger.debug("Querying Interface_Link table for 'Connected' edges")
             query_links = f"""
@@ -237,7 +266,30 @@ class SpannerDataset:
             
             logger.debug(f"Created {connected_edge_count} 'Connected' edges")
 
-            # 5. Apply Prometheus metrics (metricscollector)
+            # 6. BGP_Session PeersWith Edges (from BGP_Peering table)
+            logger.debug("Querying BGP_Peering table for 'PeersWith' edges")
+            query_peering = f"""
+                SELECT session_id_a, session_id_b
+                FROM BGP_Peering
+                WHERE {valid_filter}
+            """
+            results = sn.execute_sql(query_peering, params=params, param_types=param_types)
+            peering_edge_count = 0
+
+            # Build a set of valid BGP session IDs for fast lookup
+            bgp_session_ids = {n["id"] for n in snapshot_data["nodes"] if n["type"] == "BGP_Session"}
+
+            for row in results:
+                src, dst = row[0], row[1]
+                # Only add if both sessions exist in the current snapshot
+                if src in bgp_session_ids and dst in bgp_session_ids:
+                    snapshot_data["edges"].append({"source": src, "target": dst, "relation": "PeersWith"})
+                    snapshot_data["edges"].append({"source": dst, "target": src, "relation": "PeersWith"})
+                    peering_edge_count += 2
+
+            logger.info(f"Created {peering_edge_count} 'PeersWith' edges from {peering_edge_count // 2} BGP peering pairs")
+
+            # 7. Apply Prometheus metrics (metricscollector)
             # Rows written by the metricscollector have node_name (router hostname),
             # interface (interface name), metric_name, and value columns.
             # PhysicalInterface ID = "router:{node_name}:interface:{interface}".
@@ -318,6 +370,7 @@ class SpannerDataset:
 
 if __name__ == "__main__":
     import sys
+    import json
 
     logging.basicConfig(
         level=logging.INFO,
@@ -367,10 +420,24 @@ if __name__ == "__main__":
                 edge_types[e["relation"]] = edge_types.get(e["relation"], 0) + 1
 
             print(f"[{i+1:02d}/{NUM_SNAPSHOTS}]  {ts.isoformat()}")
+            print("         Full Snapshot Model:")
+            print(json.dumps(snap, indent=2))
             print(f"         Nodes  ({sum(node_types.values())}): " +
                   "  ".join(f"{k}={v}" for k, v in sorted(node_types.items())))
             print(f"         Edges  ({sum(edge_types.values())}): " +
                   "  ".join(f"{k}={v}" for k, v in sorted(edge_types.items())))
+
+            # Print BGP session status
+            bgp_nodes = [n for n in snap["nodes"] if n["type"] == "BGP_Session"]
+            if bgp_nodes:
+                established = sum(1 for n in bgp_nodes if n.get("state") == 1.0)
+                idle = len(bgp_nodes) - established
+                print(f"         BGP sessions ({len(bgp_nodes)}): {established} established, {idle} idle/down")
+                for s in bgp_nodes:
+                    state_str = "ESTABLISHED" if s.get("state") == 1.0 else "IDLE/DOWN   "
+                    print(f"           {state_str}  {s['id']:<60}  peer={s.get('peer_ip','?')}")
+            else:
+                print("         No BGP session nodes found in this snapshot.")
 
             # Print metrics for every interface node
             iface_nodes = [n for n in snap["nodes"] if n["type"] == "Interface"]

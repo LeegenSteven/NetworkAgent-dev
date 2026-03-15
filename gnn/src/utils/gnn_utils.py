@@ -31,11 +31,11 @@ class GraphBuilder:
         self.text_model = None
         self.text_embed_dim = 128
         
-        # Updated to include semantic sub-nodes for HetGNN
+        # Updated to include semantic sub-nodes for HetGNN and BGP_Session
         self.global_id_map = {
             "PE Router": {}, "P Router": {}, "CE Router": {},
             "Router_Config": {}, "Protocol_State": {}, "Interface_Metrics": {},
-            "Interface": {}
+            "Interface": {}, "BGP_Session": {}
         }
         
         # Keep track of previous snapshot metrics for derivative (velocity/acceleration) calculation
@@ -297,10 +297,10 @@ class GraphBuilder:
             for node in data["nodes"]:
                 ntype = node["type"]
                 nid = node["id"]
-                if ntype in ["PE Router", "P Router", "CE Router", "Interface"]:
+                if ntype in ["PE Router", "P Router", "CE Router", "Interface", "BGP_Session"]:
                     if nid not in self.global_id_map[ntype]:
                         self.global_id_map[ntype][nid] = len(self.global_id_map[ntype])
-                        
+
                     # Also create sub-node IDs for routers (for HetGNN)
                     if "Router" in ntype:
                         conf_id = f"{nid}_config"
@@ -348,8 +348,9 @@ class GraphBuilder:
             elif ntype == "Router_Config": dim = self.text_embed_dim
             elif ntype == "Protocol_State": dim = 3
             elif ntype == "Interface": dim = 7  # Baseline + 6 metrics
-            elif ntype == "Interface_Metrics": dim = 12 # 6 metrics + 6 velocities
-            
+            elif ntype == "Interface_Metrics": dim = 12  # 6 metrics + 6 velocities
+            elif ntype == "BGP_Session": dim = 1          # Established=1 / Idle=0
+
             if count > 0:
                 features_dict[ntype] = np.zeros((count, dim), dtype=np.float32)
                 input_dims[ntype] = dim
@@ -456,6 +457,11 @@ class GraphBuilder:
                     get_scaled("Interface_Metrics", "rx_errors_velocity", rx_e_v),
                     get_scaled("Interface_Metrics", "tx_errors_velocity", tx_e_v)
                 ])
+
+            elif ntype == "BGP_Session":
+                # Single feature: Established=1.0, Idle/Down=0.0
+                # The reconstruction error on this feature is the primary BGP anomaly signal.
+                features_dict[ntype][idx] = np.array([state])
 
         for ntype, feat_array in features_dict.items():
             feat_array = np.nan_to_num(feat_array, nan=0.0)

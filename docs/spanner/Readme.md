@@ -1,12 +1,18 @@
-# Spanner Network Graph Data Model
+# Spanner Network Graph
 
-This document explains the data model used in Cloud Spanner to represent the network topology and its history. It covers the **SCD Type 2** table design, the **Property Graph** definitions, and how to query the data using **SQL** and **GQL**.
+Spanner is used to represent the network topology and its history. [Linux components that realise a virtual network](/docs/network/Readme.md) and [logical network models](/docs/automation/Readme.md) are modelling in spanner as follows:
 
-## 1. Core Data Model: SCD Type 2
+* [modelling the virtual network components  spanner](/docs/spanner/linux_spanner_mapping.md)
+* [modelling logical network CRDs in spanner](/docs/spanner/crd_spanner_mapping.md)
 
-The database tracks the history of every network entity using **Slowly Changing Dimensions (SCD) Type 2**. This means we don't just store the *current* state of a router or interface; we store every version of it that has ever existed, defined by a validity time window.
+This section details the Spanner network **table design**, the **Property Graph** definitions, and how to query the network model using **SQL** and **GQL**.
+
+## 1. Core Data Model
+
+The database tracks the history of every network entity using **Slowly Changing Dimensions (SCD) Type 2**. The  *current* state of a router or interface is stoed along with every version of it that has ever existed, defined by a validity time window.
 
 ### Schema Pattern
+
 Every topological table (`PhysicalRouter`, `PhysicalInterface`, `PhysicalLink`, etc.) has these two timestamp columns:
 - `valid_start_ts`: When this version of the entity became active.
 - `valid_end_ts`: When this version was replaced or deleted. (NULL means it is currently active).

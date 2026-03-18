@@ -1,4 +1,8 @@
 FROM python:3.12
-ADD ui/dashboard/build/web/ /dashboard
+
 WORKDIR /dashboard
-CMD ["python3", "-m", "http.server","8080"]
+COPY ui/dashboard/build/web/ .
+COPY ui/dashboard/server.py .
+
+# CMD ["python3", "-m", "http.server","8080"]
+CMD ["python3", "server.py"]

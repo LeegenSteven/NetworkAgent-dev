@@ -1611,48 +1611,40 @@ Networkagent()
         echo "Supervisor Agent URL is ${SUPERVISOR_URL}"
 
         IMAGE_URI="$GOOGLE_REGION-docker.pkg.dev/$GOOGLE_PROJECT/$GOOGLE_REPO/dashboard:latest"
-        if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
+        if [[ $YES_FLAG != "y" ]] && [[ $NO_FLAG != "y" ]] && \
+            $(gcloud artifacts docker images describe $IMAGE_URI >/dev/null 2>&1); then
             read -p "Dashboard image already exists. Rebuild? (y/n) " -n 1 -r
             echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                cd ui/dashboard
-                echo "Cleaning flutter environment"
-                flutter clean
-                echo "Building flutter web app"
-                flutter build web \
-                        --dart-define=WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
-                        --dart-define=WEBAPPS_PWD=${WEBAPPS_PWD} \
-                        --dart-define=GCP_PROJECT=${GOOGLE_PROJECT}\
-                        --dart-define=GITEA_URL=https://${GITEA_HOST}:3000 \
-                        --dart-define=NETWORKAGENT_URL=${SUPERVISOR_URL}
-                cd ../../
-                gcloud builds submit --region=$GOOGLE_REGION --config ui/dashboard/cloudbuild.yaml .
-            fi
         else
+            REPLY="y"
+        fi
+
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
             cd ui/dashboard
             echo "Cleaning flutter environment"
             flutter clean
             echo "Building flutter web app"
             flutter build web \
-                    --dart-define=WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
-                    --dart-define=WEBAPPS_PWD=${WEBAPPS_PWD} \
-                    --dart-define=GCP_PROJECT=${GOOGLE_PROJECT}\
-                    --dart-define=GITEA_URL=https://${GITEA_HOST}:3000 \
-                    --dart-define=NETWORKAGENT_URL=${SUPERVISOR_URL}
+                --dart-define=WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
+                --dart-define=WEBAPPS_PWD=${WEBAPPS_PWD} \
+                --dart-define=GCP_PROJECT=${GOOGLE_PROJECT}\
+                --dart-define=GITEA_URL=https://${GITEA_HOST}:3000 \
+                --dart-define=NETWORKAGENT_URL=${SUPERVISOR_URL} \
+                --dart-define=BUILD_TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
             cd ../../
             gcloud builds submit --region=$GOOGLE_REGION --config ui/dashboard/cloudbuild.yaml .
         fi
 
         gcloud run deploy network-dashboard \
-        --image $IMAGE_URI \
-        --region $GOOGLE_REGION \
-        --service-account $GOOGLE_SERVICE_ACCOUNT \
-        --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
-        --update-env-vars NETWORKAGENT_URL=${SUPERVISOR_URL} \
-        --update-env-vars GITEA_URL=https://${GITEA_HOST}:3000 \
-        --update-env-vars WEBAPPS_PWD=${WEBAPPS_PWD} \
-        --update-env-vars WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
-        --allow-unauthenticated 
+            --image $IMAGE_URI \
+            --region $GOOGLE_REGION \
+            --service-account $GOOGLE_SERVICE_ACCOUNT \
+            --update-env-vars GOOGLE_PROJECT=$GOOGLE_PROJECT \
+            --update-env-vars NETWORKAGENT_URL=${SUPERVISOR_URL} \
+            --update-env-vars GITEA_URL=https://${GITEA_HOST}:3000 \
+            --update-env-vars WEBAPPS_PWD=${WEBAPPS_PWD} \
+            --update-env-vars WEBAPPS_LOGIN=${WEBAPPS_LOGIN} \
+            --allow-unauthenticated 
 
         DASHBOARD_URL=$(gcloud run services describe network-dashboard --region=$GOOGLE_REGION --format="value(status.url)")
         echo "Dashboard URL is ${DASHBOARD_URL}"

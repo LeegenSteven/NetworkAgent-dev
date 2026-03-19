@@ -1,16 +1,16 @@
-# Virtual Network Simulator
+# Network Simulator
 
-The virtual network runs [VyOS routers](https://vyos.io/) as a set of containers inside a GCE Virtual Machine, with container interfaces connected to each other using linux networking. 
+The network simulator runs [VyOS routers](https://vyos.io/) as a set of containers inside a GCE Virtual Machine. Vyos containers are connected over linux bridges to mimick physical connections.
 
-The drawing below shows a sample virtual network deployment in a GCE virtual machine, being orchestrated and monitored by GKE and Cloud Monitoring. 
+The drawing below shows a sample virtual network deployment in a GCE virtual machine. This is dynamically orchestrated by a network operator running in GKE with performance a logging sent to Cloud Monitoring. 
 
 ![virtual network](/docs/drawings/networking.drawio.svg)
 
-The Linux Virtual Network Components that make up a virtual network are as follows:
+The following Linux networking components make up a virtual network as follows:
 
 * **Containers**: Vyos Routers and end host/free5gc devices are deployed in docker containers.
-* **Veth Pair**: veth pairs are added to each container to add interfaces inside the container. 
-* **Linux Bridge**: the other end of a veth pair is added to a linux bridge which provides a l2 connection between 2 container interfaces. A special management bridge connects all mgmt interfaces for every container. 
+* **Veth Pair**: Virtual ethernet pairs are added to each container to add interfaces inside the container. 
+* **Linux Bridge**: the other end of the veth pair is added to a linux bridge which provides a l2 connection between 2 container interfaces. A special management bridge connects all mgmt interfaces for each container allowing their endpoints to be scraped. 
 
 The virtual network lifecycle Automation & monitoring components are as follows:
 
@@ -31,7 +31,7 @@ Two spoke sites connect via CE routers to Provider Edge (PE) routers at 100 Mbps
 
 ## Traffic Simulator
 
-The [TrafficTest CRD](/operator/config/traffic.yaml) (`traffictests.google.dev`) defines end-to-end network traffic testing scenarios between devices in the virtual network. 
+The [TrafficTest CRD](/operator/config/traffic.yaml) defines end-to-end network traffic testing scenarios between devices in the virtual network. 
 
 A test specifies one or more source devices and a single destination, the transport protocol (TCP or UDP), a target bandwidth, and a duration. Multiple sources are supported simultaneously, enabling aggregate load tests — for example, several branch-office CPEs all sending to a central hub at the same time. 
 

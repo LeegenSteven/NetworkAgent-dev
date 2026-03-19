@@ -1,12 +1,16 @@
 # Network Automation
 
-The operator (`operator/`) is a Kubernetes operator built on the [kopf](https://kopf.readthedocs.io/en/latest/) framework. It manages the full lifecycle of virtual network functions and lab infrastructure by watching Custom Resources and driving Ansible playbooks against the Network VM. Resources are reconciled declaratively — create, update and delete operations are all handled automatically.
+The lifecycle automation code that manages the linux networing to deploy a virtual network is provided as a GKE k8s operator (`operator/`). 
+
+The Kubernetes operator is built on the [kopf](https://kopf.readthedocs.io/en/latest/) framework. It manages the full lifecycle of virtual network functions and lab infrastructure by watching Custom Resources and driving Ansible playbooks against the Network VM. 
+
+Resources are reconciled declaratively — create, update and delete operations are all handled automatically.
 
 ---
 
-## CRD Overview
+## Network Component Lifecycle Overview
 
-| CRD | Short name | Description |
+| Component | Short name | Description |
 |---|---|---|
 | `VyOSInfrastructure` | `infra` | Declares the full network topology — routers, links, and locations. Generates child VyOSRouter and LinuxNetwork resources. |
 | `VyOSUnderlay` | `underlay` | Configures underlay routing protocols (OSPF, BGP, MPLS/LDP) across routers defined in an infrastructure. Depends on VyOSInfrastructure. |

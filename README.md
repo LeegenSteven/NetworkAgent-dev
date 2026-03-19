@@ -1,10 +1,12 @@
-# Network Prediction Environment
+# Autonomous Network Lab
 
-**Network Prediction** is an autonomous network lifecycle management platform that leverages Graph Neural Networks (GNNs) and AI agents to intelligently monitor, analyze, troubleshoot, and manage complex telecommunications networks. The system provides a virtual network simulator with real-time network topology understanding, automated fault detection, intelligent incident correlation and resolution capabilities.
+**Autonomous Network Lab** is a sandbox to demonstrate autonomous network lifecycle management. Leveraging Graph Neural Networks (GNNs) and AI agents to intelligently monitor, analyze, troubleshoot, and manage complex telecommunications networks. 
 
-### Architecture
+This project provides a virtual network simulator with real-time network topology understanding, automated fault detection, intelligent incident correlation and resolution capabilities.
 
-The main components of the network prediction architecture are shown below:
+### Functional Components
+
+The main components of the autonomous network lab are shown below:
 
 ![gcp architecture](/docs/drawings/architecture.drawio.svg)
 
@@ -13,6 +15,24 @@ The main components of the network prediction architecture are shown below:
 - [**Digital Shadow**](/docs/spanner/Readme.md): Google Cloud Spanner stores network topology graphs, temporal state and historical performance. 
 - [**Network GNNs**](/docs/gnn-research/Readme.md): Training and serving infrastructure for graph neural network models that can pinpoint failures and predict the impact of network changes. 
 - [**Network Agents**](/docs/agents/Readme.md): Specialized agents for network testing, log analysis, and incident management
+
+## GCP Architecture
+
+The lab GCP deployment architecture is shown in the diagram below. 
+
+![GCP Architecture](/docs/drawings/gcp.drawio.svg)
+
+| Component | Description |
+|-----------|-------------|
+| Dashboard | User Interface showing network topology along with current and historical anomalies. Allows users to interact with network agents.  |
+| Agents | A2A compliant network agents that run tests, analyse anomalies and root cause |
+| Tools | MCP tool server brokers agent communications to network orchestration and spanner historical network state |
+| Config Connector | K8s based GCP infrastrastructure orchestration. |
+| Orchestration Operator | Automation code for managing virtual network function lifecycles.  |
+| Network VM | Network simulator virtual machine, lifecycle managed by Config Connector. |
+| Cloud Monitoring | All metrics and syslog for network functions sent to Cloud Monitoring. Eventarc and Cloud functions process and update Spanner in near real time. |
+| Spanner | Current and historical network topology and state used to train and run inference with GNNs. |
+| Vertex AI | Run-time for training and inferencing GNNs |
 
 ## Running the demo
 

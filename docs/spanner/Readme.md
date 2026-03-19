@@ -96,7 +96,9 @@ These tables represent the virtualized network services (L3VPN, BGP).
 
 #### Property Graph
 
-![logical-graph](/docs/drawings//spanner/logical-graph.drawio.svg)
+Graph nodes and edges model for the logical VPN is below.
+
+![logical-graph](/docs/drawings/spanner/logical-graph.drawio.svg)
 
 The following tables are registered as node types in the graph:
 

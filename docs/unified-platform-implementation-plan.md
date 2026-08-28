@@ -3,7 +3,7 @@
 > 文档状态：Active（后续开发的计划与进度唯一事实来源）  
 > 首次建立：2026-08-28  
 > 最近更新：2026-08-28  
-> 当前里程碑：P0 基线与架构冻结  
+> 当前里程碑：P0 GitHub 推送待账户确认 / P1 已完成
 > 目标主仓库：`NetworkAgent-dev`  
 > 输入项目：`NetworkAgent-dev`、`telco-autonomous-networks-data-demo-main`
 
@@ -77,7 +77,7 @@ Tester Agent 验证 → Incident 关闭或重新调查
 
 - `telco-autonomous-networks-data-demo-main` 离线测试为 `10 passed`。
 - 本地数据包含 13,440 条 Performance、579 条 Cell Trace；现有 DuckDB 中有 4 个 `NEW` Incident。
-- `NetworkAgent-dev` 当前目录缺少 Git 元数据，实施前必须建立可回滚的版本基线。
+- `NetworkAgent-dev` 初始目录缺少 Git 元数据；现已恢复 GitLab 历史并建立可回滚开发分支。
 - 两个项目的运行时并不兼容：主项目镜像主要使用 Python `3.13.2`、ADK `1.18.0`；本地 RCA 虚拟环境实际为 Python `3.12.4`、ADK `2.6.3`、LiteLLM `1.96.0`、DuckDB `1.5.5`。
 - 主项目的 A2A SDK 也存在 `0.2.16`（Fault Service/Portal）与 `0.3.11`（主要 Agent）并存，必须通过协议契约测试后逐步统一。
 - 本地 RCA 的 `pyproject.toml` 使用宽松下界且遗漏部分直接依赖，主项目各服务也存在依赖重复或依赖传递安装；合并前需要按服务补齐直接依赖并生成锁文件。
@@ -145,10 +145,17 @@ Tester Agent 验证 → Incident 关闭或重新调查
 
 ```text
 NetworkAgent-dev/
+├── packages/
+│   └── telco-domain/             # 独立、无 Agent/云框架依赖的领域与契约包
+│       └── src/telco_domain/
+│           ├── models.py         # Incident/Evidence/RCA/Approval/Action/Verification
+│           ├── state_machine.py  # 合法转换、revision 与不可变更新
+│           ├── contracts.py      # 版本化 A2A Data Part DTO
+│           ├── ports.py          # Repository/Gateway Protocol
+│           └── memory.py         # 确定性测试实现
 ├── lib/src/agent_library/
-│   ├── incidents/                 # 统一领域模型、状态机、契约和策略
-│   ├── model_providers/           # Gemini/DeepSeek/测试模型工厂
-│   └── approvals/                 # 审批令牌、策略和审计
+│   ├── model_providers/          # Gemini/DeepSeek/测试模型工厂
+│   └── runtime_adapters/         # ADK/A2A/MCP 运行时适配，依赖 telco-domain
 ├── networkagents/
 │   ├── incident_detector/         # KPI/日志候选事件检测 A2A Agent
 │   └── resolver/
@@ -263,7 +270,7 @@ Agent 不得直接导入 DuckDB、Spanner、GKE 或 Gitea SDK。
 | 阶段 | 目标 | 估算 | 当前状态 |
 |---|---|---:|---|
 | P0 | 基线、目标架构和决策冻结 | 1–2 人日 | **IN PROGRESS** |
-| P1 | 统一领域模型、接口和测试骨架 | 3–5 人日 | NOT STARTED |
+| P1 | 统一领域模型、接口和测试骨架 | 3–5 人日 | **DONE** |
 | P2 | 本地 Detector/RCA 迁入主仓库 | 5–8 人日 | NOT STARTED |
 | P3 | 接入 Spanner/MCP/实时事件 | 5–8 人日 | NOT STARTED |
 | P4 | 合并并增强 Resolver Pipeline | 6–10 人日 | NOT STARTED |
@@ -301,9 +308,11 @@ Agent 不得直接导入 DuckDB、Spanner、GKE 或 Gitea SDK。
 
 退出标准：
 
-- Local 与 Cloud 适配器可以通过同一套契约测试。
+- 可复用的 Repository/Gateway 契约测试套件已经建立，内存参考实现全部通过；DuckDB 与 Spanner 分别在 P2、P3 接入同一测试套件。
 - 非法状态转换、重复事件和未审批动作会被确定性拒绝。
 - 契约不依赖任何具体 Agent 框架或云 SDK。
+
+2026-08-28 安全 Gate 复核：第一版 276 项离线测试虽已通过，但额外攻击性测试发现仓储 CAS 可绕过状态机、审批尚未绑定 Incident/RCA 版本、空 RCA/执行/验证记录可伪造阶段完成，以及历史审计集合可被替换。修复采用“先红测、再实现”：新增攻击性回归最初确定性失败，修复后在 Pydantic 2.5.3 与 2.13.4 环境中均为 315 项通过；独立复审逐条重放原 10 类阻断并给出 P1 Gate `PASS`。wheel 已完成构建及源代码树外导入验证。
 
 ### P2：迁入本地 Detector/RCA
 
@@ -553,6 +562,8 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | ADR-007 | 2026-08-28 | 初期保持 Agent 进程隔离，再统一 ADK 版本 | Proposed | 降低依赖升级与合并同时发生的风险 |
 | ADR-008 | 2026-08-28 | LTE Demo 与 5G Live 使用共同遥测契约但不同 KPI/规则集 | Accepted | 两者网络技术和现有数据语义不可直接互换 |
 | ADR-009 | 2026-08-28 | 高频 PM/Trace 的云端物理存储在容量基准后决定 | Proposed | Incident 状态适合 Spanner，但高频明细不应未经评估直接写入同一存储 |
+| ADR-010 | 2026-08-28 | 领域模型与协议 DTO 建立独立 `telco-domain` 包 | Accepted | 现有 `agent_library` 强依赖 ADK 1.18，无法作为跨 ADK 版本的无框架共享核心 |
+| ADR-011 | 2026-08-28 | 传输中的 ApprovalReference 不是授权，ActionGateway 执行前必须以可信存储与时钟重新解析最新决定 | Accepted | 防止伪造载荷、旧批准重放、撤销后复用及调用方回拨时间复活过期授权 |
 
 ## 16. 待确认事项
 
@@ -575,8 +586,8 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 |---|---|---|---|
 | 两项目快速架构与代码基线分析 | DONE | 2026-08-28 | README、入口、依赖、数据与测试已检查 |
 | 统一目标架构与实施路线 | DONE | 2026-08-28 | 本文档已完成架构、代码、交付和兼容性复核 |
-| 主仓库 Git 可回滚基线 | BLOCKED | 2026-08-28 | 当前 `NetworkAgent-dev` 目录没有 `.git` |
-| P1 领域模型与接口 | NOT STARTED | 2026-08-28 | — |
+| 主仓库 Git 可回滚基线 | IN PROGRESS | 2026-08-28 | 已恢复 GitLab `dev@44ecbb3`，建立 `unified-platform@dfccee3`，GitHub 私有仓库已创建，等待账户 sudo 复核后推送 |
+| P1 领域模型与接口 | DONE | 2026-08-28 | 独立 `telco-domain` 包；双环境各 315 项通过；wheel 构建/独立导入成功；原 10 类安全阻断复审全部关闭，Gate PASS |
 | 首个 Local 纵向切片 | NOT STARTED | 2026-08-28 | — |
 | Cloud 数据接入 | NOT STARTED | 2026-08-28 | — |
 | Resolver 合并 | NOT STARTED | 2026-08-28 | — |
@@ -602,6 +613,9 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 |---|---|---|
 | 2026-08-28 | 建立统一平台实施计划初稿，记录目标架构、阶段、风险、ADR 和维护规则 | Codex |
 | 2026-08-28 | 完成并行架构、交付与依赖复核；补充 ADK/A2A 版本隔离、LTE/5G 语义边界、首个 A2A 纵向切片及供应链风险 | Codex |
+| 2026-08-28 | 恢复 GitLab 原始历史，建立 `unified-platform` 开发基线并创建 GitHub 私有仓库；P1 领域模型与状态机进入开发 | Codex |
+| 2026-08-28 | 建立独立 `telco-domain` 包、双 Python/Pydantic 环境契约测试及 3.12/3.13 CI；安全 Gate 发现并开始修复仓储绕过、审批重放、伪造完成和审计历史篡改路径 | Codex |
+| 2026-08-28 | 完成 P1 安全加固：原子状态机仓储、版本化审批引用、可信时钟、并发去重、隐私/载荷预算及不可变审计；双环境各 315 项通过，独立复审 Gate PASS | Codex |
 
 ## 20. 项目完成定义
 

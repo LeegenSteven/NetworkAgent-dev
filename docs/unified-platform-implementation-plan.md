@@ -344,6 +344,7 @@ P2a 验收证据（2026-08-28）：
 - `confirm` 是唯一 Incident 写入口：提交前重扫并绑定规则内容、资源、时间窗、观测值和证据摘要；成功确认仅产生 1 条 Incident/1 条初始审计，同 key 精确重放不重复写，不同请求指纹确定性冲突。
 - RCA 按历史规则版本和内容哈希精确解释，METRIC/TRACE fact 隔离，证据资源与时间窗严格匹配；不一致一律返回 `INCONCLUSIVE`。完整样例得到 `EXACT/CONCLUSIVE` 八节中文报告，但 Incident 仍为 `DETECTED` revision 0，报告、建议、动作均不落库。
 - 两个 Pydantic 依赖矩阵均通过 `telco-local 149 + telco-domain 318 + Local E2E 1`，合计 468 项；两个 wheel 均完成构建、源码树外安装、`pip check`、导入隔离与 CLI 冒烟。安全复核结论见 [P2a Local Profile Gate 审计](security/p2a-gate-audit.md)。
+- 提交 `e2a632b` 的远程验收已通过：[telco-local CI（Python 3.12/3.13、测试、wheel 与安装冒烟）](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33165120216) 与 [telco-domain CI](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33165120260) 均为 `success`。
 - P2 总阶段仍保持 `IN PROGRESS`；只有 P2b 的 A2A 状态流、结构化双输出、显式确认和 Supervisor 跨版本契约全部通过后，才可将 P2 标记为完成。
 
 ### P3：接入云端数据与事件

@@ -6,8 +6,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable
 
+import duckdb
+
 from .config import LocalProfileConfig
-from .database import DatabaseSummary, initialize_database
+from .database import LOCAL_SCHEMA_VERSION, DatabaseSummary, initialize_database
 from .detector import LocalDetector
 from .documents import MarkdownDocumentRepository
 from .incident_repository import DuckDbIncidentRepository
@@ -43,6 +45,64 @@ class LocalProfile:
         """Initialize storage and compose adapters without cloud/model clients."""
 
         summary = initialize_database(config, reset=reset)
+        return cls._compose(config, summary, clock=clock)
+
+    @classmethod
+    def open_existing(
+        cls,
+        config: LocalProfileConfig,
+        *,
+        clock: Clock | None = None,
+    ) -> LocalProfile:
+        """Open an initialized Local Profile without DDL or source imports."""
+
+        if not config.database_path.is_file():
+            raise FileNotFoundError(config.database_path)
+        if not config.rules_dir.is_dir():
+            raise FileNotFoundError(config.rules_dir)
+        if config.documents_dir is not None and not config.documents_dir.is_dir():
+            raise FileNotFoundError(config.documents_dir)
+        connection = duckdb.connect(str(config.database_path), read_only=True)
+        try:
+            schema_row = connection.execute(
+                "SELECT value FROM local_schema_metadata "
+                "WHERE key = 'schema_version'"
+            ).fetchone()
+            if schema_row is None or str(schema_row[0]) != LOCAL_SCHEMA_VERSION:
+                raise RuntimeError("unsupported or missing Local Profile schema")
+            performance_rows = int(
+                connection.execute("SELECT COUNT(*) FROM performance").fetchone()[0]
+            )
+            trace_rows = int(
+                connection.execute("SELECT COUNT(*) FROM cell_traces").fetchone()[0]
+            )
+            incident_rows = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM canonical_incidents"
+                ).fetchone()[0]
+            )
+            connection.execute("SELECT * FROM performance_kpi LIMIT 0")
+        except duckdb.Error:
+            raise RuntimeError("Local Profile database is not initialized") from None
+        finally:
+            connection.close()
+        summary = DatabaseSummary(
+            database_path=config.database_path,
+            schema_version=LOCAL_SCHEMA_VERSION,
+            performance_rows=performance_rows,
+            trace_rows=trace_rows,
+            incident_rows=incident_rows,
+        )
+        return cls._compose(config, summary, clock=clock)
+
+    @classmethod
+    def _compose(
+        cls,
+        config: LocalProfileConfig,
+        summary: DatabaseSummary,
+        *,
+        clock: Clock | None,
+    ) -> LocalProfile:
         rules = JsonRuleRepository(config.rules_dir)
         incidents = DuckDbIncidentRepository(config, clock=clock)
         telemetry = DuckDbTelemetryRepository(config, clock=clock)

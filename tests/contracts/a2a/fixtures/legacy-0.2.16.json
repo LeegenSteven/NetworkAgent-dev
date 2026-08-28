@@ -1,0 +1,631 @@
+{
+  "attacks": {
+    "context_id_mismatch": {
+      "artifact": {
+        "artifactId": "artifact-result-01",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Incident created."
+          },
+          {
+            "data": {
+              "actor": "supervisor:user",
+              "candidate_id": "candidate-01",
+              "decision": "CONFIRM",
+              "idempotency_key": "idempotency-wire-01",
+              "incident": {
+                "incident_id": "incident-01",
+                "trace_id": "trace-wire-01"
+              },
+              "message_id": "message-result-01",
+              "message_type": "assurance_confirmation_result",
+              "outcome": "created",
+              "preview_message_id": "message-preview-01",
+              "request_message_id": "message-confirm-01",
+              "schema_version": "1.0",
+              "sent_at": "2026-08-28T01:02:03Z",
+              "summary_zh": "Incident created.",
+              "trace_id": "trace-wire-01",
+              "workflow_id": "workflow-wire-01"
+            },
+            "kind": "data"
+          }
+        ]
+      },
+      "contextId": "other-context",
+      "kind": "artifact-update",
+      "lastChunk": true,
+      "taskId": "task-wire-01"
+    },
+    "duplicate_data": [
+      {
+        "data": {
+          "idempotency_key": "idempotency-wire-01",
+          "message_id": "message-scan-01",
+          "message_type": "assurance_scan_request",
+          "page_offset": 0,
+          "page_size": 1,
+          "resource_ids": [],
+          "schema_version": "1.0",
+          "sent_at": "2026-08-28T01:02:03Z",
+          "trace_id": "trace-wire-01",
+          "window_end": null,
+          "window_start": null,
+          "workflow_id": "workflow-wire-01"
+        },
+        "kind": "data"
+      },
+      {
+        "data": {
+          "idempotency_key": "idempotency-wire-01",
+          "message_id": "message-scan-01",
+          "message_type": "assurance_scan_request",
+          "page_offset": 0,
+          "page_size": 1,
+          "resource_ids": [],
+          "schema_version": "1.0",
+          "sent_at": "2026-08-28T01:02:03Z",
+          "trace_id": "trace-wire-01",
+          "window_end": null,
+          "window_start": null,
+          "workflow_id": "workflow-wire-01"
+        },
+        "kind": "data"
+      }
+    ],
+    "file_part": [
+      {
+        "file": {
+          "name": "secret.txt"
+        },
+        "kind": "file"
+      }
+    ],
+    "message_id_mismatch": [
+      {
+        "data": {
+          "idempotency_key": "idempotency-wire-01",
+          "message_id": "other",
+          "message_type": "assurance_scan_request",
+          "page_offset": 0,
+          "page_size": 1,
+          "resource_ids": [],
+          "schema_version": "1.0",
+          "sent_at": "2026-08-28T01:02:03Z",
+          "trace_id": "trace-wire-01",
+          "window_end": null,
+          "window_start": null,
+          "workflow_id": "workflow-wire-01"
+        },
+        "kind": "data"
+      }
+    ],
+    "overdeep_data": {
+      "depth": 25,
+      "nested_key": "child",
+      "part": {
+        "kind": "data"
+      }
+    },
+    "oversized_text": [
+      {
+        "kind": "text",
+        "text_repeat": {
+          "character": "x",
+          "count": 256001
+        }
+      },
+      {
+        "data": {
+          "idempotency_key": "idempotency-wire-01",
+          "message_id": "message-scan-01",
+          "message_type": "assurance_scan_request",
+          "page_offset": 0,
+          "page_size": 1,
+          "resource_ids": [],
+          "schema_version": "1.0",
+          "sent_at": "2026-08-28T01:02:03Z",
+          "trace_id": "trace-wire-01",
+          "window_end": null,
+          "window_start": null,
+          "workflow_id": "workflow-wire-01"
+        },
+        "kind": "data"
+      }
+    ],
+    "task_id_mismatch": {
+      "artifact": {
+        "artifactId": "artifact-result-01",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Incident created."
+          },
+          {
+            "data": {
+              "actor": "supervisor:user",
+              "candidate_id": "candidate-01",
+              "decision": "CONFIRM",
+              "idempotency_key": "idempotency-wire-01",
+              "incident": {
+                "incident_id": "incident-01",
+                "trace_id": "trace-wire-01"
+              },
+              "message_id": "message-result-01",
+              "message_type": "assurance_confirmation_result",
+              "outcome": "created",
+              "preview_message_id": "message-preview-01",
+              "request_message_id": "message-confirm-01",
+              "schema_version": "1.0",
+              "sent_at": "2026-08-28T01:02:03Z",
+              "summary_zh": "Incident created.",
+              "trace_id": "trace-wire-01",
+              "workflow_id": "workflow-wire-01"
+            },
+            "kind": "data"
+          }
+        ]
+      },
+      "contextId": "context-wire-01",
+      "kind": "artifact-update",
+      "lastChunk": true,
+      "taskId": "other-task"
+    },
+    "unknown_part": [
+      {
+        "kind": "future-kind",
+        "value": "x"
+      }
+    ]
+  },
+  "fixture_schema": "networkagent.a2a-wire-fixture/1",
+  "generated_with": {
+    "distribution": "a2a-sdk",
+    "version": "0.2.16"
+  },
+  "identifiers": {
+    "context_id": "context-wire-01",
+    "idempotency_key": "idempotency-wire-01",
+    "task_id": "task-wire-01",
+    "trace_id": "trace-wire-01",
+    "workflow_id": "workflow-wire-01"
+  },
+  "requests": {
+    "analysis": {
+      "id": "rpc-analyze-01",
+      "jsonrpc": "2.0",
+      "method": "message/send",
+      "params": {
+        "message": {
+          "contextId": "context-wire-01",
+          "kind": "message",
+          "messageId": "message-analyze-01",
+          "parts": [
+            {
+              "kind": "text",
+              "text": "Analyze the incident."
+            },
+            {
+              "data": {
+                "idempotency_key": "idempotency-wire-01",
+                "incident_id": "incident-01",
+                "message_id": "message-analyze-01",
+                "message_type": "assurance_analyze_request",
+                "requested_report_version": 1,
+                "schema_version": "1.0",
+                "sent_at": "2026-08-28T01:02:03Z",
+                "trace_id": "trace-wire-01",
+                "workflow_id": "workflow-wire-01"
+              },
+              "kind": "data"
+            }
+          ],
+          "role": "user"
+        }
+      }
+    },
+    "continuation": {
+      "id": "rpc-confirm-01",
+      "jsonrpc": "2.0",
+      "method": "message/send",
+      "params": {
+        "message": {
+          "contextId": "context-wire-01",
+          "kind": "message",
+          "messageId": "message-confirm-01",
+          "parts": [
+            {
+              "data": {
+                "candidate_id": "candidate-01",
+                "challenge_id": "challenge-cccccccccccccccccccccccccccccccc",
+                "decision": "CONFIRM",
+                "idempotency_key": "idempotency-wire-01",
+                "message_id": "message-confirm-01",
+                "message_type": "assurance_confirmation_request",
+                "preview_message_id": "message-preview-01",
+                "reason": "Candidate reviewed.",
+                "schema_version": "1.0",
+                "sent_at": "2026-08-28T01:02:03Z",
+                "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "trace_id": "trace-wire-01",
+                "workflow_id": "workflow-wire-01"
+              },
+              "kind": "data"
+            },
+            {
+              "kind": "text",
+              "text": "Confirm incident creation."
+            }
+          ],
+          "role": "user",
+          "taskId": "task-wire-01"
+        }
+      }
+    },
+    "message_send": {
+      "id": "rpc-send-01",
+      "jsonrpc": "2.0",
+      "method": "message/send",
+      "params": {
+        "message": {
+          "contextId": "context-wire-01",
+          "kind": "message",
+          "messageId": "message-scan-01",
+          "parts": [
+            {
+              "kind": "text",
+              "text": "Scan local LTE performance data."
+            },
+            {
+              "data": {
+                "idempotency_key": "idempotency-wire-01",
+                "message_id": "message-scan-01",
+                "message_type": "assurance_scan_request",
+                "page_offset": 0,
+                "page_size": 1,
+                "resource_ids": [],
+                "schema_version": "1.0",
+                "sent_at": "2026-08-28T01:02:03Z",
+                "trace_id": "trace-wire-01",
+                "window_end": null,
+                "window_start": null,
+                "workflow_id": "workflow-wire-01"
+              },
+              "kind": "data"
+            }
+          ],
+          "role": "user"
+        }
+      }
+    },
+    "message_stream": {
+      "id": "rpc-stream-01",
+      "jsonrpc": "2.0",
+      "method": "message/stream",
+      "params": {
+        "message": {
+          "contextId": "context-wire-01",
+          "kind": "message",
+          "messageId": "message-scan-01",
+          "parts": [
+            {
+              "kind": "text",
+              "text": "Scan local LTE performance data."
+            },
+            {
+              "data": {
+                "idempotency_key": "idempotency-wire-01",
+                "message_id": "message-scan-01",
+                "message_type": "assurance_scan_request",
+                "page_offset": 0,
+                "page_size": 1,
+                "resource_ids": [],
+                "schema_version": "1.0",
+                "sent_at": "2026-08-28T01:02:03Z",
+                "trace_id": "trace-wire-01",
+                "window_end": null,
+                "window_start": null,
+                "workflow_id": "workflow-wire-01"
+              },
+              "kind": "data"
+            }
+          ],
+          "role": "user"
+        }
+      }
+    }
+  },
+  "responses": {
+    "artifact_data_text": {
+      "id": "rpc-confirm-01",
+      "jsonrpc": "2.0",
+      "result": {
+        "artifact": {
+          "artifactId": "artifact-result-02",
+          "parts": [
+            {
+              "data": {
+                "actor": "supervisor:user",
+                "candidate_id": "candidate-01",
+                "decision": "CONFIRM",
+                "idempotency_key": "idempotency-wire-01",
+                "incident": {
+                  "incident_id": "incident-01",
+                  "trace_id": "trace-wire-01"
+                },
+                "message_id": "message-result-01",
+                "message_type": "assurance_confirmation_result",
+                "outcome": "created",
+                "preview_message_id": "message-preview-01",
+                "request_message_id": "message-confirm-01",
+                "schema_version": "1.0",
+                "sent_at": "2026-08-28T01:02:03Z",
+                "summary_zh": "Incident created.",
+                "trace_id": "trace-wire-01",
+                "workflow_id": "workflow-wire-01"
+              },
+              "kind": "data"
+            },
+            {
+              "kind": "text",
+              "text": "Incident created."
+            }
+          ]
+        },
+        "contextId": "context-wire-01",
+        "kind": "artifact-update",
+        "lastChunk": true,
+        "taskId": "task-wire-01"
+      }
+    },
+    "artifact_text_data": {
+      "id": "rpc-confirm-01",
+      "jsonrpc": "2.0",
+      "result": {
+        "artifact": {
+          "artifactId": "artifact-result-01",
+          "parts": [
+            {
+              "kind": "text",
+              "text": "Incident created."
+            },
+            {
+              "data": {
+                "actor": "supervisor:user",
+                "candidate_id": "candidate-01",
+                "decision": "CONFIRM",
+                "idempotency_key": "idempotency-wire-01",
+                "incident": {
+                  "incident_id": "incident-01",
+                  "trace_id": "trace-wire-01"
+                },
+                "message_id": "message-result-01",
+                "message_type": "assurance_confirmation_result",
+                "outcome": "created",
+                "preview_message_id": "message-preview-01",
+                "request_message_id": "message-confirm-01",
+                "schema_version": "1.0",
+                "sent_at": "2026-08-28T01:02:03Z",
+                "summary_zh": "Incident created.",
+                "trace_id": "trace-wire-01",
+                "workflow_id": "workflow-wire-01"
+              },
+              "kind": "data"
+            }
+          ]
+        },
+        "contextId": "context-wire-01",
+        "kind": "artifact-update",
+        "lastChunk": true,
+        "taskId": "task-wire-01"
+      }
+    },
+    "error_artifact": {
+      "id": "rpc-error-01",
+      "jsonrpc": "2.0",
+      "result": {
+        "artifact": {
+          "artifactId": "artifact-error-01",
+          "parts": [
+            {
+              "kind": "text",
+              "text": "Request rejected."
+            },
+            {
+              "data": {
+                "error_code": "INVALID_REQUEST",
+                "message_id": "message-error-01",
+                "message_type": "assurance_error",
+                "schema_version": "1.0",
+                "sent_at": "2026-08-28T01:02:03Z",
+                "summary_zh": "Request rejected."
+              },
+              "kind": "data"
+            }
+          ]
+        },
+        "contextId": "context-wire-01",
+        "kind": "artifact-update",
+        "lastChunk": true,
+        "taskId": "task-wire-01"
+      }
+    },
+    "canceled": {
+      "id": "rpc-cancel-01",
+      "jsonrpc": "2.0",
+      "result": {
+        "contextId": "context-wire-01",
+        "final": true,
+        "kind": "status-update",
+        "status": {
+          "state": "canceled"
+        },
+        "taskId": "task-wire-01"
+      }
+    },
+    "completed": {
+      "id": "rpc-confirm-01",
+      "jsonrpc": "2.0",
+      "result": {
+        "contextId": "context-wire-01",
+        "final": true,
+        "kind": "status-update",
+        "status": {
+          "message": {
+            "contextId": "context-wire-01",
+            "kind": "message",
+            "messageId": "message-completed-01",
+            "parts": [
+              {
+                "kind": "text",
+                "text": "Confirmation completed."
+              }
+            ],
+            "role": "agent"
+          },
+          "state": "completed"
+        },
+        "taskId": "task-wire-01"
+      }
+    },
+    "failed": {
+      "id": "rpc-failed-01",
+      "jsonrpc": "2.0",
+      "result": {
+        "contextId": "context-wire-01",
+        "final": true,
+        "kind": "status-update",
+        "status": {
+          "state": "failed"
+        },
+        "taskId": "task-wire-01"
+      }
+    },
+    "input_required": {
+      "id": "rpc-stream-01",
+      "jsonrpc": "2.0",
+      "result": {
+        "contextId": "context-wire-01",
+        "final": true,
+        "kind": "status-update",
+        "status": {
+          "message": {
+            "contextId": "context-wire-01",
+            "kind": "message",
+            "messageId": "message-preview-01",
+            "parts": [
+              {
+                "kind": "text",
+                "text": "Confirm the candidate."
+              },
+              {
+                "data": {
+                  "candidates": [
+                    {
+                      "affected_resources": [
+                        {
+                          "resource_id": "lte:enodeb:1:cell:1",
+                          "resource_type": "CELL",
+                          "technology": "LTE"
+                        }
+                      ],
+                      "candidate_id": "candidate-01",
+                      "summary_zh": "One anomaly candidate.",
+                      "technology": "LTE",
+                      "title": "LTE KPI anomaly",
+                      "violated_kpis": [
+                        {
+                          "comparator": "LT",
+                          "kpi_name": "DL_bitrate",
+                          "observed_value": 1.0,
+                          "sample_count": 1,
+                          "threshold_value": 5.0,
+                          "unit": "Mbps"
+                        }
+                      ],
+                      "window_end": "2022-01-01T00:15:00Z",
+                      "window_start": "2022-01-01T00:00:00Z"
+                    }
+                  ],
+                  "challenge_expires_at": "2026-08-28T01:12:03Z",
+                  "challenge_id": "challenge-cccccccccccccccccccccccccccccccc",
+                  "effective_window_end": "2022-01-01T23:59:59Z",
+                  "effective_window_start": "2022-01-01T00:00:00Z",
+                  "has_more": false,
+                  "idempotency_key": "idempotency-wire-01",
+                  "message_id": "message-preview-01",
+                  "message_type": "assurance_candidate_page",
+                  "page_offset": 0,
+                  "page_size": 1,
+                  "request_message_id": "message-scan-01",
+                  "schema_version": "1.0",
+                  "sent_at": "2026-08-28T01:02:03Z",
+                  "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "summary_zh": "Confirm incident creation.",
+                  "total_candidates": 1,
+                  "trace_id": "trace-wire-01",
+                  "workflow_id": "workflow-wire-01"
+                },
+                "kind": "data"
+              }
+            ],
+            "role": "agent"
+          },
+          "state": "input-required"
+        },
+        "taskId": "task-wire-01"
+      }
+    },
+    "rejected": {
+      "id": "rpc-reject-01",
+      "jsonrpc": "2.0",
+      "result": {
+        "contextId": "context-wire-01",
+        "final": true,
+        "kind": "status-update",
+        "status": {
+          "state": "rejected"
+        },
+        "taskId": "task-wire-01"
+      }
+    },
+    "task_submitted": {
+      "id": "rpc-stream-01",
+      "jsonrpc": "2.0",
+      "result": {
+        "contextId": "context-wire-01",
+        "id": "task-wire-01",
+        "kind": "task",
+        "status": {
+          "state": "submitted"
+        }
+      }
+    },
+    "working": {
+      "id": "rpc-stream-01",
+      "jsonrpc": "2.0",
+      "result": {
+        "contextId": "context-wire-01",
+        "final": false,
+        "kind": "status-update",
+        "status": {
+          "message": {
+            "contextId": "context-wire-01",
+            "kind": "message",
+            "messageId": "message-working-01",
+            "parts": [
+              {
+                "kind": "text",
+                "text": "Detecting anomalies."
+              }
+            ],
+            "role": "agent"
+          },
+          "state": "working"
+        },
+        "taskId": "task-wire-01"
+      }
+    }
+  }
+}

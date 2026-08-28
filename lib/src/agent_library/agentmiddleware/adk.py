@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Dict, Callable, Any, AsyncGenerator, List
+from typing import Optional, Dict, Callable, Any, AsyncGenerator, List, Mapping
 import json
 import asyncio
 import inspect
@@ -20,7 +20,8 @@ import os
 from ag_ui.core import (
     RunAgentInput, BaseEvent, EventType,
     RunStartedEvent, RunFinishedEvent, RunErrorEvent,
-    ToolCallEndEvent, SystemMessage,ToolCallResultEvent
+    ToolCallStartEvent, ToolCallEndEvent, SystemMessage,ToolCallResultEvent,
+    AssistantMessage, FunctionCall, ToolCall, ToolMessage
 )
 from google.adk import Runner
 from google.adk.agents import BaseAgent, RunConfig as ADKRunConfig
@@ -214,7 +215,14 @@ class ADKAgent:
         # Use thread_id as default (assumes thread per user)
         return f"thread_user_{input.thread_id}"
     
-    async def _add_pending_tool_call_with_context(self, session_id: str, tool_call_id: str, app_name: str, user_id: str):
+    async def _add_pending_tool_call_with_context(
+        self,
+        session_id: str,
+        tool_call_id: str,
+        app_name: str,
+        user_id: str,
+        tool_name: str | None = None,
+    ):
         """Add a tool call to the session's pending list for HITL tracking.
         
         Args:
@@ -249,10 +257,30 @@ class ADKAgent:
                 
                 if success:
                     logger.info(f"Added tool call {tool_call_id} to session {session_id} pending list")
+            if tool_name:
+                pending_names = await self._session_manager.get_state_value(
+                    session_id=session_id,
+                    app_name=app_name,
+                    user_id=user_id,
+                    key="pending_tool_call_names",
+                    default={},
+                )
+                if not isinstance(pending_names, dict):
+                    pending_names = {}
+                pending_names[tool_call_id] = tool_name
+                await self._session_manager.set_state_value(
+                    session_id=session_id,
+                    app_name=app_name,
+                    user_id=user_id,
+                    key="pending_tool_call_names",
+                    value=pending_names,
+                )
         except Exception as e:
             logger.error(f"Failed to add pending tool call {tool_call_id} to session {session_id}: {e}")
     
-    async def _remove_pending_tool_call(self, session_id: str, tool_call_id: str):
+    async def _remove_pending_tool_call(
+        self, session_id: str, tool_call_id: str
+    ) -> bool:
         """Remove a tool call from the session's pending list.
 
         Uses efficient session lookup to find the session without needing explicit app_name/user_id.
@@ -279,8 +307,10 @@ class ADKAgent:
                 )
 
                 # Remove tool call if present
-                if tool_call_id in pending_calls:
-                    pending_calls.remove(tool_call_id)
+                removed = False
+                if isinstance(pending_calls, list) and tool_call_id in pending_calls:
+                    remaining_calls = list(pending_calls)
+                    remaining_calls.remove(tool_call_id)
 
                     # Update the state using SessionManager
                     success = await self._session_manager.set_state_value(
@@ -288,13 +318,38 @@ class ADKAgent:
                         app_name=app_name,
                         user_id=user_id,
                         key="pending_tool_calls",
-                        value=pending_calls
+                        value=remaining_calls
                     )
                     
-                    if success:
+                    if success is True:
+                        removed = True
                         logger.info(f"Removed tool call {tool_call_id} from session {session_id} pending list")
+                if not removed:
+                    return False
+                pending_names = await self._session_manager.get_state_value(
+                    session_id=session_id,
+                    app_name=app_name,
+                    user_id=user_id,
+                    key="pending_tool_call_names",
+                    default={},
+                )
+                if isinstance(pending_names, dict) and tool_call_id in pending_names:
+                    pending_names.pop(tool_call_id, None)
+                    await self._session_manager.set_state_value(
+                        session_id=session_id,
+                        app_name=app_name,
+                        user_id=user_id,
+                        key="pending_tool_call_names",
+                        value=pending_names,
+                    )
+                return removed
         except Exception as e:
-            logger.error(f"Failed to remove pending tool call {tool_call_id} from session {session_id}: {e}")
+            logger.error(
+                "Failed to consume pending tool call thread=%s type=%s",
+                session_id,
+                type(e).__name__,
+            )
+        return False
     
     async def _has_pending_tool_calls(self, session_id: str) -> bool:
         """Check if session has pending tool calls (HITL scenario).
@@ -326,6 +381,61 @@ class ADKAgent:
             logger.error(f"Failed to check pending tool calls for session {session_id}: {e}")
 
         return False
+
+    async def is_pending_tool_call(
+        self, session_id: str, tool_call_id: str
+    ) -> bool:
+        """Fail closed unless this exact encoded call is pending for the thread."""
+        try:
+            metadata = self._get_session_metadata(session_id)
+            if not metadata:
+                return False
+            pending_calls = await self._session_manager.get_state_value(
+                session_id=session_id,
+                app_name=metadata["app_name"],
+                user_id=metadata["user_id"],
+                key="pending_tool_calls",
+                default=[],
+            )
+            return (
+                isinstance(pending_calls, list)
+                and isinstance(tool_call_id, str)
+                and tool_call_id in pending_calls
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed exact pending-tool lookup thread=%s type=%s",
+                session_id,
+                type(exc).__name__,
+            )
+            return False
+
+    async def pending_tool_call_name(
+        self, session_id: str, tool_call_id: str
+    ) -> str | None:
+        """Return the server-observed tool name for one exact pending call."""
+        try:
+            metadata = self._get_session_metadata(session_id)
+            if not metadata:
+                return None
+            pending_names = await self._session_manager.get_state_value(
+                session_id=session_id,
+                app_name=metadata["app_name"],
+                user_id=metadata["user_id"],
+                key="pending_tool_call_names",
+                default={},
+            )
+            if not isinstance(pending_names, dict):
+                return None
+            value = pending_names.get(tool_call_id)
+            return value if isinstance(value, str) and value else None
+        except Exception as exc:
+            logger.error(
+                "Failed pending-tool-name lookup thread=%s type=%s",
+                session_id,
+                type(exc).__name__,
+            )
+            return None
     
     
     def _default_run_config(self, input: RunAgentInput) -> ADKRunConfig:
@@ -348,11 +458,10 @@ class ADKAgent:
         )
     
     async def run(self, input: RunAgentInput) -> AsyncGenerator[BaseEvent, None]:
-        """Run the ADK agent with client-side tool support.
-        
-        All client-side tools are long-running. For tool result submissions,
-        we continue existing executions. For new requests, we start new executions.
-        ADK sessions handle conversation continuity and tool result processing.
+        """Run a normal client request.
+
+        Tool results are accepted only through :meth:`handle_tool_result`, which
+        binds them to an exact server-observed pending call before continuation.
         
         Args:
             input: The AG-UI run input
@@ -360,15 +469,11 @@ class ADKAgent:
         Yields:
             AG-UI protocol events
         """
-        # Check if this is a tool result submission for an existing execution
-        if self._is_tool_result_submission(input):
-            # Handle tool results for existing execution
-            async for event in self._handle_tool_result_submission(input):
-                yield event
-        else:
-            # Start new execution for regular requests
-            async for event in self._start_new_execution(input):
-                yield event
+        if any(getattr(message, "role", None) == "tool" for message in input.messages):
+            raise PermissionError("direct client tool message is forbidden")
+
+        async for event in self._start_new_execution(input):
+            yield event
     
     async def _ensure_session_exists(self, app_name: str, user_id: str, session_id: str, initial_state: dict):
         """Ensure a session exists, creating it if necessary via session manager."""
@@ -425,100 +530,115 @@ class ADKAgent:
         return hasattr(last_message, 'role') and last_message.role == "tool"
     
     async def _handle_tool_result_submission(
-        self, 
-        input: RunAgentInput
+        self,
+        input: RunAgentInput,
+        *,
+        trusted_tool_names: Optional[Mapping[str, str]] = None,
     ) -> AsyncGenerator[BaseEvent, None]:
-        """Handle tool result submission for existing execution.
-        
-        Args:
-            input: The run input containing tool results
-            
-        Yields:
-            AG-UI events from continued execution
-        """
-        thread_id = input.thread_id
-        
-        # Extract tool results that is send by the frontend 
-        tool_results = await self._extract_tool_results(input)
-        
-        # if the tool results are not sent by the fronted then call the tool function
-        if not tool_results:
-            logger.error(f"Tool result submission without tool results for thread {thread_id}")
-            yield RunErrorEvent(
-                type=EventType.RUN_ERROR,
-                message="No tool results found in submission",
-                code="NO_TOOL_RESULTS"
-            )
-            return
-        
-        try:
-            # Check if tool result matches any pending tool calls for better debugging
-            for tool_result in tool_results:
-                tool_call_id = tool_result['message'].tool_call_id
-                has_pending = await self._has_pending_tool_calls(thread_id)
-                
-                if has_pending:
-                    # Could add more specific check here for the exact tool_call_id
-                    # but for now just log that we're processing a tool result while tools are pending
-                    logger.debug(f"Processing tool result {tool_call_id} for thread {thread_id} with pending tools")
-                    # Remove from pending tool calls now that we're processing it
-                    await self._remove_pending_tool_call(thread_id, tool_call_id)
-                else:
-                    # No pending tools - this could be a stale result or from a different session
-                    logger.warning(f"No pending tool calls found for tool result {tool_call_id} in thread {thread_id}")
-            
-            # Since all tools are long-running, all tool results are standalone
-            # and should start new executions with the tool results
-            logger.info(f"Starting new execution for tool result in thread {thread_id}")
-            async for event in self._start_new_execution(input):
-                yield event
-                
-        except Exception as e:
-            logger.error(f"Error handling tool results: {e}", exc_info=True)
-            yield RunErrorEvent(
-                type=EventType.RUN_ERROR,
-                message=f"Failed to process tool results: {str(e)}",
-                code="TOOL_RESULT_PROCESSING_ERROR"
-            )
-    
-    async def _extract_tool_results(self, input: RunAgentInput) -> List[Dict]:
-        """Extract tool messages with their names from input.
-        
-        Only extracts the most recent tool message to avoid accumulation issues
-        where multiple tool results are sent to the LLM causing API errors.
-        
-        Args:
-            input: The run input
-            
-        Returns:
-            List of dicts containing tool name and message (single item for most recent)
-        """
-        # Create a mapping of tool_call_id to tool name
-        tool_call_map = {}
+        """Continue an internally authenticated pending tool call."""
+        if not trusted_tool_names:
+            raise PermissionError("trusted tool binding is required")
+
+        trusted_content = await self._build_tool_response_content(
+            input,
+            trusted_tool_names=trusted_tool_names,
+        )
+        async for event in self._start_new_execution(
+            input,
+            trusted_tool_response=trusted_content,
+        ):
+            yield event
+
+    async def _extract_tool_results(
+        self,
+        input: RunAgentInput,
+        *,
+        trusted_tool_names: Optional[Mapping[str, str]] = None,
+    ) -> List[Dict]:
+        """Extract one tool result bound to an exact server-observed name."""
+        if not trusted_tool_names:
+            raise PermissionError("trusted tool binding is required")
+
+        tool_messages = [
+            message
+            for message in input.messages
+            if getattr(message, "role", None) == "tool"
+        ]
+        if len(tool_messages) != 1:
+            raise PermissionError("exactly one trusted ToolMessage is required")
+
+        tool_message = tool_messages[0]
+        tool_call_id = getattr(tool_message, "tool_call_id", None)
+        if not isinstance(tool_call_id, str) or not tool_call_id:
+            raise PermissionError("trusted tool call id is invalid")
+        if set(trusted_tool_names) != {tool_call_id}:
+            raise PermissionError("trusted tool call id does not match")
+
+        trusted_name = trusted_tool_names.get(tool_call_id)
+        if (
+            not isinstance(trusted_name, str)
+            or not trusted_name
+            or trusted_name != trusted_name.strip()
+            or trusted_name.lower() == "unknown"
+        ):
+            raise PermissionError("trusted tool name is invalid")
+
+        declared_calls = []
         for message in input.messages:
-            if hasattr(message, 'tool_calls') and message.tool_calls:
-                for tool_call in message.tool_calls:
-                    tool_call_map[tool_call.id] = tool_call.function.name
-        
-        # Find the most recent tool message (should be the last one in a tool result submission)
-        most_recent_tool_message = None
-        for message in reversed(input.messages):
-            if hasattr(message, 'role') and message.role == "tool":
-                most_recent_tool_message = message
-                break
-        
-        if most_recent_tool_message:
-            tool_name = tool_call_map.get(most_recent_tool_message.tool_call_id, "unknown")
-            
-            # Debug: Log the extracted tool message
-            logger.debug(f"Extracted most recent ToolMessage: role={most_recent_tool_message.role}, tool_call_id={most_recent_tool_message.tool_call_id}, content='{most_recent_tool_message.content}'")
-            
-            return [{
-                'tool_name': tool_name,
-                'message': most_recent_tool_message
-            }]
-        
-        return []
+            for tool_call in getattr(message, "tool_calls", None) or []:
+                declared_calls.append(tool_call)
+        if len(declared_calls) != 1:
+            raise PermissionError("exactly one trusted ToolCall context is required")
+
+        declared_call = declared_calls[0]
+        declared_name = getattr(getattr(declared_call, "function", None), "name", None)
+        if declared_call.id != tool_call_id or declared_name != trusted_name:
+            raise PermissionError("tool call name does not match trusted binding")
+
+        logger.debug("Validated trusted ToolMessage call=%s", tool_call_id)
+        return [{"tool_name": trusted_name, "message": tool_message}]
+
+    async def _build_tool_response_content(
+        self,
+        input: RunAgentInput,
+        *,
+        trusted_tool_names: Optional[Mapping[str, str]] = None,
+    ) -> types.Content:
+        """Build an ADK function response without reflecting untrusted input."""
+        tool_results = await self._extract_tool_results(
+            input,
+            trusted_tool_names=trusted_tool_names,
+        )
+        parts = []
+        for tool_result in tool_results:
+            tool_message = tool_result["message"]
+            tool_call_id = tool_message.tool_call_id
+            content = tool_message.content
+            try:
+                if not isinstance(content, str) or not content.strip():
+                    raise json.JSONDecodeError("empty tool result", "", 0)
+                result = json.loads(content)
+            except (json.JSONDecodeError, TypeError):
+                result = {
+                    "error": "Invalid tool result JSON",
+                    "error_type": "JSON_DECODE_ERROR",
+                }
+                logger.warning(
+                    "Invalid JSON tool result rejected call=%s type=%s",
+                    tool_call_id,
+                    type(content).__name__,
+                )
+
+            parts.append(
+                types.Part(
+                    function_response=types.FunctionResponse(
+                        id=tool_call_id,
+                        name=tool_result["tool_name"],
+                        response=result,
+                    )
+                )
+            )
+        return types.Content(parts=parts, role="user")
     
     async def _stream_events(
         self, 
@@ -592,8 +712,10 @@ class ADKAgent:
                     break
     
     async def _start_new_execution(
-        self, 
-        input: RunAgentInput
+        self,
+        input: RunAgentInput,
+        *,
+        trusted_tool_response: Optional[types.Content] = None,
     ) -> AsyncGenerator[BaseEvent, None]:
         """Start a new ADK execution with tool support.
         
@@ -637,7 +759,10 @@ class ADKAgent:
                     logger.debug(f"Previous execution completed with error: {e}")
             
             # Start background execution
-            execution = await self._start_background_execution(input)
+            execution = await self._start_background_execution(
+                input,
+                trusted_tool_response=trusted_tool_response,
+            )
             
             # Store execution (replacing any previous one)
             async with self._execution_lock:
@@ -647,10 +772,13 @@ class ADKAgent:
             logger.debug(f"Starting to stream events for execution {execution.thread_id}")
             has_tool_calls = False
             tool_call_ids = []
+            tool_call_names: dict[str, str] = {}
             
             logger.debug(f"About to iterate over _stream_events for execution {execution.thread_id}")
             async for event in self._stream_events(execution):
                 # Track tool calls for HITL scenarios
+                if isinstance(event, ToolCallStartEvent):
+                    tool_call_names[event.tool_call_id] = event.tool_call_name
                 if isinstance(event, ToolCallEndEvent):
                     logger.info(f"Detected ToolCallEndEvent with id: {event.tool_call_id}")
                     has_tool_calls = True
@@ -674,7 +802,11 @@ class ADKAgent:
                 user_id = self._get_user_id(input)
                 for tool_call_id in tool_call_ids:
                     await self._add_pending_tool_call_with_context(
-                        execution.thread_id, tool_call_id, app_name, user_id
+                        execution.thread_id,
+                        tool_call_id,
+                        app_name,
+                        user_id,
+                        tool_call_names.get(tool_call_id),
                     )
             logger.debug(f"Finished streaming events for execution {execution.thread_id}")
             
@@ -687,10 +819,14 @@ class ADKAgent:
             )
             
         except Exception as e:
-            logger.error(f"Error in new execution: {e}", exc_info=True)            
+            logger.error(
+                "ADK execution failed thread=%s type=%s",
+                input.thread_id,
+                type(e).__name__,
+            )
             yield RunErrorEvent(
                 type=EventType.RUN_ERROR,
-                message=str(e),
+                message="代理执行失败，请稍后重试。",
                 code="EXECUTION_ERROR"
             )
         finally:
@@ -709,8 +845,10 @@ class ADKAgent:
                         logger.info(f"Preserving execution for thread {input.thread_id} - has pending tool calls (HITL scenario)")
     
     async def _start_background_execution(
-        self, 
-        input: RunAgentInput
+        self,
+        input: RunAgentInput,
+        *,
+        trusted_tool_response: Optional[types.Content] = None,
     ) -> ExecutionState:
         """Start ADK execution in background with tool support.
         
@@ -815,7 +953,8 @@ class ADKAgent:
                 adk_agent=adk_agent,
                 user_id=user_id,
                 app_name=app_name,
-                event_queue=event_queue
+                event_queue=event_queue,
+                trusted_tool_response=trusted_tool_response,
             )
         )
         logger.debug(f"Background task created for thread {input.thread_id}: {task}")
@@ -832,7 +971,8 @@ class ADKAgent:
         adk_agent: BaseAgent,
         user_id: str,
         app_name: str,
-        event_queue: asyncio.Queue
+        event_queue: asyncio.Queue,
+        trusted_tool_response: Optional[types.Content] = None,
     ):
         """Run ADK agent in background, emitting events to queue.
         
@@ -875,45 +1015,14 @@ class ADKAgent:
             # only use this new_message if there is no tool response from the user
             new_message = await self._convert_latest_message(input)
             
-            # if there is a tool response submission by the user then we need to only pass the tool response to the adk runner
+            # A tool response may reach the runner only through the authenticated
+            # continuation path. Public run() rejects every client ToolMessage.
             if self._is_tool_result_submission(input):
-                tool_results = await self._extract_tool_results(input)
-                parts = []
-                for tool_msg in tool_results:
-                    tool_call_id = tool_msg['message'].tool_call_id
-                    content = tool_msg['message'].content
-                    
-                    # Debug: Log the actual tool message content we received
-                    logger.debug(f"Received tool result for call {tool_call_id}: content='{content}', type={type(content)}")
-                    
-                    # Parse JSON content, handling empty or invalid JSON gracefully
-                    try:
-                        if content and content.strip():
-                            result = json.loads(content)
-                        else:
-                            # Handle empty content as a success with empty result
-                            result = {"success": True, "result": None}
-                            logger.warning(f"Empty tool result content for tool call {tool_call_id}, using empty success result")
-                    except json.JSONDecodeError as json_error:
-                        # Handle invalid JSON by providing detailed error result
-                        result = {
-                            "error": f"Invalid JSON in tool result: {str(json_error)}", 
-                            "raw_content": content,
-                            "error_type": "JSON_DECODE_ERROR",
-                            "line": getattr(json_error, 'lineno', None),
-                            "column": getattr(json_error, 'colno', None)
-                        }
-                        logger.error(f"Invalid JSON in tool result for call {tool_call_id}: {json_error} at line {getattr(json_error, 'lineno', '?')}, column {getattr(json_error, 'colno', '?')}")
-                    
-                    updated_function_response_part = types.Part(
-                    function_response=types.FunctionResponse(
-                        id= tool_call_id,
-                        name=tool_msg["tool_name"], 
-                        response=result,
-                    )
-                )
-                    parts.append(updated_function_response_part)
-                new_message = types.Content(parts=parts, role='user')
+                if trusted_tool_response is None:
+                    raise PermissionError("untrusted ToolMessage reached ADK runner")
+                new_message = trusted_tool_response
+            elif trusted_tool_response is not None:
+                raise PermissionError("trusted tool response has no ToolMessage")
 
             # Create event translator 
             event_translator = EventTranslator()
@@ -967,12 +1076,16 @@ class ADKAgent:
             logger.debug(f"Background task completion signal sent for thread {input.thread_id}")
             
         except Exception as e:
-            logger.error(f"Background execution error: {e}", exc_info=True)
+            logger.error(
+                "Background execution failed thread=%s type=%s",
+                input.thread_id,
+                type(e).__name__,
+            )
             # Put error in queue
             await event_queue.put(
                 RunErrorEvent(
                     type=EventType.RUN_ERROR,
-                    message=str(e),
+                    message="后台代理执行失败，请稍后重试。",
                     code="BACKGROUND_EXECUTION_ERROR"
                 )
             )
@@ -996,7 +1109,9 @@ class ADKAgent:
             await execution.cancel()
             logger.info(f"Cleaned up stale execution for thread {thread_id}")
 
-    async def handle_tool_result(self, session_id: str, tool_call_id: str, content: str):
+    async def handle_tool_result(
+        self, session_id: str, tool_call_id: str, content: str
+    ) -> AsyncGenerator[BaseEvent, None]:
         """
         Handle tool result from AG-UI frontend
         
@@ -1005,63 +1120,74 @@ class ADKAgent:
             tool_call_id: ID of the tool call being responded to (format: original_id::thread_id)
             content: User's response content (JSON string)
         """
-        try:
-            logger.info(f"ADKAgent handling tool result for session {session_id}, tool_call_id: {tool_call_id}")
-            
-            # Extract thread_id from the encoded tool_call_id
-            # Format: original_id::thread_id
-            if "::" in tool_call_id:
-                original_tool_call_id, thread_id = tool_call_id.split("::", 1)
-                logger.info(f"Extracted thread_id {thread_id} from tool_call_id {tool_call_id}")
-            else:
-                # Fallback to using session_id as thread_id for backward compatibility
-                original_tool_call_id = tool_call_id
-                thread_id = session_id
-                logger.warning(f"Tool call ID {tool_call_id} does not contain thread_id, using session_id {session_id} as fallback")
-            
-            # Get session metadata using the extracted thread_id
-            metadata = self._get_session_metadata(thread_id)
-            if not metadata:
-                logger.error(f"No session metadata found for thread_id {thread_id}")
-                return
-            
-            app_name = metadata["app_name"]
-            user_id = metadata["user_id"]
-            
-            # Remove from pending tool calls using the full encoded tool_call_id
-            await self._remove_pending_tool_call(thread_id, tool_call_id)
-            
-            # Create a tool message for the AG-UI protocol using the original tool_call_id
-            from ag_ui.core import ToolMessage
-            tool_message = ToolMessage(
-                id=f"tool_result_{original_tool_call_id}",
-                role="tool",
-                tool_call_id=original_tool_call_id,
-                content=content
-            )
-            
-            # Create a new RunAgentInput with the tool result using the extracted thread_id
-            run_input = RunAgentInput(
-                thread_id=thread_id,
-                run_id=f"tool_result_{original_tool_call_id}",
-                state={},
-                messages=[tool_message],
-                tools=[],
-                context=[],
-                forwardedProps={}
-            )
-            
-            # Process the tool result through the normal run flow
-            # This will continue the conversation with the tool result
-            events = []
-            async for event in self.run(run_input):
-                events.append(event)
-                logger.debug(f"Tool result processing event: {type(event).__name__}")
-            
-            logger.info(f"Successfully processed tool result for {tool_call_id}, generated {len(events)} events")
-            
-        except Exception as e:
-            logger.error(f"Error handling tool result for {tool_call_id}: {e}", exc_info=True)
+        if (
+            not isinstance(session_id, str)
+            or not session_id
+            or not isinstance(tool_call_id, str)
+            or tool_call_id.count("::") != 1
+        ):
+            raise PermissionError("tool call binding is invalid")
+        original_tool_call_id, thread_id = tool_call_id.split("::", 1)
+        if not original_tool_call_id or thread_id != session_id:
+            raise PermissionError("tool call belongs to another thread")
+        if not await self.is_pending_tool_call(thread_id, tool_call_id):
+            raise PermissionError("tool call is not pending for this thread")
+        pending_tool_name = await self.pending_tool_call_name(
+            thread_id, tool_call_id
+        )
+        if (
+            not isinstance(pending_tool_name, str)
+            or not pending_tool_name
+            or pending_tool_name != pending_tool_name.strip()
+            or pending_tool_name.lower() == "unknown"
+        ):
+            raise PermissionError("pending tool call name is unavailable")
+        if not self._get_session_metadata(thread_id):
+            raise PermissionError("tool call session is unavailable")
+
+        logger.info("Continuing ADK tool result thread=%s", thread_id)
+        if not await self._remove_pending_tool_call(thread_id, tool_call_id):
+            raise PermissionError("pending tool call could not be consumed")
+
+        assistant_message = AssistantMessage(
+            id=f"tool_context_{original_tool_call_id}",
+            tool_calls=[
+                ToolCall(
+                    id=original_tool_call_id,
+                    function=FunctionCall(
+                        name=pending_tool_name,
+                        arguments="{}",
+                    ),
+                )
+            ],
+        )
+        tool_message = ToolMessage(
+            id=f"tool_result_{original_tool_call_id}",
+            role="tool",
+            tool_call_id=original_tool_call_id,
+            content=content,
+        )
+        run_input = RunAgentInput(
+            thread_id=thread_id,
+            run_id=f"tool_result_{original_tool_call_id}",
+            state={},
+            messages=[assistant_message, tool_message],
+            tools=[],
+            context=[],
+            forwardedProps={},
+        )
+        event_count = 0
+        async for event in self._handle_tool_result_submission(
+            run_input,
+            trusted_tool_names={original_tool_call_id: pending_tool_name},
+        ):
+            event_count += 1
+            yield event
+        logger.info(
+            "Completed ADK tool continuation thread=%s events=%s",
+            thread_id,
+            event_count,
+        )
 
     async def close(self):
         """Clean up resources including active executions."""

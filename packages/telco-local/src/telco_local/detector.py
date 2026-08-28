@@ -7,7 +7,7 @@ import json
 import math
 import uuid
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
@@ -27,6 +27,7 @@ from telco_domain.ports import IncidentRepository
 
 from .config import LocalProfileConfig
 from .incident_repository import DuckDbIncidentRepository
+from .lte_identifiers import canonical_lte_resource_id, parse_lte_resource_id
 from .rules import (
     JsonRuleRepository,
     RcaRule,
@@ -40,6 +41,8 @@ Clock = Callable[[], datetime]
 MAX_CURRENT_RULES = 32
 MAX_EPISODE_SAMPLES = 1_000
 MAX_SCAN_CANDIDATES = 100
+MAX_SCAN_RESOURCE_IDS = 100
+MAX_SCAN_WINDOW = timedelta(days=31)
 
 
 class DetectorCapacityError(RuntimeError):
@@ -85,6 +88,44 @@ def _assert_privacy_safe(value: object, *, boundary: str) -> None:
         raise SensitiveDataError(
             f"{boundary} rejected by privacy policy"
         ) from None
+
+
+def _validated_scan_scope(
+    *,
+    window_start: datetime | None,
+    window_end: datetime | None,
+    resource_ids: Sequence[str],
+) -> tuple[datetime | None, datetime | None, tuple[str, ...]]:
+    if (window_start is None) != (window_end is None):
+        raise ValueError("window_start and window_end must be provided together")
+    start = window_start
+    end = window_end
+    if start is not None and end is not None:
+        for value in (start, end):
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ValueError("scan windows must be timezone-aware UTC")
+            if value.utcoffset() != timedelta(0):
+                raise ValueError("scan windows must use UTC")
+        start = start.astimezone(UTC)
+        end = end.astimezone(UTC)
+        if end < start:
+            raise ValueError("window_end must not be earlier than window_start")
+        if end - start > MAX_SCAN_WINDOW:
+            raise ValueError("scan window must not exceed 31 days")
+
+    if isinstance(resource_ids, (str, bytes)):
+        raise ValueError("resource_ids must be a sequence of identifiers")
+    supplied = tuple(resource_ids)
+    if len(supplied) > MAX_SCAN_RESOURCE_IDS:
+        raise ValueError(
+            f"resource_ids must contain at most {MAX_SCAN_RESOURCE_IDS} items"
+        )
+    _assert_privacy_safe(supplied, boundary="resource_ids")
+    normalized: set[str] = set()
+    for raw_resource_id in supplied:
+        enodeb_id, cell_id = parse_lte_resource_id(raw_resource_id)
+        normalized.add(canonical_lte_resource_id(enodeb_id, cell_id))
+    return start, end, tuple(sorted(normalized))
 
 
 def _resource_identity(
@@ -353,6 +394,9 @@ class LocalDetector:
         trace_id: str,
         *,
         workflow_id: str | None = None,
+        window_start: datetime | None = None,
+        window_end: datetime | None = None,
+        resource_ids: Sequence[str] = (),
     ) -> tuple[IncidentTrigger, ...]:
         """Read telemetry and return deterministic, uncommitted candidates."""
 
@@ -364,6 +408,13 @@ class LocalDetector:
         )
         if normalized_workflow_id == normalized_trace_id:
             raise ValueError("workflow_id and trace_id must be independent")
+        normalized_start, normalized_end, normalized_resource_ids = (
+            _validated_scan_scope(
+                window_start=window_start,
+                window_end=window_end,
+                resource_ids=resource_ids,
+            )
+        )
         rules = tuple(
             rule
             for rule in self._rules.load_all()
@@ -382,6 +433,9 @@ class LocalDetector:
             await self._telemetry.query_kpis(
                 kpi_names=kpi_names,
                 technology=Technology.LTE,
+                window_start=normalized_start,
+                window_end=normalized_end,
+                resource_ids=normalized_resource_ids,
             )
         )
         if len(observations) == MAX_QUERY_OBSERVATIONS:
@@ -457,6 +511,9 @@ class LocalDetector:
         idempotency_key: str,
         actor: str,
         reason: str,
+        window_start: datetime | None = None,
+        window_end: datetime | None = None,
+        resource_ids: Sequence[str] = (),
     ) -> Incident:
         """Rescan and atomically create/correlate one server-owned candidate."""
 
@@ -470,6 +527,13 @@ class LocalDetector:
         normalized_actor = _require_identifier("actor", actor)
         normalized_reason = _require_text(
             "reason", reason, max_length=4_096
+        )
+        normalized_start, normalized_end, normalized_resource_ids = (
+            _validated_scan_scope(
+                window_start=window_start,
+                window_end=window_end,
+                resource_ids=resource_ids,
+            )
         )
         replay = await self._incidents.find_by_idempotency_key(
             normalized_candidate_id,
@@ -498,7 +562,12 @@ class LocalDetector:
                 # A correlated replay result is not the original request.  Its
                 # fingerprint can only be checked after rebuilding the exact
                 # candidate from current telemetry; disappearance fails closed.
-                candidates = await self.scan(normalized_trace_id)
+                candidates = await self.scan(
+                    normalized_trace_id,
+                    window_start=normalized_start,
+                    window_end=normalized_end,
+                    resource_ids=normalized_resource_ids,
+                )
                 selected = next(
                     (
                         candidate
@@ -510,7 +579,12 @@ class LocalDetector:
                 if selected is not None:
                     selected_incident = selected.incident
         else:
-            candidates = await self.scan(normalized_trace_id)
+            candidates = await self.scan(
+                normalized_trace_id,
+                window_start=normalized_start,
+                window_end=normalized_end,
+                resource_ids=normalized_resource_ids,
+            )
             selected = next(
                 (
                     candidate
@@ -540,4 +614,6 @@ __all__ = [
     "MAX_CURRENT_RULES",
     "MAX_EPISODE_SAMPLES",
     "MAX_SCAN_CANDIDATES",
+    "MAX_SCAN_RESOURCE_IDS",
+    "MAX_SCAN_WINDOW",
 ]

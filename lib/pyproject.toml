@@ -10,10 +10,10 @@ authors = [
 ]
 description = "A shared library for network agents"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "google-auth",
-    "google-adk==1.18.0",
+    "google-adk>=1.18.0,<2",
     "google-cloud-container==2.61.0",
     "ag-ui-protocol==0.1.9",
     "kubernetes==33.1.0",

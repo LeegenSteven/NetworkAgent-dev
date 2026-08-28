@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from uuid import UUID
 
 import duckdb
@@ -244,6 +244,123 @@ def test_scan_is_read_only_deterministic_and_splits_on_rule_gap(local_config) ->
 
         repository = DuckDbIncidentRepository(config)
         assert await repository.list() == ()
+
+    _run(scenario())
+
+
+def test_scan_applies_explicit_utc_window_and_lte_resource_scope(
+    local_config,
+) -> None:
+    async def scenario() -> None:
+        config = _detector_config(local_config)
+        detector = _detector(config)
+
+        selected = await detector.scan(
+            "trace-scoped",
+            workflow_id="workflow-scoped",
+            window_start=datetime(2025, 11, 20, 1, 0, tzinfo=UTC),
+            window_end=datetime(2025, 11, 20, 1, 30, tzinfo=UTC),
+            resource_ids=("lte:enodeb:7:cell:700",),
+        )
+
+        assert len(selected) == 1
+        assert selected[0].incident.window_start == datetime(
+            2025, 11, 20, 1, 15, tzinfo=UTC
+        )
+        assert selected[0].incident.window_end == datetime(
+            2025, 11, 20, 1, 15, tzinfo=UTC
+        )
+
+    _run(scenario())
+
+
+@pytest.mark.parametrize(
+    ("window_start", "window_end", "match"),
+    (
+        (
+            datetime(2025, 11, 20, 0, 0),
+            datetime(2025, 11, 20, 1, 0, tzinfo=UTC),
+            "timezone-aware UTC",
+        ),
+        (
+            datetime(2025, 11, 20, 0, 0, tzinfo=timezone(timedelta(hours=8))),
+            datetime(2025, 11, 20, 1, 0, tzinfo=timezone(timedelta(hours=8))),
+            "UTC",
+        ),
+        (
+            datetime(2025, 11, 1, 0, 0, tzinfo=UTC),
+            datetime(2025, 12, 3, 0, 0, tzinfo=UTC),
+            "31 days",
+        ),
+    ),
+)
+def test_scan_rejects_invalid_or_oversized_explicit_window(
+    local_config,
+    window_start: datetime,
+    window_end: datetime,
+    match: str,
+) -> None:
+    async def scenario() -> None:
+        detector = _detector(_detector_config(local_config))
+        with pytest.raises(ValueError, match=match):
+            await detector.scan(
+                "trace-window-boundary",
+                window_start=window_start,
+                window_end=window_end,
+            )
+
+    _run(scenario())
+
+
+def test_scan_rejects_partial_window_and_oversized_resource_scope(
+    local_config,
+) -> None:
+    async def scenario() -> None:
+        detector = _detector(_detector_config(local_config))
+        with pytest.raises(ValueError, match="provided together"):
+            await detector.scan(
+                "trace-partial-window",
+                window_start=datetime(2025, 11, 20, tzinfo=UTC),
+            )
+        with pytest.raises(ValueError, match="at most 100"):
+            await detector.scan(
+                "trace-resource-capacity",
+                resource_ids=tuple(
+                    f"lte:enodeb:{index}" for index in range(101)
+                ),
+            )
+
+    _run(scenario())
+
+
+def test_confirm_revalidates_with_the_exact_preview_scope(local_config) -> None:
+    async def scenario() -> None:
+        config = _detector_config(local_config)
+        detector = _detector(config)
+        window_start = datetime(2025, 11, 20, 1, 0, tzinfo=UTC)
+        window_end = datetime(2025, 11, 20, 1, 30, tzinfo=UTC)
+        resources = ("lte:enodeb:7:cell:700",)
+        candidate = (
+            await detector.scan(
+                "trace-confirm-scope",
+                window_start=window_start,
+                window_end=window_end,
+                resource_ids=resources,
+            )
+        )[0]
+
+        confirmed = await detector.confirm(
+            candidate.incident_id,
+            trace_id="trace-confirm-scope",
+            idempotency_key="confirm-scope-key",
+            actor="assurance-service",
+            reason="用户确认创建候选 Incident",
+            window_start=window_start,
+            window_end=window_end,
+            resource_ids=resources,
+        )
+
+        assert confirmed.incident_id == candidate.incident_id
 
     _run(scenario())
 

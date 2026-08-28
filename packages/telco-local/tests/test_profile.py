@@ -7,6 +7,8 @@ import subprocess
 import sys
 from dataclasses import replace
 
+import pytest
+
 from telco_domain import IncidentRepository, MetricRepository, TelemetryRepository
 from telco_local import (
     DeterministicRcaGateway,
@@ -46,6 +48,20 @@ def test_initialize_without_documents_keeps_external_and_internal_search_off(
 ) -> None:
     profile = LocalProfile.initialize(local_config)
     assert profile.document_repository is None
+
+
+def test_open_existing_composes_runtime_without_bootstrap(local_config) -> None:
+    initialized = LocalProfile.initialize(local_config)
+    opened = LocalProfile.open_existing(local_config)
+
+    assert opened.database_summary == initialized.database_summary
+    assert isinstance(opened.detector, LocalDetector)
+    assert isinstance(opened.rca_gateway, DeterministicRcaGateway)
+
+
+def test_open_existing_fails_closed_when_database_is_missing(local_config) -> None:
+    with pytest.raises(FileNotFoundError):
+        LocalProfile.open_existing(local_config)
 
 
 def test_public_import_is_cloud_framework_and_credential_independent(tmp_path) -> None:

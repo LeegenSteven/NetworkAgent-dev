@@ -3,7 +3,7 @@
 > 文档状态：Active（后续开发的计划与进度唯一事实来源）  
 > 首次建立：2026-08-28  
 > 最近更新：2026-08-28  
-> 当前里程碑：P0、P1、P2a 已完成 / P2b 待开始（P2 总阶段进行中）
+> 当前里程碑：P0、P1、P2 已完成 / 下一阶段为 P3 Cloud 数据与实时事件接入
 > 目标主仓库：`NetworkAgent-dev`  
 > 输入项目：`NetworkAgent-dev`、`telco-autonomous-networks-data-demo-main`
 
@@ -271,7 +271,7 @@ Agent 不得直接导入 DuckDB、Spanner、GKE 或 Gitea SDK。
 |---|---|---:|---|
 | P0 | 基线、目标架构和决策冻结 | 1–2 人日 | **DONE** |
 | P1 | 统一领域模型、接口和测试骨架 | 3–5 人日 | **DONE** |
-| P2 | 本地 Detector/RCA 迁入主仓库 | 5–8 人日 | **IN PROGRESS** |
+| P2 | 本地 Detector/RCA 迁入主仓库 | 5–8 人日 | **DONE** |
 | P3 | 接入 Spanner/MCP/实时事件 | 5–8 人日 | NOT STARTED |
 | P4 | 合并并增强 Resolver Pipeline | 6–10 人日 | NOT STARTED |
 | P5 | 审批、真实修复和修复后验证 | 5–8 人日 | NOT STARTED |
@@ -319,7 +319,7 @@ Agent 不得直接导入 DuckDB、Spanner、GKE 或 Gitea SDK。
 执行拆分：
 
 - **P2a（已完成）**：完成无 GCP、无 ADK、无模型 API 的确定性离线核心，即 CSV → DuckDB → 候选预览 → 显式确认/幂等创建 → 聚合证据 → 规则 RCA → 中文报告。RCA 在本阶段严格只读，不推进或持久化 Incident，也不执行任何动作；后续由唯一 Resolver 按审批状态机接管。
-- **P2b（待开始）**：用独立运行环境包装标准 A2A Agent，验证 `working → input_required → 确认 → completed`、DataPart/TextPart 双输出和 Supervisor 跨版本传递。旧 ADK FastAPI 前端不直接复制。
+- **P2b（已完成）**：用独立运行环境包装标准 A2A Agent，验证 `working → input_required → 确认 → completed`、DataPart/TextPart 双输出和 Supervisor 跨版本传递。Assurance 运行时只依赖 A2A 0.3.11 与 P2a 领域/本地包，不引入 ADK、模型或云 SDK；旧 ADK FastAPI 前端不直接复制。
 
 交付物：
 
@@ -345,7 +345,13 @@ P2a 验收证据（2026-08-28）：
 - RCA 按历史规则版本和内容哈希精确解释，METRIC/TRACE fact 隔离，证据资源与时间窗严格匹配；不一致一律返回 `INCONCLUSIVE`。完整样例得到 `EXACT/CONCLUSIVE` 八节中文报告，但 Incident 仍为 `DETECTED` revision 0，报告、建议、动作均不落库。
 - 两个 Pydantic 依赖矩阵均通过 `telco-local 149 + telco-domain 318 + Local E2E 1`，合计 468 项；两个 wheel 均完成构建、源码树外安装、`pip check`、导入隔离与 CLI 冒烟。安全复核结论见 [P2a Local Profile Gate 审计](security/p2a-gate-audit.md)。
 - 提交 `e2a632b` 的远程验收已通过：[telco-local CI（Python 3.12/3.13、测试、wheel 与安装冒烟）](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33165120216) 与 [telco-domain CI](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33165120260) 均为 `success`。
-- P2 总阶段仍保持 `IN PROGRESS`；只有 P2b 的 A2A 状态流、结构化双输出、显式确认和 Supervisor 跨版本契约全部通过后，才可将 P2 标记为完成。
+- P2b 新增纯 A2A 0.3.11 `telco-assurance-agent`：`init` 与 `run` 分离，运行时不执行 DDL/导入，只允许 loopback 地址；AgentCard、JSON-RPC、流式状态、取消和只读 RCA 均通过真实 ASGI/HTTP 验收。
+- 确认只接受服务端 challenge 与权威 DataPart。challenge 仅保存 SHA-256，绑定 task/context/workflow/trace/candidate/snapshot；预览与拒绝零写，确认后唯一写，崩溃重启使用同一业务幂等指纹精确重放且 revision/history 不增长。
+- DuckDB Task/Pending Store 使用 schema `1.1`，支持从 `1.0` 显式迁移；未完成 claim 与孤立 `input-required` Task 有界回收，存在持久 Incident 写时仅在 challenge 到期后保留 15 分钟精确恢复窗口。
+- Supervisor 只把 TextPart 用于展示，DataPart 使用 exact allowed/required schema、大小/深度/隐私与关联标识校验；A2A 事件仅单播到 thread 所属 Socket，流结束、错误响应、错误 task/context 或未知字段均 fail closed。
+- Dashboard 审批回程只接受服务端记录的 `requestTaskApproval` 调用；普通 `agui_message` 的 ToolMessage 被拒绝，ADK continuation 保留真实 FunctionResponse 工具名，持久化或消费失败可安全重试，不再吞掉续跑事件。
+- 本地发布门禁：既有领域/Local 回归 476 项、Assurance 26 项、真实 HTTP E2E 4 项、A2A 0.3.11/legacy wire 兼容 70 项、精确 ADK 1.28.1 Supervisor 57 项全部通过；三个 wheel 已完成源码树外安装与 `pip check`。安全结论见 [P2b Assurance/A2A Gate 审计](security/p2b-gate-audit.md)。
+- P2 的退出标准已经满足并标记为 `DONE`；P3 将接入 Spanner/MCP/实时事件，P6 再收敛统一 RCA 展示，P7 才允许在认证、TLS 与部署加固后扩展到非本机网络。
 
 ### P3：接入云端数据与事件
 
@@ -468,16 +474,16 @@ Triage
 ```text
 现有 Flutter Dashboard
  → Supervisor
- → Incident Detector A2A（独立 ADK 2.x 运行环境）
+ → Assurance A2A 0.3.11（无 ADK、无模型、独立运行环境）
  → 本地 Performance CSV / DuckDB
  → 展示候选并请求确认（A2A input_required）
  → Canonical Incident
  → 中文结果返回现有 Dashboard
 ```
 
-该切片暂不执行 RCA 或修复，但必须使用最终的领域契约、端口和 A2A 消息格式。它能最快验证最危险的集成点：ADK 双版本隔离、A2A Agent Card/流式状态/`input_required`、状态传递、幂等、数据脱敏和 Supervisor 路由。用户未确认不得写入；重复确认只能产生一个 Incident；整条链必须传播同一 `trace_id`。
+该切片已完成候选展示与显式确认，且不执行修复；它使用最终领域契约、端口和 A2A 消息格式，验证了 A2A Agent Card、流式状态/`input_required`、状态传递、幂等、数据脱敏和 Supervisor 路由。用户未确认不得写入；重复确认只能产生一个 Incident；task/context/workflow/trace/idempotency 各自保持独立语义。
 
-第二个纵向切片再加入“Canonical Incident → 统一 Resolver 只读 RCA → 中文报告”，随后分别接入 Spanner、Engineer 和 Tester，避免同时调试模型、云数据和真实写操作。
+第二个本地切片“Canonical Incident → 确定性只读 RCA → 中文报告”也已由 Assurance A2A 的 `assurance_analyze_request` 完成；报告不落库、不生成动作、不推进 Incident。随后按 P3–P5 分别接入 Spanner、统一 Resolver、Engineer 和 Tester，避免同时调试云数据、模型和真实写操作。
 
 ## 9. 数据迁移与一致性
 
@@ -496,7 +502,7 @@ Triage
 - 为 Agent 角色配置模型，不在业务代码写死 `gemini-2.5-flash` 或 DeepSeek 型号。
 - `ModelProvider` 至少支持 Gemini、DeepSeek、Fake/Replay 三种实现。
 - 提示词、输出 Schema 和安全策略独立版本化。
-- 在 ADK `1.18.0 → 1.22+` 升级前建立关键回调、Toolset、Session 和 A2A 回归测试。
+- Supervisor 已精确锁定并验证 ADK `1.28.1`；其余仍锁定 `1.18.0` 的 legacy Agent 继续进程隔离，完成同类回归门禁前不得作为新增外部入口。
 - 实际目标版本需以兼容性矩阵为依据；不能因为第二项目当前解析到 ADK `2.6.3` 就直接全仓升级。
 - LangGraph Engineer 可以继续独立演进；只要求遵守 A2A 合同。
 - 生产中禁止依赖自由文本解析推进状态，关键输出必须通过 Pydantic Schema 校验。
@@ -543,6 +549,7 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 |---|---|---|
 | ADK 1.18 与 1.22+ 行为不兼容 | 回调、Session、Toolset 失效 | 进程隔离、契约测试后再统一版本 |
 | A2A 0.2.16/0.3.11 混用 | Agent Card、消息和任务状态不兼容 | 锁定新服务 0.3.11，建立跨服务协议契约测试 |
+| 部分 legacy Agent 仍使用受 [GHSA-rg7c-g689-fr3x](https://github.com/advisories/GHSA-rg7c-g689-fr3x) 影响的 ADK 1.18.0 | 未认证远程代码执行；不能作为新增外部入口 | Supervisor 已升级并精确锁定修复版 1.28.1，Assurance 完全不依赖 ADK；其余 legacy 服务继续隔离并在 P7 分批升级 |
 | LTE 样例与 5G 实验网语义不一致 | RCA 得出错误目标或错误动作 | `technology`、5G KPI、ResourceReference 映射和动作能力校验 |
 | 两套 Incident 逻辑并存 | 重复事件和状态冲突 | Canonical Incident + 单一 Resolver 所有权 |
 | DuckDB/Spanner 语义差异 | 事务和并发错误 | Repository 契约、乐观锁、禁止双主写 |
@@ -556,12 +563,12 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | UI 与后端状态不同步 | 错误审批或误判 | 服务端持久状态、事件游标、断线恢复 |
 | 配置/依赖/凭据漂移 | 构建不可重复或秘密泄露 | 按服务锁文件、秘密扫描、Secret Manager、禁止记录凭据对象 |
 | LTE CSV 时间戳没有时区 | 窗口关联结果随运行机器时区变化 | 数据 manifest 明确记录 `assumed UTC`，导入时强制转换为 aware UTC |
-| 旧本地前端绑定 ADK 专用 REST | 无法可靠接入 Supervisor/A2A DataPart | 保留为参考，不复制；P2b 先建立跨版本 A2A 契约与 `input_required` 测试 |
+| 旧本地前端绑定 ADK 专用 REST | 无法可靠接入 Supervisor/A2A DataPart | 保留为参考，不复制；P2b 已建立跨版本 A2A/`input_required` 契约，P6 再完成统一 RCA 视图 |
 | Local DuckDB 跨进程写竞争 | 独立 CLI/服务进程同时写时一方可能得到文件锁错误 | P2a 明确单 writer、失败关闭；Cloud 采用 Spanner 事务，后续部署 Profile 增加外部互斥或有界重试 |
-| Local 全量扫描没有分页 | 数据量超过本地演示预算时结果可能不完整或放大内存 | 规则、观测、episode、候选均设硬上限并 fail closed；P2b 增加显式时间窗与分页 |
+| Local Detector 内部扫描仍以有界全量查询为主 | 数据量超过本地演示预算时会 fail closed，不能当作生产流处理 | 规则、观测、episode、候选均设硬上限；P2b 已增加显式时间窗、资源范围和候选分页，P3 改为增量/事件驱动查询 |
 | pre-v3 Incident 缺规则内容哈希 | 只能证明版本号，不能证明同版本规则未被改写 | 新候选使用内容哈希；旧数据迁移时补规则快照/哈希并标记 legacy，不回退 current 猜测 |
 | 多规则/多资源证据归因过粗 | 未来聚合 Incident 可能把一条证据错误用于另一规则或资源 | 当前限制为单规则、单资源 episode；扩展前将 evidence scope 细化到 violation/rule 级 |
-| Local CLI 运行命令会执行幂等 DDL | 严格只读部署仍需数据库写权限并可能触发锁竞争 | 当前只保证不写 Incident；P2b/P7 将初始化与运行进程分离，分析进程使用只读权限 |
+| Local DuckDB 初始化与运行权限混用 | 严格只读部署可能误执行 DDL/导入并触发锁竞争 | P2b 已拆分 `init`/`run`；运行进程只打开已初始化 schema，部署时继续采用单 writer 与最小文件权限 |
 
 ## 14. 发布与回滚策略
 
@@ -593,6 +600,11 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | ADR-014 | 2026-08-28 | 确定性 RCA 只接受精确规则版本+内容哈希和类型/资源/时间均匹配的证据；任何 provenance 冲突均显式 `INCONCLUSIVE` | Accepted | 禁止用 current 规则解释历史 Incident、跨 EvidenceKind 拼 fact 或使用外部/陈旧证据伪造确定根因 |
 | ADR-015 | 2026-08-28 | P2a RCA 是只读 `PROPOSED` Artifact，不保存报告、不生成动作、不推进 Incident | Accepted | 保持 Resolver 的唯一生命周期所有权，并在 A2A/审批闭环接入前消除隐式写操作 |
 | ADR-016 | 2026-08-28 | Local LTE eNodeB/Cell 组件使用 28-bit ASCII 十进制白名单，并在导入与 Telemetry 出站边界共用同一规范化函数 | Accepted | 阻止无标签订户号伪装成资源标识，避免前导零产生身份碰撞，并让被篡改的本地数据库也能 fail closed |
+| ADR-017 | 2026-08-28 | P2b Assurance 是纯 A2A 0.3.11 独立服务，不依赖 ADK、`agent_library`、模型或云 SDK | Accepted | 保持运行时隔离，并避免把受安全公告影响的 legacy ADK 版本扩散到新服务 |
+| ADR-018 | 2026-08-28 | Incident 确认只接受绑定 task/context/workflow/trace/snapshot/candidate 的服务端 challenge DataPart；TextPart 永不触发写入 | Accepted | 防止 LLM 或展示文本伪造审批、跨会话重放和候选替换 |
+| ADR-019 | 2026-08-28 | Supervisor 精确锁定 ADK 1.28.1 与 A2A 0.3.11；共享库只声明 ADK 1.x 范围，每个服务继续使用自己的精确锁 | Accepted | 关闭 Supervisor 的已知 ADK 安全风险，同时避免把仍需验证的升级强加给全部 legacy Agent |
+| ADR-020 | 2026-08-28 | Assurance 的 Task/challenge 状态使用 DuckDB 持久化，challenge 只存哈希，崩溃重放有界保留 15 分钟，并把 `init` 与 `run` 分离 | Accepted | 在本地单 writer 边界内兼顾重启恢复、容量上限、最小运行权限与过期状态回收 |
+| ADR-021 | 2026-08-28 | Supervisor 只展示 TextPart，结构化 DataPart 采用 exact schema；审批工具调用由服务端保存并单播回原 Socket | Accepted | 防止文本命令、未知字段、跨会话事件和伪造 ToolMessage 推进 Incident 写入或模型续跑 |
 
 ## 16. 待确认事项
 
@@ -618,7 +630,7 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | 主仓库 Git 可回滚基线 | DONE | 2026-08-28 | 私有仓库 `LeegenSteven/NetworkAgent-dev` 已建立并将 `unified-platform` 设为默认分支；P1 基线为 `e363662`，原始 `dev@44ecbb3`、其余 4 个分支和 4 个发布标签均已推送并校验 |
 | P1 领域模型与接口 | DONE | 2026-08-28 | 独立 `telco-domain` 包；双环境各 315 项通过；wheel 构建/独立导入成功；原 10 类安全阻断复审全部关闭；GitHub Actions Python 3.12/3.13 均通过（[run 33151947728](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33151947728)），Gate PASS |
 | 首个 Local 纵向切片（P2a） | DONE | 2026-08-28 | 13,440 KPI + 579 安全 Trace → 15 候选；预览零写、确认唯一写、RCA 只读；双依赖矩阵各 468 项通过，wheel/CLI 冒烟成功，安全 Gate PASS |
-| A2A/Supervisor 接入（P2b） | NOT STARTED | 2026-08-28 | 下一步实现独立 Assurance A2A 服务、`input_required` 确认流、DataPart/TextPart 双输出与 Supervisor 跨版本契约 |
+| A2A/Supervisor 接入（P2b） | DONE | 2026-08-28 | 独立 Assurance A2A 0.3.11、持久 challenge/task、真实 HTTP detect/confirm/analyze/restart、Supervisor 单播与结构化审批桥均通过；本地发布门禁 476+26+4+70+57 项全绿，三个 wheel 与依赖检查通过 |
 | Cloud 数据接入 | NOT STARTED | 2026-08-28 | — |
 | Resolver 合并 | NOT STARTED | 2026-08-28 | — |
 | 修复与验证闭环 | NOT STARTED | 2026-08-28 | — |
@@ -649,6 +661,8 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | 2026-08-28 | 完成 P0：认证并推送 GitHub 私有仓库，保留 GitLab 原始分支与标签历史，设置 `unified-platform` 为默认分支；P1 的 Python 3.12/3.13 云端 CI 全部通过，并将官方 Checkout/Setup Python 更新至 v7 | Codex |
 | 2026-08-28 | 启动 P2：以 Local Profile 为边界迁移 LTE CSV/DuckDB、确定性异常检测和证据驱动 RCA，先建立无 GCP/无模型 API 的纵向验收链路 | Codex |
 | 2026-08-28 | 完成 P2a：建立 `telco-local`、安全数据投影、确定性 Detector/精确规则 RCA、显式确认与本地 CLI；关闭数据漂移、证据串用、数字标识伪装、隐私和容量 Gate，双依赖矩阵各 468 项及 wheel 冒烟通过；P2b A2A 接入保留为下一阶段 | Codex |
+| 2026-08-28 | 启动 P2b：冻结纯 A2A Assurance、持久 challenge、结构化确认和 Supervisor 单会话桥接契约；记录 legacy ADK 1.18 安全公告并禁止将其作为新增生产暴露面 | Codex |
+| 2026-08-28 | 完成 P2b/P2：交付本机限定的纯 A2A Assurance、持久且有界恢复的 Task/challenge、真实 detect/confirm/analyze/restart 链路、Supervisor exact DataPart/单播/可信工具续跑；Supervisor 升级至 ADK 1.28.1，本地发布门禁与三 wheel 冒烟全部通过 | Codex |
 
 ## 20. 项目完成定义
 

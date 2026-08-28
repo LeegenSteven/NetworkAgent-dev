@@ -88,27 +88,16 @@ class AuthenticationError(SupervisorAgentError):
     """Exception raised for authentication errors."""
     pass
 
-async def send_error_message(sio_sessions, error: SupervisorAgentError):
+async def send_error_message(socket_target, error: SupervisorAgentError):
     """
     Send an error message to the user through the socket.
     
     Args:
-        sio_sessions: Dictionary of socket sessions
+        socket_target: One authorized ``(sid, socket_server)`` tuple
         error: The error that occurred
     """
     # Format the error message with severity
     error_message = f"[{error.severity.value}] {error.message}"
-    
-    # Add details if available
-    if error.details:
-        error_details = "\n\nDetails:\n"
-        for key, value in error.details.items():
-            if key == "traceback":
-                # Don't include traceback in user-facing messages
-                continue
-            else:
-                error_details += f"\n{key}: {value}"
-        error_message += error_details
     
     # Generate a unique message ID for this error
     import uuid
@@ -138,12 +127,18 @@ async def send_error_message(sio_sessions, error: SupervisorAgentError):
         'message_id': message_id
     }
 
-    # Send AG-UI events to all registered sessions
-    for sid, sio in sio_sessions.items():
-        await sio.emit('agui_event', start_event, room=sid)
-        await sio.emit('agui_event', content_event, room=sid)
-        await sio.emit('agui_event', end_event, room=sid)
-        logger.info(f"Sent error message to {sid}: {error_message}")
+    if (
+        not isinstance(socket_target, tuple)
+        or len(socket_target) != 2
+        or not isinstance(socket_target[0], str)
+        or not socket_target[0]
+    ):
+        raise ValueError("one authorized socket target is required")
+    sid, sio = socket_target
+    await sio.emit('agui_event', start_event, room=sid)
+    await sio.emit('agui_event', content_event, room=sid)
+    await sio.emit('agui_event', end_event, room=sid)
+    logger.info("Sent bounded error event to room=%s severity=%s", sid, error.severity.value)
 
 def with_error_handling(error_handler: Callable):
     """

@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "telco-assurance-agent"
+version = "0.1.0"
+description = "Deterministic A2A adapter for the NetworkAgent Local Assurance Profile"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "a2a-sdk[http-server]==0.3.11",
+    "duckdb>=1.5,<2",
+    "pydantic>=2.11,<3",
+    "starlette>=0.41,<2",
+    "telco-domain>=0.1,<0.2",
+    "telco-local>=0.1,<0.2",
+    "uvicorn==0.35.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "httpx>=0.28,<1",
+    "pytest>=8,<10",
+    "pytest-asyncio>=0.25,<2",
+]
+
+[project.scripts]
+telco-assurance-agent = "telco_assurance_agent.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --strict-config"
+testpaths = ["tests"]
+pythonpath = [
+    "src",
+    "../../packages/telco-domain/src",
+    "../../packages/telco-local/src",
+]

@@ -16,6 +16,7 @@ import logging
 import datetime
 import json
 from uuid import uuid4
+from agent.a2a_parts import emit_agui_events
 from agent.host_agent import HostAgent
 from tools.topology import fetch_db_node, build_graph, spanner_connect
 from tools.logs import fetch_log_entries, delete_logs
@@ -60,6 +61,23 @@ class SocketEndpoint:
         Returns:
             RunAgentInput instance
         """
+        if isinstance(data, dict):
+            messages = data.get('messages')
+            message_items = (
+                [messages]
+                if isinstance(messages, dict)
+                else messages
+            )
+            if isinstance(message_items, (list, tuple)) and any(
+                (
+                    message.get('role')
+                    if isinstance(message, dict)
+                    else getattr(message, 'role', None)
+                ) == 'tool'
+                for message in message_items
+            ):
+                raise PermissionError("direct client ToolMessage is forbidden")
+
         # Handle simple text message format
         if isinstance(data, dict) and 'text' in data:
             # Simple text message - convert to AG-UI format
@@ -83,7 +101,12 @@ class SocketEndpoint:
         
         # Handle full AG-UI RunAgentInput format
         elif isinstance(data, dict) and 'thread_id' in data:
-            return RunAgentInput(**data)
+            sanitized = dict(data)
+            # Session authority is server-held; clients cannot overwrite A2A,
+            # workflow, challenge, or approval state through AG-UI snapshots.
+            sanitized['state'] = {}
+            sanitized['tools'] = [chartTool, approvalTool]
+            return RunAgentInput(**sanitized)
         
         else:
             raise ValueError(f"Invalid message format: {data}")
@@ -115,8 +138,7 @@ class SocketEndpoint:
 
             # add sio to the agent
             agent=await HostAgent.get_instance()
-            agent.sio_sessions[sid]=self.sio
-            logger.info(agent.sio_sessions)
+            agent.register_socket(sid, self.sio)
 
 
         @self.sio.event
@@ -128,7 +150,7 @@ class SocketEndpoint:
                 sid: Socket.IO session ID
                 data: AG-UI message data
             """
-            logger.info("AG-UI message from %s: %s", sid, data)
+            logger.info("AG-UI message received sid=%s", sid)
             
             try:
                 # Convert to RunAgentInput
@@ -139,16 +161,20 @@ class SocketEndpoint:
                 agent = await HostAgent.get_instance()
                 
                 # Stream AG-UI events back to client via Socket.IO
-                async for event in agent.run_agui(run_input):
+                async for event in agent.run_agui(run_input, sid=sid, sio=self.sio):
                     event_data = event.model_dump()
                     await self.sio.emit('agui_event', event_data, room=sid)
                     logger.debug(f"SocketEndpoint: Emitted {type(event).__name__} to session {sid}")
                     
             except Exception as e:
-                logger.error(f"Error processing AG-UI message from {sid}: {e}", exc_info=True)
+                logger.error(
+                    "AG-UI message failed sid=%s type=%s",
+                    sid,
+                    type(e).__name__,
+                )
                 error_response = {
                     "type": "RUN_ERROR",
-                    "message": f"Error processing AG-UI message: {str(e)}",
+                    "message": "请求处理失败，请稍后重试。",
                     "code": "AGUI_PROCESSING_ERROR"
                 }
                 await self.sio.emit('agui_event', error_response, room=sid)
@@ -183,7 +209,7 @@ class SocketEndpoint:
                         message="Failed to build graph",
                         severity=ErrorSeverity.ERROR
                     )
-                    await send_error_message(self.sio, sid, error)
+                    await send_error_message((sid, self.sio), error)
                     await self.sio.emit('topology_update', {'error': "Failed to build graph"}, room=sid)
             except Exception as e:
                 logger.error(f"Error fetching topology: {e}")
@@ -192,7 +218,7 @@ class SocketEndpoint:
                     severity=ErrorSeverity.ERROR,
                     original_exception=e
                 )
-                await send_error_message(self.sio, sid, error)
+                await send_error_message((sid, self.sio), error)
                 await self.sio.emit('topology_update', {'error': f"Error fetching topology: {str(e)}"}, room=sid)
                 
         @self.sio.event
@@ -319,9 +345,7 @@ class SocketEndpoint:
 
             # remove the sid/sio from the agent session
             agent=await HostAgent.get_instance()
-            if sid in agent.sio_sessions:
-                del agent.sio_sessions[sid]
-            logger.info(agent.sio_sessions)
+            agent.remove_socket(sid)
 
         @self.sio.event
         async def get_all_last_metrics(sid):
@@ -393,33 +417,45 @@ class SocketEndpoint:
                 data: The tool result data containing tool_call_id and content
             """
             try:
+                if not isinstance(data, dict):
+                    raise PermissionError("tool result must be an object")
+                if set(data) != {'tool_call_id', 'content'}:
+                    raise PermissionError("tool result shape is invalid")
                 tool_call_id = data.get('tool_call_id')
                 content = data.get('content')
-                
-                logger.info(f"Received AG-UI tool result from {sid}: {tool_call_id} -> {content}")
-                
-                # Extract thread_id from the encoded tool_call_id if present
-                # Format: original_id::thread_id
-                session_id_to_use = sid  # Default to socket session ID
-                
-                if tool_call_id and "::" in tool_call_id:
-                    # Extract thread_id from encoded tool_call_id
-                    parts = tool_call_id.split("::", 1)
-                    if len(parts) == 2:
-                        original_tool_call_id, thread_id = parts
-                        session_id_to_use = thread_id
-                        logger.info(f"Extracted thread_id {thread_id} from encoded tool_call_id {tool_call_id}")
-                    else:
-                        logger.warning(f"Invalid encoded tool_call_id format: {tool_call_id}")
-                else:
-                    logger.info(f"Using socket session ID {sid} as fallback for tool_call_id {tool_call_id}")
-                
-                # Get agent instance and forward the tool result with the correct session ID
+                if (
+                    not isinstance(tool_call_id, str)
+                    or tool_call_id.count('::') != 1
+                    or not isinstance(content, str)
+                ):
+                    raise PermissionError("tool result binding is invalid")
+                _, thread_id = tool_call_id.split('::', 1)
+                logger.info("AG-UI tool result received sid=%s thread=%s", sid, thread_id)
+
                 agent = await HostAgent.get_instance()
-                await agent.handleToolResult(session_id_to_use, tool_call_id, content)
+                async for event in agent.handleToolResult(
+                    thread_id,
+                    sid,
+                    tool_call_id,
+                    content,
+                ):
+                    await emit_agui_events((event,), self.sio, sid)
                 
             except Exception as e:
-                logger.error(f"Error handling AG-UI tool result: {e}")
+                logger.error(
+                    "Rejected AG-UI tool result sid=%s type=%s",
+                    sid,
+                    type(e).__name__,
+                )
+                await self.sio.emit(
+                    'agui_event',
+                    {
+                        'type': 'RUN_ERROR',
+                        'message': '工具结果未通过安全校验。',
+                        'code': 'AGUI_TOOL_RESULT_REJECTED',
+                    },
+                    room=sid,
+                )
 
         @self.sio.event
         async def notification_feedback(sid, data):

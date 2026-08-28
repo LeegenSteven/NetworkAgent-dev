@@ -3,7 +3,7 @@
 > 文档状态：Active（后续开发的计划与进度唯一事实来源）  
 > 首次建立：2026-08-28  
 > 最近更新：2026-08-29
-> 当前里程碑：P0、P1、P2 已完成 / P3 Cloud 代码已集成，正在完成远程 Emulator 与 Cloud Staging 验收
+> 当前里程碑：P0、P1、P2 已完成 / P3 Cloud 代码与远程 Emulator Gate 已通过，等待 Cloud Staging 验收
 > 目标主仓库：`NetworkAgent-dev`  
 > 输入项目：`NetworkAgent-dev`、`telco-autonomous-networks-data-demo-main`
 
@@ -358,12 +358,12 @@ P2a 验收证据（2026-08-28）：
 
 执行拆分（2026-08-29 更新）：
 
-- **P3a（本地完成，远程 Gate 待回填）**：已建立 Canonical Spanner v2 表族、事务型 Incident/Telemetry/Event/Outbox Repository、审计/幂等/source-event 关联和三实现共享契约；旧 `Incident` 表保持只读，不原地更名或长期双写。
+- **P3a（代码与远程 Emulator Gate 完成）**：已建立 Canonical Spanner v2 表族、事务型 Incident/Telemetry/Event/Outbox Repository、审计/幂等/source-event 关联和三实现共享契约；旧 `Incident` 表保持只读，不原地更名或长期双写。
 - **P3b（本地完成）**：已建立严格 Pub/Sub push Fault Ingress，以同一 Spanner 事务写 Inbox + Incident/Audit + SourceAssociation + Outbox；默认 `shadow`，仅 durable success/replay 返回 2xx，瞬时故障返回可重试状态，poison message 交给订阅 DLQ。
 - **P3c（本地完成）**：已建立与 Engineering 写工具分离的独立 FastMCP 服务，只注册六个只读 Canonical Incident/KPI/Evidence/Resource 工具，并在出站边界执行逐项与累计预算。
 - **P3d（本地完成）**：已建立 checksummed Canonical DuckDB → Spanner 一次性迁移；运行时/导出无 DDL，保留完整来源证明，重放交叉核验持久组件。legacy Spanner 语义不明确的行只读保留并进入人工映射队列。
 - 共享 Repository 已统一：source event 全生命周期只属于一个 Incident；新关联不增加 revision；分裂 selector fail closed；`CLOSED → REOPENED` 在同一事务重新获取全部活动键。
-- 本地发布矩阵已通过：领域 323 项、Local 166 项、共享 Repository 合同 2 项、Cloud/迁移/FGAC 146 项、Fault Ingress 与 Cloud MCP 101 项；P2b Assurance 26 项和 Local E2E 1 项也保持绿色。Spanner 迁移与常规生命周期均已覆盖 1,000 条来源的批量边界；最新五 wheel 已完成源码树外全新环境安装、四 CLI 冒烟与 `pip check`，真实 Emulator 证据由推送后的 Linux 双 Python CI 回填。
+- 本地发布矩阵已通过：领域 323 项、Local 166 项、共享 Repository 合同 2 项、Cloud/迁移/FGAC 146 项、Fault Ingress 与 Cloud MCP 101 项；P2b Assurance 26 项和 Local E2E 1 项也保持绿色。Spanner 迁移与常规生命周期均已覆盖 1,000 条来源的批量边界。提交 `fa07096` 的 [Cloud CI run 33202370157](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33202370157) 已在 Python 3.12/3.13 上分别通过真实 Spanner Emulator 对象 DDL、共享 Repository、50 路并发、迁移重放、1,000 条来源、reopen 与 Inbox/Outbox 验收，并完成五 wheel 源码树外安装、四 CLI 冒烟和 `pip check`。
 
 交付物：
 
@@ -647,7 +647,7 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | P1 领域模型与接口 | DONE | 2026-08-28 | 独立 `telco-domain` 包；双环境各 315 项通过；wheel 构建/独立导入成功；原 10 类安全阻断复审全部关闭；GitHub Actions Python 3.12/3.13 均通过（[run 33151947728](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33151947728)），Gate PASS |
 | 首个 Local 纵向切片（P2a） | DONE | 2026-08-28 | 13,440 KPI + 579 安全 Trace → 15 候选；预览零写、确认唯一写、RCA 只读；双依赖矩阵各 468 项通过，wheel/CLI 冒烟成功，安全 Gate PASS |
 | A2A/Supervisor 接入（P2b） | DONE | 2026-08-28 | 独立 Assurance A2A 0.3.11、持久 challenge/task、真实 HTTP detect/confirm/analyze/restart、Supervisor 单播与结构化审批桥均通过；本地门禁与[GitHub Actions run 33179490152](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33179490152) 全绿，三个 wheel 与依赖检查通过 |
-| Cloud 数据接入 | IN PROGRESS | 2026-08-29 | P3a–P3d 本地代码与回归已完成：Spanner v2、事务 Inbox/Outbox、严格 Fault Ingress、六工具只读 MCP、四角色 FGAC 和一次性 Canonical 迁移；等待 GitHub Emulator 双 Python 结果及 Cloud Staging IAM/OIDC/DLQ 验收后才能标 DONE |
+| Cloud 数据接入 | IN PROGRESS | 2026-08-29 | P3a–P3d 代码与远程 Emulator Gate 已完成：Spanner v2、事务 Inbox/Outbox、严格 Fault Ingress、六工具只读 MCP、四角色 FGAC 和一次性 Canonical 迁移；[GitHub Actions run 33202370157](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33202370157) 的 Python 3.12/3.13 Emulator、五 wheel 与依赖检查全绿。仍需 Cloud Staging IAM/OIDC/DLQ/Workload Identity 验收后才能标 DONE |
 | Resolver 合并 | NOT STARTED | 2026-08-28 | — |
 | 修复与验证闭环 | NOT STARTED | 2026-08-28 | — |
 | UI 与发布 | NOT STARTED | 2026-08-28 | — |

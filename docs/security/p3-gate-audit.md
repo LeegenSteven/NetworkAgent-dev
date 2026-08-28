@@ -2,7 +2,7 @@
 
 > 日期：2026-08-29
 > 范围：Canonical Spanner v2、Pub/Sub Fault Ingress、Inbox/Outbox、Radio KPI/Evidence 端口与独立只读 MCP
-> 当前结论：**IN PROGRESS（本地 Gate PASS；远程 Emulator 与 Cloud Staging 待验收）**
+> 当前结论：**IN PROGRESS（本地与远程 Emulator Gate PASS；Cloud Staging 待验收）**
 
 ## 1. 发布边界
 
@@ -17,15 +17,15 @@
 
 | Gate | 验收要求 | 状态 |
 |---|---|---|
-| Repository 同构 | Memory、DuckDB、Spanner Emulator 通过同一 CAS/幂等/审计/关联契约 | LOCAL PASS / REMOTE PENDING |
-| 并发去重 | 50 路同事件或同 correlation 仅一条活动 Incident | LOCAL FAKE PASS / EMULATOR PENDING |
-| 重开冲突 | `CLOSED → REOPENED` 原子重新获取 active keys，冲突不产生双 active | LOCAL PASS / EMULATOR PENDING |
-| Inbox/Outbox 原子性 | 任一写入失败整个事务回滚；提交后崩溃重投不重复建事故/派发 | LOCAL PASS / EMULATOR PENDING |
+| Repository 同构 | Memory、DuckDB、Spanner Emulator 通过同一 CAS/幂等/审计/关联契约 | PASS |
+| 并发去重 | 50 路同事件或同 correlation 仅一条活动 Incident | PASS |
+| 重开冲突 | `CLOSED → REOPENED` 原子重新获取 active keys，冲突不产生双 active | PASS |
+| Inbox/Outbox 原子性 | 任一写入失败整个事务回滚；提交后崩溃重投不重复建事故/派发 | PASS |
 | Ingress 边界 | 大小/深度/字段/base64/UTF-8/时间/隐私严格校验，错误不回显原载荷 | LOCAL PASS |
 | MCP 只读 | 工具 allowlist 精确，UTC 窗口、资源、数量、256 KiB 出站预算全部 fail closed | LOCAL PASS |
 | FGAC artifact | schema、部署 SQL 与文档的四角色/列级权限精确一致 | LOCAL PASS / STAGING PENDING |
-| 一次性迁移 | no-DDL export、校验和、隔离清单、provenance 保留、重放完整性和部分失败恢复 | LOCAL PASS / STAGING PENDING |
-| Emulator/CI | Python 3.12/3.13、真实 Spanner Emulator DDL/事务、wheel 源码树外安装与 `pip check` | WORKFLOW READY / REMOTE PENDING |
+| 一次性迁移 | no-DDL export、校验和、隔离清单、provenance 保留、重放完整性和部分失败恢复 | LOCAL + EMULATOR PASS / STAGING PENDING |
+| Emulator/CI | Python 3.12/3.13、真实 Spanner Emulator DDL/事务、wheel 源码树外安装与 `pip check` | [PASS（run 33202370157）](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33202370157) |
 | Cloud Staging | IAM/OIDC、DLQ、重投、Workload Identity 和非匿名 MCP/Fault 入口 | NOT RUN |
 
 ## 3. 已关闭的高风险边界
@@ -39,9 +39,11 @@
 - Repository 与迁移公开入口都先验证 bounded `Sequence` 和数量，再读取内容；1,000 条 source association 使用批量 owner/index 查询与批量 mutation。Fake Spanner 已覆盖迁移首导/重放和常规 create/transition，真实 Emulator 中保留相同容量用例。
 - 迁移 JSON 防护由合法 bundle 单点注入测试验证 duplicate key、`NaN`、溢出浮点与 surrogate 均在 checksum 前拒绝；单条隐私和 canonical depth 24/25 边界同样固定为回归。
 
-## 4. 本地验收入口
+## 4. 本地与远程验收入口
 
-2026-08-29 稳定源码快照的本机证据：领域 323 项、Local 166 项、共享 Repository 合同 2 项（合计 491）；Cloud/迁移/FGAC 146 项；Fault Ingress 与 Cloud MCP 101 项；P2b Assurance 回归 26 项及 Local E2E 1 项均通过。真实 Emulator 4 项在未设置 `SPANNER_EMULATOR_HOST` 的 Windows 环境中按设计 skip，不计为通过。
+2026-08-29 稳定源码快照的本机证据：领域 323 项、Local 166 项、共享 Repository 合同 2 项（合计 491）；Cloud/迁移/FGAC 146 项；Fault Ingress 与 Cloud MCP 101 项；P2b Assurance 回归 26 项及 Local E2E 1 项均通过。真实 Emulator 4 项在未设置 `SPANNER_EMULATOR_HOST` 的 Windows 环境中按设计 skip；纯 helper 合同仍在本机执行并通过。
+
+提交 `fa07096` 的 [GitHub Actions run 33202370157](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33202370157) 已通过全部四个作业：Python 3.12/3.13 的真实 Spanner Emulator 均完成对象 DDL、共享 Repository、50 路并发迁移、1,000 条 source association 首导/重放/状态推进，以及 Inbox/Outbox/CAS/reopen；两个常规作业均完成全回归、五 wheel 构建、源码树外安装、四 CLI 冒烟和 `pip check`。
 
 同一源码快照已重建 `telco-domain`、`telco-local`、`telco-cloud`、`telco-fault-ingress`、`telco-cloud-mcp` 五个 wheel，并在源码树外全新 Python 3.12 环境安装；`pip check` 无冲突，四个 CLI `--help` 通过，核心包从 `site-packages` 导入且 import 阶段未加载 `google.cloud.spanner` 或 `fastmcp`。wheel 内容不含 tests、build、`__pycache__` 或字节码。
 
@@ -58,6 +60,6 @@
 - Spanner Emulator 不验证 TLS、IAM 或生产延迟；Emulator 通过不能替代 Cloud Staging 安全验收。
 - P3 只接入低频 Canonical Incident、Radio KPI Observation 和安全 EvidenceReference。原始高频 Trace/PM 的 Spanner/BigQuery 选型在容量基准前保持未决。
 - P4 前 Outbox 可验证持久与可重放派发，但不将事件交给 legacy Resolver 推进 Incident 状态。
-- 本机 Windows 环境没有 Docker，真实 Emulator 证据必须来自 GitHub Actions；在成功链接回填前不得把 Emulator Gate 标为 PASS。
+- 本机 Windows 环境没有 Docker，因此真实 Emulator 证据来自已通过的 [GitHub Actions run 33202370157](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33202370157)；本机 skip 不作为通过证据。
 - Emulator 不支持 IAM/FGAC。四角色实际正/负权限、Cloud Run OIDC、Pub/Sub DLQ 和 Workload Identity 必须在 Cloud Staging 验收。
 - 迁移 bundle 是 checksummed 而非 signed；legacy Spanner Incident 自动映射未实现，必须按[迁移手册](../runbooks/p3-canonical-migration.md)进入人工映射流程。

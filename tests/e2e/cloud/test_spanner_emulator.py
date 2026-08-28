@@ -1,8 +1,9 @@
 """Real Cloud Spanner emulator gates for Canonical v2 transactions.
 
-The suite is intentionally skipped unless ``SPANNER_EMULATOR_HOST`` is set.
-CI can point that variable at a Spanner emulator service container; no test
-silently starts Docker or contacts a production endpoint.
+Real integration cases are skipped unless ``SPANNER_EMULATOR_HOST`` is set;
+the pure fixture-contract regression remains runnable locally. CI can point
+that variable at a Spanner emulator service container, and no test silently
+starts Docker or contacts a production endpoint.
 """
 
 from __future__ import annotations
@@ -16,16 +17,14 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 
-pytestmark = pytest.mark.skipif(
-    not os.environ.get("SPANNER_EMULATOR_HOST"),
-    reason="SPANNER_EMULATOR_HOST is required for real Spanner E2E",
-)
-
-spanner = pytest.importorskip("google.cloud.spanner")
-pytest.importorskip("google.auth.credentials")
-
-from google.auth.credentials import AnonymousCredentials
-from google.cloud.spanner_v1.data_types import JsonObject
+try:
+    import google.cloud.spanner as spanner
+    from google.auth.credentials import AnonymousCredentials
+    from google.cloud.spanner_v1.data_types import JsonObject
+except ImportError:  # The pure helper contract remains runnable without the SDK.
+    spanner = None
+    AnonymousCredentials = None
+    JsonObject = dict
 from telco_domain.contracts import IncidentTrigger
 from telco_domain.models import (
     ActionRun,
@@ -81,21 +80,49 @@ class _MutableClock:
 
 def _incident(
     incident_id: str,
-    source_event_id: str,
+    source_event_id: str | None = None,
     *,
     correlation_key: str,
     now: datetime = BASE,
+    source_event_ids: tuple[str, ...] | None = None,
 ) -> Incident:
+    if source_event_ids is None:
+        if source_event_id is None:
+            raise ValueError("source_event_id or source_event_ids is required")
+        normalized_source_event_ids = (source_event_id,)
+    else:
+        if source_event_id is not None:
+            raise ValueError(
+                "source_event_id and source_event_ids are mutually exclusive"
+            )
+        normalized_source_event_ids = source_event_ids
     return Incident(
         incident_id=incident_id,
         correlation_key=correlation_key,
-        source_event_ids=(source_event_id,),
+        source_event_ids=normalized_source_event_ids,
         title="Emulator network fault",
         trace_id=f"trace-{incident_id}",
         detected_at=now,
         created_at=now,
         updated_at=now,
     )
+
+
+def test_incident_helper_accepts_explicit_source_event_ids_without_emulator() -> None:
+    source_event_ids = ("helper-source-a", "helper-source-b")
+
+    incident = _incident(
+        "helper-capacity-incident",
+        correlation_key="lte:helper-capacity:availability",
+        source_event_ids=source_event_ids,
+    )
+
+    assert incident.source_event_ids == source_event_ids
+    assert _incident(
+        "helper-default-incident",
+        "helper-default-source",
+        correlation_key="lte:helper-default:availability",
+    ).source_event_ids == ("helper-default-source",)
 
 
 def _envelope(
@@ -254,6 +281,12 @@ async def _advance_to_closed(
 
 @pytest.fixture
 def emulator_database():
+    if not os.environ.get("SPANNER_EMULATOR_HOST"):
+        pytest.skip("SPANNER_EMULATOR_HOST is required for real Spanner E2E")
+    if spanner is None or AnonymousCredentials is None:
+        pytest.fail(
+            "google-cloud-spanner is required when SPANNER_EMULATOR_HOST is set"
+        )
     suffix = uuid.uuid4().hex[:12]
     instance_id = f"p3test-{suffix}"
     database_id = f"p3db-{suffix}"

@@ -60,7 +60,7 @@ _CANONICAL_OBJECT_DDL: tuple[str, ...] = (
     ) PRIMARY KEY (incident_id, source_event_id)""",
     """CREATE UNIQUE INDEX IF NOT EXISTS CanonicalIncidentSourceEventsV2ByGlobalSource
         ON CanonicalIncidentSourceEventsV2(source_event_id)
-        STORING (incident_id, payload)""",
+        STORING (payload)""",
     """CREATE TABLE IF NOT EXISTS CanonicalIncidentAuditV2 (
         incident_id STRING(256) NOT NULL,
         revision INT64 NOT NULL,

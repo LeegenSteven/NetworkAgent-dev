@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 
 import pytest
 import telco_cloud
@@ -209,6 +210,67 @@ def test_schema_is_v2_idempotent_and_complete() -> None:
         if "CREATE TABLE IF NOT EXISTS CanonicalIncidentActiveKeysV2" in ddl
     )
     assert "key_value" not in active_keys_ddl
+
+
+def test_secondary_index_storing_columns_exclude_table_and_index_keys() -> None:
+    """Catch GoogleSQL DDL that the real Spanner service rejects.
+
+    Secondary indexes already carry their own key columns and every base-table
+    primary-key column. GoogleSQL therefore rejects either category in a
+    STORING clause even though lightweight DDL fakes can accept the text.
+    """
+
+    primary_keys: dict[str, set[str]] = {}
+    for ddl in CANONICAL_SCHEMA_DDL:
+        table = re.search(
+            r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+).*?"
+            r"PRIMARY\s+KEY\s*\(([^)]*)\)",
+            ddl,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if table is not None:
+            primary_keys[table.group(1)] = {
+                column.strip().split()[0]
+                for column in table.group(2).split(",")
+            }
+
+    index_ddls = tuple(
+        ddl
+        for ddl in CANONICAL_SCHEMA_DDL
+        if re.match(
+            r"^\s*CREATE\s+(?:(?:UNIQUE|NULL_FILTERED)\s+)*INDEX\b",
+            ddl,
+            flags=re.IGNORECASE,
+        )
+    )
+    parsed_indexes = 0
+    for ddl in index_ddls:
+        index = re.search(
+            r"CREATE\s+(?:(?:UNIQUE|NULL_FILTERED)\s+)*INDEX\s+"
+            r"(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s+ON\s+(\w+)\s*"
+            r"\((.*?)\)(?:\s+STORING\s*\((.*?)\))?\s*$",
+            ddl,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        assert index is not None, f"static index DDL parser missed: {ddl!r}"
+        parsed_indexes += 1
+        if index.group(4) is None:
+            continue
+        index_name, table_name = index.group(1), index.group(2)
+        key_columns = {
+            column.strip().split()[0]
+            for column in index.group(3).split(",")
+        }
+        storing_columns = {
+            column.strip().split()[0]
+            for column in index.group(4).split(",")
+        }
+        forbidden = key_columns | primary_keys[table_name]
+        assert storing_columns.isdisjoint(forbidden), (
+            f"{index_name} repeats key columns in STORING: "
+            f"{sorted(storing_columns & forbidden)}"
+        )
+    assert parsed_indexes == len(index_ddls)
 
 
 def test_migration_importer_role_is_exported_and_exactly_bounded() -> None:

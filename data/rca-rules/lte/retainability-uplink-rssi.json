@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.0",
+  "rule_id": "lte.retainability.uplink-rssi",
+  "version": "1.0.0",
+  "technology": "LTE",
+  "is_current": true,
+  "description_zh": "每小时主动释放事件率超过阈值时，检查同一小区和时间窗内的上行 RSSI 聚合值。",
+  "detection": {
+    "kpi_name": "retainability",
+    "comparator": "GT",
+    "threshold": 3.0,
+    "unit": "releases/hour",
+    "max_gap_minutes": 30
+  },
+  "analysis": {
+    "evidence_types": [
+      "METRIC"
+    ],
+    "when": {
+      "operator": "ANY",
+      "predicates": [
+        {
+          "fact": "uplink_rssi_avg",
+          "comparator": "LT",
+          "value": -120.0
+        },
+        {
+          "fact": "uplink_rssi_avg",
+          "comparator": "GT",
+          "value": -114.0
+        }
+      ]
+    },
+    "hypothesis_zh": "上行 RSSI 偏离规则正常范围可能与主动释放事件率升高有关。",
+    "root_cause_zh": "上行 RSSI 偏离规则定义的正常范围。"
+  },
+  "severity": {
+    "cases": [
+      {
+        "when": {
+          "operator": "ALL",
+          "predicates": [
+            {
+              "fact": "kpi_value",
+              "comparator": "GT",
+              "value": 3.5
+            }
+          ]
+        },
+        "severity": "HIGH"
+      },
+      {
+        "when": {
+          "operator": "ALL",
+          "predicates": [
+            {
+              "fact": "uplink_rssi_avg",
+              "comparator": "LT",
+              "value": -120.0
+            }
+          ]
+        },
+        "severity": "MEDIUM"
+      },
+      {
+        "when": {
+          "operator": "ALL",
+          "predicates": [
+            {
+              "fact": "uplink_rssi_avg",
+              "comparator": "GT",
+              "value": -105.0
+            }
+          ]
+        },
+        "severity": "HIGH"
+      }
+    ],
+    "default": "LOW"
+  }
+}

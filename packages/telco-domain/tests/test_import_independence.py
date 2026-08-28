@@ -60,6 +60,8 @@ def test_public_api_exports_the_primary_workflow_types() -> None:
         "IncidentRepository",
         "IncidentTrigger",
         "InMemoryIncidentRepository",
+        "KpiObservation",
+        "MetricRepository",
         "NetworkChangeRequest",
         "transition_incident",
     }

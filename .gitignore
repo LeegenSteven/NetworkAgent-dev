@@ -109,3 +109,10 @@ local.properties
 # Python library
 lib/build
 **/*egg-info
+packages/*/build/
+packages/*/dist/
+
+# Local telco assurance runtime
+.local/
+*.duckdb
+*.duckdb.wal

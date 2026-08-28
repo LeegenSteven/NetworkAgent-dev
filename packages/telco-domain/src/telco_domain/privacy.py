@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, Sequence, Set
 from typing import Any
 
 
@@ -64,6 +64,12 @@ def find_sensitive_paths(value: Any, *, path: str = "$") -> tuple[str, ...]:
 
     if isinstance(value, Mapping):
         for key, nested in value.items():
+            # Mapping keys are payload content too. Never echo a matching key
+            # in the error path, because the key itself contains the value we
+            # are preventing from crossing the boundary.
+            if isinstance(key, str) and _LABELED_IDENTIFIER.search(key):
+                matches.append(f"{path}.<sensitive-key>")
+                continue
             nested_path = f"{path}.{key}"
             if _is_sensitive_key(key) and not _is_empty(nested):
                 matches.append(nested_path)
@@ -71,7 +77,7 @@ def find_sensitive_paths(value: Any, *, path: str = "$") -> tuple[str, ...]:
             matches.extend(find_sensitive_paths(nested, path=nested_path))
         return tuple(matches)
 
-    if isinstance(value, Sequence) and not isinstance(
+    if isinstance(value, (Sequence, Set)) and not isinstance(
         value, (str, bytes, bytearray)
     ):
         for index, nested in enumerate(value):
@@ -102,8 +108,12 @@ def redact_sensitive_data(value: Any) -> Any:
 
     if isinstance(value, Mapping):
         return {
-            key: REDACTED if _is_sensitive_key(key) and not _is_empty(nested)
-            else redact_sensitive_data(nested)
+            REDACTED if isinstance(key, str) and _LABELED_IDENTIFIER.search(key)
+            else key: (
+                REDACTED
+                if _is_sensitive_key(key) and not _is_empty(nested)
+                else redact_sensitive_data(nested)
+            )
             for key, nested in value.items()
         }
 
@@ -113,7 +123,7 @@ def redact_sensitive_data(value: Any) -> Any:
     if isinstance(value, list):
         return [redact_sensitive_data(item) for item in value]
 
-    if isinstance(value, set):
+    if isinstance(value, Set):
         return {redact_sensitive_data(item) for item in value}
 
     if isinstance(value, str):

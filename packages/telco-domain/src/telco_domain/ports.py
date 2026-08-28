@@ -28,6 +28,8 @@ from .models import (
     Incident,
     IncidentAuditEvent,
     IncidentStatus,
+    KpiObservation,
+    Technology,
 )
 
 
@@ -241,6 +243,25 @@ class TelemetryRepository(Protocol):
 
 
 @runtime_checkable
+class MetricRepository(Protocol):
+    """Query bounded, privacy-safe KPI observations before Incident creation."""
+
+    async def query_kpis(
+        self,
+        *,
+        kpi_names: Sequence[str],
+        technology: Technology,
+        window_start: datetime | None = None,
+        window_end: datetime | None = None,
+        resource_ids: Sequence[str] = (),
+        limit: int = 50_000,
+    ) -> Sequence[KpiObservation]:
+        """Return ordered observations without applying detection thresholds."""
+
+        ...
+
+
+@runtime_checkable
 class RuleRepository(Protocol):
     """Retrieve versioned RCA rules applicable to an incident."""
 
@@ -326,6 +347,7 @@ __all__ = [
     "IncidentNotFoundError",
     "IncidentRepository",
     "IncidentRepositoryError",
+    "MetricRepository",
     "RcaGateway",
     "RevisionConflictError",
     "RuleRepository",

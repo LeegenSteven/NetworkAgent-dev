@@ -2,6 +2,18 @@
 
 This repository demonstrates a set of network agents that manage the end to end lifecycle of a virtual telecoms network. The agents are built on [Google's Autonomous Network Operations Framework](https://cloud.google.com/blog/topics/telecommunications/the-autonomous-network-operations-framework-for-csps?e=48754805?utm_source%3Dlinkedin) and implemented using Google's [agent development kit](https://google.github.io/adk-docs/) and [agent to agent protocol](https://a2aprotocol.ai/). The agents are designed to help Network Architects and Operators easily deploy and manage complex Telco infrastructure and network function software.
 
+## Unified assurance platform development
+
+The `unified-platform` branch is progressively combining this lifecycle platform
+with the deterministic LTE assurance demo. P2a now provides a cloud-independent
+Local Profile for safe CSV/DuckDB ingestion, anomaly preview, explicit Incident
+confirmation, and read-only rule-based RCA. It does not require GCP, ADK, a
+model API, or network access.
+
+* [Living implementation plan](docs/unified-platform-implementation-plan.md)
+* [Local Profile setup and CLI](packages/telco-local/README.md)
+* [P2a security Gate audit](docs/security/p2a-gate-audit.md)
+
 ## Network Agents
 
 There are two categories of network agents provided:

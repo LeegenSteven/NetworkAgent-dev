@@ -1,0 +1,55 @@
+{
+  "schema_version": "1.0",
+  "rule_id": "lte.erab.security-setup",
+  "version": "1.0.0",
+  "technology": "LTE",
+  "is_current": true,
+  "description_zh": "ERAB 建立成功率低于阈值时，检查同一小区和时间窗内的 S1 安全配置失败聚合占比。",
+  "detection": {
+    "kpi_name": "erab_success_rate",
+    "comparator": "LT",
+    "threshold": 97.0,
+    "unit": "%",
+    "max_gap_minutes": 30
+  },
+  "analysis": {
+    "evidence_types": [
+      "TRACE"
+    ],
+    "when": {
+      "operator": "ALL",
+      "predicates": [
+        {
+          "fact": "failed_security_setup_ratio",
+          "comparator": "GTE",
+          "value": 0.5
+        },
+        {
+          "fact": "failure_count",
+          "comparator": "GTE",
+          "value": 1
+        }
+      ]
+    },
+    "hypothesis_zh": "S1 安全配置失败可能导致 ERAB 建立异常。",
+    "root_cause_zh": "失败事件主要由 S1 安全配置失败造成。"
+  },
+  "severity": {
+    "cases": [
+      {
+        "when": {
+          "operator": "ALL",
+          "predicates": [
+            {
+              "fact": "kpi_value",
+              "comparator": "LT",
+              "value": 95.0
+            }
+          ]
+        },
+        "severity": "HIGH"
+      }
+    ],
+    "default": "LOW"
+  }
+}

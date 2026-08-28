@@ -3,7 +3,7 @@
 > 文档状态：Active（后续开发的计划与进度唯一事实来源）  
 > 首次建立：2026-08-28  
 > 最近更新：2026-08-28  
-> 当前里程碑：P0、P1 已完成 / P2 待开始
+> 当前里程碑：P0、P1、P2a 已完成 / P2b 待开始（P2 总阶段进行中）
 > 目标主仓库：`NetworkAgent-dev`  
 > 输入项目：`NetworkAgent-dev`、`telco-autonomous-networks-data-demo-main`
 
@@ -271,7 +271,7 @@ Agent 不得直接导入 DuckDB、Spanner、GKE 或 Gitea SDK。
 |---|---|---:|---|
 | P0 | 基线、目标架构和决策冻结 | 1–2 人日 | **DONE** |
 | P1 | 统一领域模型、接口和测试骨架 | 3–5 人日 | **DONE** |
-| P2 | 本地 Detector/RCA 迁入主仓库 | 5–8 人日 | NOT STARTED |
+| P2 | 本地 Detector/RCA 迁入主仓库 | 5–8 人日 | **IN PROGRESS** |
 | P3 | 接入 Spanner/MCP/实时事件 | 5–8 人日 | NOT STARTED |
 | P4 | 合并并增强 Resolver Pipeline | 6–10 人日 | NOT STARTED |
 | P5 | 审批、真实修复和修复后验证 | 5–8 人日 | NOT STARTED |
@@ -316,6 +316,11 @@ Agent 不得直接导入 DuckDB、Spanner、GKE 或 Gitea SDK。
 
 ### P2：迁入本地 Detector/RCA
 
+执行拆分：
+
+- **P2a（已完成）**：完成无 GCP、无 ADK、无模型 API 的确定性离线核心，即 CSV → DuckDB → 候选预览 → 显式确认/幂等创建 → 聚合证据 → 规则 RCA → 中文报告。RCA 在本阶段严格只读，不推进或持久化 Incident，也不执行任何动作；后续由唯一 Resolver 按审批状态机接管。
+- **P2b（待开始）**：用独立运行环境包装标准 A2A Agent，验证 `working → input_required → 确认 → completed`、DataPart/TextPart 双输出和 Supervisor 跨版本传递。旧 ADK FastAPI 前端不直接复制。
+
 交付物：
 
 - 迁移 DuckDB 初始化、CSV 导入、KPI 视图和本地规则/文档。
@@ -330,6 +335,16 @@ Agent 不得直接导入 DuckDB、Spanner、GKE 或 Gitea SDK。
 - 在无 GCP 环境下，从 CSV 检测异常、创建 Incident、生成 RCA 报告全链路通过。
 - 现有第二项目的 10 项离线测试全部迁移或由更强的新测试替代。
 - 原始 IMSI/MSISDN/IMEISV 不会出现在模型输入、日志或报告中。
+
+P2a 验收证据（2026-08-28）：
+
+- 新增独立 `telco-local` 包、显式 Local Profile 组合根与 `telco-local` CLI；共享领域层不引入 DuckDB/ADK/A2A/云 SDK，本地包也不加载云凭据、模型提供商或网络客户端。
+- 完整合成资产固定为 13,440 条 LTE performance 与 579 条安全 Trace；扫描得到 15 个唯一 episode 候选（ERAB 2、retainability 13），扫描后 Incident 数仍为 0。
+- Performance/Trace 只导入显式白名单列；Local LTE eNodeB/Cell 标识统一为 1–9 位 ASCII 十进制且限定在 `0..268435455`，导入前规范化、查询出站前再次校验，拒绝将无标签订户号伪装成网元标识。
+- `confirm` 是唯一 Incident 写入口：提交前重扫并绑定规则内容、资源、时间窗、观测值和证据摘要；成功确认仅产生 1 条 Incident/1 条初始审计，同 key 精确重放不重复写，不同请求指纹确定性冲突。
+- RCA 按历史规则版本和内容哈希精确解释，METRIC/TRACE fact 隔离，证据资源与时间窗严格匹配；不一致一律返回 `INCONCLUSIVE`。完整样例得到 `EXACT/CONCLUSIVE` 八节中文报告，但 Incident 仍为 `DETECTED` revision 0，报告、建议、动作均不落库。
+- 两个 Pydantic 依赖矩阵均通过 `telco-local 149 + telco-domain 318 + Local E2E 1`，合计 468 项；两个 wheel 均完成构建、源码树外安装、`pip check`、导入隔离与 CLI 冒烟。安全复核结论见 [P2a Local Profile Gate 审计](security/p2a-gate-audit.md)。
+- P2 总阶段仍保持 `IN PROGRESS`；只有 P2b 的 A2A 状态流、结构化双输出、显式确认和 Supervisor 跨版本契约全部通过后，才可将 P2 标记为完成。
 
 ### P3：接入云端数据与事件
 
@@ -535,9 +550,17 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | 审批链重复 | 用户混淆或越权 | Resolver 与 Engineer 共享一个版本化审批对象 |
 | 提示或规则诱导写操作 | 网络风险 | 工具权限分层、审批、作用域、Kill Switch |
 | 敏感标识泄漏 | 合规风险 | 聚合、脱敏、日志过滤、出站检查 |
+| 无标签订户号伪装为 LTE 网元标识 | 订户标识通过资源字段进入证据、日志或报告 | Local Profile 对 eNodeB/Cell 使用 28-bit 十进制白名单、规范化与导入/出站双边界校验；错误不回显原值 |
 | `install.sh` 继续膨胀 | 部署不可维护 | 新组件独立脚本/清单，顶层只编排 |
 | UI 与后端状态不同步 | 错误审批或误判 | 服务端持久状态、事件游标、断线恢复 |
 | 配置/依赖/凭据漂移 | 构建不可重复或秘密泄露 | 按服务锁文件、秘密扫描、Secret Manager、禁止记录凭据对象 |
+| LTE CSV 时间戳没有时区 | 窗口关联结果随运行机器时区变化 | 数据 manifest 明确记录 `assumed UTC`，导入时强制转换为 aware UTC |
+| 旧本地前端绑定 ADK 专用 REST | 无法可靠接入 Supervisor/A2A DataPart | 保留为参考，不复制；P2b 先建立跨版本 A2A 契约与 `input_required` 测试 |
+| Local DuckDB 跨进程写竞争 | 独立 CLI/服务进程同时写时一方可能得到文件锁错误 | P2a 明确单 writer、失败关闭；Cloud 采用 Spanner 事务，后续部署 Profile 增加外部互斥或有界重试 |
+| Local 全量扫描没有分页 | 数据量超过本地演示预算时结果可能不完整或放大内存 | 规则、观测、episode、候选均设硬上限并 fail closed；P2b 增加显式时间窗与分页 |
+| pre-v3 Incident 缺规则内容哈希 | 只能证明版本号，不能证明同版本规则未被改写 | 新候选使用内容哈希；旧数据迁移时补规则快照/哈希并标记 legacy，不回退 current 猜测 |
+| 多规则/多资源证据归因过粗 | 未来聚合 Incident 可能把一条证据错误用于另一规则或资源 | 当前限制为单规则、单资源 episode；扩展前将 evidence scope 细化到 violation/rule 级 |
+| Local CLI 运行命令会执行幂等 DDL | 严格只读部署仍需数据库写权限并可能触发锁竞争 | 当前只保证不写 Incident；P2b/P7 将初始化与运行进程分离，分析进程使用只读权限 |
 
 ## 14. 发布与回滚策略
 
@@ -564,6 +587,11 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | ADR-009 | 2026-08-28 | 高频 PM/Trace 的云端物理存储在容量基准后决定 | Proposed | Incident 状态适合 Spanner，但高频明细不应未经评估直接写入同一存储 |
 | ADR-010 | 2026-08-28 | 领域模型与协议 DTO 建立独立 `telco-domain` 包 | Accepted | 现有 `agent_library` 强依赖 ADK 1.18，无法作为跨 ADK 版本的无框架共享核心 |
 | ADR-011 | 2026-08-28 | 传输中的 ApprovalReference 不是授权，ActionGateway 执行前必须以可信存储与时钟重新解析最新决定 | Accepted | 防止伪造载荷、旧批准重放、撤销后复用及调用方回拨时间复活过期授权 |
+| ADR-012 | 2026-08-28 | Local Detector/RCA 先落地为无框架确定性核心，A2A/ADK 只作为后续进程边界适配 | Accepted | 让 KPI、分段、证据、规则和仓储先可离线回归，避免同时调试 ADK 主版本差异、A2A 确认流和模型不确定性 |
+| ADR-013 | 2026-08-28 | 预览 `incident_id` 是绑定规则/资源/窗口/观测/证据的内容寻址确认令牌；message/workflow/idempotency 使用彼此独立的传输标识 | Accepted | 防止预览后数据漂移与标识混用，同时允许同一业务候选在不同消息中安全重放 |
+| ADR-014 | 2026-08-28 | 确定性 RCA 只接受精确规则版本+内容哈希和类型/资源/时间均匹配的证据；任何 provenance 冲突均显式 `INCONCLUSIVE` | Accepted | 禁止用 current 规则解释历史 Incident、跨 EvidenceKind 拼 fact 或使用外部/陈旧证据伪造确定根因 |
+| ADR-015 | 2026-08-28 | P2a RCA 是只读 `PROPOSED` Artifact，不保存报告、不生成动作、不推进 Incident | Accepted | 保持 Resolver 的唯一生命周期所有权，并在 A2A/审批闭环接入前消除隐式写操作 |
+| ADR-016 | 2026-08-28 | Local LTE eNodeB/Cell 组件使用 28-bit ASCII 十进制白名单，并在导入与 Telemetry 出站边界共用同一规范化函数 | Accepted | 阻止无标签订户号伪装成资源标识，避免前导零产生身份碰撞，并让被篡改的本地数据库也能 fail closed |
 
 ## 16. 待确认事项
 
@@ -588,7 +616,8 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | 统一目标架构与实施路线 | DONE | 2026-08-28 | 本文档已完成架构、代码、交付和兼容性复核 |
 | 主仓库 Git 可回滚基线 | DONE | 2026-08-28 | 私有仓库 `LeegenSteven/NetworkAgent-dev` 已建立并将 `unified-platform` 设为默认分支；P1 基线为 `e363662`，原始 `dev@44ecbb3`、其余 4 个分支和 4 个发布标签均已推送并校验 |
 | P1 领域模型与接口 | DONE | 2026-08-28 | 独立 `telco-domain` 包；双环境各 315 项通过；wheel 构建/独立导入成功；原 10 类安全阻断复审全部关闭；GitHub Actions Python 3.12/3.13 均通过（[run 33151947728](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33151947728)），Gate PASS |
-| 首个 Local 纵向切片 | NOT STARTED | 2026-08-28 | — |
+| 首个 Local 纵向切片（P2a） | DONE | 2026-08-28 | 13,440 KPI + 579 安全 Trace → 15 候选；预览零写、确认唯一写、RCA 只读；双依赖矩阵各 468 项通过，wheel/CLI 冒烟成功，安全 Gate PASS |
+| A2A/Supervisor 接入（P2b） | NOT STARTED | 2026-08-28 | 下一步实现独立 Assurance A2A 服务、`input_required` 确认流、DataPart/TextPart 双输出与 Supervisor 跨版本契约 |
 | Cloud 数据接入 | NOT STARTED | 2026-08-28 | — |
 | Resolver 合并 | NOT STARTED | 2026-08-28 | — |
 | 修复与验证闭环 | NOT STARTED | 2026-08-28 | — |
@@ -617,6 +646,8 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | 2026-08-28 | 建立独立 `telco-domain` 包、双 Python/Pydantic 环境契约测试及 3.12/3.13 CI；安全 Gate 发现并开始修复仓储绕过、审批重放、伪造完成和审计历史篡改路径 | Codex |
 | 2026-08-28 | 完成 P1 安全加固：原子状态机仓储、版本化审批引用、可信时钟、并发去重、隐私/载荷预算及不可变审计；双环境各 315 项通过，独立复审 Gate PASS | Codex |
 | 2026-08-28 | 完成 P0：认证并推送 GitHub 私有仓库，保留 GitLab 原始分支与标签历史，设置 `unified-platform` 为默认分支；P1 的 Python 3.12/3.13 云端 CI 全部通过，并将官方 Checkout/Setup Python 更新至 v7 | Codex |
+| 2026-08-28 | 启动 P2：以 Local Profile 为边界迁移 LTE CSV/DuckDB、确定性异常检测和证据驱动 RCA，先建立无 GCP/无模型 API 的纵向验收链路 | Codex |
+| 2026-08-28 | 完成 P2a：建立 `telco-local`、安全数据投影、确定性 Detector/精确规则 RCA、显式确认与本地 CLI；关闭数据漂移、证据串用、数字标识伪装、隐私和容量 Gate，双依赖矩阵各 468 项及 wheel 冒烟通过；P2b A2A 接入保留为下一阶段 | Codex |
 
 ## 20. 项目完成定义
 

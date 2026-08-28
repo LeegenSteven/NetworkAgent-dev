@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "dataset_id": "digitalroute-synthetic-lte-demo",
+  "technology": "LTE",
+  "source_project": "telco-autonomous-networks-data-demo-main",
+  "source_license": "Apache-2.0",
+  "source_attribution": "DigitalRoute",
+  "synthetic": true,
+  "source_timezone_assumption": "UTC",
+  "files": {
+    "performance.csv": {
+      "rows": 13440,
+      "sha256": "0d5f0e6d76b0f57c20473961b79f4531e95cd683997990dbb03570a312d89c7b"
+    },
+    "safe-cell-traces.csv": {
+      "rows": 579,
+      "sha256": "76f39e02cd1acf9f58300c331aa2cf176fcc60200fb4eebe78e17364fe15c705",
+      "privacy_projection": true,
+      "columns": [
+        "PROCEDURE_TYPE",
+        "STARTTIME",
+        "ENDTIME",
+        "START_ENODEB_ID",
+        "START_CELL_ID",
+        "S1_SIG_CONN_SETUP_SIG_CONN_RESULT"
+      ]
+    }
+  }
+}

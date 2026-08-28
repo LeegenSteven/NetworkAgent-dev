@@ -34,6 +34,22 @@ def test_assertion_error_contains_paths_but_not_identifier_values() -> None:
     assert raw_identifier not in str(error.value)
 
 
+def test_labeled_identifier_in_mapping_key_is_rejected_without_echo() -> None:
+    raw_key = "IMSI=208930000000001"
+
+    with pytest.raises(SensitiveDataError) as error:
+        assert_model_safe({"outcome_counts": {raw_key: 1}})
+
+    assert raw_key not in str(error.value)
+    assert "<sensitive-key>" in str(error.value)
+    assert redact_sensitive_data({raw_key: 1}) == {REDACTED: 1}
+
+
+def test_subscriber_identifier_inside_a_set_is_rejected() -> None:
+    with pytest.raises(SensitiveDataError):
+        assert_model_safe({"values": {"IMSI: 208930000000001"}})
+
+
 def test_redaction_is_recursive_and_does_not_mutate_input() -> None:
     payload = {
         "imsi": "208930000000001",

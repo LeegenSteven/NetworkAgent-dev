@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "telco-local"
+version = "0.1.0"
+description = "Deterministic DuckDB adapters for the unified telco Local Profile"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "duckdb>=1.5,<2",
+    "pydantic>=2.5,<3",
+    "pytz>=2024.1,<2027",
+    "telco-domain>=0.1,<0.2",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+
+[project.scripts]
+telco-local = "telco_local.cli:main"
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.4,<10",
+]
+dev = [
+    "build>=1,<2",
+    "pytest>=7.4,<10",
+    "pytest-cov>=4,<7",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --strict-config"
+testpaths = ["tests"]
+pythonpath = ["src", "../telco-domain/src"]

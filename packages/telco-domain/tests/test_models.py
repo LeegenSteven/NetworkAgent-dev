@@ -18,6 +18,7 @@ from telco_domain.models import (
     IncidentSeverity,
     IncidentStatus,
     KpiComparator,
+    KpiObservation,
     KpiViolation,
     RemediationAction,
     ReportStatus,
@@ -53,6 +54,49 @@ def test_incident_has_canonical_defaults_and_is_frozen() -> None:
     with pytest.raises(ValidationError, match="literal_error"):
         Incident(
             incident_id="inc-future", trace_id="trace-future", schema_version="2.0"
+        )
+
+
+def test_kpi_observation_is_utc_privacy_safe_and_rule_neutral() -> None:
+    observation = KpiObservation(
+        observation_id="obs-1",
+        kpi_name="erab_success_rate",
+        observed_value=96.5,
+        observed_at=BASE_TIME,
+        resources=(
+            ResourceReference(
+                resource_id="lte:enodeb:1:cell:12314",
+                resource_type=ResourceType.CELL,
+                technology=Technology.LTE,
+                parent_resource_id="lte:enodeb:1",
+            ),
+        ),
+        unit="percent",
+        source_uri="duckdb://performance/obs-1",
+        quality_flags=("SOURCE_TIMEZONE_ASSUMED_UTC",),
+        dimensions={"aggregation": "counter_ratio"},
+    )
+
+    assert observation.observed_at.tzinfo is UTC
+    assert observation.model_dump(mode="json")["observed_value"] == 96.5
+    assert "threshold" not in KpiObservation.model_fields
+
+    with pytest.raises(ValidationError, match="timezone"):
+        KpiObservation(
+            observation_id="obs-naive",
+            kpi_name="retainability",
+            observed_value=3.2,
+            observed_at=datetime(2026, 8, 28, 10, 0),
+            resources=(target(),),
+            source_uri="duckdb://performance/obs-naive",
+        )
+
+    with pytest.raises(ValidationError, match="quality_flags"):
+        KpiObservation.model_validate(
+            {
+                **observation.model_dump(mode="python"),
+                "quality_flags": ("SOURCE_TIMEZONE_ASSUMED_UTC",) * 2,
+            }
         )
 
 
@@ -270,6 +314,7 @@ def test_approved_decision_is_bound_and_effective_at_injected_time() -> None:
             status=ApprovalStatus.APPROVED,
             action_hash=action.action_hash,
             scope=action.target_resources,
+            requested_at=BASE_TIME,
             expires_at=BASE_TIME + timedelta(minutes=5),
             idempotency_key="approve-invalid",
         )
@@ -556,6 +601,7 @@ def test_terminal_approval_decisions_require_actor_and_decision_time() -> None:
             action_hash=action.action_hash,
             scope=action.target_resources,
             status=ApprovalStatus.REJECTED,
+            requested_at=BASE_TIME,
             expires_at=BASE_TIME + timedelta(hours=1),
             idempotency_key="reject-action",
         )

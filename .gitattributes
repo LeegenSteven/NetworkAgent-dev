@@ -1,0 +1,2 @@
+# Preserve the exact synthetic dataset bytes and the checksums in manifest.json.
+data/samples/lte-demo/*.csv -text whitespace=cr-at-eol

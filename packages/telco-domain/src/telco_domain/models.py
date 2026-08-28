@@ -282,6 +282,42 @@ class KpiViolation(DomainModel):
         return self.threshold_value
 
 
+class KpiObservation(DomainModel):
+    """One privacy-safe KPI observation returned by a telemetry adapter.
+
+    Detection rules deliberately live above this model: repositories expose the
+    measured value and quality flags, while Detector services own thresholds and
+    episode grouping. Raw counter rows remain in the telemetry store.
+    """
+
+    schema_version: SchemaVersion = SCHEMA_VERSION
+    observation_id: Identifier
+    kpi_name: NonEmptyStr
+    observed_value: float
+    observed_at: UtcDatetime
+    resources: tuple[ResourceReference, ...] = Field(min_length=1)
+    unit: NonEmptyStr | None = None
+    source_uri: NonEmptyStr
+    quality_flags: tuple[NonEmptyStr, ...] = ()
+    dimensions: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_identity(self) -> KpiObservation:
+        resource_identities = tuple(
+            (
+                resource.resource_type.value,
+                resource.resource_id,
+                resource.parent_resource_id,
+            )
+            for resource in self.resources
+        )
+        if len(resource_identities) != len(set(resource_identities)):
+            raise ValueError("resources must not contain duplicates")
+        if len(self.quality_flags) != len(set(self.quality_flags)):
+            raise ValueError("quality_flags must not contain duplicates")
+        return self
+
+
 class EvidenceReference(DomainModel):
     """A pointer to evidence, intentionally excluding the raw evidence payload."""
 

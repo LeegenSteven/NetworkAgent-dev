@@ -8,6 +8,7 @@ All I/O methods are asynchronous to match the surrounding agent call chain.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
@@ -29,8 +30,22 @@ from .models import (
     IncidentAuditEvent,
     IncidentStatus,
     KpiObservation,
+    SourceEventAssociation,
     Technology,
 )
+
+
+MAX_REPOSITORY_PAGE_SIZE = 1_000
+MAX_REPOSITORY_OFFSET = 100_000
+MAX_REPOSITORY_BATCH_BYTES = 64 * 1024 * 1024
+
+
+@dataclass(frozen=True, slots=True)
+class IncidentSnapshotImportResult:
+    """Atomic outcome of the narrow one-time snapshot import boundary."""
+
+    incident: Incident
+    replayed: bool
 
 
 class IncidentRepositoryError(RuntimeError):
@@ -63,6 +78,36 @@ class ActiveIncidentConflictError(IncidentRepositoryError):
             f"incident {incident_id!r} correlates with active incident "
             f"{existing_incident_id!r}; use create_or_correlate"
         )
+
+
+class SourceEventOwnershipConflictError(IncidentRepositoryError):
+    """A source event was already bound to a different Incident forever."""
+
+    def __init__(
+        self,
+        source_event_id: str,
+        owner_incident_id: str,
+        requested_incident_id: str,
+    ) -> None:
+        self.source_event_id = source_event_id
+        self.owner_incident_id = owner_incident_id
+        self.requested_incident_id = requested_incident_id
+        super().__init__("source event is already owned by another incident")
+
+
+class IncidentCorrelationConflictError(IncidentRepositoryError):
+    """Correlation and source selectors resolve to different active Incidents."""
+
+    def __init__(
+        self,
+        requested_incident_id: str,
+        conflicting_incident_ids: Sequence[str],
+    ) -> None:
+        self.requested_incident_id = requested_incident_id
+        self.conflicting_incident_ids = tuple(sorted(set(conflicting_incident_ids)))
+        if len(self.conflicting_incident_ids) < 2:
+            raise ValueError("at least two conflicting incidents are required")
+        super().__init__("incident correlation selectors have multiple active owners")
 
 
 class RevisionConflictError(IncidentRepositoryError):
@@ -107,7 +152,10 @@ class UnsafeIncidentWriteError(IncidentRepositoryError):
     def __init__(self, incident_id: str, reason: str) -> None:
         self.incident_id = incident_id
         self.reason = reason
-        super().__init__(f"unsafe write rejected for incident {incident_id!r}: {reason}")
+        # The structured attribute remains available to trusted callers, but
+        # the printable error must never reflect an identifier that failed the
+        # privacy boundary itself.
+        super().__init__(f"unsafe incident write rejected: {reason}")
 
 
 @runtime_checkable
@@ -221,8 +269,30 @@ class IncidentRepository(Protocol):
 
         ...
 
-    async def history(self, incident_id: str) -> Sequence[IncidentAuditEvent]:
-        """Return audit metadata committed atomically with successful writes."""
+    async def history(
+        self,
+        incident_id: str,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> Sequence[IncidentAuditEvent]:
+        """Return a deterministic audit page committed with successful writes.
+
+        ``None`` preserves the small, in-process compatibility view. Network
+        boundaries must always supply a finite limit so adapters can enforce
+        database-side pagination rather than materializing an unbounded log.
+        """
+
+        ...
+
+    async def source_event_associations(
+        self,
+        incident_id: str,
+        *,
+        limit: int = MAX_REPOSITORY_PAGE_SIZE,
+        offset: int = 0,
+    ) -> Sequence[SourceEventAssociation]:
+        """Return immutable source-event provenance without mutating revision."""
 
         ...
 
@@ -344,13 +414,20 @@ __all__ = [
     "IdempotencyConflictError",
     "IncidentAuditEvent",
     "IncidentAlreadyExistsError",
+    "IncidentCorrelationConflictError",
     "IncidentNotFoundError",
     "IncidentRepository",
     "IncidentRepositoryError",
+    "IncidentSnapshotImportResult",
     "MetricRepository",
+    "MAX_REPOSITORY_OFFSET",
+    "MAX_REPOSITORY_BATCH_BYTES",
+    "MAX_REPOSITORY_PAGE_SIZE",
     "RcaGateway",
     "RevisionConflictError",
     "RuleRepository",
+    "SourceEventAssociation",
+    "SourceEventOwnershipConflictError",
     "TelemetryRepository",
     "UnsafeIncidentWriteError",
     "VerificationGateway",

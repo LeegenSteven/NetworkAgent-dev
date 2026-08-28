@@ -15,7 +15,12 @@ from .lte_identifiers import (
 )
 
 
-LOCAL_SCHEMA_VERSION = "1.0"
+LOCAL_SCHEMA_VERSION = "1.1"
+_LEGACY_LOCAL_SCHEMA_VERSION = "1.0"
+
+
+class LocalSchemaMigrationRequiredError(RuntimeError):
+    """A legacy database needs explicit operator reconciliation."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,8 +67,9 @@ CREATE TABLE IF NOT EXISTS canonical_incident_source_events (
 );
 
 -- Forward migration for Local Profile databases initialized by an earlier P2a
--- development build.  Historical rows remain readable with NULL provenance;
--- every new association is complete and immutable.
+-- development build.  Added columns are validated before the schema version is
+-- advanced: historical rows without complete provenance require an explicit
+-- operator reconciliation and are never populated with guessed values.
 ALTER TABLE canonical_incident_source_events
     ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR;
 ALTER TABLE canonical_incident_source_events
@@ -101,6 +107,185 @@ CREATE TABLE IF NOT EXISTS canonical_incident_idempotency (
     PRIMARY KEY (operation, requested_incident_id, idempotency_key)
 );
 """
+
+
+_REPOSITORY_TABLE_SHAPES = {
+    "local_schema_metadata": (
+        ("key", "VARCHAR", True, True),
+        ("value", "VARCHAR", True, False),
+    ),
+    "canonical_incidents": (
+        ("incident_id", "VARCHAR", True, True),
+        ("correlation_key", "VARCHAR", False, False),
+        ("source_event_ids", "JSON", True, False),
+        ("status", "VARCHAR", True, False),
+        ("revision", "BIGINT", True, False),
+        ("trace_id", "VARCHAR", True, False),
+        ("payload", "JSON", True, False),
+        ("created_at", "TIMESTAMP WITH TIME ZONE", True, False),
+        ("updated_at", "TIMESTAMP WITH TIME ZONE", True, False),
+    ),
+    "canonical_incident_source_events": (
+        ("incident_id", "VARCHAR", True, True),
+        ("source_event_id", "VARCHAR", True, True),
+        ("registered_at", "TIMESTAMP WITH TIME ZONE", True, False),
+        ("idempotency_key", "VARCHAR", True, False),
+        ("actor", "VARCHAR", True, False),
+        ("reason", "VARCHAR", True, False),
+        ("trace_id", "VARCHAR", True, False),
+    ),
+    "canonical_incident_audit": (
+        ("event_id", "VARCHAR", True, True),
+        ("incident_id", "VARCHAR", True, False),
+        ("revision", "BIGINT", True, False),
+        ("from_status", "VARCHAR", False, False),
+        ("to_status", "VARCHAR", True, False),
+        ("trace_id", "VARCHAR", True, False),
+        ("occurred_at", "TIMESTAMP WITH TIME ZONE", True, False),
+        ("payload", "JSON", True, False),
+    ),
+    "canonical_incident_idempotency": (
+        ("operation", "VARCHAR", True, True),
+        ("requested_incident_id", "VARCHAR", True, True),
+        ("idempotency_key", "VARCHAR", True, True),
+        ("request_fingerprint", "VARCHAR", True, False),
+        ("result_payload", "JSON", True, False),
+        ("created_at", "TIMESTAMP WITH TIME ZONE", True, False),
+    ),
+}
+
+_REPOSITORY_INDEX_SHAPES = {
+    "canonical_incidents_status_idx": (
+        "canonical_incidents",
+        False,
+        "[status]",
+    ),
+    "canonical_incidents_correlation_idx": (
+        "canonical_incidents",
+        False,
+        "[correlation_key]",
+    ),
+    "canonical_incident_source_events_source_idx": (
+        "canonical_incident_source_events",
+        False,
+        "[source_event_id]",
+    ),
+    "canonical_incident_source_events_owner_idx": (
+        "canonical_incident_source_events",
+        True,
+        "[source_event_id]",
+    ),
+    "canonical_incident_audit_incident_idx": (
+        "canonical_incident_audit",
+        False,
+        "[incident_id]",
+    ),
+}
+
+
+def _normalize_sql_shape(value: object) -> str:
+    return "".join(str(value).lower().split())
+
+
+def _validate_repository_objects(connection: Any) -> None:
+    """Validate the exact persisted repository shape without applying DDL."""
+
+    for table_name, expected in _REPOSITORY_TABLE_SHAPES.items():
+        rows = connection.execute(
+            f"PRAGMA table_info('{table_name}')"
+        ).fetchall()
+        actual = tuple(
+            (
+                str(row[1]).lower(),
+                " ".join(str(row[2]).upper().split()),
+                bool(row[3]),
+                bool(row[5]),
+            )
+            for row in rows
+        )
+        if actual != expected:
+            raise RuntimeError("Local Profile repository table shape is invalid")
+
+    indexes = {
+        str(row[0]): (str(row[1]), bool(row[2]), _normalize_sql_shape(row[3]))
+        for row in connection.execute(
+            """
+            SELECT index_name, table_name, is_unique, expressions
+            FROM duckdb_indexes()
+            WHERE schema_name = 'main'
+            """
+        ).fetchall()
+    }
+    for index_name, expected in _REPOSITORY_INDEX_SHAPES.items():
+        table_name, is_unique, expressions = expected
+        if indexes.get(index_name) != (
+            table_name,
+            is_unique,
+            _normalize_sql_shape(expressions),
+        ):
+            if index_name == "canonical_incident_source_events_owner_idx":
+                raise RuntimeError("Local Profile ownership index is invalid")
+            raise RuntimeError("Local Profile repository index shape is invalid")
+
+    repository_tables = set(_REPOSITORY_TABLE_SHAPES)
+    repository_indexes = {
+        name: shape
+        for name, shape in indexes.items()
+        if shape[0] in repository_tables
+    }
+    expected_indexes = {
+        name: (table_name, is_unique, _normalize_sql_shape(expressions))
+        for name, (table_name, is_unique, expressions) in (
+            _REPOSITORY_INDEX_SHAPES.items()
+        )
+    }
+    if repository_indexes != expected_indexes:
+        raise RuntimeError("Local Profile repository index set is invalid")
+
+    actual_constraints = {
+        (
+            str(row[0]),
+            str(row[1]).upper(),
+            tuple(str(column).lower() for column in row[2]),
+        )
+        for row in connection.execute(
+            """
+            SELECT table_name, constraint_type, constraint_column_names
+            FROM duckdb_constraints()
+            WHERE schema_name = 'main'
+            """
+        ).fetchall()
+        if str(row[0]) in repository_tables
+    }
+    expected_constraints: set[tuple[str, str, tuple[str, ...]]] = set()
+    for table_name, shape in _REPOSITORY_TABLE_SHAPES.items():
+        primary_key = tuple(column for column, _, _, is_pk in shape if is_pk)
+        if primary_key:
+            expected_constraints.add((table_name, "PRIMARY KEY", primary_key))
+        expected_constraints.update(
+            (table_name, "NOT NULL", (column,))
+            for column, _, is_not_null, _ in shape
+            if is_not_null
+        )
+    expected_constraints.add(
+        ("canonical_incident_audit", "UNIQUE", ("incident_id", "revision"))
+    )
+    if actual_constraints != expected_constraints:
+        raise RuntimeError("Local Profile repository constraint set is invalid")
+
+
+def _has_incomplete_source_provenance(connection: Any) -> bool:
+    return connection.execute(
+        """
+        SELECT 1
+        FROM canonical_incident_source_events
+        WHERE idempotency_key IS NULL
+           OR actor IS NULL
+           OR reason IS NULL
+           OR trace_id IS NULL
+        LIMIT 1
+        """
+    ).fetchone() is not None
 
 
 _KPI_VIEW = """
@@ -157,16 +342,130 @@ def _ensure_repository_schema(connection: Any) -> None:
     row = connection.execute(
         "SELECT value FROM local_schema_metadata WHERE key = 'schema_version'"
     ).fetchone()
-    if row is None:
-        connection.execute(
-            "INSERT INTO local_schema_metadata VALUES ('schema_version', ?)",
-            [LOCAL_SCHEMA_VERSION],
-        )
-    elif str(row[0]) != LOCAL_SCHEMA_VERSION:
+    stored_version = None if row is None else str(row[0])
+    if stored_version not in (
+        None,
+        _LEGACY_LOCAL_SCHEMA_VERSION,
+        LOCAL_SCHEMA_VERSION,
+    ):
         raise RuntimeError(
             "unsupported Local Profile schema version "
             f"{row[0]!r}; expected {LOCAL_SCHEMA_VERSION!r}"
         )
+
+    # P2 allowed a source event to be reused after an Incident settled.  P3
+    # makes provenance immutable for the full lifecycle.  Never choose an
+    # owner or delete history automatically: a conflicting v1.0 database must
+    # be backed up and reconciled explicitly by its operator.
+    duplicate_owner = connection.execute(
+        """
+        SELECT 1
+        FROM canonical_incident_source_events
+        GROUP BY source_event_id
+        HAVING COUNT(DISTINCT incident_id) > 1
+        LIMIT 1
+        """
+    ).fetchone()
+    if duplicate_owner is not None:
+        raise LocalSchemaMigrationRequiredError(
+            "Local Profile v1.0 has ambiguous source-event ownership; "
+            "back up and reconcile the database before upgrading to v1.1"
+        )
+
+    if _has_incomplete_source_provenance(connection):
+        raise LocalSchemaMigrationRequiredError(
+            "Local Profile source-event provenance is incomplete; "
+            "back up and reconcile the database before upgrading to v1.1"
+        )
+
+    provenance_columns = {
+        "idempotency_key",
+        "actor",
+        "reason",
+        "trace_id",
+    }
+    nullable_provenance = {
+        str(row[1])
+        for row in connection.execute(
+            "PRAGMA table_info('canonical_incident_source_events')"
+        ).fetchall()
+        if str(row[1]) in provenance_columns and not bool(row[3])
+    }
+    if nullable_provenance:
+        # DuckDB refuses ALTER COLUMN while a secondary index depends on the
+        # table.  Both indexes are recreated below inside the same transaction.
+        connection.execute(
+            "DROP INDEX IF EXISTS canonical_incident_source_events_source_idx"
+        )
+        connection.execute(
+            "DROP INDEX IF EXISTS canonical_incident_source_events_owner_idx"
+        )
+        for column_name in sorted(nullable_provenance):
+            connection.execute(
+                "ALTER TABLE canonical_incident_source_events "
+                f"ALTER COLUMN {column_name} SET NOT NULL"
+            )
+
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS canonical_incident_source_events_source_idx
+        ON canonical_incident_source_events(source_event_id)
+        """
+    )
+
+    existing_owner_index = connection.execute(
+        """
+        SELECT sql
+        FROM duckdb_indexes()
+        WHERE index_name = 'canonical_incident_source_events_owner_idx'
+        """
+    ).fetchone()
+    if existing_owner_index is not None:
+        normalized = "".join(str(existing_owner_index[0]).lower().split())
+        if "uniqueindex" not in normalized or "(source_event_id)" not in normalized:
+            connection.execute(
+                "DROP INDEX canonical_incident_source_events_owner_idx"
+            )
+    connection.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS
+            canonical_incident_source_events_owner_idx
+        ON canonical_incident_source_events(source_event_id)
+        """
+    )
+    _validate_repository_objects(connection)
+
+    if stored_version is None:
+        connection.execute(
+            "INSERT INTO local_schema_metadata VALUES ('schema_version', ?)",
+            [LOCAL_SCHEMA_VERSION],
+        )
+    elif stored_version == _LEGACY_LOCAL_SCHEMA_VERSION:
+        connection.execute(
+            """
+            UPDATE local_schema_metadata
+            SET value = ?
+            WHERE key = 'schema_version'
+            """,
+            [LOCAL_SCHEMA_VERSION],
+        )
+
+
+def _validate_existing_repository_schema(connection: Any) -> None:
+    """Read-only validation used by runtime and export composition roots."""
+
+    try:
+        row = connection.execute(
+            "SELECT value FROM local_schema_metadata "
+            "WHERE key = 'schema_version'"
+        ).fetchone()
+        if row is None or str(row[0]) != LOCAL_SCHEMA_VERSION:
+            raise RuntimeError("unsupported or missing Local Profile schema")
+        _validate_repository_objects(connection)
+        if _has_incomplete_source_provenance(connection):
+            raise RuntimeError("Local Profile source-event provenance is incomplete")
+    except duckdb.Error:
+        raise RuntimeError("Local Profile repository is not initialized") from None
 
 
 def _drop_local_tables(connection: Any) -> None:
@@ -436,6 +735,7 @@ def initialize_database(
 
 __all__ = [
     "DatabaseSummary",
+    "LocalSchemaMigrationRequiredError",
     "LOCAL_SCHEMA_VERSION",
     "initialize_database",
 ]

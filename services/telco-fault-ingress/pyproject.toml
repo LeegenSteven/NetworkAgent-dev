@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61,<82"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "telco-fault-ingress"
+version = "0.1.0"
+description = "Strict Pub/Sub ingress for canonical telco fault events"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "aiohttp==3.12.15",
+    "google-cloud-spanner>=3.59,<4",
+    "pydantic>=2.5,<3",
+    "telco-cloud>=0.1,<0.2",
+    "telco-domain>=0.1,<0.2",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8,<10",
+    "pytest-asyncio>=0.25,<2",
+]
+
+[project.scripts]
+telco-fault-ingress = "telco_fault_ingress.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --strict-config"
+testpaths = ["tests_fault_ingress"]
+pythonpath = [
+    "src",
+    "../../packages/telco-domain/src",
+    "../../packages/telco-cloud/src",
+    "../../packages/telco-cloud/tests",
+]

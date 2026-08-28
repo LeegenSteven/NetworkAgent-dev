@@ -82,6 +82,22 @@ class LocalProfile:
                 ).fetchone()[0]
             )
             connection.execute("SELECT * FROM performance_kpi LIMIT 0")
+            owner_index = connection.execute(
+                """
+                SELECT sql
+                FROM duckdb_indexes()
+                WHERE index_name =
+                    'canonical_incident_source_events_owner_idx'
+                """
+            ).fetchone()
+            if owner_index is None:
+                raise RuntimeError("Local Profile ownership index is missing")
+            normalized_index = "".join(str(owner_index[0]).lower().split())
+            if (
+                "uniqueindex" not in normalized_index
+                or "(source_event_id)" not in normalized_index
+            ):
+                raise RuntimeError("Local Profile ownership index is invalid")
         except duckdb.Error:
             raise RuntimeError("Local Profile database is not initialized") from None
         finally:
@@ -104,7 +120,11 @@ class LocalProfile:
         clock: Clock | None,
     ) -> LocalProfile:
         rules = JsonRuleRepository(config.rules_dir)
-        incidents = DuckDbIncidentRepository(config, clock=clock)
+        incidents = DuckDbIncidentRepository(
+            config,
+            clock=clock,
+            ensure_schema=False,
+        )
         telemetry = DuckDbTelemetryRepository(config, clock=clock)
         documents = (
             MarkdownDocumentRepository(config.documents_dir)
@@ -115,6 +135,7 @@ class LocalProfile:
             config,
             rule_repository=rules,
             incident_repository=incidents,
+            telemetry_repository=telemetry,
             clock=clock,
         )
         rca_arguments = {

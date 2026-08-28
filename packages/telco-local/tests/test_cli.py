@@ -82,7 +82,7 @@ def test_cli_preview_is_read_only_and_confirm_is_the_only_incident_write(
     code, initialized, error = _invoke([*base, "init", "--reset"])
     assert (code, error) == (0, "")
     assert initialized == {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "performance_rows": 2,
         "trace_rows": 2,
         "incident_rows": 0,

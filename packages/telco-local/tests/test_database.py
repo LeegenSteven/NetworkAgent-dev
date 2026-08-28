@@ -9,7 +9,11 @@ import pytest
 
 from telco_domain.models import Incident
 from telco_local.config import LocalProfileConfig
-from telco_local.database import LOCAL_SCHEMA_VERSION, initialize_database
+from telco_local.database import (
+    LOCAL_SCHEMA_VERSION,
+    LocalSchemaMigrationRequiredError,
+    initialize_database,
+)
 from telco_local.incident_repository import DuckDbIncidentRepository
 from telco_local.lte_identifiers import LTE_IDENTIFIER_MAX
 
@@ -99,6 +103,88 @@ def test_initialize_database_builds_kpis_and_imports_only_safe_trace_columns(
         b"19725551045",
     ):
         assert raw_identifier not in database_bytes
+
+
+def test_safe_v1_database_upgrades_to_v1_1_with_global_source_owner(
+    local_config,
+) -> None:
+    initialize_database(local_config)
+    with duckdb.connect(str(local_config.database_path)) as connection:
+        connection.execute(
+            "DROP INDEX canonical_incident_source_events_owner_idx"
+        )
+        connection.execute(
+            "UPDATE local_schema_metadata SET value = '1.0' "
+            "WHERE key = 'schema_version'"
+        )
+
+    DuckDbIncidentRepository(local_config)
+
+    with duckdb.connect(str(local_config.database_path)) as connection:
+        assert connection.execute(
+            "SELECT value FROM local_schema_metadata "
+            "WHERE key = 'schema_version'"
+        ).fetchone() == (LOCAL_SCHEMA_VERSION,)
+        now = "2040-01-01T00:00:00+00:00"
+        connection.execute(
+            """
+            INSERT INTO canonical_incident_source_events VALUES
+                ('owner-a', 'globally-owned', ?, 'key-a', 'actor', 'reason', 'trace-a')
+            """,
+            [now],
+        )
+        with pytest.raises(duckdb.ConstraintException):
+            connection.execute(
+                """
+                INSERT INTO canonical_incident_source_events VALUES
+                    ('owner-b', 'globally-owned', ?, 'key-b', 'actor', 'reason', 'trace-b')
+                """,
+                [now],
+            )
+
+
+def test_ambiguous_v1_source_ownership_requires_manual_reconciliation(
+    local_config,
+) -> None:
+    initialize_database(local_config)
+    with duckdb.connect(str(local_config.database_path)) as connection:
+        connection.execute(
+            "DROP INDEX canonical_incident_source_events_owner_idx"
+        )
+        connection.execute(
+            "UPDATE local_schema_metadata SET value = '1.0' "
+            "WHERE key = 'schema_version'"
+        )
+        now = "2040-01-01T00:00:00+00:00"
+        connection.executemany(
+            """
+            INSERT INTO canonical_incident_source_events VALUES
+                (?, 'ambiguous-source', ?, ?, 'actor', 'reason', ?)
+            """,
+            [
+                ("owner-a", now, "key-a", "trace-a"),
+                ("owner-b", now, "key-b", "trace-b"),
+            ],
+        )
+
+    with pytest.raises(LocalSchemaMigrationRequiredError, match="reconcile"):
+        DuckDbIncidentRepository(local_config)
+
+    with duckdb.connect(str(local_config.database_path)) as connection:
+        assert connection.execute(
+            "SELECT value FROM local_schema_metadata "
+            "WHERE key = 'schema_version'"
+        ).fetchone() == ("1.0",)
+        assert connection.execute(
+            """
+            SELECT COUNT(*)
+            FROM duckdb_indexes()
+            WHERE index_name = 'canonical_incident_source_events_owner_idx'
+            """
+        ).fetchone() == (0,)
+        assert connection.execute(
+            "SELECT COUNT(*) FROM canonical_incident_source_events"
+        ).fetchone() == (2,)
 
 
 def test_performance_import_is_an_explicit_privacy_allowlist(local_config) -> None:

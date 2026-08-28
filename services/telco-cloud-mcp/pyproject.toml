@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61,<82"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "telco-cloud-mcp"
+version = "0.1.0"
+description = "Bounded read-only MCP facade for canonical telco cloud data"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "fastmcp==2.12.4",
+    "google-cloud-spanner>=3.59,<4",
+    "pydantic>=2.5,<3",
+    "telco-cloud>=0.1,<0.2",
+    "telco-domain>=0.1,<0.2",
+    "uvicorn==0.35.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10", "pytest-asyncio>=0.25,<2"]
+
+[project.scripts]
+telco-cloud-mcp = "telco_cloud_mcp.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --strict-config"
+testpaths = ["tests_cloud_mcp"]
+pythonpath = [
+    "src",
+    "../../packages/telco-domain/src",
+    "../../packages/telco-cloud/src",
+]

@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Protocol
 
 from telco_domain import (
     Incident,
@@ -23,7 +23,11 @@ from telco_domain import (
     Technology,
     assert_model_safe,
 )
-from telco_domain.ports import IncidentRepository
+from telco_domain.ports import (
+    IncidentRepository,
+    MetricRepository,
+    TelemetryRepository,
+)
 
 from .config import LocalProfileConfig
 from .incident_repository import DuckDbIncidentRepository
@@ -43,6 +47,12 @@ MAX_EPISODE_SAMPLES = 1_000
 MAX_SCAN_CANDIDATES = 100
 MAX_SCAN_RESOURCE_IDS = 100
 MAX_SCAN_WINDOW = timedelta(days=31)
+
+
+class DetectorTelemetryRepository(
+    MetricRepository, TelemetryRepository, Protocol
+):
+    """Combined read-only port required by deterministic KPI detection."""
 
 
 class DetectorCapacityError(RuntimeError):
@@ -182,19 +192,40 @@ class LocalDetector:
 
     def __init__(
         self,
-        config: LocalProfileConfig,
+        config: LocalProfileConfig | None = None,
         *,
         rule_repository: JsonRuleRepository | None = None,
         incident_repository: IncidentRepository | None = None,
+        telemetry_repository: DetectorTelemetryRepository | None = None,
         clock: Clock | None = None,
     ) -> None:
         self._config = config
         self._clock = clock or (lambda: datetime.now(UTC))
-        self._rules = rule_repository or JsonRuleRepository(config.rules_dir)
-        self._telemetry = DuckDbTelemetryRepository(config, clock=self._clock)
-        self._incidents = incident_repository or DuckDbIncidentRepository(
-            config, clock=self._clock
-        )
+        if rule_repository is None:
+            if config is None:
+                raise ValueError(
+                    "config or an explicit rule_repository is required"
+                )
+            rule_repository = JsonRuleRepository(config.rules_dir)
+        if telemetry_repository is None:
+            if config is None:
+                raise ValueError(
+                    "config or an explicit telemetry_repository is required"
+                )
+            telemetry_repository = DuckDbTelemetryRepository(
+                config, clock=self._clock
+            )
+        if incident_repository is None:
+            if config is None:
+                raise ValueError(
+                    "config or an explicit incident_repository is required"
+                )
+            incident_repository = DuckDbIncidentRepository(
+                config, clock=self._clock
+            )
+        self._rules = rule_repository
+        self._telemetry = telemetry_repository
+        self._incidents = incident_repository
 
     def _now(self) -> datetime:
         value = self._clock()
@@ -608,7 +639,13 @@ class LocalDetector:
         return result
 
 
+# The engine is storage-neutral when its ports are injected. Keep the original
+# name for Local Profile callers while Cloud Profile uses the explicit alias.
+DeterministicKpiDetector = LocalDetector
+
+
 __all__ = [
+    "DeterministicKpiDetector",
     "DetectorCapacityError",
     "LocalDetector",
     "MAX_CURRENT_RULES",

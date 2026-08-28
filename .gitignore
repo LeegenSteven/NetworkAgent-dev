@@ -111,6 +111,8 @@ lib/build
 **/*egg-info
 packages/*/build/
 packages/*/dist/
+services/*/build/
+services/*/dist/
 
 # Local telco assurance runtime
 .local/

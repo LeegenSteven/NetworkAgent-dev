@@ -7,14 +7,20 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+import telco_domain.memory as memory_module
 from telco_domain.memory import InMemoryIncidentRepository
-from telco_domain.models import Incident, IncidentStatus
+from telco_domain.models import (
+    Incident,
+    IncidentStatus,
+    SourceEventAssociation,
+)
 from telco_domain.ports import (
     ActiveIncidentConflictError,
     IdempotencyConflictError,
     IncidentAlreadyExistsError,
     IncidentRepository,
     RevisionConflictError,
+    SourceEventOwnershipConflictError,
     UnsafeIncidentWriteError,
 )
 from telco_domain.state_machine import transition_incident
@@ -32,6 +38,56 @@ def _incident(incident_id: str = "incident-1", *, title: str = "") -> Incident:
     )
 
 
+def test_snapshot_import_rejects_unbounded_or_oversized_associations_without_consuming() -> None:
+    class CountingIterable:
+        def __init__(self, value) -> None:
+            self.value = value
+            self.consumed = 0
+
+        def __iter__(self):
+            while True:
+                self.consumed += 1
+                yield self.value
+
+    async def scenario() -> None:
+        repository = InMemoryIncidentRepository()
+        incident = _incident("migration-bounded")
+        association = SourceEventAssociation(
+            incident_id=incident.incident_id,
+            source_event_id="source-bounded",
+            registered_at=datetime(2030, 1, 1, tzinfo=UTC),
+            actor="canonical-migration",
+            reason="bounded migration input",
+            idempotency_key="association-bounded",
+            trace_id=incident.trace_id,
+        )
+        unbounded = CountingIterable(association)
+        kwargs = {
+            "idempotency_key": "migration-bounded",
+            "actor": "canonical-migration",
+            "reason": "one-time canonical incident import",
+            "trace_id": incident.trace_id,
+        }
+
+        with pytest.raises(ValueError, match="bounded"):
+            await repository.import_detected_snapshot(
+                incident,
+                unbounded,
+                **kwargs,
+            )
+        assert unbounded.consumed == 0
+
+        with pytest.raises(ValueError, match="capacity"):
+            await repository.import_detected_snapshot(
+                incident,
+                (association,) * 1001,
+                **kwargs,
+            )
+        assert await repository.list() == ()
+
+    _run(scenario())
+
+
 async def _create(
     repository: InMemoryIncidentRepository,
     incident: Incident,
@@ -44,6 +100,40 @@ async def _create(
         reason="test incident detection",
         trace_id=incident.trace_id,
     )
+
+
+def test_repository_page_has_a_cumulative_byte_budget(monkeypatch) -> None:
+    async def scenario() -> None:
+        repository = InMemoryIncidentRepository()
+        first = await _create(
+            repository,
+            Incident(
+                incident_id="batch-a",
+                trace_id="trace-batch-a",
+                model_metadata={"safe_blob": "a" * 2_000},
+            ),
+            "batch-create-a",
+        )
+        second = await _create(
+            repository,
+            Incident(
+                incident_id="batch-b",
+                trace_id="trace-batch-b",
+                model_metadata={"safe_blob": "b" * 2_000},
+            ),
+            "batch-create-b",
+        )
+        budget = sum(
+            len(item.model_dump_json(round_trip=True).encode("utf-8"))
+            for item in (first, second)
+        ) - 1
+        monkeypatch.setattr(memory_module, "MAX_REPOSITORY_BATCH_BYTES", budget)
+
+        assert len(await repository.list(limit=1)) == 1
+        with pytest.raises(UnsafeIncidentWriteError, match="batch"):
+            await repository.list(limit=2)
+
+    _run(scenario())
 
 
 async def _save(
@@ -126,6 +216,16 @@ def test_create_get_list_and_idempotency_lookup() -> None:
             second_committed,
         )
         assert await repository.list(limit=1, offset=1) == (created,)
+        with pytest.raises(ValueError, match="limit"):
+            await repository.list(limit=1_001)
+        with pytest.raises(ValueError, match="offset"):
+            await repository.list(offset=100_001)
+        with pytest.raises(ValueError, match="explicit limit"):
+            await repository.history(first.incident_id, offset=1)
+        with pytest.raises(ValueError, match="offset"):
+            await repository.source_event_associations(
+                first.incident_id, offset=100_001
+            )
 
     _run(scenario())
 
@@ -326,6 +426,14 @@ def test_create_requires_revision_zero_and_writes_atomic_audit_history() -> None
         ]
         assert [event.revision for event in history] == [0, 1]
         assert all(event.trace_id == original.trace_id for event in history)
+        assert [event.revision for event in await repository.history(
+            original.incident_id, limit=1, offset=1
+        )] == [1]
+        assert await repository.history(original.incident_id, limit=1, offset=2) == ()
+        with pytest.raises(ValueError, match="limit"):
+            await repository.history(original.incident_id, limit=0)
+        with pytest.raises(ValueError, match="offset"):
+            await repository.history(original.incident_id, offset=-1)
 
     _run(scenario())
 
@@ -508,6 +616,138 @@ def test_create_or_correlate_is_atomic_for_correlation_and_source_event() -> Non
     _run(scenario())
 
 
+def test_correlation_records_immutable_source_event_provenance() -> None:
+    async def scenario() -> None:
+        repository = InMemoryIncidentRepository()
+        first = Incident(
+            incident_id="incident-source-a",
+            correlation_key="shared-fault",
+            source_event_ids=("event-a",),
+            trace_id="trace-source-a",
+        )
+        created = await repository.create_or_correlate(
+            first,
+            idempotency_key="source-a",
+            actor="fault-ingress",
+            reason="first delivery",
+            trace_id=first.trace_id,
+        )
+        second = Incident(
+            incident_id="incident-source-b",
+            correlation_key="shared-fault",
+            source_event_ids=("event-b",),
+            trace_id="trace-source-b",
+        )
+        correlated = await repository.create_or_correlate(
+            second,
+            idempotency_key="source-b",
+            actor="test-ingress",
+            reason="correlated delivery",
+            trace_id=second.trace_id,
+        )
+
+        assert correlated == created
+        assert correlated.revision == 0
+        assert len(await repository.history(created.incident_id)) == 1
+        associations = await repository.source_event_associations(
+            created.incident_id
+        )
+        assert [item.source_event_id for item in associations] == [
+            "event-a",
+            "event-b",
+        ]
+        assert associations[0].actor == "fault-ingress"
+        assert associations[1].actor == "test-ingress"
+        assert associations[1].reason == "correlated delivery"
+        assert (
+            await repository.find_active(source_event_id="event-b")
+        ).incident_id == created.incident_id
+
+    _run(scenario())
+
+
+def test_reopen_reacquires_active_correlation_keys_atomically() -> None:
+    async def scenario() -> None:
+        repository = InMemoryIncidentRepository()
+        old = Incident(
+            incident_id="incident-old",
+            correlation_key="same-active-key",
+            source_event_ids=("event-old",),
+            trace_id="trace-old",
+        )
+        created = await _create(repository, old, "create-old")
+
+        # Seed a previously completed legal lifecycle without coupling this
+        # repository contract test to every RCA/action fixture.
+        closed_payload = created.model_dump(mode="python", round_trip=True)
+        closed_payload.update(status=IncidentStatus.CLOSED, revision=8)
+        repository._incidents[created.incident_id] = Incident.model_validate(
+            closed_payload
+        )
+
+        current = Incident(
+            incident_id="incident-current",
+            correlation_key="same-active-key",
+            source_event_ids=("event-current",),
+            trace_id="trace-current",
+        )
+        await _create(repository, current, "create-current")
+
+        with pytest.raises(ActiveIncidentConflictError) as conflict:
+            await repository.transition(
+                created.incident_id,
+                IncidentStatus.REOPENED,
+                expected_revision=8,
+                idempotency_key="reopen-old",
+                actor="resolver-agent",
+                reason="new evidence arrived",
+                trace_id=created.trace_id,
+            )
+        assert conflict.value.existing_incident_id == current.incident_id
+        assert (await repository.get(created.incident_id)).status is IncidentStatus.CLOSED
+
+    _run(scenario())
+
+
+def test_settled_incident_retains_global_source_event_ownership() -> None:
+    async def scenario() -> None:
+        repository = InMemoryIncidentRepository()
+        old = Incident(
+            incident_id="incident-owner",
+            correlation_key="old-fault",
+            source_event_ids=("event-forever-owned",),
+            trace_id="trace-owner",
+        )
+        created = await _create(repository, old, "create-owner")
+        closed_payload = created.model_dump(mode="python", round_trip=True)
+        closed_payload.update(status=IncidentStatus.CLOSED, revision=8)
+        repository._incidents[created.incident_id] = Incident.model_validate(
+            closed_payload
+        )
+
+        reuse = Incident(
+            incident_id="incident-reuse",
+            correlation_key="unrelated-new-fault",
+            source_event_ids=("event-forever-owned",),
+            trace_id="trace-reuse",
+        )
+        with pytest.raises(SourceEventOwnershipConflictError) as conflict:
+            await repository.create_or_correlate(
+                reuse,
+                idempotency_key="reuse-source",
+                actor="fault-ingress",
+                reason="new delivery",
+                trace_id=reuse.trace_id,
+            )
+
+        assert conflict.value.owner_incident_id == created.incident_id
+        assert conflict.value.requested_incident_id == reuse.incident_id
+        assert await repository.get(reuse.incident_id) is None
+        assert len(await repository.list()) == 1
+
+    _run(scenario())
+
+
 def test_idempotency_key_is_scoped_by_operation_and_requested_incident() -> None:
     async def scenario() -> None:
         repository = InMemoryIncidentRepository()
@@ -595,6 +835,18 @@ def test_direct_repository_writes_enforce_privacy_without_echoing_paths() -> Non
             await _create(repository, unsafe, "unsafe-create")
         assert raw_value not in str(create_error.value)
         assert "imsi" not in str(create_error.value).lower()
+
+        sensitive_id = "IMSI:310410000000001"
+        with pytest.raises(UnsafeIncidentWriteError) as identifier_error:
+            await repository.create(
+                Incident(incident_id=sensitive_id, trace_id="safe-trace"),
+                idempotency_key="safe-idempotency",
+                actor="detector-agent",
+                reason="privacy boundary test",
+                trace_id="safe-trace",
+            )
+        assert sensitive_id not in str(identifier_error.value)
+        assert "310410000000001" not in str(identifier_error.value)
 
         safe = _incident("incident-safe")
         created = await _create(repository, safe, "safe-create")

@@ -26,6 +26,7 @@ from pydantic import (
 
 
 SCHEMA_VERSION = "1.0"
+MAX_INCIDENT_SOURCE_EVENTS = 1_000
 SchemaVersion = Literal["1.0"]
 
 
@@ -701,13 +702,33 @@ class IncidentAuditEvent(DomainModel):
     trace_id: Identifier
 
 
+class SourceEventAssociation(DomainModel):
+    """Immutable provenance linking a source event to one Incident.
+
+    Correlation may discover additional source events after the Incident was
+    created. Those links are stored separately so duplicate delivery never
+    rewrites the aggregate or increments its revision.
+    """
+
+    schema_version: SchemaVersion = SCHEMA_VERSION
+    incident_id: Identifier
+    source_event_id: Identifier
+    registered_at: UtcDatetime = Field(default_factory=_utc_now)
+    actor: Identifier
+    reason: NonEmptyStr
+    idempotency_key: Identifier
+    trace_id: Identifier
+
+
 class Incident(DomainModel):
     """The canonical incident aggregate shared by all runtime profiles."""
 
     schema_version: SchemaVersion = SCHEMA_VERSION
     incident_id: Identifier
     correlation_key: Identifier | None = None
-    source_event_ids: tuple[Identifier, ...] = ()
+    source_event_ids: tuple[Identifier, ...] = Field(
+        default=(), max_length=MAX_INCIDENT_SOURCE_EVENTS
+    )
     technology: Technology = Technology.UNKNOWN
     vendor_profile: NonEmptyStr | None = None
     status: IncidentStatus = IncidentStatus.DETECTED

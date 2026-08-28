@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=61,<82"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "telco-cloud"
+version = "0.1.0"
+description = "Cloud Spanner adapters for the unified telco operations platform"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "google-cloud-spanner>=3.59,<4",
+    "pydantic>=2.5,<3",
+    "telco-domain>=0.1,<0.2",
+]
+
+[project.scripts]
+telco-cloud-schema = "telco_cloud.schema_cli:main"
+telco-cloud-migrate = "telco_cloud.migration_cli:main"
+
+[project.optional-dependencies]
+detector = [
+    "telco-local>=0.1,<0.2",
+]
+migration = [
+    "telco-local>=0.1,<0.2",
+]
+test = [
+    "pytest>=7.4,<10",
+]
+dev = [
+    "build>=1,<2",
+    "pytest>=7.4,<10",
+    "pytest-cov>=4,<7",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+telco_cloud = ["py.typed"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --strict-config"
+testpaths = ["tests"]
+pythonpath = ["src", "../telco-domain/src"]

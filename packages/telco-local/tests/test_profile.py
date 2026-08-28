@@ -7,6 +7,7 @@ import subprocess
 import sys
 from dataclasses import replace
 
+import duckdb
 import pytest
 
 from telco_domain import IncidentRepository, MetricRepository, TelemetryRepository
@@ -61,6 +62,80 @@ def test_open_existing_composes_runtime_without_bootstrap(local_config) -> None:
 
 def test_open_existing_fails_closed_when_database_is_missing(local_config) -> None:
     with pytest.raises(FileNotFoundError):
+        LocalProfile.open_existing(local_config)
+
+
+def test_open_existing_never_repairs_or_applies_ddl(local_config) -> None:
+    LocalProfile.initialize(local_config)
+    with duckdb.connect(str(local_config.database_path)) as connection:
+        connection.execute(
+            "DROP INDEX canonical_incident_source_events_owner_idx"
+        )
+
+    with pytest.raises(RuntimeError, match="ownership index"):
+        LocalProfile.open_existing(local_config)
+
+    with duckdb.connect(
+        str(local_config.database_path), read_only=True
+    ) as connection:
+        assert connection.execute(
+            """
+            SELECT COUNT(*)
+            FROM duckdb_indexes()
+            WHERE index_name = 'canonical_incident_source_events_owner_idx'
+            """
+        ).fetchone() == (0,)
+
+
+def test_open_existing_rejects_broken_table_shape_without_repair(
+    local_config,
+) -> None:
+    LocalProfile.initialize(local_config)
+    with duckdb.connect(str(local_config.database_path)) as connection:
+        connection.execute(
+            "DROP INDEX canonical_incident_source_events_source_idx"
+        )
+        connection.execute(
+            "DROP INDEX canonical_incident_source_events_owner_idx"
+        )
+        connection.execute(
+            "ALTER TABLE canonical_incident_source_events DROP COLUMN actor"
+        )
+        connection.execute(
+            "CREATE INDEX canonical_incident_source_events_source_idx "
+            "ON canonical_incident_source_events(source_event_id)"
+        )
+        connection.execute(
+            "CREATE UNIQUE INDEX canonical_incident_source_events_owner_idx "
+            "ON canonical_incident_source_events(source_event_id)"
+        )
+    before = local_config.database_path.read_bytes()
+
+    with pytest.raises(RuntimeError, match="table shape"):
+        LocalProfile.open_existing(local_config)
+
+    assert local_config.database_path.read_bytes() == before
+    with duckdb.connect(
+        str(local_config.database_path), read_only=True
+    ) as connection:
+        columns = {
+            str(row[1])
+            for row in connection.execute(
+                "PRAGMA table_info('canonical_incident_source_events')"
+            ).fetchall()
+        }
+        assert "actor" not in columns
+
+
+def test_open_existing_rejects_extra_unique_constraints(local_config) -> None:
+    LocalProfile.initialize(local_config)
+    with duckdb.connect(str(local_config.database_path)) as connection:
+        connection.execute(
+            "CREATE UNIQUE INDEX unexpected_status_owner "
+            "ON canonical_incidents(status)"
+        )
+
+    with pytest.raises(RuntimeError, match="index set"):
         LocalProfile.open_existing(local_config)
 
 

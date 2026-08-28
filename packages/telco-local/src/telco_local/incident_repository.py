@@ -13,7 +13,13 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Iterator
 
-from telco_domain.models import Incident, IncidentAuditEvent, IncidentStatus
+from telco_domain.models import (
+    Incident,
+    IncidentAuditEvent,
+    IncidentStatus,
+    MAX_INCIDENT_SOURCE_EVENTS,
+    SourceEventAssociation,
+)
 from telco_domain.contracts import (
     MAX_CONTRACT_DEPTH,
     MAX_CONTRACT_SERIALIZED_BYTES,
@@ -22,15 +28,24 @@ from telco_domain.ports import (
     ActiveIncidentConflictError,
     IdempotencyConflictError,
     IncidentAlreadyExistsError,
+    IncidentCorrelationConflictError,
     IncidentNotFoundError,
+    MAX_REPOSITORY_BATCH_BYTES,
+    MAX_REPOSITORY_OFFSET,
+    MAX_REPOSITORY_PAGE_SIZE,
     RevisionConflictError,
+    SourceEventOwnershipConflictError,
     UnsafeIncidentWriteError,
 )
 from telco_domain.privacy import SensitiveDataError, assert_model_safe
 from telco_domain.state_machine import SETTLED_STATUSES, transition_incident
 
 from .config import LocalProfileConfig
-from .database import _connect, _ensure_repository_schema
+from .database import (
+    _connect,
+    _ensure_repository_schema,
+    _validate_existing_repository_schema,
+)
 
 
 Clock = Callable[[], datetime]
@@ -142,7 +157,7 @@ def _payload_depth(value: object) -> int:
     return maximum
 
 
-def _assert_repository_safe(value: object, *, incident_id: str) -> None:
+def _assert_repository_safe(value: object, *, incident_id: str) -> int:
     model_dump = getattr(value, "model_dump", None)
     try:
         plain = (
@@ -150,7 +165,7 @@ def _assert_repository_safe(value: object, *, incident_id: str) -> None:
             if callable(model_dump)
             else value
         )
-    except (TypeError, ValueError, RecursionError):
+    except (TypeError, ValueError, UnicodeError, RecursionError):
         raise UnsafeIncidentWriteError(
             "<canonical-incident>", "canonical payload must be JSON-safe"
         ) from None
@@ -174,7 +189,7 @@ def _assert_repository_safe(value: object, *, incident_id: str) -> None:
             separators=(",", ":"),
             sort_keys=True,
         ).encode("utf-8")
-    except (TypeError, ValueError, RecursionError):
+    except (TypeError, ValueError, UnicodeError, RecursionError):
         raise UnsafeIncidentWriteError(
             "<canonical-incident>", "canonical payload must be JSON-safe"
         ) from None
@@ -184,6 +199,24 @@ def _assert_repository_safe(value: object, *, incident_id: str) -> None:
             "canonical payload serialized size exceeds "
             f"{MAX_CONTRACT_SERIALIZED_BYTES} bytes",
         )
+    return len(encoded)
+
+
+def _append_bounded(
+    result: list[object],
+    value: object,
+    *,
+    total_bytes: int,
+) -> int:
+    total_bytes += _assert_repository_safe(
+        value, incident_id="<repository-page>"
+    )
+    if total_bytes > MAX_REPOSITORY_BATCH_BYTES:
+        raise UnsafeIncidentWriteError(
+            "<repository-page>", "repository batch exceeds size limit"
+        )
+    result.append(value)
+    return total_bytes
 
 
 def _scope(
@@ -199,10 +232,58 @@ def _incident_json(incident: Incident) -> str:
     return incident.model_dump_json(round_trip=True)
 
 
+def _reject_json_constant(value: str) -> None:
+    del value
+    raise ValueError("non-finite JSON constants are forbidden")
+
+
+def _reject_duplicate_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON object key")
+        result[key] = value
+    return result
+
+
+def _parse_persisted_model(
+    payload: object,
+    model_type: type[Incident] | type[IncidentAuditEvent],
+) -> Incident | IncidentAuditEvent:
+    """Validate database content at the same boundary as a fresh write.
+
+    A database row is not implicitly trusted: operational mistakes, an old
+    writer, or an over-privileged principal can otherwise turn a valid-looking
+    Pydantic object into a privacy or resource-exhaustion bypass on read/replay.
+    Errors are deliberately generic so poisoned row contents are never echoed.
+    """
+
+    try:
+        if isinstance(payload, str):
+            if len(payload.encode("utf-8")) > MAX_CONTRACT_SERIALIZED_BYTES:
+                raise UnsafeIncidentWriteError(
+                    "<persisted-record>", "persisted payload exceeds size limit"
+                )
+            payload = json.loads(
+                payload,
+                object_pairs_hook=_reject_duplicate_pairs,
+                parse_constant=_reject_json_constant,
+            )
+        model = model_type.model_validate(payload)
+        _assert_repository_safe(model, incident_id="<persisted-record>")
+        return model
+    except UnsafeIncidentWriteError:
+        raise
+    except (TypeError, ValueError, UnicodeError, RecursionError):
+        raise UnsafeIncidentWriteError(
+            "<persisted-record>", "persisted canonical record is invalid"
+        ) from None
+
+
 def _parse_incident(payload: object) -> Incident:
-    if isinstance(payload, str):
-        return Incident.model_validate_json(payload)
-    return Incident.model_validate(payload)
+    parsed = _parse_persisted_model(payload, Incident)
+    assert isinstance(parsed, Incident)
+    return parsed
 
 
 def _event_json(event: IncidentAuditEvent) -> str:
@@ -210,9 +291,34 @@ def _event_json(event: IncidentAuditEvent) -> str:
 
 
 def _parse_event(payload: object) -> IncidentAuditEvent:
-    if isinstance(payload, str):
-        return IncidentAuditEvent.model_validate_json(payload)
-    return IncidentAuditEvent.model_validate(payload)
+    parsed = _parse_persisted_model(payload, IncidentAuditEvent)
+    assert isinstance(parsed, IncidentAuditEvent)
+    return parsed
+
+
+def _parse_association(
+    *,
+    incident_id: str,
+    row: Sequence[object],
+) -> SourceEventAssociation:
+    try:
+        association = SourceEventAssociation(
+            incident_id=incident_id,
+            source_event_id=row[0],
+            registered_at=row[1],
+            actor=row[2],
+            reason=row[3],
+            idempotency_key=row[4],
+            trace_id=row[5],
+        )
+        _assert_repository_safe(association, incident_id="<persisted-record>")
+        return association
+    except UnsafeIncidentWriteError:
+        raise
+    except (TypeError, ValueError, UnicodeError, RecursionError, IndexError):
+        raise UnsafeIncidentWriteError(
+            "<persisted-record>", "persisted source association is invalid"
+        ) from None
 
 
 class DuckDbIncidentRepository:
@@ -229,6 +335,7 @@ class DuckDbIncidentRepository:
         config_or_path: LocalProfileConfig | str | Path,
         *,
         clock: Clock | None = None,
+        ensure_schema: bool = True,
     ) -> None:
         configured_path = (
             config_or_path.database_path
@@ -236,13 +343,23 @@ class DuckDbIncidentRepository:
             else Path(config_or_path)
         )
         self._database_path = configured_path.expanduser().resolve(strict=False)
-        self._database_path.parent.mkdir(parents=True, exist_ok=True)
+        if ensure_schema:
+            self._database_path.parent.mkdir(parents=True, exist_ok=True)
+        elif not self._database_path.is_file():
+            raise FileNotFoundError(self._database_path)
         self._clock = clock or (lambda: datetime.now(UTC))
         self._async_lock = asyncio.Lock()
         self._path_lock = _database_lock(self._database_path)
 
-        with self._path_lock, self._transaction() as connection:
-            _ensure_repository_schema(connection)
+        if ensure_schema:
+            with self._path_lock, self._transaction() as connection:
+                _ensure_repository_schema(connection)
+        else:
+            connection = _connect(self._database_path, read_only=True)
+            try:
+                _validate_existing_repository_schema(connection)
+            finally:
+                connection.close()
 
     @property
     def database_path(self) -> Path:
@@ -307,6 +424,7 @@ class DuckDbIncidentRepository:
                     connection,
                     correlation_key=committed.correlation_key,
                     source_event_ids=frozenset(committed.source_event_ids),
+                    requested_incident_id=committed.incident_id,
                 )
                 if active is not None:
                     raise ActiveIncidentConflictError(
@@ -368,6 +486,7 @@ class DuckDbIncidentRepository:
                     connection,
                     correlation_key=candidate.correlation_key,
                     source_event_ids=frozenset(candidate.source_event_ids),
+                    requested_incident_id=candidate.incident_id,
                 )
                 if existing is not None:
                     self._insert_source_event_associations_locked(
@@ -501,6 +620,9 @@ class DuckDbIncidentRepository:
                 _assert_repository_safe(
                     successor, incident_id=incident.incident_id
                 )
+                self._require_reactivation_keys_locked(
+                    connection, current, successor
+                )
                 self._commit_transition_locked(
                     connection,
                     current,
@@ -595,6 +717,9 @@ class DuckDbIncidentRepository:
                     now=trusted_now,
                 )
                 _assert_repository_safe(successor, incident_id=incident_id)
+                self._require_reactivation_keys_locked(
+                    connection, current, successor
+                )
                 self._commit_transition_locked(
                     connection,
                     current,
@@ -653,6 +778,7 @@ class DuckDbIncidentRepository:
                     connection,
                     correlation_key=correlation_key,
                     source_event_ids=source_ids,
+                    requested_incident_id="<lookup>",
                 )
                 return None if incident is None else _clone(incident)
             finally:
@@ -665,10 +791,10 @@ class DuckDbIncidentRepository:
         limit: int = 100,
         offset: int = 0,
     ) -> tuple[Incident, ...]:
-        if limit < 1:
-            raise ValueError("limit must be at least 1")
-        if offset < 0:
-            raise ValueError("offset must not be negative")
+        if limit < 1 or limit > MAX_REPOSITORY_PAGE_SIZE:
+            raise ValueError("limit must be between 1 and 1000")
+        if offset < 0 or offset > MAX_REPOSITORY_OFFSET:
+            raise ValueError("offset must be between 0 and 100000")
 
         parameters: list[object] = []
         where = ""
@@ -681,7 +807,7 @@ class DuckDbIncidentRepository:
         with self._path_lock:
             connection = _connect(self._database_path, read_only=True)
             try:
-                rows = connection.execute(
+                cursor = connection.execute(
                     f"""
                     SELECT payload
                     FROM canonical_incidents
@@ -690,28 +816,101 @@ class DuckDbIncidentRepository:
                     LIMIT ? OFFSET ?
                     """,
                     parameters,
-                ).fetchall()
-                return tuple(_parse_incident(row[0]) for row in rows)
+                )
+                result: list[object] = []
+                total_bytes = 0
+                while (row := cursor.fetchone()) is not None:
+                    total_bytes = _append_bounded(
+                        result,
+                        _parse_incident(row[0]),
+                        total_bytes=total_bytes,
+                    )
+                return tuple(result)  # type: ignore[return-value]
             finally:
                 connection.close()
 
     async def history(
-        self, incident_id: str
+        self,
+        incident_id: str,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> tuple[IncidentAuditEvent, ...]:
         _require_non_empty("incident_id", incident_id, max_length=256)
+        if limit is not None and (limit < 1 or limit > MAX_REPOSITORY_PAGE_SIZE):
+            raise ValueError("limit must be between 1 and 1000")
+        if offset < 0 or offset > MAX_REPOSITORY_OFFSET:
+            raise ValueError("offset must be between 0 and 100000")
+        if limit is None and offset:
+            raise ValueError("offset requires an explicit limit")
         with self._path_lock:
             connection = _connect(self._database_path, read_only=True)
             try:
-                rows = connection.execute(
-                    """
+                page = ""
+                parameters: list[object] = [incident_id]
+                if limit is not None:
+                    page = "LIMIT ? OFFSET ?"
+                    parameters.extend((limit, offset))
+                cursor = connection.execute(
+                    f"""
                     SELECT payload
                     FROM canonical_incident_audit
                     WHERE incident_id = ?
                     ORDER BY revision, occurred_at, event_id
+                    {page}
                     """,
-                    [incident_id],
-                ).fetchall()
-                return tuple(_parse_event(row[0]) for row in rows)
+                    parameters,
+                )
+                result: list[object] = []
+                total_bytes = 0
+                while (row := cursor.fetchone()) is not None:
+                    total_bytes = _append_bounded(
+                        result,
+                        _parse_event(row[0]),
+                        total_bytes=total_bytes,
+                    )
+                return tuple(result)  # type: ignore[return-value]
+            finally:
+                connection.close()
+
+    async def source_event_associations(
+        self,
+        incident_id: str,
+        *,
+        limit: int = MAX_REPOSITORY_PAGE_SIZE,
+        offset: int = 0,
+    ) -> tuple[SourceEventAssociation, ...]:
+        _require_non_empty("incident_id", incident_id, max_length=256)
+        if limit < 1 or limit > MAX_REPOSITORY_PAGE_SIZE:
+            raise ValueError("limit must be between 1 and 1000")
+        if offset < 0 or offset > MAX_REPOSITORY_OFFSET:
+            raise ValueError("offset must be between 0 and 100000")
+        with self._path_lock:
+            connection = _connect(self._database_path, read_only=True)
+            try:
+                cursor = connection.execute(
+                    """
+                    SELECT source_event_id, registered_at, actor, reason,
+                           idempotency_key, trace_id
+                    FROM canonical_incident_source_events
+                    WHERE incident_id = ?
+                    ORDER BY source_event_id
+                    LIMIT ? OFFSET ?
+                    """,
+                    [incident_id, limit, offset],
+                )
+                result: list[object] = []
+                total_bytes = 0
+                while (row := cursor.fetchone()) is not None:
+                    total_bytes = _append_bounded(
+                        result,
+                        _parse_association(
+                            incident_id=incident_id,
+                            row=row,
+                        ),
+                        total_bytes=total_bytes,
+                    )
+                return tuple(result)  # type: ignore[return-value]
             finally:
                 connection.close()
 
@@ -782,7 +981,10 @@ class DuckDbIncidentRepository:
         *,
         correlation_key: str | None,
         source_event_ids: frozenset[str],
+        exclude_incident_id: str | None = None,
+        requested_incident_id: str = "<candidate>",
     ) -> Incident | None:
+        matches: dict[str, Incident] = {}
         if source_event_ids:
             ordered_source_ids = sorted(source_event_ids)
             placeholders = ", ".join("?" for _ in ordered_source_ids)
@@ -799,8 +1001,10 @@ class DuckDbIncidentRepository:
             ).fetchall()
             for row in association_rows:
                 incident = _parse_incident(row[0])
+                if incident.incident_id == exclude_incident_id:
+                    continue
                 if incident.status not in SETTLED_STATUSES:
-                    return incident
+                    matches[incident.incident_id] = incident
 
         # Payload scanning keeps databases created before the association table
         # migration readable.  Any subsequent correlation transactionally
@@ -810,6 +1014,8 @@ class DuckDbIncidentRepository:
         ).fetchall()
         for row in rows:
             incident = _parse_incident(row[0])
+            if incident.incident_id == exclude_incident_id:
+                continue
             if incident.status in SETTLED_STATUSES:
                 continue
             correlation_match = (
@@ -820,8 +1026,45 @@ class DuckDbIncidentRepository:
                 source_event_ids.intersection(incident.source_event_ids)
             )
             if correlation_match or source_match:
-                return incident
-        return None
+                matches[incident.incident_id] = incident
+        if len(matches) > 1:
+            raise IncidentCorrelationConflictError(
+                requested_incident_id,
+                tuple(matches),
+            )
+        return next(iter(matches.values()), None)
+
+    @classmethod
+    def _require_reactivation_keys_locked(
+        cls,
+        connection: Any,
+        current: Incident,
+        successor: Incident,
+    ) -> None:
+        if (
+            current.status not in SETTLED_STATUSES
+            or successor.status in SETTLED_STATUSES
+        ):
+            return
+        source_rows = connection.execute(
+            """
+            SELECT source_event_id
+            FROM canonical_incident_source_events
+            WHERE incident_id = ?
+            """,
+            [successor.incident_id],
+        ).fetchall()
+        active = cls._find_active_locked(
+            connection,
+            correlation_key=successor.correlation_key,
+            source_event_ids=frozenset(row[0] for row in source_rows),
+            exclude_incident_id=successor.incident_id,
+            requested_incident_id=successor.incident_id,
+        )
+        if active is not None:
+            raise ActiveIncidentConflictError(
+                successor.incident_id, active.incident_id
+            )
 
     @staticmethod
     def _replay(
@@ -909,6 +1152,41 @@ class DuckDbIncidentRepository:
         reason: str,
         trace_id: str,
     ) -> None:
+        incoming = frozenset(source_event_ids)
+        existing = frozenset(
+            row[0]
+            for row in connection.execute(
+                """
+                SELECT source_event_id
+                FROM canonical_incident_source_events
+                WHERE incident_id = ?
+                """,
+                [incident_id],
+            ).fetchall()
+        )
+        if len(existing | incoming) > MAX_INCIDENT_SOURCE_EVENTS:
+            raise ValueError(
+                "incident source-event association capacity exceeded 1000"
+            )
+        if incoming:
+            ordered = sorted(incoming)
+            placeholders = ", ".join("?" for _ in ordered)
+            owner_rows = connection.execute(
+                f"""
+                SELECT source_event_id, incident_id
+                FROM canonical_incident_source_events
+                WHERE source_event_id IN ({placeholders})
+                ORDER BY source_event_id
+                """,
+                ordered,
+            ).fetchall()
+            for source_event_id, owner_incident_id in owner_rows:
+                if owner_incident_id != incident_id:
+                    raise SourceEventOwnershipConflictError(
+                        source_event_id,
+                        owner_incident_id,
+                        incident_id,
+                    )
         rows = [
             (
                 incident_id,
@@ -919,7 +1197,7 @@ class DuckDbIncidentRepository:
                 reason,
                 trace_id,
             )
-            for source_event_id in sorted(set(source_event_ids))
+            for source_event_id in sorted(incoming)
         ]
         if not rows:
             return

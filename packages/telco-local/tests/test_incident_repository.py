@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime, timedelta
 
 import duckdb
 import pytest
 
+import telco_local.incident_repository as incident_repository_module
 from telco_domain.models import Incident, IncidentStatus
 from telco_domain.ports import (
     ActiveIncidentConflictError,
@@ -13,9 +15,11 @@ from telco_domain.ports import (
     IncidentAlreadyExistsError,
     IncidentRepository,
     RevisionConflictError,
+    SourceEventOwnershipConflictError,
     UnsafeIncidentWriteError,
 )
 from telco_domain.state_machine import transition_incident
+from telco_local.database import LocalSchemaMigrationRequiredError
 from telco_local.incident_repository import DuckDbIncidentRepository
 
 
@@ -176,6 +180,19 @@ def test_save_is_state_machine_cas_and_replay_precedes_stale_check(
         assert committed.updated_at == clock_value[0]
         assert committed.revision == 1
         assert [event.revision for event in await repository.history(original.incident_id)] == [0, 1]
+        assert [
+            event.revision
+            for event in await repository.history(
+                original.incident_id, limit=1, offset=1
+            )
+        ] == [1]
+        assert await repository.history(
+            original.incident_id, limit=1, offset=2
+        ) == ()
+        with pytest.raises(ValueError, match="limit"):
+            await repository.history(original.incident_id, limit=0)
+        with pytest.raises(ValueError, match="offset"):
+            await repository.history(original.incident_id, offset=-1)
 
         stale = transition_incident(
             original,
@@ -363,6 +380,16 @@ def test_correlation_persists_source_event_associations_without_revision_change(
         assert correlated == replay == created
         assert correlated.revision == 0
         assert len(await repository.history(created.incident_id)) == 1
+        associations = await repository.source_event_associations(
+            created.incident_id
+        )
+        assert [item.source_event_id for item in associations] == [
+            "event-a",
+            "event-b",
+        ]
+        assert associations[1].registered_at == association_before_replay[0]
+        assert associations[1].idempotency_key == "correlate-b"
+        assert associations[1].reason == "same fault, new source event"
         assert (
             await repository.find_active(source_event_id="event-b")
         ).incident_id == created.incident_id
@@ -393,10 +420,114 @@ def test_correlation_persists_source_event_associations_without_revision_change(
     _run(scenario())
 
 
-def test_source_event_provenance_columns_migrate_before_new_writes(
+def test_reopen_reacquires_active_correlation_keys_atomically(
     initialized_config,
 ) -> None:
     async def scenario() -> None:
+        repository = DuckDbIncidentRepository(initialized_config)
+        old = _incident(
+            "incident-old",
+            correlation_key="same-active-key",
+            source_event_ids=("event-old",),
+        )
+        created = await _create(repository, old, "create-old")
+
+        closed_payload = created.model_dump(mode="python", round_trip=True)
+        closed_payload.update(status=IncidentStatus.CLOSED, revision=8)
+        closed = Incident.model_validate(closed_payload)
+        with duckdb.connect(str(initialized_config.database_path)) as connection:
+            connection.execute(
+                """
+                UPDATE canonical_incidents
+                SET status = ?, revision = ?, payload = ?
+                WHERE incident_id = ?
+                """,
+                [
+                    closed.status.value,
+                    closed.revision,
+                    closed.model_dump_json(round_trip=True),
+                    closed.incident_id,
+                ],
+            )
+
+        current = _incident(
+            "incident-current",
+            correlation_key="same-active-key",
+            source_event_ids=("event-current",),
+        )
+        await _create(repository, current, "create-current")
+
+        with pytest.raises(ActiveIncidentConflictError) as conflict:
+            await repository.transition(
+                closed.incident_id,
+                IncidentStatus.REOPENED,
+                expected_revision=8,
+                idempotency_key="reopen-old",
+                actor="resolver-agent",
+                reason="new evidence arrived",
+                trace_id=closed.trace_id,
+            )
+        assert conflict.value.existing_incident_id == current.incident_id
+        assert (await repository.get(closed.incident_id)).status is IncidentStatus.CLOSED
+
+    _run(scenario())
+
+
+def test_settled_incident_retains_global_source_event_ownership(
+    initialized_config,
+) -> None:
+    async def scenario() -> None:
+        repository = DuckDbIncidentRepository(initialized_config)
+        old = _incident(
+            "incident-owner",
+            correlation_key="old-fault",
+            source_event_ids=("event-forever-owned",),
+        )
+        created = await _create(repository, old, "create-owner")
+        closed_payload = created.model_dump(mode="python", round_trip=True)
+        closed_payload.update(status=IncidentStatus.CLOSED, revision=8)
+        closed = Incident.model_validate(closed_payload)
+        with duckdb.connect(str(initialized_config.database_path)) as connection:
+            connection.execute(
+                """
+                UPDATE canonical_incidents
+                SET status = ?, revision = ?, payload = ?
+                WHERE incident_id = ?
+                """,
+                [
+                    closed.status.value,
+                    closed.revision,
+                    closed.model_dump_json(round_trip=True),
+                    closed.incident_id,
+                ],
+            )
+
+        reuse = _incident(
+            "incident-reuse",
+            correlation_key="unrelated-new-fault",
+            source_event_ids=("event-forever-owned",),
+        )
+        with pytest.raises(SourceEventOwnershipConflictError) as conflict:
+            await repository.create_or_correlate(
+                reuse,
+                idempotency_key="reuse-source",
+                actor="fault-ingress",
+                reason="new delivery",
+                trace_id=reuse.trace_id,
+            )
+
+        assert conflict.value.owner_incident_id == created.incident_id
+        assert conflict.value.requested_incident_id == reuse.incident_id
+        assert await repository.get(reuse.incident_id) is None
+        assert len(await repository.list()) == 1
+
+    _run(scenario())
+
+
+def test_incomplete_v1_source_event_provenance_requires_reconciliation(
+    initialized_config,
+) -> None:
+    async def prepare() -> None:
         repository = DuckDbIncidentRepository(initialized_config)
         first = _incident(
             "migration-a",
@@ -411,48 +542,51 @@ def test_source_event_provenance_columns_migrate_before_new_writes(
             trace_id=first.trace_id,
         )
 
-        with duckdb.connect(str(initialized_config.database_path)) as connection:
+        assert created.incident_id == first.incident_id
+
+    _run(prepare())
+    with duckdb.connect(str(initialized_config.database_path)) as connection:
+        connection.execute(
+            "DROP INDEX canonical_incident_source_events_source_idx"
+        )
+        connection.execute(
+            "DROP INDEX canonical_incident_source_events_owner_idx"
+        )
+        for column in ("idempotency_key", "actor", "reason", "trace_id"):
             connection.execute(
-                "DROP INDEX canonical_incident_source_events_source_idx"
+                f"""ALTER TABLE canonical_incident_source_events
+                     DROP COLUMN {column}"""
             )
-            for column in ("idempotency_key", "actor", "reason", "trace_id"):
-                connection.execute(
-                    f"""ALTER TABLE canonical_incident_source_events
-                         DROP COLUMN {column}"""
-                )
-
-        migrated = DuckDbIncidentRepository(initialized_config)
-        second = _incident(
-            "migration-b",
-            correlation_key="migration-fault",
-            source_event_ids=("migration-event-b",),
+        connection.execute(
+            "UPDATE local_schema_metadata SET value = '1.0' "
+            "WHERE key = 'schema_version'"
         )
-        result = await migrated.create_or_correlate(
-            second,
-            idempotency_key="migration-correlate",
-            actor="detector-agent",
-            reason="post-migration association",
-            trace_id=second.trace_id,
-        )
-        assert result.incident_id == created.incident_id
 
-        with duckdb.connect(
-            str(initialized_config.database_path), read_only=True
-        ) as connection:
-            assert connection.execute(
-                """
-                SELECT idempotency_key, actor, reason, trace_id
-                FROM canonical_incident_source_events
-                WHERE source_event_id = 'migration-event-b'
-                """
-            ).fetchone() == (
-                "migration-correlate",
-                "detector-agent",
-                "post-migration association",
-                second.trace_id,
-            )
+    with pytest.raises(LocalSchemaMigrationRequiredError, match="provenance"):
+        DuckDbIncidentRepository(initialized_config)
 
-    _run(scenario())
+    with duckdb.connect(
+        str(initialized_config.database_path), read_only=True
+    ) as connection:
+        assert connection.execute(
+            "SELECT value FROM local_schema_metadata "
+            "WHERE key = 'schema_version'"
+        ).fetchone() == ("1.0",)
+        columns = {
+            str(row[1])
+            for row in connection.execute(
+                "PRAGMA table_info('canonical_incident_source_events')"
+            ).fetchall()
+        }
+        assert {
+            "idempotency_key",
+            "actor",
+            "reason",
+            "trace_id",
+        }.isdisjoint(columns)
+        assert connection.execute(
+            "SELECT COUNT(*) FROM canonical_incident_source_events"
+        ).fetchone() == (1,)
 
 
 def test_repository_enforces_privacy_and_does_not_echo_sensitive_values(
@@ -481,6 +615,90 @@ def test_repository_enforces_privacy_and_does_not_echo_sensitive_values(
                 updates={"model_metadata": {"msisdn": raw_value}},
             )
         assert (await repository.get(safe.incident_id)).revision == 0
+
+    _run(scenario())
+
+
+def test_persisted_rows_are_revalidated_before_read_or_replay(
+    initialized_config,
+) -> None:
+    async def scenario() -> None:
+        repository = DuckDbIncidentRepository(initialized_config)
+        created = await _create(
+            repository,
+            _incident(
+                "persisted-boundary",
+                source_event_ids=("persisted-event",),
+            ),
+            "persisted-create",
+        )
+        sensitive = "IMSI:310410000000001"
+
+        with duckdb.connect(str(initialized_config.database_path)) as connection:
+            incident_payload = connection.execute(
+                "SELECT payload FROM canonical_incidents WHERE incident_id = ?",
+                [created.incident_id],
+            ).fetchone()[0]
+            poisoned_incident = json.loads(incident_payload)
+            poisoned_incident["model_metadata"] = {"subscriber": sensitive}
+            poisoned_json = json.dumps(poisoned_incident)
+            connection.execute(
+                "UPDATE canonical_incidents SET payload = ? WHERE incident_id = ?",
+                [poisoned_json, created.incident_id],
+            )
+            connection.execute(
+                """
+                UPDATE canonical_incident_idempotency
+                SET result_payload = ?
+                WHERE requested_incident_id = ? AND idempotency_key = ?
+                """,
+                [poisoned_json, created.incident_id, "persisted-create"],
+            )
+
+        for read in (
+            lambda: repository.get(created.incident_id),
+            repository.list,
+            lambda: repository.find_by_idempotency_key(
+                created.incident_id,
+                "persisted-create",
+                operation="create",
+            ),
+        ):
+            with pytest.raises(UnsafeIncidentWriteError) as error:
+                await read()
+            assert sensitive not in str(error.value)
+
+        with duckdb.connect(str(initialized_config.database_path)) as connection:
+            connection.execute(
+                "UPDATE canonical_incidents SET payload = ? WHERE incident_id = ?",
+                [incident_payload, created.incident_id],
+            )
+            audit_payload = connection.execute(
+                "SELECT payload FROM canonical_incident_audit WHERE incident_id = ?",
+                [created.incident_id],
+            ).fetchone()[0]
+            poisoned_audit = json.loads(audit_payload)
+            poisoned_audit["actor"] = sensitive
+            connection.execute(
+                "UPDATE canonical_incident_audit SET payload = ? WHERE incident_id = ?",
+                [json.dumps(poisoned_audit), created.incident_id],
+            )
+            connection.execute(
+                """
+                UPDATE canonical_incident_source_events
+                SET actor = ?
+                WHERE source_event_id = ?
+                """,
+                [sensitive, "persisted-event"],
+            )
+
+        for read in (
+            lambda: repository.history(created.incident_id),
+            lambda: repository.source_event_associations(created.incident_id),
+        ):
+            with pytest.raises(UnsafeIncidentWriteError) as error:
+                await read()
+            assert sensitive not in str(error.value)
 
     _run(scenario())
 
@@ -620,8 +838,51 @@ def test_query_validation_and_detached_results(initialized_config) -> None:
             await repository.find_active()
         with pytest.raises(ValueError, match="limit"):
             await repository.list(limit=0)
+        with pytest.raises(ValueError, match="limit"):
+            await repository.list(limit=1_001)
         with pytest.raises(ValueError, match="offset"):
             await repository.list(offset=-1)
+        with pytest.raises(ValueError, match="offset"):
+            await repository.list(offset=100_001)
+        with pytest.raises(ValueError, match="explicit limit"):
+            await repository.history(created.incident_id, offset=1)
+        with pytest.raises(ValueError, match="offset"):
+            await repository.source_event_associations(
+                created.incident_id, offset=100_001
+            )
+
+    _run(scenario())
+
+
+def test_repository_page_has_a_cumulative_byte_budget(
+    initialized_config,
+    monkeypatch,
+) -> None:
+    async def scenario() -> None:
+        repository = DuckDbIncidentRepository(initialized_config)
+        first = await _create(
+            repository,
+            _incident("batch-a", model_metadata={"safe_blob": "a" * 2_000}),
+            "batch-create-a",
+        )
+        second = await _create(
+            repository,
+            _incident("batch-b", model_metadata={"safe_blob": "b" * 2_000}),
+            "batch-create-b",
+        )
+        budget = sum(
+            len(item.model_dump_json(round_trip=True).encode("utf-8"))
+            for item in (first, second)
+        ) - 1
+        monkeypatch.setattr(
+            incident_repository_module,
+            "MAX_REPOSITORY_BATCH_BYTES",
+            budget,
+        )
+
+        assert len(await repository.list(limit=1)) == 1
+        with pytest.raises(UnsafeIncidentWriteError, match="batch"):
+            await repository.list(limit=2)
 
     _run(scenario())
 

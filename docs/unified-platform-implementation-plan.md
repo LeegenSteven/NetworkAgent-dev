@@ -2,8 +2,8 @@
 
 > 文档状态：Active（后续开发的计划与进度唯一事实来源）  
 > 首次建立：2026-08-28  
-> 最近更新：2026-08-28  
-> 当前里程碑：P0、P1、P2 已完成 / 下一阶段为 P3 Cloud 数据与实时事件接入
+> 最近更新：2026-08-29
+> 当前里程碑：P0、P1、P2 已完成 / P3 Cloud 代码已集成，正在完成远程 Emulator 与 Cloud Staging 验收
 > 目标主仓库：`NetworkAgent-dev`  
 > 输入项目：`NetworkAgent-dev`、`telco-autonomous-networks-data-demo-main`
 
@@ -272,7 +272,7 @@ Agent 不得直接导入 DuckDB、Spanner、GKE 或 Gitea SDK。
 | P0 | 基线、目标架构和决策冻结 | 1–2 人日 | **DONE** |
 | P1 | 统一领域模型、接口和测试骨架 | 3–5 人日 | **DONE** |
 | P2 | 本地 Detector/RCA 迁入主仓库 | 5–8 人日 | **DONE** |
-| P3 | 接入 Spanner/MCP/实时事件 | 5–8 人日 | NOT STARTED |
+| P3 | 接入 Spanner/MCP/实时事件 | 5–8 人日 | **IN PROGRESS** |
 | P4 | 合并并增强 Resolver Pipeline | 6–10 人日 | NOT STARTED |
 | P5 | 审批、真实修复和修复后验证 | 5–8 人日 | NOT STARTED |
 | P6 | 统一 Supervisor 与 UI 体验 | 4–7 人日 | NOT STARTED |
@@ -356,13 +356,22 @@ P2a 验收证据（2026-08-28）：
 
 ### P3：接入云端数据与事件
 
+执行拆分（2026-08-29 更新）：
+
+- **P3a（本地完成，远程 Gate 待回填）**：已建立 Canonical Spanner v2 表族、事务型 Incident/Telemetry/Event/Outbox Repository、审计/幂等/source-event 关联和三实现共享契约；旧 `Incident` 表保持只读，不原地更名或长期双写。
+- **P3b（本地完成）**：已建立严格 Pub/Sub push Fault Ingress，以同一 Spanner 事务写 Inbox + Incident/Audit + SourceAssociation + Outbox；默认 `shadow`，仅 durable success/replay 返回 2xx，瞬时故障返回可重试状态，poison message 交给订阅 DLQ。
+- **P3c（本地完成）**：已建立与 Engineering 写工具分离的独立 FastMCP 服务，只注册六个只读 Canonical Incident/KPI/Evidence/Resource 工具，并在出站边界执行逐项与累计预算。
+- **P3d（本地完成）**：已建立 checksummed Canonical DuckDB → Spanner 一次性迁移；运行时/导出无 DDL，保留完整来源证明，重放交叉核验持久组件。legacy Spanner 语义不明确的行只读保留并进入人工映射队列。
+- 共享 Repository 已统一：source event 全生命周期只属于一个 Incident；新关联不增加 revision；分裂 selector fail closed；`CLOSED → REOPENED` 在同一事务重新获取全部活动键。
+- 本地发布矩阵已通过：领域 323 项、Local 166 项、共享 Repository 合同 2 项、Cloud/迁移/FGAC 146 项、Fault Ingress 与 Cloud MCP 101 项；P2b Assurance 26 项和 Local E2E 1 项也保持绿色。Spanner 迁移与常规生命周期均已覆盖 1,000 条来源的批量边界；最新五 wheel 已完成源码树外全新环境安装、四 CLI 冒烟与 `pip check`，真实 Emulator 证据由推送后的 Linux 双 Python CI 回填。
+
 交付物：
 
-- 实现 Spanner Incident/Metric/Trace/Log Repository。
-- 将 Fault Service 输出转换为 Canonical Incident/Event。
-- 增加定时 KPI 检测与事件触发检测，并统一走关联/去重服务。
-- 将规则、证据查询暴露为只读 MCP 工具或复用现有工具。
-- 为 CSV/DuckDB 与 Spanner 建立一次性导入/导出工具，不使用长期双写。
+- 实现 Spanner Incident、Radio KPI、Safe Evidence、Resource Mapping、Inbox/Outbox Repository。
+- 将新的 Pub/Sub Fault Ingress 输出转换为严格 Canonical Event；legacy Fault Service 仅作为 `legacy`/回滚路径，不扩展其 0.2.16 A2A 主链。
+- 增加事件驱动 KPI 检测端口并统一走事务关联/去重服务；Outbox 在 P4 前不派发给 legacy Resolver。
+- 通过独立只读 MCP 暴露 Incident、审计、证据、KPI 和资源映射，不复用 legacy 写工具或任意 SQL。
+- 为 Canonical DuckDB 与 Spanner 建立一次性导入/导出工具，不使用长期双写；legacy 数据禁止猜测映射。
 - 定义 5G PM/Trace 数据契约和 `ResourceReference` 映射；不能把现有主机 `NetworkMetrics` 当作 LTE/5G 无线 KPI。
 - 通过容量、保留期和查询基准决定高频 Trace/PM 明细使用 Spanner、BigQuery 或其他分析型存储；Agent 只依赖 `TelemetryRepository`。
 
@@ -371,6 +380,7 @@ P2a 验收证据（2026-08-28）：
 - 同一故障从日志、测试和 KPI 多次到达时只产生一个活动 Incident。
 - 云端证据查询具有时间窗、资源范围和结果大小限制。
 - Repository 契约测试在 DuckDB 与 Spanner 测试环境均通过。
+- Linux CI 中真实 Spanner Emulator 完成对象 DDL、事务、并发、reopen、迁移重放和 Outbox 验收；Cloud Staging 的 FGAC/OIDC/DLQ 结果单独回填，不以 Emulator 代替。
 
 ### P4：统一 Resolver Pipeline
 
@@ -489,12 +499,13 @@ Triage
 ## 9. 数据迁移与一致性
 
 1. `incidents` 以 Canonical Incident 为源模型，DuckDB/Spanner 分别映射，禁止在 Agent 中拼 SQL。
-2. 现有 Spanner Incident 与 DuckDB Incident 通过一次性迁移器转换，保留原始 ID 和 `legacy_source`。
-3. `correlation_key` 建议由资源范围、故障类别和时间桶组成，并允许规则化扩展。
-4. 原始指标、Trace 和日志保留在各自数据源；Incident 只保存摘要和引用。
-5. 报告采用不可变版本，审批绑定具体 `report_version` 和 `action_hash`。
-6. 所有时间统一为 UTC 存储，UI 按用户时区展示。
-7. Local 与 Cloud 模式每次只配置一个写入型 `IncidentRepository`。
+2. Canonical DuckDB schema `1.1` 通过 checksummed 一次性 bundle 导入 Spanner v2，保留 Incident 快照及每条 SourceEventAssociation；不启用长期双写。
+3. legacy Spanner `Incident` 缺少 Canonical revision/provenance/状态语义，P3 不自动猜测；旧表只读保留，带 `legacy_source`/`legacy_id` 的候选进入可追踪隔离清单，待人工批准映射。
+4. `correlation_key` 建议由资源范围、故障类别和时间桶组成，并允许规则化扩展。
+5. 原始指标、Trace 和日志保留在各自数据源；Incident 只保存摘要和引用。
+6. 报告采用不可变版本，审批绑定具体 `report_version` 和 `action_hash`。
+7. 所有时间统一为 UTC 存储，UI 按用户时区展示。
+8. Local 与 Cloud 模式每次只配置一个写入型 `IncidentRepository`。
 
 ## 10. 模型与 Agent 兼容策略
 
@@ -606,6 +617,10 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | ADR-019 | 2026-08-28 | Supervisor 精确锁定 ADK 1.28.1 与 A2A 0.3.11；共享库只声明 ADK 1.x 范围，每个服务继续使用自己的精确锁 | Accepted | 关闭 Supervisor 的已知 ADK 安全风险，同时避免把仍需验证的升级强加给全部 legacy Agent |
 | ADR-020 | 2026-08-28 | Assurance 的 Task/challenge 状态使用 DuckDB 持久化，challenge 只存哈希，崩溃重放有界保留 15 分钟，并把 `init` 与 `run` 分离 | Accepted | 在本地单 writer 边界内兼顾重启恢复、容量上限、最小运行权限与过期状态回收 |
 | ADR-021 | 2026-08-28 | Supervisor 只展示 TextPart，结构化 DataPart 采用 exact schema；审批工具调用由服务端保存并单播回原 Socket | Accepted | 防止文本命令、未知字段、跨会话事件和伪造 ToolMessage 推进 Incident 写入或模型续跑 |
+| ADR-022 | 2026-08-29 | Cloud Incident 新建 `Canonical*V2` 表族，legacy `Incident` 只读保留；Inbox、Incident/Audit/Idempotency/Association 与 Outbox 在同一 Spanner 事务提交 | Accepted | 旧表缺 revision/provenance，原地复用无法提供 CAS、全局来源归属和可靠事件确认 |
+| ADR-023 | 2026-08-29 | Fault Pipeline 使用唯一 `legacy|shadow|canonical|paused` 模式，默认 shadow；canonical 与 legacy writer 互斥 | Accepted | 避免双主并保留可验证回滚点；入口只在 durable commit 后 ACK |
+| ADR-024 | 2026-08-29 | Cloud MCP 是独立六工具只读服务，使用专属 FGAC reader；Fault、MCP、Outbox、一次性迁移分别使用精确角色 | Accepted | 工具 allowlist 不能替代数据库最小权限，迁移所需 Audit 读取也不应扩散给常驻 Fault 身份 |
+| ADR-025 | 2026-08-29 | 一次性迁移只自动接受 Canonical DETECTED/revision-0；bundle 使用校验和而非签名，legacy/归属歧义进入可追踪隔离清单 | Accepted | 保留可证明的快照与 provenance，禁止按字段相似度猜测 legacy 状态或任意选择冲突 owner |
 
 ## 16. 待确认事项
 
@@ -613,7 +628,7 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 
 - Local Profile 的最终入口使用现有中文 UI，还是统一 Dashboard 的本地构建。
 - Cloud 模式默认模型供应商及每个角色的模型预算。
-- Spanner 中 Canonical Incident 是迁移现有表还是建立 v2 表后切换。
+- legacy Spanner Incident 的人工字段映射、历史状态还原和归档保留期（v2 新表切换方案已由 ADR-022 确定）。
 - 允许自动执行的低风险动作白名单是否存在；默认全部要求人工审批。
 - 外部文档允许列表、网络访问策略和内容留存要求。
 - 目标部署是否继续全部使用 Cloud Run，还是部分 Agent 进入 GKE。
@@ -632,7 +647,7 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | P1 领域模型与接口 | DONE | 2026-08-28 | 独立 `telco-domain` 包；双环境各 315 项通过；wheel 构建/独立导入成功；原 10 类安全阻断复审全部关闭；GitHub Actions Python 3.12/3.13 均通过（[run 33151947728](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33151947728)），Gate PASS |
 | 首个 Local 纵向切片（P2a） | DONE | 2026-08-28 | 13,440 KPI + 579 安全 Trace → 15 候选；预览零写、确认唯一写、RCA 只读；双依赖矩阵各 468 项通过，wheel/CLI 冒烟成功，安全 Gate PASS |
 | A2A/Supervisor 接入（P2b） | DONE | 2026-08-28 | 独立 Assurance A2A 0.3.11、持久 challenge/task、真实 HTTP detect/confirm/analyze/restart、Supervisor 单播与结构化审批桥均通过；本地门禁与[GitHub Actions run 33179490152](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33179490152) 全绿，三个 wheel 与依赖检查通过 |
-| Cloud 数据接入 | NOT STARTED | 2026-08-28 | — |
+| Cloud 数据接入 | IN PROGRESS | 2026-08-29 | P3a–P3d 本地代码与回归已完成：Spanner v2、事务 Inbox/Outbox、严格 Fault Ingress、六工具只读 MCP、四角色 FGAC 和一次性 Canonical 迁移；等待 GitHub Emulator 双 Python 结果及 Cloud Staging IAM/OIDC/DLQ 验收后才能标 DONE |
 | Resolver 合并 | NOT STARTED | 2026-08-28 | — |
 | 修复与验证闭环 | NOT STARTED | 2026-08-28 | — |
 | UI 与发布 | NOT STARTED | 2026-08-28 | — |
@@ -665,6 +680,9 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | 2026-08-28 | 启动 P2b：冻结纯 A2A Assurance、持久 challenge、结构化确认和 Supervisor 单会话桥接契约；记录 legacy ADK 1.18 安全公告并禁止将其作为新增生产暴露面 | Codex |
 | 2026-08-28 | 完成 P2b/P2：交付本机限定的纯 A2A Assurance、持久且有界恢复的 Task/challenge、真实 detect/confirm/analyze/restart 链路、Supervisor exact DataPart/单播/可信工具续跑；Supervisor 升级至 ADK 1.28.1，本地发布门禁与三 wheel 冒烟全部通过 | Codex |
 | 2026-08-28 | P2b 提交 `974db42` 的 GitHub Actions 远程验收通过：Assurance 四个 job 及 Local Profile 双 Python 矩阵全部 `success`，回填可追溯运行链接 | Codex |
+| 2026-08-28 | 启动 P3：冻结“Spanner v2 扩展表族 → 事务 Inbox/Outbox Fault Ingress → 独立只读 MCP”三切片；旧 Incident/Fault/MCP 路径保留回滚且不双主，云端默认 shadow | Codex |
+| 2026-08-29 | 完成 P3 本地实现：新增 Canonical Spanner v2 与四类 Repository、严格 Pub/Sub Fault Ingress、六工具只读 MCP、四角色 FGAC、共享三实现契约及 checksummed 一次性 Canonical 迁移；保持 legacy 只读、shadow 默认和 P4 前 Outbox 不派发，转入远程 Emulator/Cloud Staging Gate | Codex |
+| 2026-08-29 | 完成 P3 发布前容量与迁移加固：Repository/迁移入口先限界后迭代，Spanner source owner/active key/association 改为批量事务，补 1,000 来源首导、精确重放和状态推进，以及基于合法 bundle 的 JSON/隐私/depth 攻击回归；本地矩阵全部通过 | Codex |
 
 ## 20. 项目完成定义
 

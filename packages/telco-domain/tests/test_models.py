@@ -433,6 +433,13 @@ def test_timeline_and_uniqueness_invariants_are_enforced() -> None:
             source_event_ids=("event-1", "event-1"),
         )
 
+    with pytest.raises(ValidationError, match="too_long"):
+        Incident(
+            incident_id="inc-source-capacity",
+            trace_id="trace-source-capacity",
+            source_event_ids=tuple(f"event-{index}" for index in range(1_001)),
+        )
+
 
 def test_raw_evidence_payload_and_unknown_fields_are_rejected() -> None:
     with pytest.raises(ValidationError, match="Extra inputs"):

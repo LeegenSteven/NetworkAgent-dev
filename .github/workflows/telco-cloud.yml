@@ -1,0 +1,153 @@
+name: telco-cloud
+
+on:
+  push:
+    paths:
+      - "packages/telco-domain/**"
+      - "packages/telco-local/**"
+      - "packages/telco-cloud/**"
+      - "services/telco-fault-ingress/**"
+      - "services/telco-cloud-mcp/**"
+      - "tests/contracts/repository/**"
+      - "tests/e2e/cloud/**"
+      - "deploy/cloud/p3/**"
+      - "docs/security/p3-gate-audit.md"
+      - ".github/workflows/telco-cloud.yml"
+  pull_request:
+    paths:
+      - "packages/telco-domain/**"
+      - "packages/telco-local/**"
+      - "packages/telco-cloud/**"
+      - "services/telco-fault-ingress/**"
+      - "services/telco-cloud-mcp/**"
+      - "tests/contracts/repository/**"
+      - "tests/e2e/cloud/**"
+      - "deploy/cloud/p3/**"
+      - "docs/security/p3-gate-audit.md"
+      - ".github/workflows/telco-cloud.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  cloud-profile-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            packages/telco-domain/pyproject.toml
+            packages/telco-local/pyproject.toml
+            packages/telco-cloud/pyproject.toml
+            services/telco-fault-ingress/pyproject.toml
+            services/telco-cloud-mcp/pyproject.toml
+      - name: Install Cloud Profile and test dependencies
+        run: |
+          python -m pip install -e "packages/telco-domain[test]"
+          python -m pip install -e "packages/telco-local[test]"
+          python -m pip install -e "packages/telco-cloud[detector,migration,dev]"
+          python -m pip install -e "services/telco-fault-ingress[test]"
+          python -m pip install -e "services/telco-cloud-mcp[test]"
+      - name: Run domain, adapter, ingress, and MCP regressions
+        run: |
+          python -m pytest packages/telco-domain/tests -q
+          python -m pytest packages/telco-local/tests -q
+          python -m pytest packages/telco-cloud/tests -q
+          python -m pytest services/telco-fault-ingress/tests_fault_ingress -q
+          python -m pytest services/telco-cloud-mcp/tests_cloud_mcp -q
+          python -m pytest tests/contracts/repository/test_repository_contract.py -q
+          python -m pytest deploy/cloud/p3/test_spanner_fgac_artifact.py -q
+      - name: Build all five wheels
+        run: |
+          python -m build --wheel --outdir dist/domain packages/telco-domain
+          python -m build --wheel --outdir dist/local packages/telco-local
+          python -m build --wheel --outdir dist/cloud packages/telco-cloud
+          python -m build --wheel --outdir dist/fault services/telco-fault-ingress
+          python -m build --wheel --outdir dist/mcp services/telco-cloud-mcp
+      - name: Smoke-test wheels outside the source tree
+        run: |
+          python -m venv /tmp/p3-wheel-smoke
+          /tmp/p3-wheel-smoke/bin/python -m pip install \
+            dist/domain/telco_domain-*.whl \
+            dist/local/telco_local-*.whl \
+            dist/cloud/telco_cloud-*.whl \
+            dist/fault/telco_fault_ingress-*.whl \
+            dist/mcp/telco_cloud_mcp-*.whl
+          cd /tmp
+          /tmp/p3-wheel-smoke/bin/python -c "import sys, telco_cloud, telco_cloud_mcp, telco_domain, telco_fault_ingress; assert telco_domain.SCHEMA_VERSION == '1.0'; assert 'duckdb' not in sys.modules"
+          /tmp/p3-wheel-smoke/bin/python -c "import telco_local"
+          /tmp/p3-wheel-smoke/bin/telco-cloud-schema --help
+          /tmp/p3-wheel-smoke/bin/telco-cloud-migrate --help
+          /tmp/p3-wheel-smoke/bin/telco-fault-ingress --help
+          /tmp/p3-wheel-smoke/bin/telco-cloud-mcp --help
+          /tmp/p3-wheel-smoke/bin/python -m pip check
+      - name: Verify dependency consistency
+        run: python -m pip check
+
+  spanner-emulator-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    services:
+      spanner:
+        image: gcr.io/cloud-spanner-emulator/emulator:1.5.56
+        ports:
+          - 9010:9010
+          - 9020:9020
+    env:
+      SPANNER_EMULATOR_HOST: localhost:9010
+      GOOGLE_CLOUD_PROJECT: p3-emulator
+      GOOGLE_PROJECT: p3-emulator
+      GOOGLE_SPANNER_INSTANCE: p3-instance
+      GOOGLE_SPANNER_DATABASE: p3-database
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            packages/telco-domain/pyproject.toml
+            packages/telco-local/pyproject.toml
+            packages/telco-cloud/pyproject.toml
+            services/telco-fault-ingress/pyproject.toml
+            services/telco-cloud-mcp/pyproject.toml
+      - name: Install the emulator contract environment
+        run: |
+          python -m pip install -e "packages/telco-domain[test]"
+          python -m pip install -e "packages/telco-local[test]"
+          python -m pip install -e "packages/telco-cloud[detector,migration,test]"
+          python -m pip install -e "services/telco-fault-ingress[test]"
+          python -m pip install -e "services/telco-cloud-mcp[test]"
+      - name: Wait for the Spanner Emulator
+        run: |
+          python - <<'PY'
+          import socket
+          import time
+
+          for _ in range(60):
+              try:
+                  with socket.create_connection(("127.0.0.1", 9010), timeout=1):
+                      break
+              except OSError:
+                  time.sleep(1)
+          else:
+              raise SystemExit("Spanner Emulator did not become ready")
+          PY
+      - name: Run real GoogleSQL, transaction, and concurrency contracts
+        run: python -m pytest tests/e2e/cloud/test_spanner_emulator.py -q
+      - name: Verify dependency consistency
+        run: python -m pip check

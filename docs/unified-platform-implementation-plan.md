@@ -3,7 +3,7 @@
 > 文档状态：Active（后续开发的计划与进度唯一事实来源）  
 > 首次建立：2026-08-28  
 > 最近更新：2026-08-28  
-> 当前里程碑：P0 GitHub 推送待账户确认 / P1 已完成
+> 当前里程碑：P0、P1 已完成 / P2 待开始
 > 目标主仓库：`NetworkAgent-dev`  
 > 输入项目：`NetworkAgent-dev`、`telco-autonomous-networks-data-demo-main`
 
@@ -269,7 +269,7 @@ Agent 不得直接导入 DuckDB、Spanner、GKE 或 Gitea SDK。
 
 | 阶段 | 目标 | 估算 | 当前状态 |
 |---|---|---:|---|
-| P0 | 基线、目标架构和决策冻结 | 1–2 人日 | **IN PROGRESS** |
+| P0 | 基线、目标架构和决策冻结 | 1–2 人日 | **DONE** |
 | P1 | 统一领域模型、接口和测试骨架 | 3–5 人日 | **DONE** |
 | P2 | 本地 Detector/RCA 迁入主仓库 | 5–8 人日 | NOT STARTED |
 | P3 | 接入 Spanner/MCP/实时事件 | 5–8 人日 | NOT STARTED |
@@ -586,8 +586,8 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 |---|---|---|---|
 | 两项目快速架构与代码基线分析 | DONE | 2026-08-28 | README、入口、依赖、数据与测试已检查 |
 | 统一目标架构与实施路线 | DONE | 2026-08-28 | 本文档已完成架构、代码、交付和兼容性复核 |
-| 主仓库 Git 可回滚基线 | IN PROGRESS | 2026-08-28 | 已恢复 GitLab `dev@44ecbb3`，建立 `unified-platform@dfccee3`，GitHub 私有仓库已创建，等待账户 sudo 复核后推送 |
-| P1 领域模型与接口 | DONE | 2026-08-28 | 独立 `telco-domain` 包；双环境各 315 项通过；wheel 构建/独立导入成功；原 10 类安全阻断复审全部关闭，Gate PASS |
+| 主仓库 Git 可回滚基线 | DONE | 2026-08-28 | 私有仓库 `LeegenSteven/NetworkAgent-dev` 已建立并将 `unified-platform` 设为默认分支；P1 基线为 `e363662`，原始 `dev@44ecbb3`、其余 4 个分支和 4 个发布标签均已推送并校验 |
+| P1 领域模型与接口 | DONE | 2026-08-28 | 独立 `telco-domain` 包；双环境各 315 项通过；wheel 构建/独立导入成功；原 10 类安全阻断复审全部关闭；GitHub Actions Python 3.12/3.13 均通过（[run 33151635230](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33151635230)），Gate PASS |
 | 首个 Local 纵向切片 | NOT STARTED | 2026-08-28 | — |
 | Cloud 数据接入 | NOT STARTED | 2026-08-28 | — |
 | Resolver 合并 | NOT STARTED | 2026-08-28 | — |
@@ -616,6 +616,7 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | 2026-08-28 | 恢复 GitLab 原始历史，建立 `unified-platform` 开发基线并创建 GitHub 私有仓库；P1 领域模型与状态机进入开发 | Codex |
 | 2026-08-28 | 建立独立 `telco-domain` 包、双 Python/Pydantic 环境契约测试及 3.12/3.13 CI；安全 Gate 发现并开始修复仓储绕过、审批重放、伪造完成和审计历史篡改路径 | Codex |
 | 2026-08-28 | 完成 P1 安全加固：原子状态机仓储、版本化审批引用、可信时钟、并发去重、隐私/载荷预算及不可变审计；双环境各 315 项通过，独立复审 Gate PASS | Codex |
+| 2026-08-28 | 完成 P0：认证并推送 GitHub 私有仓库，保留 GitLab 原始分支与标签历史，设置 `unified-platform` 为默认分支；P1 的 Python 3.12/3.13 云端 CI 首轮全部通过 | Codex |
 
 ## 20. 项目完成定义
 

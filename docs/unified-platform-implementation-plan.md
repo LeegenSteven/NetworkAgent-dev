@@ -351,6 +351,7 @@ P2a 验收证据（2026-08-28）：
 - Supervisor 只把 TextPart 用于展示，DataPart 使用 exact allowed/required schema、大小/深度/隐私与关联标识校验；A2A 事件仅单播到 thread 所属 Socket，流结束、错误响应、错误 task/context 或未知字段均 fail closed。
 - Dashboard 审批回程只接受服务端记录的 `requestTaskApproval` 调用；普通 `agui_message` 的 ToolMessage 被拒绝，ADK continuation 保留真实 FunctionResponse 工具名，持久化或消费失败可安全重试，不再吞掉续跑事件。
 - 本地发布门禁：既有领域/Local 回归 476 项、Assurance 26 项、真实 HTTP E2E 4 项、A2A 0.3.11/legacy wire 兼容 70 项、精确 ADK 1.28.1 Supervisor 57 项全部通过；三个 wheel 已完成源码树外安装与 `pip check`。安全结论见 [P2b Assurance/A2A Gate 审计](security/p2b-gate-audit.md)。
+- 提交 `974db42` 的远程验收已通过：[Assurance CI（Python 3.12/3.13、Supervisor ADK 1.28.1、legacy wire、真实 HTTP、三 wheel）](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33179490152) 与 [Local Profile 回归 CI](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33179490104) 均为 `success`。
 - P2 的退出标准已经满足并标记为 `DONE`；P3 将接入 Spanner/MCP/实时事件，P6 再收敛统一 RCA 展示，P7 才允许在认证、TLS 与部署加固后扩展到非本机网络。
 
 ### P3：接入云端数据与事件
@@ -630,7 +631,7 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | 主仓库 Git 可回滚基线 | DONE | 2026-08-28 | 私有仓库 `LeegenSteven/NetworkAgent-dev` 已建立并将 `unified-platform` 设为默认分支；P1 基线为 `e363662`，原始 `dev@44ecbb3`、其余 4 个分支和 4 个发布标签均已推送并校验 |
 | P1 领域模型与接口 | DONE | 2026-08-28 | 独立 `telco-domain` 包；双环境各 315 项通过；wheel 构建/独立导入成功；原 10 类安全阻断复审全部关闭；GitHub Actions Python 3.12/3.13 均通过（[run 33151947728](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33151947728)），Gate PASS |
 | 首个 Local 纵向切片（P2a） | DONE | 2026-08-28 | 13,440 KPI + 579 安全 Trace → 15 候选；预览零写、确认唯一写、RCA 只读；双依赖矩阵各 468 项通过，wheel/CLI 冒烟成功，安全 Gate PASS |
-| A2A/Supervisor 接入（P2b） | DONE | 2026-08-28 | 独立 Assurance A2A 0.3.11、持久 challenge/task、真实 HTTP detect/confirm/analyze/restart、Supervisor 单播与结构化审批桥均通过；本地发布门禁 476+26+4+70+57 项全绿，三个 wheel 与依赖检查通过 |
+| A2A/Supervisor 接入（P2b） | DONE | 2026-08-28 | 独立 Assurance A2A 0.3.11、持久 challenge/task、真实 HTTP detect/confirm/analyze/restart、Supervisor 单播与结构化审批桥均通过；本地门禁与[GitHub Actions run 33179490152](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33179490152) 全绿，三个 wheel 与依赖检查通过 |
 | Cloud 数据接入 | NOT STARTED | 2026-08-28 | — |
 | Resolver 合并 | NOT STARTED | 2026-08-28 | — |
 | 修复与验证闭环 | NOT STARTED | 2026-08-28 | — |
@@ -663,6 +664,7 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | 2026-08-28 | 完成 P2a：建立 `telco-local`、安全数据投影、确定性 Detector/精确规则 RCA、显式确认与本地 CLI；关闭数据漂移、证据串用、数字标识伪装、隐私和容量 Gate，双依赖矩阵各 468 项及 wheel 冒烟通过；P2b A2A 接入保留为下一阶段 | Codex |
 | 2026-08-28 | 启动 P2b：冻结纯 A2A Assurance、持久 challenge、结构化确认和 Supervisor 单会话桥接契约；记录 legacy ADK 1.18 安全公告并禁止将其作为新增生产暴露面 | Codex |
 | 2026-08-28 | 完成 P2b/P2：交付本机限定的纯 A2A Assurance、持久且有界恢复的 Task/challenge、真实 detect/confirm/analyze/restart 链路、Supervisor exact DataPart/单播/可信工具续跑；Supervisor 升级至 ADK 1.28.1，本地发布门禁与三 wheel 冒烟全部通过 | Codex |
+| 2026-08-28 | P2b 提交 `974db42` 的 GitHub Actions 远程验收通过：Assurance 四个 job 及 Local Profile 双 Python 矩阵全部 `success`，回填可追溯运行链接 | Codex |
 
 ## 20. 项目完成定义
 

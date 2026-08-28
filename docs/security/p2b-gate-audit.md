@@ -41,7 +41,7 @@
 | A2A 0.2.16 golden fixture `--check` | passed |
 | 三个 wheel 源码树外安装、CLI/import isolation、`pip check` | passed |
 
-上述门禁已配置为在 Python 3.12/3.13 CI 中分别运行；远程成功链接在首次执行完成后回填实施计划。
+远程门禁已验收通过：[Assurance CI run 33179490152](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33179490152) 覆盖 Python 3.12/3.13、Supervisor ADK 1.28.1、A2A 0.2.16/0.3.11、真实 HTTP、三 wheel 与 `pip check`；[Local Profile CI run 33179490104](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33179490104) 同步确认既有回归无破坏。两个 workflow 结论均为 `success`。
 
 ## 4. 已知非阻断限制
 

@@ -1,0 +1,617 @@
+# NetworkAgent 统一智能运维平台实施计划
+
+> 文档状态：Active（后续开发的计划与进度唯一事实来源）  
+> 首次建立：2026-08-28  
+> 最近更新：2026-08-28  
+> 当前里程碑：P0 基线与架构冻结  
+> 目标主仓库：`NetworkAgent-dev`  
+> 输入项目：`NetworkAgent-dev`、`telco-autonomous-networks-data-demo-main`
+
+## 1. 结论与总体策略
+
+两个项目可以重构为一个完备项目，但不应直接复制目录或并排运行两套 Incident/RCA 流程。目标应是以 `NetworkAgent-dev` 为主仓库，将第二个项目中已经验证的本地异常检测、规则驱动 RCA、中文交互、DeepSeek 模型适配和 DuckDB 运行能力，整合进现有的 Supervisor、Resolver、Engineer、MCP Tools、Fault Service、Spanner 和 Network Operator 体系。
+
+统一平台应支持两种运行模式：
+
+- **Local 模式**：DeepSeek + DuckDB + 合成 CSV + 模拟网络动作，不依赖 GCP，适合开发、演示和离线测试。
+- **Cloud 模式**：Gemini 或 DeepSeek + Spanner + GKE/GitOps + Network Operator，处理实时指标、日志和真实网络资源。
+
+两种模式必须共用领域模型、Agent 工作流、规则、审批策略和测试契约，只替换模型、数据与动作适配器。最终只保留一条 Incident 生命周期：
+
+```text
+指标/日志/测试故障
+        ↓
+检测、关联和去重
+        ↓
+Canonical Incident
+        ↓
+规则检索 → 证据采集 → RCA → 严重度 → 历史案例 → 报告
+        ↓
+人工审批（任何有副作用的动作）
+        ↓
+Engineer Agent → MCP → GitOps / Network Operator
+        ↓
+Tester Agent 验证 → Incident 关闭或重新调查
+```
+
+## 2. 目标与非目标
+
+### 2.1 目标
+
+1. 建立版本化、可审计的统一 Incident 数据模型和状态机。
+2. 将 KPI 异常检测接入现有日志/故障触发机制，避免重复 Incident。
+3. 将本地项目的多 Agent RCA 能力整合到现有 Resolver，而不是保留第二套 Resolver。
+4. 通过端口/适配器隔离 DuckDB 与 Spanner、DeepSeek 与 Gemini、模拟动作与真实工程动作。
+5. 保留 A2A 作为 Agent 间协议，MCP 作为数据和基础设施工具协议。
+6. 在 Supervisor/Dashboard 中统一展示检测、RCA、审批、执行和验证过程。
+7. 本地模式可以在没有 GCP 凭据的情况下完成端到端演示。
+8. 云端模式可以从真实指标或故障开始，经过审批后安全执行网络变更。
+9. 对 IMSI、MSISDN、IMEISV 等敏感字段实行最小化、聚合和脱敏。
+10. 为关键流程建立离线、契约、集成、端到端和安全回归测试。
+
+### 2.2 第一阶段非目标
+
+- 不一次性重写所有现有 Agent、Dashboard 或 `install.sh`。
+- 不在没有审批、幂等保护和回滚设计的情况下开放自主网络变更。
+- 不让 DuckDB 和 Spanner 长期承担同一环境中的双主写入。
+- 不在初期统一所有历史 UI；先保证协议和工作流统一。
+- 不把模型生成结果当作事实来源；RCA 结论必须能追溯到工具证据。
+
+## 3. 当前基线
+
+| 维度 | NetworkAgent-dev | Telco Data Demo | 统一后的处理方式 |
+|---|---|---|---|
+| 主要职责 | 网络设计、部署、查询、测试、故障修复 | LTE KPI 异常检测与证据化 RCA | 前者作为平台，后者贡献分析能力 |
+| Agent 框架 | ADK + LangGraph | ADK | 保留混合框架，通过 A2A 隔离 |
+| Agent 协议 | A2A | 当前以 ADK 本地应用为主 | Detector/RCA 对外统一提供 A2A |
+| 工具协议 | FastMCP/MCP | Python 本地工具 | 领域工具先抽象，远程能力通过 MCP |
+| 模型 | Gemini 2.5 Flash | DeepSeek via LiteLLM | 增加按角色配置的 ModelProvider |
+| 数据 | Spanner、GKE、日志、指标 | DuckDB、CSV、JSON、Markdown | Repository 接口 + Local/Cloud 适配器 |
+| Incident | Fault Service + Spanner | DuckDB `incidents` | 单一 Canonical Incident 契约 |
+| RCA | Strategy → Troubleshoot → Resolution | 规则、Analyzer、Severity、Docs、History、Report | 合并为统一 Resolver Pipeline |
+| 动作 | Engineer → MCP → GitOps/Operator | 本地模拟动作 | ActionGateway + 强制审批 |
+| UI | Dashboard/Incident/Portal | 中文本地 Web UI | Supervisor API 为统一后端，逐步合并 UI |
+| 部署 | GCP/GKE/Cloud Run | 本地 Python | Local 与 Cloud 两套 Profile |
+
+已验证基线：
+
+- `telco-autonomous-networks-data-demo-main` 离线测试为 `10 passed`。
+- 本地数据包含 13,440 条 Performance、579 条 Cell Trace；现有 DuckDB 中有 4 个 `NEW` Incident。
+- `NetworkAgent-dev` 当前目录缺少 Git 元数据，实施前必须建立可回滚的版本基线。
+- 两个项目的运行时并不兼容：主项目镜像主要使用 Python `3.13.2`、ADK `1.18.0`；本地 RCA 虚拟环境实际为 Python `3.12.4`、ADK `2.6.3`、LiteLLM `1.96.0`、DuckDB `1.5.5`。
+- 主项目的 A2A SDK 也存在 `0.2.16`（Fault Service/Portal）与 `0.3.11`（主要 Agent）并存，必须通过协议契约测试后逐步统一。
+- 本地 RCA 的 `pyproject.toml` 使用宽松下界且遗漏部分直接依赖，主项目各服务也存在依赖重复或依赖传递安装；合并前需要按服务补齐直接依赖并生成锁文件。
+
+### 3.1 必须正视的业务语义差异
+
+第二项目的样例是 LTE eNodeB/Cell 数据，核心 KPI 是 ERAB 成功率、Retainability 和 LTE Cell Trace；主项目运行 Free5GC/UERANSIM 5G SA 实验网络，现有 `NetworkMetrics` 主要保存 CPU、网卡吞吐等主机指标，另有 Service Performance 和进程/测试故障。
+
+因此，两个项目当前只有“Incident/RCA 工作流”可以直接融合，数据不能硬映射。统一平台必须显式支持：
+
+- `lte-demo`：保留现有 ERAB、Retainability、eNodeB/Cell 和合成 Trace 数据。
+- `5g-live`：新增注册成功率、PDU Session 建立成功率、NG/RRC/认证失败、用户面连通性等 5G KPI/事件。
+- `ResourceReference`：建立 eNodeB/Cell 或 gNB/NR Cell 到 Spanner Graph `NetworkNode`、Network Service 和 Engineer 目标资源的映射。
+
+在 5G 原生遥测和资源映射完成前，LTE RCA 结论不得自动转换成主项目中的真实网络变更。
+
+## 4. 设计原则
+
+1. **领域优先**：先统一 Incident、Evidence、Recommendation、Approval、Action 和 Verification 契约，再迁移 Agent。
+2. **单一生命周期所有者**：Resolver 负责从调查到验证的完整状态推进；Detector 只发现/提交候选事件。
+3. **协议边界稳定**：Agent 间只依赖版本化 A2A 数据契约；Agent 对基础设施只依赖 MCP 或明确的 Repository/Gateway 接口。
+4. **Local/Cloud 同构**：业务流程不包含 `if GCP` 分支，环境差异由依赖注入和适配器解决。
+5. **只读与写操作分离**：证据采集默认只读；任何写操作必须进入审批、幂等、执行和验证链路。
+6. **可追溯性**：所有结论记录使用的规则、工具、数据时间窗、模型、提示版本和执行结果。
+7. **渐进迁移**：用可独立验收的纵向切片替代大爆炸式重写。
+8. **兼容优先**：在 ADK 版本统一前，各 Agent 保持进程/容器隔离，避免依赖冲突扩散。
+
+## 5. 目标架构
+
+```text
+                         ┌─────────────────────────┐
+                         │ Dashboard / Local Web UI │
+                         └────────────┬────────────┘
+                                      │ Socket / REST / AG-UI
+                              ┌───────▼────────┐
+                              │ Supervisor Agent│
+                              └───────┬────────┘
+                                      │ A2A
+             ┌────────────────────────┼────────────────────────┐
+             │                        │                        │
+      ┌──────▼──────┐          ┌──────▼──────┐         ┌──────▼──────┐
+      │ Operations  │          │ Incident     │         │ Engineer /  │
+      │ / Logs/Test │          │ Resolver     │         │ Tester      │
+      └──────┬──────┘          └──────┬──────┘         └──────┬──────┘
+             │                        │                         │
+             │              ┌─────────▼─────────┐               │
+             │              │ Unified RCA Core  │               │
+             │              │ Rules/Evidence/   │               │
+             │              │ Severity/History/ │               │
+             │              │ Report/Approval   │               │
+             │              └─────────┬─────────┘               │
+             │                        │                         │
+             └────────────────────────┼─────────────────────────┘
+                                      │ MCP / Ports
+                   ┌──────────────────┴──────────────────┐
+                   │                                     │
+          ┌────────▼────────┐                   ┌────────▼────────┐
+          │ Local Adapters   │                   │ Cloud Adapters   │
+          │ DuckDB/CSV/JSON/ │                   │ Spanner/GKE/Git/ │
+          │ Markdown/Sim     │                   │ Operator/Logs    │
+          └─────────────────┘                   └─────────────────┘
+```
+
+### 5.1 推荐的目标目录
+
+```text
+NetworkAgent-dev/
+├── lib/src/agent_library/
+│   ├── incidents/                 # 统一领域模型、状态机、契约和策略
+│   ├── model_providers/           # Gemini/DeepSeek/测试模型工厂
+│   └── approvals/                 # 审批令牌、策略和审计
+├── networkagents/
+│   ├── incident_detector/         # KPI/日志候选事件检测 A2A Agent
+│   └── resolver/
+│       └── src/resolveragents/
+│           ├── evidence/          # 证据采集
+│           ├── rules/             # RCA 规则选择
+│           ├── analysis/          # 根因分析
+│           ├── severity/          # 严重度分类
+│           ├── knowledge/         # 内外部资料、历史案例
+│           ├── reporting/         # 报告生成
+│           ├── approval/          # 动作审批
+│           └── verification/      # 修复后验证
+├── tools/src/
+│   ├── ports/                     # Incident/Metric/Trace/Action 接口
+│   ├── adapters/local/            # DuckDB、CSV、JSON、Markdown、模拟动作
+│   └── adapters/cloud/            # Spanner、日志、GKE、Engineer A2A
+├── data/
+│   ├── samples/                   # 合成演示数据
+│   └── rca-rules/                 # 版本化规则
+├── ui/                            # 逐步统一后的事件/RCA 页面
+└── tests/
+    ├── contract/
+    ├── integration/
+    ├── e2e/local/
+    ├── e2e/cloud/
+    └── safety/
+```
+
+目录可在首个实现阶段微调，但“领域模型、Agent 编排、基础设施适配器”三层不得重新耦合。
+
+## 6. 核心契约
+
+### 6.1 Canonical Incident
+
+至少包含：
+
+- `schema_version`
+- `incident_id`、`correlation_key`、`source_event_ids`
+- `technology`（如 `LTE`、`5G_SA`）与 `vendor_profile`
+- `status`、`severity`、`title`、`description`
+- `affected_resources`（版本化 `ResourceReference`：位置、服务、节点、eNodeB/Cell、gNB/NR Cell）
+- `detected_at`、`window_start`、`window_end`
+- `violated_kpis`
+- `evidence_refs`（不直接嵌入大体量或敏感原始数据）
+- `hypotheses`、`root_cause`、`recommendations`
+- `approval`、`action_runs`、`verification_runs`
+- `model_metadata`、`rule_versions`、`trace_id`
+- `created_at`、`updated_at`、`revision`
+
+### 6.2 状态机
+
+```text
+DETECTED
+  → TRIAGED
+  → INVESTIGATING
+  → RCA_COMPLETE
+  → AWAITING_APPROVAL
+  → REMEDIATING
+  → VERIFYING
+  → RESOLVED
+  → CLOSED
+```
+
+异常分支：`DUPLICATE`、`REJECTED`、`FAILED`、`CANCELLED`、`REOPENED`。
+
+状态变更必须满足：预期旧版本匹配、合法转换、幂等键唯一、审计事件写入成功。Cloud 模式采用 Spanner 事务；Local 模式采用 DuckDB 事务实现相同语义。
+
+### 6.3 端口接口
+
+- `IncidentRepository`
+- `MetricRepository`
+- `TraceRepository`
+- `LogRepository`
+- `RuleRepository`
+- `KnowledgeRepository`
+- `ModelProvider`
+- `ApprovalService`
+- `ActionGateway`
+- `VerificationGateway`
+- `EventPublisher`
+
+Agent 不得直接导入 DuckDB、Spanner、GKE 或 Gitea SDK。
+
+报告持久化确认与网络动作批准是两种不同的 `ApprovalDecision`，必须分别记录。提示词中的“逐步确认”只能改善交互，不能替代具有审批人、作用域、参数摘要、有效期和幂等键的持久授权。
+
+### 6.4 A2A 与关联标识
+
+共享契约包至少定义以下结构化 Data Part：
+
+- `IncidentTrigger`
+- `RcaRequest` / `RcaResult`
+- `NetworkChangeRequest`
+- `VerificationRequest` / `VerificationResult`
+- `ApprovalDecision`
+
+用户聊天可以使用文本，Agent 间业务数据必须使用带 `schema_version` 的结构化载荷。最终响应同时包含中文摘要和结构化 Artifact。
+
+标识语义必须分离：
+
+- `context_id`：同一工作流上下文。
+- `incident_id`：领域 Incident，显式存在载荷中。
+- `task_id`：A2A 任务实例。
+- `trace_id`：跨 A2A、MCP、数据库和 Operator 的链路追踪标识。
+- `idempotency_key`：一次业务意图的防重键。
+
+不得继续让 `context_id` 同时承担聊天 Session、Incident 和 Trace 的含义。
+
+## 7. 分阶段实施
+
+> 估算为单名熟悉 Python/ADK/GCP 的工程人员的相对工作量，不是交付日期承诺。每阶段只有在验收证据写回本文档后才可标记完成。
+
+| 阶段 | 目标 | 估算 | 当前状态 |
+|---|---|---:|---|
+| P0 | 基线、目标架构和决策冻结 | 1–2 人日 | **IN PROGRESS** |
+| P1 | 统一领域模型、接口和测试骨架 | 3–5 人日 | NOT STARTED |
+| P2 | 本地 Detector/RCA 迁入主仓库 | 5–8 人日 | NOT STARTED |
+| P3 | 接入 Spanner/MCP/实时事件 | 5–8 人日 | NOT STARTED |
+| P4 | 合并并增强 Resolver Pipeline | 6–10 人日 | NOT STARTED |
+| P5 | 审批、真实修复和修复后验证 | 5–8 人日 | NOT STARTED |
+| P6 | 统一 Supervisor 与 UI 体验 | 4–7 人日 | NOT STARTED |
+| P7 | 部署、CI、可观测性与安全加固 | 5–8 人日 | NOT STARTED |
+| P8 | 灰度切换、旧路径下线和发布验收 | 3–5 人日 | NOT STARTED |
+
+### P0：基线与架构冻结
+
+交付物：
+
+- 保存两个项目当前测试、依赖、数据和主要调用链基线。
+- 确认 `NetworkAgent-dev` 为目标主仓库并建立 Git 可回滚基线。
+- 建立本计划、架构决策日志和风险清单。
+- 明确 Local/Cloud 两种 Profile 的支持边界。
+- 执行秘密扫描并处理 `setenv.sh`、凭据对象日志和明文 Git 登录风险。
+- 记录 Apache 2.0 代码许可、DigitalRoute 合成数据说明以及 NetworkAgent CC-BY 资源归属。
+
+退出标准：
+
+- 目标架构与首个纵向切片得到确认。
+- 主仓库可以创建功能分支或等价的可回滚快照。
+- 所有未决策问题均有负责人或默认方案。
+
+### P1：领域与接口基础
+
+交付物：
+
+- 实现版本化 Pydantic Incident、Evidence、RCAReport、Approval、ActionRun、VerificationRun 模型。
+- 实现状态机、乐观并发、幂等和敏感字段过滤规则。
+- 定义 Repository/Gateway Protocol 及内存测试实现。
+- 定义 A2A `DataPart` 请求/响应 Schema 和兼容文本格式。
+- 建立契约测试、状态机测试和序列化兼容测试。
+
+退出标准：
+
+- Local 与 Cloud 适配器可以通过同一套契约测试。
+- 非法状态转换、重复事件和未审批动作会被确定性拒绝。
+- 契约不依赖任何具体 Agent 框架或云 SDK。
+
+### P2：迁入本地 Detector/RCA
+
+交付物：
+
+- 迁移 DuckDB 初始化、CSV 导入、KPI 视图和本地规则/文档。
+- 迁移 Incident Detector，并包装为标准 A2A Agent。
+- 迁移规则选择、Analyzer、Severity、Docs、History 和 Report Generator。
+- 将本地工具改为 P1 定义的端口实现。
+- 增加 Local Profile 启动命令和无 API 的确定性测试模型。
+- 为所有样例和规则标记 `technology=LTE`，禁止将 LTE 动作建议路由到 5G Engineer。
+
+退出标准：
+
+- 在无 GCP 环境下，从 CSV 检测异常、创建 Incident、生成 RCA 报告全链路通过。
+- 现有第二项目的 10 项离线测试全部迁移或由更强的新测试替代。
+- 原始 IMSI/MSISDN/IMEISV 不会出现在模型输入、日志或报告中。
+
+### P3：接入云端数据与事件
+
+交付物：
+
+- 实现 Spanner Incident/Metric/Trace/Log Repository。
+- 将 Fault Service 输出转换为 Canonical Incident/Event。
+- 增加定时 KPI 检测与事件触发检测，并统一走关联/去重服务。
+- 将规则、证据查询暴露为只读 MCP 工具或复用现有工具。
+- 为 CSV/DuckDB 与 Spanner 建立一次性导入/导出工具，不使用长期双写。
+- 定义 5G PM/Trace 数据契约和 `ResourceReference` 映射；不能把现有主机 `NetworkMetrics` 当作 LTE/5G 无线 KPI。
+- 通过容量、保留期和查询基准决定高频 Trace/PM 明细使用 Spanner、BigQuery 或其他分析型存储；Agent 只依赖 `TelemetryRepository`。
+
+退出标准：
+
+- 同一故障从日志、测试和 KPI 多次到达时只产生一个活动 Incident。
+- 云端证据查询具有时间窗、资源范围和结果大小限制。
+- Repository 契约测试在 DuckDB 与 Spanner 测试环境均通过。
+
+### P4：统一 Resolver Pipeline
+
+目标流程：
+
+```text
+Triage
+ → Rule Selection
+ → Evidence Collection
+ → Hypothesis/RCA
+ → Severity
+ → Knowledge/Prior Incidents
+ → Report
+ → Remediation Proposal
+```
+
+交付物：
+
+- 将现有 Resolver 的 Strategy/Troubleshoot 能力与本地 RCA 子 Agent 合并。
+- 去除重复 Incident 状态和重复数据库写入逻辑。
+- 每个阶段输出结构化结果，同时生成简体中文用户摘要。
+- 持久化 Checkpoint，使 Cloud Run 重启后可以恢复。
+- 记录模型、提示、规则、工具调用和证据引用版本。
+
+退出标准：
+
+- 相同 Incident 重放不会产生重复动作或重复报告版本。
+- 任一阶段失败都能得到可恢复状态和明确错误原因。
+- 最终报告中的事实均可追溯到证据引用。
+
+### P5：审批、修复与验证闭环
+
+交付物：
+
+- 建立不可伪造、具有作用域和有效期的审批记录。
+- 将模拟 `Action Executor` 替换为 `ActionGateway`；Cloud 实现通过 A2A 请求 Engineer。
+- Engineer 的计划确认与 Resolver 的动作审批合并为一次明确且可审计的用户决策。
+- 写操作必须先生成 dry-run/diff；审批绑定动作参数哈希，任何参数或作用域变化都必须重新审批。
+- 增加幂等键、超时、重试边界、补偿/回滚说明和最大动作范围。
+- 修复后调用 Tester/Operations 验证，失败则自动转入 `REOPENED` 或人工接管。
+
+退出标准：
+
+- 未审批、审批过期、参数变化或作用域扩大时无法执行写操作。
+- 重复消息不会重复执行网络变更。
+- 每个修复动作都有前后状态、执行结果和验证结果。
+
+### P6：统一 Supervisor 与 UI
+
+交付物：
+
+- Supervisor 可路由 Detector、Resolver、Engineer、Tester，并保持同一会话上下文。
+- Dashboard 增加 Incident 列表、RCA 时间线、证据摘要、审批卡片和验证状态。
+- 保留中文交互；界面不展示模型私有思维链，只展示阶段、工具、证据和结果。
+- 评估本地 Web UI：将其作为 Local Profile 壳层，或在功能等价后下线。
+
+退出标准：
+
+- 用户可以从一个界面完成“发现 → 调查 → 审批 → 修复 → 验证”。
+- 页面刷新、断线重连和 Cloud Run 重启不会丢失任务状态。
+- 审批对象、参数、风险和预期影响对用户可见。
+
+### P7：部署、CI、可观测性与安全
+
+交付物：
+
+- 锁定 Python 与依赖版本；在兼容性验证后统一 ADK 版本。
+- 补齐每个服务实际导入的直接依赖，生成按服务锁文件和全仓约束文件，禁止仅依赖传递安装或无上界漂移。
+- 为 Local Profile 提供一条启动入口，为 Cloud Profile 提供独立可组合部署脚本。
+- 避免继续扩张单体 `install.sh`：新组件采用可独立调用脚本，并由其编排。
+- CI 覆盖静态检查、单元、契约、Local E2E、容器冒烟和安全测试。
+- 建立跨 Agent `trace_id`、结构化日志、指标、成本和延迟监控。
+- 密钥全部进入 Secret Manager/环境注入；删除明文 Git 密码路径。
+
+退出标准：
+
+- 新环境可以按文档重复启动 Local Profile。
+- Cloud 预发布环境可以一键部署/回滚相关组件。
+- 日志不得包含密钥、原始用户标识或不受控的模型上下文。
+- 关键 SLO、告警和 Runbook 已定义并演练。
+
+### P8：灰度与旧路径下线
+
+交付物：
+
+- 影子模式运行新 Detector/RCA，只比较结果不执行动作。
+- 对 Incident 数量、严重度、根因、建议和延迟进行新旧路径对比。
+- 逐步开启人工审批后的真实修复，设置 Kill Switch。
+- 迁移必要数据，归档第二项目和重复 Resolver 路径。
+- 完成演示脚本、操作手册、故障手册和发布说明。
+
+退出标准：
+
+- 连续灰度窗口内无重复修复、未授权写入或关键 Incident 遗漏。
+- 回滚演练通过。
+- 旧路径不再接收新事件，且历史数据仍可查询。
+
+## 8. 首个最小纵向切片
+
+第一个可运行切片应利用现有 Dashboard 和 Supervisor，避免先重写 UI：
+
+```text
+现有 Flutter Dashboard
+ → Supervisor
+ → Incident Detector A2A（独立 ADK 2.x 运行环境）
+ → 本地 Performance CSV / DuckDB
+ → 展示候选并请求确认（A2A input_required）
+ → Canonical Incident
+ → 中文结果返回现有 Dashboard
+```
+
+该切片暂不执行 RCA 或修复，但必须使用最终的领域契约、端口和 A2A 消息格式。它能最快验证最危险的集成点：ADK 双版本隔离、A2A Agent Card/流式状态/`input_required`、状态传递、幂等、数据脱敏和 Supervisor 路由。用户未确认不得写入；重复确认只能产生一个 Incident；整条链必须传播同一 `trace_id`。
+
+第二个纵向切片再加入“Canonical Incident → 统一 Resolver 只读 RCA → 中文报告”，随后分别接入 Spanner、Engineer 和 Tester，避免同时调试模型、云数据和真实写操作。
+
+## 9. 数据迁移与一致性
+
+1. `incidents` 以 Canonical Incident 为源模型，DuckDB/Spanner 分别映射，禁止在 Agent 中拼 SQL。
+2. 现有 Spanner Incident 与 DuckDB Incident 通过一次性迁移器转换，保留原始 ID 和 `legacy_source`。
+3. `correlation_key` 建议由资源范围、故障类别和时间桶组成，并允许规则化扩展。
+4. 原始指标、Trace 和日志保留在各自数据源；Incident 只保存摘要和引用。
+5. 报告采用不可变版本，审批绑定具体 `report_version` 和 `action_hash`。
+6. 所有时间统一为 UTC 存储，UI 按用户时区展示。
+7. Local 与 Cloud 模式每次只配置一个写入型 `IncidentRepository`。
+
+## 10. 模型与 Agent 兼容策略
+
+- 第一阶段不强行把所有服务装进同一个 Python 环境；继续使用服务/容器隔离。
+- 共享 `contracts/domain` 包不得依赖 ADK、A2A SDK、FastMCP、LangGraph 或云 SDK；框架适配代码留在各服务内。
+- 为 Agent 角色配置模型，不在业务代码写死 `gemini-2.5-flash` 或 DeepSeek 型号。
+- `ModelProvider` 至少支持 Gemini、DeepSeek、Fake/Replay 三种实现。
+- 提示词、输出 Schema 和安全策略独立版本化。
+- 在 ADK `1.18.0 → 1.22+` 升级前建立关键回调、Toolset、Session 和 A2A 回归测试。
+- 实际目标版本需以兼容性矩阵为依据；不能因为第二项目当前解析到 ADK `2.6.3` 就直接全仓升级。
+- LangGraph Engineer 可以继续独立演进；只要求遵守 A2A 合同。
+- 生产中禁止依赖自由文本解析推进状态，关键输出必须通过 Pydantic Schema 校验。
+
+## 11. 测试与质量门禁
+
+### 11.1 测试层级
+
+- **单元测试**：KPI 计算、规则选择、相似度、状态机、脱敏、幂等、审批。
+- **契约测试**：DuckDB/Spanner Repository、A2A 消息、MCP 工具、模型结构化输出。
+- **Agent 场景测试**：固定输入与 Fake/Replay 模型，验证工具顺序和状态推进。
+- **Local E2E**：CSV → Detector → Resolver → Report → 模拟审批/动作/验证。
+- **Cloud 集成测试**：测试 Spanner、Cloud Run A2A、MCP、Engineer、Operator 沙箱。
+- **安全测试**：提示注入、越权工具、审批绕过、敏感数据泄漏、重放攻击。
+- **韧性测试**：超时、重复事件、断线、部分失败、服务重启和模型限流。
+
+### 11.2 合并门禁
+
+每个功能变更至少满足：
+
+1. 新增或更新相应测试。
+2. Local 离线测试全绿。
+3. 契约兼容测试全绿。
+4. 无新增高危安全问题和明文凭据。
+5. 本计划中的阶段状态、证据或决策日志已同步更新。
+
+## 12. 部署与配置
+
+建议配置：
+
+- `RUNTIME_PROFILE=local|cloud`
+- `MODEL_PROVIDER=deepseek|gemini|fake`
+- `INCIDENT_STORE=duckdb|spanner`
+- `ACTION_MODE=simulate|engineer_a2a|disabled`
+- `REQUIRE_ACTION_APPROVAL=true`（生产不可关闭）
+- `EXTERNAL_DOCS_ENABLED=false`（默认）
+- `INCIDENT_SCHEMA_VERSION=v1`
+
+Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据或本地数据库文件。配置启动时必须执行组合合法性校验，例如 Cloud + `ACTION_MODE=engineer_a2a` 必须同时存在 Engineer 地址和审批服务。
+
+## 13. 主要风险与缓解措施
+
+| 风险 | 影响 | 缓解措施 |
+|---|---|---|
+| ADK 1.18 与 1.22+ 行为不兼容 | 回调、Session、Toolset 失效 | 进程隔离、契约测试后再统一版本 |
+| A2A 0.2.16/0.3.11 混用 | Agent Card、消息和任务状态不兼容 | 锁定新服务 0.3.11，建立跨服务协议契约测试 |
+| LTE 样例与 5G 实验网语义不一致 | RCA 得出错误目标或错误动作 | `technology`、5G KPI、ResourceReference 映射和动作能力校验 |
+| 两套 Incident 逻辑并存 | 重复事件和状态冲突 | Canonical Incident + 单一 Resolver 所有权 |
+| DuckDB/Spanner 语义差异 | 事务和并发错误 | Repository 契约、乐观锁、禁止双主写 |
+| 模型供应商差异 | Tool Calling/Schema 表现不同 | ModelProvider + 场景回放 + 结构校验 |
+| 重复或乱序事件 | 重复修复 | correlation_key、revision、idempotency_key |
+| 审批链重复 | 用户混淆或越权 | Resolver 与 Engineer 共享一个版本化审批对象 |
+| 提示或规则诱导写操作 | 网络风险 | 工具权限分层、审批、作用域、Kill Switch |
+| 敏感标识泄漏 | 合规风险 | 聚合、脱敏、日志过滤、出站检查 |
+| `install.sh` 继续膨胀 | 部署不可维护 | 新组件独立脚本/清单，顶层只编排 |
+| UI 与后端状态不同步 | 错误审批或误判 | 服务端持久状态、事件游标、断线恢复 |
+| 配置/依赖/凭据漂移 | 构建不可重复或秘密泄露 | 按服务锁文件、秘密扫描、Secret Manager、禁止记录凭据对象 |
+
+## 14. 发布与回滚策略
+
+1. 所有新路径使用 Feature Flag。
+2. 先在 Local Profile 完成纵向切片，再进入 Cloud 测试环境。
+3. 云端先运行影子模式，只记录比较结果。
+4. 真实动作最初仅对白名单服务、低风险操作和人工审批开放。
+5. 每次动作保留 Kill Switch 和明确的补偿/人工恢复步骤。
+6. 数据 Schema 采用向前兼容迁移；发布时先扩展、切换后再收缩。
+7. 回滚优先切回旧 Agent 路由，不删除新数据；用 `schema_version` 保持可读。
+
+## 15. 架构决策日志
+
+| ID | 日期 | 决策 | 状态 | 原因 |
+|---|---|---|---|---|
+| ADR-001 | 2026-08-28 | 以 `NetworkAgent-dev` 为统一主仓库 | Accepted | 它已包含完整网络生命周期、A2A/MCP、Operator 和 Dashboard |
+| ADR-002 | 2026-08-28 | Resolver 是唯一 Incident 生命周期编排者 | Accepted | 避免两个 RCA/Resolution 流程竞争状态所有权 |
+| ADR-003 | 2026-08-28 | Local/Cloud 使用端口与适配器共享同一业务流程 | Accepted | 保留离线易用性，同时支持真实网络 |
+| ADR-004 | 2026-08-28 | Agent 间使用 A2A，基础设施能力使用 MCP/Repository | Accepted | 延续现有协议边界并降低框架耦合 |
+| ADR-005 | 2026-08-28 | 模型供应商可配置，按 Agent 角色选择模型 | Accepted | 避免锁定 Gemini 或 DeepSeek |
+| ADR-006 | 2026-08-28 | 所有有副作用动作强制人工审批和幂等验证 | Accepted | 网络变更属于高风险操作 |
+| ADR-007 | 2026-08-28 | 初期保持 Agent 进程隔离，再统一 ADK 版本 | Proposed | 降低依赖升级与合并同时发生的风险 |
+| ADR-008 | 2026-08-28 | LTE Demo 与 5G Live 使用共同遥测契约但不同 KPI/规则集 | Accepted | 两者网络技术和现有数据语义不可直接互换 |
+| ADR-009 | 2026-08-28 | 高频 PM/Trace 的云端物理存储在容量基准后决定 | Proposed | Incident 状态适合 Spanner，但高频明细不应未经评估直接写入同一存储 |
+
+## 16. 待确认事项
+
+这些事项不阻塞 P1，但必须在对应阶段开始前决策：
+
+- Local Profile 的最终入口使用现有中文 UI，还是统一 Dashboard 的本地构建。
+- Cloud 模式默认模型供应商及每个角色的模型预算。
+- Spanner 中 Canonical Incident 是迁移现有表还是建立 v2 表后切换。
+- 允许自动执行的低风险动作白名单是否存在；默认全部要求人工审批。
+- 外部文档允许列表、网络访问策略和内容留存要求。
+- 目标部署是否继续全部使用 Cloud Run，还是部分 Agent 进入 GKE。
+
+默认方案分别为：保留本地 UI 直至功能等价、Gemini 为 Cloud 默认且 DeepSeek 可选、新建 v2 后迁移、全部人工审批、外部检索关闭、沿用现有 Cloud Run/GKE 分工。
+
+## 17. 进度看板
+
+状态定义：`NOT STARTED`、`IN PROGRESS`、`BLOCKED`、`DONE`。不得用主观百分比替代验收证据。
+
+| 工作项 | 状态 | 最近更新 | 验收证据/备注 |
+|---|---|---|---|
+| 两项目快速架构与代码基线分析 | DONE | 2026-08-28 | README、入口、依赖、数据与测试已检查 |
+| 统一目标架构与实施路线 | DONE | 2026-08-28 | 本文档已完成架构、代码、交付和兼容性复核 |
+| 主仓库 Git 可回滚基线 | BLOCKED | 2026-08-28 | 当前 `NetworkAgent-dev` 目录没有 `.git` |
+| P1 领域模型与接口 | NOT STARTED | 2026-08-28 | — |
+| 首个 Local 纵向切片 | NOT STARTED | 2026-08-28 | — |
+| Cloud 数据接入 | NOT STARTED | 2026-08-28 | — |
+| Resolver 合并 | NOT STARTED | 2026-08-28 | — |
+| 修复与验证闭环 | NOT STARTED | 2026-08-28 | — |
+| UI 与发布 | NOT STARTED | 2026-08-28 | — |
+
+## 18. 文档维护规则
+
+本文档在开发过程中必须持续维护，具体规则如下：
+
+1. 每次开始一个阶段时，将对应状态改为 `IN PROGRESS`，并记录范围和日期。
+2. 每次完成代码变更时，同步更新交付物、风险、决策和验收证据。
+3. 只有验收标准全部满足并附上测试/演示证据后，阶段才能标记为 `DONE`。
+4. 出现阻塞时必须记录：阻塞原因、影响、已尝试方案和解除条件。
+5. 任何架构边界变化必须新增 ADR，不覆盖旧决策；被替代的决策标记为 `Superseded`。
+6. 工作范围变化必须同步调整阶段表，不允许代码状态领先于计划文档。
+7. 每个开发回合结束前检查“进度看板”和“变更记录”。
+8. 测试命令、部署结果、关键截图或日志位置应以仓库内相对路径记录，不粘贴密钥或敏感数据。
+
+## 19. 变更记录
+
+| 日期 | 变更 | 作者 |
+|---|---|---|
+| 2026-08-28 | 建立统一平台实施计划初稿，记录目标架构、阶段、风险、ADR 和维护规则 | Codex |
+| 2026-08-28 | 完成并行架构、交付与依赖复核；补充 ADK/A2A 版本隔离、LTE/5G 语义边界、首个 A2A 纵向切片及供应链风险 | Codex |
+
+## 20. 项目完成定义
+
+统一项目只有同时满足以下条件才算完成：
+
+- Local 与 Cloud 两种 Profile 均使用同一 Incident/RCA 领域逻辑。
+- 从异常检测到修复验证存在一个可恢复、可审计的状态机。
+- Detector、Resolver、Engineer、Tester 和 Supervisor 通过稳定契约协作。
+- 未审批写操作、重复修复和敏感数据外泄都有自动化防护测试。
+- Local E2E 与 Cloud 预发布 E2E 通过，回滚演练通过。
+- 用户能在一个界面查看证据、报告、审批、执行和验证结果。
+- 旧的重复 Incident/RCA 路径已停止接收新任务并有明确归档说明。
+- 架构、运行、部署、测试、故障处理和安全文档完整且与代码一致。

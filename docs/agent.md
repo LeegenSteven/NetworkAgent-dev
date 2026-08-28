@@ -4,7 +4,7 @@ The networkagent demo includes a set of agents that a user can interact with usi
 
 The figure below shows the high level network agent architecture. 
 
-![agent architecture](/drawings/agent/agent_architecture.drawio.svg)
+![image-20260720211037652](D:\研究生\领军班\NetworkAgent-dev\docs\agent\image-20260720211037652.png)
 
 Network automation and observability capabilities are provided with GKE and Spanner. These capabilities are exposed to the Agents through a set of MCP Tools. 
 
@@ -23,7 +23,7 @@ The following agents are available for chat interaction:
 
 The figure below shows a high level software architecture and chat interaction patterns between the agents. A set of tools allowing the agents to interact with GKE and Spanner is available to all agents.  
 
-![agent hierarchy](/drawings/agent/chatagents.drawio.svg)
+![image-20260720211201575](D:\研究生\领军班\NetworkAgent-dev\docs\agent\image-20260720211201575.png)
 
 The supervisor agent is built using the [ADK framework](https://google.github.io/adk-docs/) and communicates with the specialist agents with the [A2A framework](https://google.github.io/A2A/).
 
@@ -33,7 +33,7 @@ Specialist agents are implemented with [langgraph agent framework](https://langc
 
 The interaction diagram below shows the flow of interactions to support a chat session with a user. This diagram assumes remote agents have already been added to the system and are ready to be routed to by the supervisor agent.
 
-![chat interaction](/drawings/agent/chatinteraction.drawio.svg)
+![image-20260720211244846](D:\研究生\领军班\NetworkAgent-dev\docs\agent\image-20260720211244846.png)
 
 The flow is summarised as follows
 
@@ -52,7 +52,7 @@ The flow is summarised as follows
 
 Agents can also be triggered by external events or from MCP tool server, e.g. newly reported anomalies in spanner can trigger an anomaly agent to investigate. 
 
-![background](/drawings/agent/background.drawio.svg)
+![image-20260720211326858](D:\研究生\领军班\NetworkAgent-dev\docs\agent\image-20260720211326858.png)
 
 The figure above shows the background agent interaction pattern.
 
@@ -63,7 +63,7 @@ The figure above shows the background agent interaction pattern.
 
 The interaction chart below shows the sequence of events. 
 
-![agent interaction](/drawings/agent/background-sequence.drawio.svg)
+![image-20260720211422566](D:\研究生\领军班\NetworkAgent-dev\docs\agent\image-20260720211422566.png)
 
 Calls from one agent to another are expected to be non-streaming and include a data payload, chat interactions are expected to be streaming with text payload. 
 
@@ -77,7 +77,7 @@ The following sections present a desciption of each agent.
 
 The main supervisor agent responds to general queries from the user about their deployed network services and what action they can take on the network. The __main agent__ routes to a specialist agent when the question requires it. 
 
-![main agent architecture](/drawings/agent/main_agent.drawio.svg)
+![image-20260720211500463](D:\研究生\领军班\NetworkAgent-dev\docs\agent\image-20260720211500463.png)
 
 The supervisor agent has access to two tools
 
@@ -98,7 +98,7 @@ The network engineer agent performanes changes to network services and locations
 
 The diagram below describes the network engineer agent workflow. 
 
-![engineer agent architecture](/drawings/agent/engineer.drawio.svg)
+![image-20260720211533554](D:\研究生\领军班\NetworkAgent-dev\docs\agent\image-20260720211533554.png)
 
 The engineer steps are as follows:
 
@@ -122,11 +122,11 @@ Network faults are reported from a number of sources:
 
 The fault logs are caught by a GCP Log Sink and sent to a pub/sub topic which in turn triggers an event into a Cloud Run Fault Service. The Cloud Run Fault Service correlates faults with existing incidents being investigated and if there is no current incident a new one is created and the resolver agent is asked to investigate and try to resolve. 
 
-![fault trigger](/drawings/agent/faulttrigger.drawio.svg)
+![image-20260720211633049](D:\研究生\领军班\NetworkAgent-dev\docs\agent\image-20260720211633049.png)
 
 The Incident Resolver Agent is implemented using [Google's ADK ](https://google.github.io/adk-docs/) framework. The resolver agent operates as a background agent that receives incident data through A2A messaging and coordinates a sequential workflow of specialist agents to investigate and resolve network incidents automatically.
 
-![fault agent](/drawings/agent/resolver_agent.drawio.svg)
+![image-20260720211657251](D:\研究生\领军班\NetworkAgent-dev\docs\agent\image-20260720211657251.png)
 
 #### Resolver Agent Architecture
 

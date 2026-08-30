@@ -97,3 +97,83 @@ the full actor/reason/trace request fingerprint; reusing the key with different
 metadata is a deterministic conflict. When a previous request correlated to a
 different active Incident, the original candidate must still be reproducible or
 the replay fails closed.
+
+## Local deployment and governance loop
+
+`tools/local-stack/local_stack.py` is the repository-level entry point for the
+credential-free Local Profile. It uses the bundled LTE sample, rules, and
+documents; stores state below an explicitly selected marker-owned workspace;
+emits one JSON document per command; and defaults to `ACTION_MODE=disabled`.
+Run it from the repository root with Python 3.12 or 3.13:
+
+```powershell
+.venv/Scripts/python.exe tools/local-stack/local_stack.py --workspace .local/networkagent-stack doctor
+.venv/Scripts/python.exe tools/local-stack/local_stack.py --workspace .local/networkagent-stack init
+.venv/Scripts/python.exe tools/local-stack/local_stack.py --workspace .local/networkagent-stack status
+```
+
+`doctor` is read-only. `init` creates the DuckDB and, when its optional
+dependencies are available, the Assurance schema. Repeating `init` on the same
+owned workspace is safe; a failed first initialization rolls back only entries
+created by that attempt.
+
+The governance demo is intentionally two-stage. First confirm the deterministic
+candidate and persist the RCA proposal. The command stops at
+`AWAITING_APPROVAL` and returns a safe `action_preview` containing the
+`action_hash`, resource scope, risk, and `expected_revision`:
+
+```powershell
+.venv/Scripts/python.exe tools/local-stack/local_stack.py `
+  --workspace .local/networkagent-stack `
+  --action-mode simulate `
+  demo --confirm-incident
+```
+
+After reviewing that output, copy both binding values into a separate approval
+command. A non-empty reason is mandatory:
+
+```powershell
+.venv/Scripts/python.exe tools/local-stack/local_stack.py `
+  --workspace .local/networkagent-stack `
+  --action-mode simulate `
+  demo `
+  --approve-action `
+  --reason "reviewed isolated local simulation" `
+  --expected-action-hash HASH_FROM_PREVIEW `
+  --expected-revision REVISION_FROM_PREVIEW
+```
+
+The lifecycle is
+`DETECTED → TRIAGED → INVESTIGATING → RCA_COMPLETE → AWAITING_APPROVAL → REMEDIATING → VERIFYING`.
+The only permitted action is the fixed, low-risk `LOCAL_SIMULATION`; its action
+gateway creates a local `ActionRun` and performs no external I/O. A passed
+deterministic verification reaches `RESOLVED`. Add
+`--verification-outcome failed` to the approval command to exercise the
+`REOPENED` path. Rejection, expiry, a stale revision, a changed action hash, or
+an idempotency-key payload conflict produces no action run. The actor is part of
+the immutable idempotency binding, and a retry resumes safely from durable
+`REMEDIATING` or `VERIFYING` state after a response-loss interruption. If the
+approved grant expires while execution is pending, a bound, replayable
+zero-action transition closes that attempt as `FAILED`.
+
+If the optional Assurance runtime is installed, `serve` runs it in the
+foreground on the fixed loopback address. It accepts only disabled action mode:
+
+```powershell
+.venv/Scripts/python.exe tools/local-stack/local_stack.py --workspace .local/networkagent-stack --port 8085 serve
+```
+
+`reset` without `--yes` reports that confirmation is required. The confirmed
+form removes only the marker-owned state and artifacts; it rejects roots, the
+repository, home, symlink/junction/reparse workspaces, UNC/device paths,
+non-fixed Windows drives, and unowned directories, and preserves unknown files:
+
+```powershell
+.venv/Scripts/python.exe tools/local-stack/local_stack.py --workspace .local/networkagent-stack reset
+.venv/Scripts/python.exe tools/local-stack/local_stack.py --workspace .local/networkagent-stack reset --yes
+```
+
+This closes the governance lifecycle only for the isolated Local Profile. It
+does not invoke the Cloud Resolver, Engineer Agent, MCP write tools, GitOps,
+GKE, or the Network Operator, and it is not evidence for Cloud Staging IAM,
+OIDC, Pub/Sub DLQ, or Workload Identity.

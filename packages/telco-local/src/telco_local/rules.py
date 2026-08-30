@@ -35,6 +35,12 @@ from telco_domain import (
 
 
 RULE_SCHEMA_VERSION = "1.0"
+BUBBLERAN_REPLAY_DETECTOR_ALGORITHM = (
+    "deterministic-bubbleran-replay-threshold-v1"
+)
+BUBBLERAN_REPLAY_RULE_ID = (
+    "5g-sa.bubbleran.persistent-interference.ul-bler"
+)
 MAX_RULE_FILE_BYTES = 1_000_000
 MAX_RULE_FILES = 256
 MAX_RULE_TOTAL_BYTES = 16_000_000
@@ -167,12 +173,12 @@ class RuleSeverity(_RuleModel):
 
 
 class RcaRule(_RuleModel):
-    """One current or historical LTE rule with no executable free-form prompt."""
+    """One versioned LTE or controlled 5G replay rule without executable prompts."""
 
     schema_version: Literal["1.0"] = RULE_SCHEMA_VERSION
     rule_id: str = Field(min_length=1, max_length=128)
     version: str = Field(min_length=1, max_length=64)
-    technology: Literal["LTE"]
+    technology: Literal["LTE", "5G_SA"]
     is_current: StrictBool
     description_zh: str = Field(min_length=1, max_length=4_096)
     detection: RuleDetection
@@ -231,6 +237,7 @@ class RuleResolutionIssueCode(StrEnum):
     INCIDENT_VERSION_CONFLICT = "INCIDENT_VERSION_CONFLICT"
     RULE_VERSION_NOT_FOUND = "RULE_VERSION_NOT_FOUND"
     DUPLICATE_RULE_VERSION = "DUPLICATE_RULE_VERSION"
+    DETECTOR_ALGORITHM_MISMATCH = "DETECTOR_ALGORITHM_MISMATCH"
     KPI_MISMATCH = "KPI_MISMATCH"
     UNIT_MISMATCH = "UNIT_MISMATCH"
     THRESHOLD_MISMATCH = "THRESHOLD_MISMATCH"
@@ -329,12 +336,19 @@ def resolve_rules_for_incident(
     only the immutable provenance recorded on that Incident.
     """
 
-    if incident.technology is not Technology.LTE:
+    if incident.technology not in {
+        Technology.LTE,
+        Technology.FIVE_G_SA,
+    }:
         return RuleResolution(status=RuleResolutionStatus.NOT_APPLICABLE)
 
     by_identity: dict[tuple[str, str], RcaRule] = {}
     duplicate_identities: set[tuple[str, str]] = set()
-    for rule in available_rules:
+    for rule in (
+        candidate
+        for candidate in available_rules
+        if candidate.technology == incident.technology.value
+    ):
         identity = (rule.rule_id, rule.version)
         previous = by_identity.get(identity)
         if previous is not None and previous != rule:
@@ -357,9 +371,9 @@ def resolve_rules_for_incident(
     legacy_content_digest = incident.model_metadata.get(
         "rule_content_sha256"
     )
+    detector_algorithm = incident.model_metadata.get("detector_algorithm")
     requires_content_digest = (
-        incident.model_metadata.get("detector_algorithm")
-        == "deterministic-threshold-episodes-v3"
+        detector_algorithm == "deterministic-threshold-episodes-v3"
     )
     content_hashes: Mapping[str, object] = {}
     content_hashes_issue: RuleResolutionIssueCode | None = None
@@ -439,6 +453,20 @@ def resolve_rules_for_incident(
             )
             continue
 
+        is_bubbleran_replay_violation = (
+            rule_id == BUBBLERAN_REPLAY_RULE_ID
+        )
+        if is_bubbleran_replay_violation and (
+            detector_algorithm != BUBBLERAN_REPLAY_DETECTOR_ALGORITHM
+        ):
+            add_issue(
+                index,
+                RuleResolutionIssueCode.DETECTOR_ALGORITHM_MISMATCH,
+                rule_id=rule_id,
+                rule_version=rule_version,
+            )
+            continue
+
         identity = (rule_id, rule_version)
         if identity in duplicate_identities:
             add_issue(
@@ -491,10 +519,19 @@ def resolve_rules_for_incident(
             continue
         content_issue: RuleResolutionIssueCode | None = None
         claimed_content_digest = content_hashes.get(rule_id)
-        if content_hashes_issue is not None:
+        if (
+            is_bubbleran_replay_violation
+            and legacy_content_digest is not None
+        ):
+            content_issue = RuleResolutionIssueCode.RULE_CONTENT_HASH_INVALID
+        elif content_hashes_issue is not None:
             content_issue = content_hashes_issue
         elif claimed_content_digest is None:
-            if requires_content_digest or raw_content_hashes is not None:
+            if (
+                requires_content_digest
+                or is_bubbleran_replay_violation
+                or raw_content_hashes is not None
+            ):
                 content_issue = (
                     RuleResolutionIssueCode.RULE_CONTENT_HASH_MISSING
                 )
@@ -695,6 +732,8 @@ class JsonRuleRepository:
 
 
 __all__ = [
+    "BUBBLERAN_REPLAY_DETECTOR_ALGORITHM",
+    "BUBBLERAN_REPLAY_RULE_ID",
     "FactPredicate",
     "JsonRuleRepository",
     "MAX_RULE_FILES",

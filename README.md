@@ -10,8 +10,76 @@ Local Profile for safe CSV/DuckDB ingestion, anomaly preview, explicit Incident
 confirmation, and read-only rule-based RCA. It does not require GCP, ADK, a
 model API, or network access.
 
+The Local Profile now also has a single repository entry point for deployment
+checks, initialization, status, a deterministic governance demo, an optional
+foreground loopback service, and marker-scoped reset:
+
+```text
+python tools/local-stack/local_stack.py --workspace .local/networkagent-stack doctor
+python tools/local-stack/local_stack.py --workspace .local/networkagent-stack init
+python tools/local-stack/local_stack.py --workspace .local/networkagent-stack demo --confirm-incident
+```
+
+The demo stops at `AWAITING_APPROVAL`. A second command may enable
+`--action-mode simulate` and approve only the exact `action_hash` and Incident
+revision returned by that preview. The sole action is `LOCAL_SIMULATION`;
+successful verification reaches `RESOLVED`, while failed verification reaches
+`REOPENED`. This path never calls GCP, Engineer, MCP, GitOps, or a Network
+Operator and cannot perform a real network change.
+
+The foreground Assurance process also exposes a strict loopback-only
+Governance HTTP surface under `/local/v1/incidents/{incident_id}` for reading,
+preparing, deciding, and executing the same local simulation lifecycle. POST
+operations require an explicit `governance-v1` operation header and strict JSON;
+the existing A2A JSON-RPC and Agent Card routes remain unchanged. A separate
+`POST /local/v1/faults/replay` route accepts only the public, versioned
+`ReplayWirePayload` contract from a loopback peer. It acknowledges with HTTP
+202 only after bounded readback verifies the current Incident's immutable
+facts, its initial revision-0 Audit, and its source-event association. Neither
+local route can invoke a real network action.
+
+P3e adds an independent Local Data Lab for reproducible tests against vetted
+public telecom datasets. Dataset downloads are always explicit, license-gated,
+version/checksum pinned, cached outside Git, and converted through privacy-safe
+adapters before evaluation.
+
+```text
+telco-lab --workspace .local/telco-lab run \
+  bubbleran-persistent-interference \
+  --accept-license CC-BY-SA-4.0 \
+  --overlap-threshold 0.1
+
+telco-lab --workspace .local/telco-lab evaluate \
+  bubbleran-persistent-interference \
+  --overlap-threshold 0.1
+```
+
+The first command explicitly fetches the pinned artifacts; the second is fully
+offline and fails closed unless every cached artifact still matches its lock.
+Third-party data is never bundled in Git or project wheels and retains its
+upstream license. BubbleRAN observations can also be converted into a bounded,
+label-free replay plan. `telco-lab` provides the shared strict wire model, an
+immediate delivery helper, and a monotonic paced runner with bounded deadline,
+cancellation evidence, and opt-in finite retries for transient network/timeout
+failures. The Assurance receiver maps each validated source event to its own
+5G SA Canonical Incident. For the exact pinned BubbleRAN scenario, only a
+server-owned rule for `ran.mac.ul_bler > 0.15` adds RCA evidence and provenance;
+the threshold is a controlled local-test signature, not a production rule.
+
+A real loopback TCP E2E covers `RESOLVED`, verification-failed `REOPENED`,
+approval `REJECTED`, and approval-expiry `FAILED`; replaying settled events
+performs no additional durable writes. Checkpoints remain caller-owned and are
+not persisted by `telco-lab`; the receiver intentionally performs no
+cross-event aggregation. This path does not connect to Cloud Fault ingress,
+Spanner, Pub/Sub, Engineer, MCP write tools, GitOps, or a Network Operator.
+
+* [Implementation Development Plan 2.0](docs/implementation-development-plan-2.0.md)
 * [Living implementation plan](docs/unified-platform-implementation-plan.md)
 * [Local Profile setup and CLI](packages/telco-local/README.md)
+* [Local deployment and governance entry point](tools/local-stack/README.md)
+* [Local governance security Gate](docs/security/local-governance-gate.md)
+* [Local Data Lab design and operating boundary](docs/local-data-lab.md)
+* [P3e Local Data Lab security Gate](docs/security/p3e-data-lab-gate.md)
 * [P2a security Gate audit](docs/security/p2a-gate-audit.md)
 
 ## Network Agents
@@ -88,9 +156,15 @@ More details on the network agents, services and the environment can be found be
 ## Run the demo
 
 * [Setup GCP environment](INSTALL.md)
-* [Build a 5G Network demo scenario](/docs/5gbuilddemo.md)
-* [Closed Loop demo scenario](/docs/closedloopdemo.md)
+* [Build a 5G Network demo scenario](docs/5gbuilddemo.md)
+* [Closed Loop demo scenario](docs/closedloopdemo.md)
 
 ## LICENSES
 
-The source code of this project is provided under the [Apache 2.0 license](LICENSE). All other artifacts such as images, video, audio and data as free/open material is provided under the [CC-BY 4.0 license](http://creativecommons.org/licenses/by/4.0/).
+The source code of this project is provided under the [Apache 2.0 license](LICENSE).
+Project-owned media and data explicitly marked as such are provided under the
+[CC-BY 4.0 license](http://creativecommons.org/licenses/by/4.0/). Third-party
+datasets are not relicensed by this repository: each dataset remains governed
+by the exact upstream license and attribution recorded in its audited catalog
+entry and workspace lock. Raw third-party datasets are downloaded to a local
+cache and are not included in Git or release wheels.

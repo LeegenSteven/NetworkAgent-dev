@@ -7,7 +7,7 @@ name = "telco-assurance-agent"
 version = "0.1.0"
 description = "Deterministic A2A adapter for the NetworkAgent Local Assurance Profile"
 readme = "README.md"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "a2a-sdk[http-server]==0.3.11",
@@ -15,6 +15,7 @@ dependencies = [
     "pydantic>=2.11,<3",
     "starlette>=0.41,<2",
     "telco-domain>=0.1,<0.2",
+    "telco-lab>=0.1,<0.2",
     "telco-local>=0.1,<0.2",
     "uvicorn==0.35.0",
 ]
@@ -38,5 +39,6 @@ testpaths = ["tests"]
 pythonpath = [
     "src",
     "../../packages/telco-domain/src",
+    "../../packages/telco-lab/src",
     "../../packages/telco-local/src",
 ]

@@ -4,8 +4,12 @@ on:
   push:
     paths:
       - "packages/telco-domain/**"
+      - "packages/telco-lab/**"
       - "packages/telco-local/**"
       - "networkagents/assurance/**"
+      - "data/rca-rules/**"
+      - "data/samples/lte-demo/**"
+      - "data/docs/lte/**"
       - "lib/pyproject.toml"
       - "lib/src/agent_library/agentmiddleware/adk.py"
       - "networkagents/supervisor/requirements.txt"
@@ -17,13 +21,19 @@ on:
       - "networkagents/supervisor/test/**"
       - "tests/contracts/a2a/**"
       - "tests/e2e/local/**"
+      - "tests/e2e/lab/**"
       - "tests/e2e/a2a/**"
+      - "docs/implementation-development-plan-2.0.md"
       - ".github/workflows/telco-assurance.yml"
   pull_request:
     paths:
       - "packages/telco-domain/**"
+      - "packages/telco-lab/**"
       - "packages/telco-local/**"
       - "networkagents/assurance/**"
+      - "data/rca-rules/**"
+      - "data/samples/lte-demo/**"
+      - "data/docs/lte/**"
       - "lib/pyproject.toml"
       - "lib/src/agent_library/agentmiddleware/adk.py"
       - "networkagents/supervisor/requirements.txt"
@@ -35,7 +45,9 @@ on:
       - "networkagents/supervisor/test/**"
       - "tests/contracts/a2a/**"
       - "tests/e2e/local/**"
+      - "tests/e2e/lab/**"
       - "tests/e2e/a2a/**"
+      - "docs/implementation-development-plan-2.0.md"
       - ".github/workflows/telco-assurance.yml"
 
 permissions:
@@ -135,11 +147,13 @@ jobs:
           cache: pip
           cache-dependency-path: |
             packages/telco-domain/pyproject.toml
+            packages/telco-lab/pyproject.toml
             packages/telco-local/pyproject.toml
             networkagents/assurance/pyproject.toml
-      - name: Install Local Profile, Assurance Agent, and test dependencies
+      - name: Install Local Profile, Data Lab, Assurance Agent, and test dependencies
         run: |
           python -m pip install -e "packages/telco-domain[test]"
+          python -m pip install -e "packages/telco-lab[test]"
           python -m pip install -e "packages/telco-local[test]"
           python -m pip install -e "networkagents/assurance[test]"
       - name: Prove the current A2A SDK is exact
@@ -148,28 +162,30 @@ jobs:
           assert version('a2a-sdk') == '0.3.11'"
       - name: Run prior regressions and P2b release tests
         run: |
-          python -m pytest \
-            packages/telco-domain/tests \
-            packages/telco-local/tests \
-            tests/e2e/local \
-            networkagents/assurance/tests \
-            tests/contracts/a2a \
-            tests/e2e/a2a \
-            -q
+          python -m pytest packages/telco-domain/tests -q
+          python -m pytest packages/telco-lab/tests -q
+          python -m pytest packages/telco-local/tests -q
+          python -m pytest tests/e2e/lab -q
+          python -m pytest tests/e2e/local -q
+          python -m pytest networkagents/assurance/tests -q
+          python -m pytest tests/contracts/a2a -q
+          python -m pytest tests/e2e/a2a -q
       - name: Build all Local-profile wheels
         run: |
           python -m pip install "build>=1,<2"
           python -m build --wheel --outdir dist/domain packages/telco-domain
+          python -m build --wheel --outdir dist/lab packages/telco-lab
           python -m build --wheel --outdir dist/local packages/telco-local
           python -m build --wheel --outdir dist/assurance networkagents/assurance
       - name: Smoke-test wheels outside the source tree
         run: |
-          python -m pip uninstall -y telco-assurance-agent telco-local telco-domain
+          python -m pip uninstall -y telco-assurance-agent telco-local telco-lab telco-domain
           python -m pip install dist/domain/telco_domain-*.whl
+          python -m pip install dist/lab/telco_lab-*.whl
           python -m pip install dist/local/telco_local-*.whl
           python -m pip install dist/assurance/telco_assurance_agent-*.whl
           cd /tmp
-          python -c "import telco_assurance_agent, telco_domain, telco_local; from importlib.metadata import version; assert version('a2a-sdk') == '0.3.11'; assert telco_domain.SCHEMA_VERSION == '1.0'"
+          python -c "import telco_assurance_agent, telco_domain, telco_lab, telco_local; from importlib.metadata import version; from telco_assurance_agent.fault_receiver import LocalReplayFaultReceiver; from telco_assurance_agent.governance_http import LocalGovernanceHttpApi; from telco_lab import ReplayWirePayload, run_paced_replay; assert version('a2a-sdk') == '0.3.11'; assert telco_domain.SCHEMA_VERSION == '1.0'; assert ReplayWirePayload.model_fields['schema_version'].default == '1.0'; assert callable(run_paced_replay)"
           telco-assurance-agent --help
       - name: Verify dependency consistency
         run: python -m pip check

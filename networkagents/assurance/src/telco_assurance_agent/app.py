@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from starlette.applications import Starlette
-from telco_local import LocalProfile
+from starlette.routing import Mount
+from telco_local import LocalGovernanceEngine, LocalProfile
 
 from .boundary import SafeA2ARequestBoundary
 from .card import build_agent_card
 from .config import AssuranceConfig
 from .executor import AssuranceAgentExecutor
+from .fault_receiver import LocalReplayFaultReceiver, fault_receiver_routes
+from .governance_http import governance_routes
 from .service import AfterIncidentWriteHook, AssuranceService, Clock
 from .stores import (
     DuckDbPendingConfirmationStore,
@@ -28,6 +32,8 @@ class AssuranceComponents:
     pending_store: DuckDbPendingConfirmationStore
     task_store: DuckDbTaskStore
     service: AssuranceService
+    fault_receiver: LocalReplayFaultReceiver
+    governance_engine: LocalGovernanceEngine
     executor: AssuranceAgentExecutor
     request_handler: DefaultRequestHandler
 
@@ -70,6 +76,16 @@ def build_components(
         clock=clock,
         after_incident_write=after_incident_write,
     )
+    governance_engine = LocalGovernanceEngine(
+        profile.incident_repository,
+        profile.rca_gateway,
+        clock=clock or (lambda: datetime.now(UTC)),
+    )
+    fault_receiver = LocalReplayFaultReceiver(
+        profile.incident_repository,
+        profile.rule_repository,
+        actor=config.actor,
+    )
     executor = AssuranceAgentExecutor(service)
     request_handler = DefaultRequestHandler(
         agent_executor=executor,
@@ -81,6 +97,8 @@ def build_components(
         pending_store=pending_store,
         task_store=task_store,
         service=service,
+        fault_receiver=fault_receiver,
+        governance_engine=governance_engine,
         executor=executor,
         request_handler=request_handler,
     )
@@ -104,14 +122,21 @@ def create_app(
         agent_card_url="/.well-known/agent-card.json",
         rpc_url="/",
     )
-    application = Starlette()
-    application.mount("/", SafeA2ARequestBoundary(sdk_application))
+    application = Starlette(
+        routes=[
+            *fault_receiver_routes(components.fault_receiver),
+            *governance_routes(components.governance_engine),
+            Mount("/", app=SafeA2ARequestBoundary(sdk_application)),
+        ]
+    )
     # Public audit/test seam: callers can inspect durable stores without
     # reaching into the A2A SDK handler's private attributes.
     application.state.assurance_components = components
     application.state.assurance_service = components.service
     application.state.assurance_pending_store = components.pending_store
     application.state.assurance_task_store = components.task_store
+    application.state.local_fault_receiver = components.fault_receiver
+    application.state.local_governance_engine = components.governance_engine
     return application
 
 

@@ -1,9 +1,10 @@
 # NetworkAgent 统一智能运维平台实施计划
 
-> 文档状态：Active（后续开发的计划与进度唯一事实来源）  
+> 文档状态：Active（统一平台架构、历史阶段与总路线事实来源）
 > 首次建立：2026-08-28  
-> 最近更新：2026-08-29
-> 当前里程碑：P0、P1、P2 已完成 / P3 Cloud 代码与远程 Emulator Gate 已通过，等待 Cloud Staging 验收
+> 最近更新：2026-08-30
+> 下一轮执行基线：[实施开发计划 2.0](implementation-development-plan-2.0.md)
+> 当前里程碑：P0、P1、P2 已完成 / P3 Cloud 代码与远程 Emulator Gate 已通过，等待 Cloud Staging 验收；P3e BubbleRAN 已完成锁定下载、适配、离线评估、受控回放、持久 Canonical Fault 接收与本地治理 E2E，但 checkpoint 持久化、跨事件聚合和 RCAEval 仍待开发；P4/P5/P7 的 Local 模拟治理与部署切片已完成，Cloud Resolver、真实动作和统一 UI 仍待开发
 > 目标主仓库：`NetworkAgent-dev`  
 > 输入项目：`NetworkAgent-dev`、`telco-autonomous-networks-data-demo-main`
 
@@ -273,10 +274,11 @@ Agent 不得直接导入 DuckDB、Spanner、GKE 或 Gitea SDK。
 | P1 | 统一领域模型、接口和测试骨架 | 3–5 人日 | **DONE** |
 | P2 | 本地 Detector/RCA 迁入主仓库 | 5–8 人日 | **DONE** |
 | P3 | 接入 Spanner/MCP/实时事件 | 5–8 人日 | **IN PROGRESS** |
-| P4 | 合并并增强 Resolver Pipeline | 6–10 人日 | NOT STARTED |
-| P5 | 审批、真实修复和修复后验证 | 5–8 人日 | NOT STARTED |
+| P3e | 本地开放数据实验室：受控下载、脱敏、适配、离线评估与回放 | 3–5 人日 | **IN PROGRESS** |
+| P4 | 合并并增强 Resolver Pipeline | 6–10 人日 | **IN PROGRESS** |
+| P5 | 审批、真实修复和修复后验证 | 5–8 人日 | **IN PROGRESS** |
 | P6 | 统一 Supervisor 与 UI 体验 | 4–7 人日 | NOT STARTED |
-| P7 | 部署、CI、可观测性与安全加固 | 5–8 人日 | NOT STARTED |
+| P7 | 部署、CI、可观测性与安全加固 | 5–8 人日 | **IN PROGRESS** |
 | P8 | 灰度切换、旧路径下线和发布验收 | 3–5 人日 | NOT STARTED |
 
 ### P0：基线与架构冻结
@@ -356,12 +358,13 @@ P2a 验收证据（2026-08-28）：
 
 ### P3：接入云端数据与事件
 
-执行拆分（2026-08-29 更新）：
+执行拆分（2026-08-30 更新）：
 
 - **P3a（代码与远程 Emulator Gate 完成）**：已建立 Canonical Spanner v2 表族、事务型 Incident/Telemetry/Event/Outbox Repository、审计/幂等/source-event 关联和三实现共享契约；旧 `Incident` 表保持只读，不原地更名或长期双写。
 - **P3b（本地完成）**：已建立严格 Pub/Sub push Fault Ingress，以同一 Spanner 事务写 Inbox + Incident/Audit + SourceAssociation + Outbox；默认 `shadow`，仅 durable success/replay 返回 2xx，瞬时故障返回可重试状态，poison message 交给订阅 DLQ。
 - **P3c（本地完成）**：已建立与 Engineering 写工具分离的独立 FastMCP 服务，只注册六个只读 Canonical Incident/KPI/Evidence/Resource 工具，并在出站边界执行逐项与累计预算。
 - **P3d（本地完成）**：已建立 checksummed Canonical DuckDB → Spanner 一次性迁移；运行时/导出无 DDL，保留完整来源证明，重放交叉核验持久组件。legacy Spanner 语义不明确的行只读保留并进入人工映射队列。
+- **P3e（IN PROGRESS）**：新增本地开放数据实验室。现有 P3c 已由只读 Cloud MCP 占用，因此开放数据工作正式编号为 P3e，不复用 P3c。当前已完成安全 catalog/lock、许可证据与归属锁定、显式许可下载、BubbleRAN 精确 schema CSV/JSON 适配、候选有界的离线评估、immutable label-free `ReplayPlan` 和公开 `ReplayWirePayload`。loopback transport 现支持立即投递与单调 paced runner，只对显式启用的 network/timeout 瞬时失败做有限重试，并保留 deadline/cancel 证据。Assurance `POST /local/v1/faults/replay` 只在 Canonical Incident/source association 持久后返回 202；每 source 独立 Incident，精确锁定的 5G SA BubbleRAN `ran.mac.ul_bler > 0.15` 只使用服务端规则版本和内容摘要作 provenance，不得外推生产。RCAEval、多源/跨事件聚合和 checkpoint 持久化仍未实现。
 - 共享 Repository 已统一：source event 全生命周期只属于一个 Incident；新关联不增加 revision；分裂 selector fail closed；`CLOSED → REOPENED` 在同一事务重新获取全部活动键。
 - 本地发布矩阵已通过：领域 323 项、Local 166 项、共享 Repository 合同 2 项、Cloud/迁移/FGAC 146 项、Fault Ingress 与 Cloud MCP 101 项；P2b Assurance 26 项和 Local E2E 1 项也保持绿色。Spanner 迁移与常规生命周期均已覆盖 1,000 条来源的批量边界。提交 `fa07096` 的 [Cloud CI run 33202370157](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33202370157) 已在 Python 3.12/3.13 上分别通过真实 Spanner Emulator 对象 DDL、共享 Repository、50 路并发、迁移重放、1,000 条来源、reopen 与 Inbox/Outbox 验收，并完成五 wheel 源码树外安装、四 CLI 冒烟和 `pip check`。
 
@@ -374,6 +377,10 @@ P2a 验收证据（2026-08-28）：
 - 为 Canonical DuckDB 与 Spanner 建立一次性导入/导出工具，不使用长期双写；legacy 数据禁止猜测映射。
 - 定义 5G PM/Trace 数据契约和 `ResourceReference` 映射；不能把现有主机 `NetworkMetrics` 当作 LTE/5G 无线 KPI。
 - 通过容量、保留期和查询基准决定高频 Trace/PM 明细使用 Spanner、BigQuery 或其他分析型存储；Agent 只依赖 `TelemetryRepository`。
+- P3e 以 catalog/lock 驱动的本地端口接入许可明确的开放数据；原始大文件仅进入 `.local/telco-lab` 摘要锁定缓存，Git 只保存 catalog、适配器和代码生成的极小脱敏 fixture。
+- P3e 首批政策白名单为 BubbleRAN（CC BY-SA 4.0）、NIST RAN Anomalous State（NIST Open Data）、RANalyzer（CC BY 4.0）、TelecomTS（MIT）和 RCAEval（MIT）；许可不清或无法固定版本的数据默认禁用。
+- P3e 先交付 BubbleRAN Detector 与 RCAEval 多源 RCA 两个互补纵向切片，再扩展其余白名单；完整设计见[本地开放数据实验室](local-data-lab.md)，发布边界见[P3e Data Lab Gate](security/p3e-data-lab-gate.md)。
+- P3e 的回放计划只接受已验证且与 lock 精确绑定的 bundle、审批过的 adapter 字段/单位投影、显式 loopback URL 和 `disabled|simulate`；限制事件数、速率、时长、单项/累计载荷、资源数、并发与倍速，并为重复、乱序和断点续传测试提供稳定序列。仓内 transport 已能以公开 wire 契约执行立即或单调节奏 loopback HTTP 投递，并在默认零重试基础上可显式选择有限 network/timeout transient retry。Assurance 持久接收器与真实 TCP 业务 E2E 已完成；checkpoint 仍未仓内持久化，也无跨事件聚合或真实动作。
 
 退出标准：
 
@@ -381,8 +388,20 @@ P2a 验收证据（2026-08-28）：
 - 云端证据查询具有时间窗、资源范围和结果大小限制。
 - Repository 契约测试在 DuckDB 与 Spanner 测试环境均通过。
 - Linux CI 中真实 Spanner Emulator 完成对象 DDL、事务、并发、reopen、迁移重放和 Outbox 验收；Cloud Staging 的 FGAC/OIDC/DLQ 结果单独回填，不以 Emulator 代替。
+- P3e 的 BubbleRAN 与 RCAEval 完成精确版本/许可/校验和锁定、隐私扫描、Canonical 适配、确定性离线评估和 loopback 受限回放；仓库与发布 wheel 不包含第三方原始数据。
+- P3e 即使完成也不能替代 Cloud Staging 的 IAM/OIDC、Pub/Sub DLQ 和 Workload Identity 验收，P3 总阶段仍以两个 Gate 各自真实证据判断。
+
+当前 P3e 尚未满足退出标准：BubbleRAN 已交付确定性计划、公开 wire、loopback transport、paced runner、有界 transient retry、Canonical Fault 持久接收器和真实 TCP 治理 E2E；但 checkpoint 持久化、跨事件聚合与 RCAEval 纵向切片尚未完成。因此 P3e 保持 `IN PROGRESS`。
 
 ### P4：统一 Resolver Pipeline
+
+Local 子切片（2026-08-30 已完成）：新增无框架的
+`LocalGovernanceEngine`，在同一 Canonical Incident/DuckDB Repository 上可恢复地推进
+`DETECTED → TRIAGED → INVESTIGATING → RCA_COMPLETE → AWAITING_APPROVAL`。
+确定性 RCA 必须绑定 Incident revision、包含本地证据；仅 `CONCLUSIVE` 报告可由独立策略附加一个固定
+`LOCAL_SIMULATION` 建议，`INCONCLUSIVE` 停在 `RCA_COMPLETE`。每一步使用派生幂等键，已提交但响应丢失时可安全续跑。
+
+该子切片验证了 Resolver 编排骨架，但没有合并现有 Strategy/Troubleshoot/Resolution Agent、模型调用、Cloud checkpoint 或 A2A Outbox 消费，因此 P4 总阶段保持 `IN PROGRESS`。
 
 目标流程：
 
@@ -412,6 +431,10 @@ Triage
 - 最终报告中的事实均可追溯到证据引用。
 
 ### P5：审批、修复与验证闭环
+
+Local 子切片（2026-08-30 已完成）：`prepare` 只创建 append-only `PENDING` 审批并返回动作哈希与 Incident revision；用户必须在另一次 `decide` 调用中同时提交精确 `expected_action_hash`、`expected_revision`、操作者与非空理由。审批默认 15 分钟、最多 24 小时，执行前由可信 Repository 与时钟重新解析最新批准。拒绝、过期、hash/revision 变化或幂等载荷冲突均不会创建 `ActionRun`。
+
+批准后只能执行固定参数、低风险、无外部 I/O 的 `LOCAL_SIMULATION`，随后生成本地 `TEST_RESULT` 证据：通过进入 `RESOLVED`，失败进入 `REOPENED`。该切片没有真实 Engineer A2A、MCP 写工具、GitOps/Operator、网络 dry-run 或生产回滚能力，因此 P5 总阶段保持 `IN PROGRESS`，不能用本地 Gate 代替 Cloud Staging 验收。
 
 交付物：
 
@@ -444,6 +467,11 @@ Triage
 - 审批对象、参数、风险和预期影响对用户可见。
 
 ### P7：部署、CI、可观测性与安全
+
+Local 部署子切片（2026-08-30 已完成）：新增
+`tools/local-stack/local_stack.py` 作为跨平台 JSON 入口，提供 `doctor`、`init`、`status`、`demo`、前台 `serve` 和显式 `reset --yes`。工作区必须显式指定且由 marker 所有，仓库内只允许 `.local` 子目录；root/home/repository、symlink/junction/reparse、UNC/device、非固定 Windows 驱动器和 unowned 路径失败关闭。服务固定绑定 `127.0.0.1`，只允许 `ACTION_MODE=disabled`，动作演示默认禁用且只能显式切换为 `simulate`。Local CI 已纳入 stack 安全测试、治理单元/E2E 与公共导出冒烟。
+
+该入口尚未交付统一 Dashboard、容器发布、Cloud 组合部署、SLO/告警和完整 Runbook，因此 P7 总阶段保持 `IN PROGRESS`。
 
 交付物：
 
@@ -496,6 +524,8 @@ Triage
 
 第二个本地切片“Canonical Incident → 确定性只读 RCA → 中文报告”也已由 Assurance A2A 的 `assurance_analyze_request` 完成；报告不落库、不生成动作、不推进 Incident。随后按 P3–P5 分别接入 Spanner、统一 Resolver、Engineer 和 Tester，避免同时调试云数据、模型和真实写操作。
 
+第三个本地切片已用仓库级 `local-stack` 完成“LTE CSV → Detector → 显式 Incident 确认 → 持久 RCA → hash/revision 双绑定审批 → `LOCAL_SIMULATION` → 本地验证”。通过时 Incident 为 `RESOLVED`，失败时为 `REOPENED`，重复执行不增加 action/verification/history。它是隔离、无网络副作用的本地治理验收链，不替代第二个切片的 A2A 用户体验，也不代表 Cloud Resolver/Engineer/Tester 已接通。
+
 ## 9. 数据迁移与一致性
 
 1. `incidents` 以 Canonical Incident 为源模型，DuckDB/Spanner 分别映射，禁止在 Agent 中拼 SQL。
@@ -527,6 +557,7 @@ Triage
 - **契约测试**：DuckDB/Spanner Repository、A2A 消息、MCP 工具、模型结构化输出。
 - **Agent 场景测试**：固定输入与 Fake/Replay 模型，验证工具顺序和状态推进。
 - **Local E2E**：CSV → Detector → Resolver → Report → 模拟审批/动作/验证。
+- **开放数据回放测试**：verified lock/bundle → 无标签 `ReplayPlan` → 公开 wire → paced loopback transport → durable Canonical Incident → 本地治理；分开验证重复/乱序/续传、截止/取消和 settled exact replay 零写。
 - **Cloud 集成测试**：测试 Spanner、Cloud Run A2A、MCP、Engineer、Operator 沙箱。
 - **安全测试**：提示注入、越权工具、审批绕过、敏感数据泄漏、重放攻击。
 - **韧性测试**：超时、重复事件、断线、部分失败、服务重启和模型限流。
@@ -555,6 +586,16 @@ Triage
 
 Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据或本地数据库文件。配置启动时必须执行组合合法性校验，例如 Cloud + `ACTION_MODE=engineer_a2a` 必须同时存在 Engineer 地址和审批服务。
 
+当前 Local 部署入口从仓库根目录运行：
+
+```text
+python tools/local-stack/local_stack.py --workspace .local/networkagent-stack doctor
+python tools/local-stack/local_stack.py --workspace .local/networkagent-stack init
+python tools/local-stack/local_stack.py --workspace .local/networkagent-stack status
+```
+
+`demo` 的 Incident 确认与动作批准必须分两次调用；第二次批准必须复制第一次返回的 `action_hash` 与 `expected_revision`。`serve` 只以前台、loopback、禁用动作模式运行；`reset` 必须使用 `--yes` 且只删除 marker-owned state/artifacts。完整命令见 [Local Profile 文档](../packages/telco-local/README.md)，安全结论见 [Local Governance Gate](security/local-governance-gate.md)。
+
 ## 13. 主要风险与缓解措施
 
 | 风险 | 影响 | 缓解措施 |
@@ -581,6 +622,13 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | pre-v3 Incident 缺规则内容哈希 | 只能证明版本号，不能证明同版本规则未被改写 | 新候选使用内容哈希；旧数据迁移时补规则快照/哈希并标记 legacy，不回退 current 猜测 |
 | 多规则/多资源证据归因过粗 | 未来聚合 Incident 可能把一条证据错误用于另一规则或资源 | 当前限制为单规则、单资源 episode；扩展前将 evidence scope 细化到 violation/rule 级 |
 | Local DuckDB 初始化与运行权限混用 | 严格只读部署可能误执行 DDL/导入并触发锁竞争 | P2b 已拆分 `init`/`run`；运行进程只打开已初始化 schema，部署时继续采用单 writer 与最小文件权限 |
+| 第三方数据许可不清或上游许可漂移 | 公司答辩、再分发或商用存在合规风险 | P3e 许可白名单默认拒绝；锁定许可证据、归属和版本，许可变化必须人工复核；对外交付前由公司合规/法务确认 |
+| 外部归档或结构化数据携带恶意内容 | 路径穿越、解压炸弹、解析器耗尽或本机文件污染 | staging 隔离、SHA-256、主机/类型/容量白名单、安全解包、解析预算；第三方代码与 Notebook 永不执行 |
+| 开放数据含订户/设备/UE 标识或原始 payload | 敏感信息进入 Canonical、日志、报告、模型或 Git | 已启用适配器采用精确 schema，未知列在行读取前拒绝并且只输出安全投影；通用自由文本扫描/quarantine 完成前不启用其他格式 |
+| 不同数据集 KPI/标签语义被强行统一 | 离线指标看似优秀但 RCA 和资源目标错误 | 每字段记录单位/时区/聚合/标签 provenance；未知语义保留数据集命名空间，不伪造 ERAB/RRC/PDU Session 等 KPI |
+| 大型数据集和派生文件进入 Git/构建产物 | 仓库膨胀、许可扩散、发布包泄漏和 CI 不稳定 | 原始/派生数据只存 `.local/telco-lab` 摘要锁定缓存；提交前与 wheel/容器构建均扫描，Git 仅含代码生成的小型脱敏 fixture |
+| 历史事件回放误入 Cloud 或触发真实动作 | 污染 Staging/生产 Incident 或造成网络变更 | 回放仅 loopback Local Profile，`ACTION_MODE=disabled|simulate`，检测 GCP/Engineer 配置即拒绝；速率、总量与时间平移有界 |
+| 训练/测试标签泄漏或选择性报告 | 答辩结果不可复现或被高估 | 固定数据锁、split、种子、场景和代码提交；有/无标签指标分开，机器可读报告保留拒绝与失败计数 |
 
 ## 14. 发布与回滚策略
 
@@ -621,6 +669,10 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | ADR-023 | 2026-08-29 | Fault Pipeline 使用唯一 `legacy|shadow|canonical|paused` 模式，默认 shadow；canonical 与 legacy writer 互斥 | Accepted | 避免双主并保留可验证回滚点；入口只在 durable commit 后 ACK |
 | ADR-024 | 2026-08-29 | Cloud MCP 是独立六工具只读服务，使用专属 FGAC reader；Fault、MCP、Outbox、一次性迁移分别使用精确角色 | Accepted | 工具 allowlist 不能替代数据库最小权限，迁移所需 Audit 读取也不应扩散给常驻 Fault 身份 |
 | ADR-025 | 2026-08-29 | 一次性迁移只自动接受 Canonical DETECTED/revision-0；bundle 使用校验和而非签名，legacy/归属歧义进入可追踪隔离清单 | Accepted | 保留可证明的快照与 provenance，禁止按字段相似度猜测 legacy 状态或任意选择冲突 owner |
+| ADR-026 | 2026-08-30 | P3e 采用 manifest/lock 驱动且许可默认拒绝的 Local Data Lab；原始数据不入 Git，只有脱敏并通过显式适配器的 Canonical 数据可进入评估/回放 | Accepted | 让第三方数据可重复、可审计地复用，同时隔离许可漂移、供应链内容、隐私和跨数据集语义风险 |
+| ADR-027 | 2026-08-30 | P3e 回放严格限制为 loopback Local Profile 与禁用/模拟动作；开放数据 Gate 和 Cloud Staging IAM/OIDC/DLQ/WIF Gate 相互独立 | Accepted | 离线数据可以验证业务契约与韧性，但无法证明真实云身份、投递和网络安全边界 |
+| ADR-028 | 2026-08-30 | Local 治理只允许策略生成的固定 `LOCAL_SIMULATION`；审批分为预览与决定两次调用，并同时绑定 action hash、report、scope、Incident revision、有效期和可信时钟 | Accepted | 在没有真实网络副作用的条件下验证完整状态机，同时关闭旧预览、参数替换、过期批准和伪造 ApprovalReference 的执行路径 |
+| ADR-029 | 2026-08-30 | Local 部署采用显式 marker-owned `.local` workspace、JSON-only 命令、默认禁用动作、固定 loopback 前台服务和确认式精确 reset | Accepted | 为答辩与离线回归提供可重复入口，同时防止隐式云凭据、后台残留进程、外部监听和误删用户/仓库文件 |
 
 ## 16. 待确认事项
 
@@ -648,8 +700,10 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | 首个 Local 纵向切片（P2a） | DONE | 2026-08-28 | 13,440 KPI + 579 安全 Trace → 15 候选；预览零写、确认唯一写、RCA 只读；双依赖矩阵各 468 项通过，wheel/CLI 冒烟成功，安全 Gate PASS |
 | A2A/Supervisor 接入（P2b） | DONE | 2026-08-28 | 独立 Assurance A2A 0.3.11、持久 challenge/task、真实 HTTP detect/confirm/analyze/restart、Supervisor 单播与结构化审批桥均通过；本地门禁与[GitHub Actions run 33179490152](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33179490152) 全绿，三个 wheel 与依赖检查通过 |
 | Cloud 数据接入 | IN PROGRESS | 2026-08-29 | P3a–P3d 代码与远程 Emulator Gate 已完成：Spanner v2、事务 Inbox/Outbox、严格 Fault Ingress、六工具只读 MCP、四角色 FGAC 和一次性 Canonical 迁移；[GitHub Actions run 33202370157](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33202370157) 的 Python 3.12/3.13 Emulator、五 wheel 与依赖检查全绿。仍需 Cloud Staging IAM/OIDC/DLQ/Workload Identity 验收后才能标 DONE |
-| Resolver 合并 | NOT STARTED | 2026-08-28 | — |
-| 修复与验证闭环 | NOT STARTED | 2026-08-28 | — |
+| 本地开放数据实验室（P3e） | IN PROGRESS | 2026-08-30 | 已交付 `telco-lab` Python/CLI、稳定 lock ID、artifact/catalog/source URL 指纹、许可证据/归属/复核日期、BubbleRAN 固定 commit 的三 artifact catalog、未知列失败关闭的 CSV/JSON 投影、离线评估、immutable `ReplayPlan`、公开 `ReplayWirePayload`、loopback transport 与单调 paced runner。Assurance receiver 对 exact BubbleRAN 5G SA UL BLER 签名做每 source 独立 Incident 映射；202 前有界回读 current immutable facts、revision-0 Audit 与 SourceAssociation，缺失 Incident/Audit 则 503 零新写。真实 TCP E2E 覆盖 `RESOLVED`/`REOPENED`/`REJECTED`/过期 `FAILED` 和 settled exact replay 零写。`telco-lab` 双 Pydantic 版本各 197 项、receiver 22 项、Assurance 全套 50 项、组合回归 133 项与真实 TCP E2E 1 项通过；本地 wheel 67,653 bytes，SHA-256=`96B5D696CB769E29256C5319FF391DA5CC30F2B25D108F5730FF9F8BD467C40B`。checkpoint 持久化、跨事件聚合、真实动作/Cloud 和 RCAEval 未完成，新远程 CI 仍为 `PENDING`，因此不标 DONE |
+| Resolver 合并 | IN PROGRESS | 2026-08-30 | Local 无框架编排骨架已完成：确定性 triage/investigate/RCA、持久报告/动作、分步幂等与崩溃后续跑；尚未合并现有 Resolver Strategy/Troubleshoot/Resolution Agent、Cloud checkpoint 或 Outbox 消费 |
+| 修复与验证闭环 | IN PROGRESS | 2026-08-30 | Local 模拟切片已完成：两阶段 hash+revision 显式审批、可信执行前复核、唯一 `LOCAL_SIMULATION`、通过 `RESOLVED`/失败 `REOPENED`、审批跨 TTL 的零动作 `FAILED` 收口、exactly-once 重放与响应丢失续跑；本机 stack+governance+full LTE E2E 聚焦验收 39 项通过，结论见 [Local Governance Gate](security/local-governance-gate.md)。真实 Engineer/MCP/GitOps/Operator 与 Cloud Tester 尚未接入 |
+| Local 部署与 CI | IN PROGRESS | 2026-08-30 | `local-stack` 已提供 `doctor/init/status/demo/serve/reset`、marker-owned workspace、固定 loopback/前台服务、默认 disabled 与安全 reset；新工作区实测装载 schema 1.1、13,440 performance、579 safe trace，发现 15 候选，两阶段命令到达 `RESOLVED` 后精确 reset。Local CI 已纳入真实命令冒烟、stack 测试、治理 E2E 和 wheel 公共导出；仍待统一 UI、容器/Cloud 部署、SLO 与 Runbook |
 | UI 与发布 | NOT STARTED | 2026-08-28 | — |
 
 ## 18. 文档维护规则
@@ -683,6 +737,14 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 | 2026-08-28 | 启动 P3：冻结“Spanner v2 扩展表族 → 事务 Inbox/Outbox Fault Ingress → 独立只读 MCP”三切片；旧 Incident/Fault/MCP 路径保留回滚且不双主，云端默认 shadow | Codex |
 | 2026-08-29 | 完成 P3 本地实现：新增 Canonical Spanner v2 与四类 Repository、严格 Pub/Sub Fault Ingress、六工具只读 MCP、四角色 FGAC、共享三实现契约及 checksummed 一次性 Canonical 迁移；保持 legacy 只读、shadow 默认和 P4 前 Outbox 不派发，转入远程 Emulator/Cloud Staging Gate | Codex |
 | 2026-08-29 | 完成 P3 发布前容量与迁移加固：Repository/迁移入口先限界后迭代，Spanner source owner/active key/association 改为批量事务，补 1,000 来源首导、精确重放和状态推进，以及基于合法 bundle 的 JSON/隐私/depth 攻击回归；本地矩阵全部通过 | Codex |
+| 2026-08-30 | 启动 P3e 本地开放数据实验室：纠正编号（P3c 已由 Cloud MCP 占用），冻结首批许可白名单、摘要锁定缓存、锁文件/校验和、脱敏、Canonical 适配、离线评估与 loopback 回放边界；建立独立 Gate，未将尚未实现内容标记为通过 | Codex |
+| 2026-08-30 | 完成 P3e BubbleRAN 首个纵向切片：新增 `telco-lab` catalog/fetch/verify/run/evaluate、固定 commit/大小/SHA-256/CC BY-SA 4.0、原子缓存、隐私安全 CSV/JSON 适配和确定性 episode/duration 评估；真实全量与无网络 E2E 通过。P3e 仍为 IN PROGRESS，未把 RCAEval、loopback 回放或 Cloud Staging Gate 误报为完成 | Codex |
+| 2026-08-30 | 完成 P3e 首切片终审加固：评估改为 sweep-line 并限制重叠候选，BubbleRAN 使用精确 schema 变体且未知列失败关闭，workspace lock 绑定许可证据/归属/复核日期和 catalog/source 指纹；双 Pydantic、真实全量、wheel 内容白名单与源码树外安装通过，终审在当前 BubbleRAN 范围为 PASS | Codex |
+| 2026-08-30 | 完成 Local 治理闭环切片：`LocalGovernanceEngine` 持久推进 triage/RCA/审批/模拟执行/验证，两阶段审批精确绑定 action hash 与 Incident revision，执行前重新解析可信批准；唯一动作 `LOCAL_SIMULATION` 无外部 I/O，验证通过进入 `RESOLVED`、失败进入 `REOPENED`，幂等与响应丢失续跑纳入回归 | Codex |
+| 2026-08-30 | 完成 Local 部署入口与受控回放第一批实现：`local-stack` 提供显式 workspace 的 `doctor/init/status/demo/serve/reset` 和固定 loopback/安全 reset；`telco-lab` 提供无标签、lock-bound、有界 `ReplayPlan` 与 opt-in loopback HTTP transport。明确记录 transport 尚无 Canonical Fault 接收器、墙钟节奏、自动重试或持久 checkpoint，也不存在 Cloud 真实动作或 Staging IAM/OIDC/DLQ/WIF 证据 | Codex |
+| 2026-08-30 | 建立[实施开发计划 2.0](implementation-development-plan-2.0.md)并启动 Sprint 1：Assurance 新增四个 `/local/v1` Governance 薄路由，保持 A2A 根路由不变；HTTP 同时校验 loopback Host/peer、严格 operation header/JSON/预算，只调用固定 `LOCAL_SIMULATION` 引擎 | Codex |
+| 2026-08-30 | 完成 loopback transport 首轮终审收口：禁代理/重定向、DNS/IP pin、逐事件重验、固定 ACK/错误预算；恢复 API 移除裸序号，checkpoint 精确绑定 plan/endpoint/window/event/payload。明确 checkpoint 非认证 ACK，且 paced runner、自动重试、持久化与 Canonical Fault 业务 bridge 仍待开发 | Codex |
+| 2026-08-30 | 完成 Sprint 1 第二批本地回放治理：公开 `ReplayWirePayload`、单调 paced runner、有界 transient retry/deadline/cancel 证据、durable-before-202 Assurance Fault receiver 和真实 TCP 业务 E2E 已实现。exact BubbleRAN 5G SA UL BLER 规则仅使用服务端 provenance；成功、验证失败、拒绝、过期和 settled exact replay 零写均通过。仍无 checkpoint 持久化、跨事件聚合、真实动作/Cloud 或 RCAEval，远程 CI 为 PENDING | Codex |
 
 ## 20. 项目完成定义
 
@@ -693,6 +755,7 @@ Local Profile 只加载本地适配器；Cloud Profile 不应携带合成数据�
 - Detector、Resolver、Engineer、Tester 和 Supervisor 通过稳定契约协作。
 - 未审批写操作、重复修复和敏感数据外泄都有自动化防护测试。
 - Local E2E 与 Cloud 预发布 E2E 通过，回滚演练通过。
+- P3e 至少两条互补开放数据纵向切片在无网络、无 GCP、无模型 API 环境中可从锁定缓存重复评估/回放，并保留许可、来源、隐私和结果证据。
 - 用户能在一个界面查看证据、报告、审批、执行和验证结果。
 - 旧的重复 Incident/RCA 路径已停止接收新任务并有明确归档说明。
 - 架构、运行、部署、测试、故障处理和安全文档完整且与代码一致。

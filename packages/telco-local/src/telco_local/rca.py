@@ -1,4 +1,4 @@
-"""A read-only, evidence-driven RCA gateway for the LTE Local Profile."""
+"""Read-only RCA for LTE and exact-provenance controlled 5G replay."""
 
 from __future__ import annotations
 
@@ -402,6 +402,11 @@ async def _load_typed_rules(
             resolved = await resolved
         if not isinstance(resolved, RuleResolution):
             raise TypeError("resolve_typed must return RuleResolution")
+        if any(
+            rule.technology != incident.technology.value
+            for rule in resolved.rules
+        ):
+            return resolve_rules_for_incident(incident, list(resolved.rules))
         return resolved
 
     typed_match = getattr(repository, "match_typed", None)
@@ -418,7 +423,7 @@ async def _load_typed_rules(
     applicable = tuple(
         rule
         for rule in rules
-        if rule.technology == Technology.LTE.value
+        if rule.technology == incident.technology.value
     )
     return resolve_rules_for_incident(incident, applicable)
 
@@ -479,10 +484,14 @@ class DeterministicRcaGateway:
         telemetry: tuple[EvidenceReference, ...] = ()
         valid_telemetry: tuple[EvidenceReference, ...] = ()
         evidence_resolution_issues: tuple[dict[str, str], ...] = ()
-        if incident.technology is Technology.LTE:
+        if incident.technology in {
+            Technology.LTE,
+            Technology.FIVE_G_SA,
+        }:
             rule_resolution = await _load_typed_rules(
                 self._rule_repository, incident
             )
+        if incident.technology is Technology.LTE:
             missing_incident_scope = not incident.affected_resources
             missing_incident_window = (
                 incident.window_start is None or incident.window_end is None

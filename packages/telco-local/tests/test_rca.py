@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -24,6 +25,8 @@ from telco_domain import (
 from telco_domain.models import ReportStatus
 from telco_local.rca import DeterministicRcaGateway
 from telco_local.rules import (
+    BUBBLERAN_REPLAY_DETECTOR_ALGORITHM,
+    BUBBLERAN_REPLAY_RULE_ID,
     JsonRuleRepository,
     RcaRule,
     RuleResolution,
@@ -39,6 +42,11 @@ WINDOW_START = datetime(2025, 11, 24, 15, 0, tzinfo=UTC)
 WINDOW_END = datetime(2025, 11, 24, 18, 18, 40, tzinfo=UTC)
 ENODEB_ID = "lte:enodeb:1"
 CELL_ID = f"{ENODEB_ID}:cell:12314"
+GNB_ID = "lab:5g-sa:gnb:1"
+NR_CELL_ID = f"{GNB_ID}:cell:1"
+RULES_DIRECTORY = (
+    Path(__file__).resolve().parents[3] / "data" / "rca-rules" / "lte"
+)
 
 
 def _resources(
@@ -121,6 +129,104 @@ def _rule() -> RcaRule:
     )
 
 
+def _five_g_rule(*, technology: str = "5G_SA") -> RcaRule:
+    return RcaRule.model_validate(
+        {
+            "schema_version": "1.0",
+            "rule_id": BUBBLERAN_REPLAY_RULE_ID,
+            "version": "1.0.0",
+            "technology": technology,
+            "is_current": True,
+            "description_zh": (
+                "仅识别受控 BubbleRAN 回放签名；0.15 是本地测试阈值，"
+                "不得外推生产网络。"
+            ),
+            "detection": {
+                "kpi_name": "ran.mac.ul_bler",
+                "comparator": "GT",
+                "threshold": 0.15,
+                "unit": "ratio",
+                "max_gap_minutes": 5,
+            },
+            "analysis": {
+                "evidence_types": ["METRIC"],
+                "when": {
+                    "operator": "ALL",
+                    "predicates": [
+                        {
+                            "fact": "kpi.ran.mac.ul_bler",
+                            "comparator": "GT",
+                            "value": 0.15,
+                        }
+                    ],
+                },
+                "hypothesis_zh": (
+                    "受控 BubbleRAN 回放中，上行 BLER 超过本地测试阈值"
+                    "可能对应持久干扰签名；不得外推生产。"
+                ),
+                "root_cause_zh": (
+                    "该受控 BubbleRAN 回放签名与持久干扰场景一致；0.15 "
+                    "仅为本地测试阈值，不代表生产网络诊断结论，"
+                    "不得外推生产网络。"
+                ),
+            },
+            "severity": {"cases": [], "default": "MEDIUM"},
+        }
+    )
+
+
+def _five_g_incident(rule: RcaRule | None = None) -> Incident:
+    rule = rule or _five_g_rule()
+    return Incident(
+        incident_id="incident-bubbleran-ul-bler",
+        trace_id="trace-bubbleran-ul-bler",
+        technology=Technology.FIVE_G_SA,
+        status=IncidentStatus.INVESTIGATING,
+        title="受控 BubbleRAN 上行 BLER 回放异常",
+        description="仅用于本地受控回放闭环测试。",
+        affected_resources=(
+            ResourceReference(
+                resource_id=GNB_ID,
+                resource_type=ResourceType.GNB,
+                technology=Technology.FIVE_G_SA,
+            ),
+            ResourceReference(
+                resource_id=NR_CELL_ID,
+                resource_type=ResourceType.NR_CELL,
+                technology=Technology.FIVE_G_SA,
+                parent_resource_id=GNB_ID,
+            ),
+        ),
+        detected_at=NOW,
+        window_start=WINDOW_START,
+        window_end=WINDOW_END,
+        violated_kpis=(
+            KpiViolation(
+                kpi_name="ran.mac.ul_bler",
+                observed_value=0.2,
+                threshold_value=0.15,
+                comparator=KpiComparator.GT,
+                unit="ratio",
+                rule_id=rule.rule_id,
+                rule_version=rule.version,
+                resource_ids=(NR_CELL_ID,),
+                window_start=WINDOW_START,
+                window_end=WINDOW_END,
+            ),
+        ),
+        rule_versions={rule.rule_id: rule.version},
+        created_at=NOW,
+        updated_at=NOW,
+        revision=2,
+        model_metadata={
+            "detector_algorithm": BUBBLERAN_REPLAY_DETECTOR_ALGORITHM,
+            "rule_content_hashes": {
+                rule.rule_id: rule_content_sha256(rule),
+            },
+        },
+    )
+
+
 def _incident(*, technology: Technology = Technology.LTE) -> Incident:
     return Incident(
         incident_id="incident-erab",
@@ -174,6 +280,14 @@ class RuleRepositoryStub:
         return (_rule(),) if incident.technology is Technology.LTE else ()
 
 
+class StaticRuleRepositoryStub:
+    def __init__(self, rules: tuple[RcaRule, ...]):
+        self.rules = rules
+
+    async def match_typed(self, incident: Incident):
+        return self.rules
+
+
 class TelemetryRepositoryStub:
     def __init__(self, evidence: tuple[EvidenceReference, ...]):
         self.evidence = evidence
@@ -208,6 +322,24 @@ class IncidentRepositoryStub:
     async def list(self, *, status=None, limit=100, offset=0):
         self.list_calls += 1
         return self.incidents
+
+
+class NeverCalledDocumentRepositoryStub:
+    def __init__(self) -> None:
+        self.search_calls = 0
+
+    async def search(self, query: str, *, technology=None, limit=10):
+        self.search_calls += 1
+        raise AssertionError("5G replay RCA must not query documents")
+
+
+class NeverCalledIncidentRepositoryStub:
+    def __init__(self) -> None:
+        self.list_calls = 0
+
+    async def list(self, *, status=None, limit=100, offset=0):
+        self.list_calls += 1
+        raise AssertionError("5G replay RCA must not query incident history")
 
 
 def _trace_evidence(**attribute_updates: object) -> EvidenceReference:
@@ -556,6 +688,110 @@ def test_gateway_returns_inconclusive_for_non_lte_without_running_telemetry() ->
     result = asyncio.run(
         gateway.analyze(_request(_incident(technology=Technology.FIVE_G_SA)))
     )
+
+    assert result.report.conclusion is RcaConclusion.INCONCLUSIVE
+    assert result.report.root_cause is None
+    assert telemetry.calls == 0
+
+
+def test_gateway_concludes_controlled_five_g_replay_from_canonical_violation_only(
+) -> None:
+    repository = JsonRuleRepository(RULES_DIRECTORY)
+    rule = next(
+        item
+        for item in repository.load_all_versions()
+        if item.rule_id == BUBBLERAN_REPLAY_RULE_ID
+    )
+    telemetry = TelemetryRepositoryStub(())
+    documents = NeverCalledDocumentRepositoryStub()
+    history = NeverCalledIncidentRepositoryStub()
+    gateway = DeterministicRcaGateway(
+        repository,
+        telemetry,
+        document_repository=documents,
+        incident_repository=history,
+        clock=lambda: NOW,
+    )
+
+    result = asyncio.run(gateway.analyze(_request(_five_g_incident(rule))))
+
+    assert result.report.conclusion is RcaConclusion.CONCLUSIVE
+    assert result.report.root_cause == rule.analysis.root_cause_zh
+    assert result.report.model_metadata["rule_resolution"] == "EXACT"
+    assert telemetry.calls == 0
+    assert documents.search_calls == 0
+    assert history.list_calls == 0
+    violation_evidence = tuple(
+        item
+        for item in result.report.evidence_refs
+        if item.source == "canonical-incident"
+    )
+    assert violation_evidence
+    assert violation_evidence[0].evidence_type is EvidenceType.METRIC
+    assert violation_evidence[0].attributes["facts"] == {
+        "kpi.ran.mac.ul_bler": 0.2
+    }
+    assert {item.evidence_type for item in result.report.evidence_refs} == {
+        EvidenceType.METRIC,
+        EvidenceType.RULE,
+    }
+    assert "受控 BubbleRAN 回放签名" in result.report.root_cause
+    assert "不代表生产网络诊断结论" in result.report.root_cause
+
+
+@pytest.mark.parametrize(
+    "conflict",
+    (
+        "technology",
+        "content_hash",
+        "version",
+        "threshold",
+        "detector_algorithm",
+        "no_violation",
+    ),
+)
+def test_gateway_rejects_non_exact_five_g_replay_provenance(
+    conflict: str,
+) -> None:
+    exact_rule = _five_g_rule()
+    repository_rule = (
+        _five_g_rule(technology="LTE")
+        if conflict == "technology"
+        else exact_rule
+    )
+    incident_payload = _five_g_incident(exact_rule).model_dump(
+        mode="python", round_trip=True
+    )
+    if conflict == "content_hash":
+        incident_payload["model_metadata"]["rule_content_hashes"][
+            exact_rule.rule_id
+        ] = "0" * 64
+    elif conflict == "version":
+        violation = dict(incident_payload["violated_kpis"][0])
+        violation["rule_version"] = "1.0.1"
+        incident_payload["violated_kpis"] = (violation,)
+        incident_payload["rule_versions"] = {exact_rule.rule_id: "1.0.1"}
+    elif conflict == "threshold":
+        violation = dict(incident_payload["violated_kpis"][0])
+        violation["threshold_value"] = 0.16
+        incident_payload["violated_kpis"] = (violation,)
+    elif conflict == "detector_algorithm":
+        incident_payload["model_metadata"]["detector_algorithm"] = (
+            "deterministic-threshold-episodes-v3"
+        )
+    elif conflict == "no_violation":
+        incident_payload["violated_kpis"] = ()
+        incident_payload["rule_versions"] = {}
+        incident_payload["model_metadata"]["rule_content_hashes"] = {}
+    incident = Incident.model_validate(incident_payload)
+    telemetry = TelemetryRepositoryStub(())
+    gateway = DeterministicRcaGateway(
+        StaticRuleRepositoryStub((repository_rule,)),
+        telemetry,
+        clock=lambda: NOW,
+    )
+
+    result = asyncio.run(gateway.analyze(_request(incident)))
 
     assert result.report.conclusion is RcaConclusion.INCONCLUSIVE
     assert result.report.root_cause is None

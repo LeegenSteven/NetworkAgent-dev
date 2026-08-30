@@ -1,0 +1,73 @@
+{
+  "schema_version": "1.0",
+  "catalog_id": "networkagent-open-data",
+  "catalog_version": "1.0.0",
+  "resources": [
+    {
+      "resource_id": "bubbleran.persistent-interference.clean.v1",
+      "dataset_id": "bubbleran-persistent-interference",
+      "dataset_version": "fa4e3333855d64474e710bc5bebf11a9ec075e0b",
+      "filename": "bubbleran-clean-data.csv",
+      "source_url": "https://raw.githubusercontent.com/bubbleran/open-telco-datasets/fa4e3333855d64474e710bc5bebf11a9ec075e0b/datasets/anomaly-detection-persistent-interference/data/raw/clean_data.csv",
+      "allowed_hosts": ["raw.githubusercontent.com"],
+      "sha256": "c6ea5a850953af5b7a1557d7cb7a727a9d38b33e3854826373b70defcaad37ba",
+      "size_bytes": 2643723,
+      "media_type": "text/csv",
+      "adapter": "bubbleran_persistent_interference_v1",
+      "license": {
+        "id": "CC-BY-SA-4.0",
+        "name": "Creative Commons Attribution-ShareAlike 4.0 International",
+        "url": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "evidence_url": "https://raw.githubusercontent.com/bubbleran/open-telco-datasets/fa4e3333855d64474e710bc5bebf11a9ec075e0b/LICENSE",
+        "evidence_sha256": "a25b2415e77fbec63d46ddf10c638218cffdcf63875386c59e766f4fba59897a",
+        "attribution": "BubbleRAN Open Telco Datasets contributors",
+        "reviewed_at": "2026-08-30",
+        "acceptance_required": true
+      }
+    },
+    {
+      "resource_id": "bubbleran.persistent-interference.anomalous.v1",
+      "dataset_id": "bubbleran-persistent-interference",
+      "dataset_version": "fa4e3333855d64474e710bc5bebf11a9ec075e0b",
+      "filename": "bubbleran-anomalous-data.csv",
+      "source_url": "https://raw.githubusercontent.com/bubbleran/open-telco-datasets/fa4e3333855d64474e710bc5bebf11a9ec075e0b/datasets/anomaly-detection-persistent-interference/data/raw/anomalous_data.csv",
+      "allowed_hosts": ["raw.githubusercontent.com"],
+      "sha256": "e19871d6b8f38a0091472a66a15047b814df6a9ef61c37bc55cce0a2cbf6757c",
+      "size_bytes": 1203488,
+      "media_type": "text/csv",
+      "adapter": "bubbleran_persistent_interference_v1",
+      "license": {
+        "id": "CC-BY-SA-4.0",
+        "name": "Creative Commons Attribution-ShareAlike 4.0 International",
+        "url": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "evidence_url": "https://raw.githubusercontent.com/bubbleran/open-telco-datasets/fa4e3333855d64474e710bc5bebf11a9ec075e0b/LICENSE",
+        "evidence_sha256": "a25b2415e77fbec63d46ddf10c638218cffdcf63875386c59e766f4fba59897a",
+        "attribution": "BubbleRAN Open Telco Datasets contributors",
+        "reviewed_at": "2026-08-30",
+        "acceptance_required": true
+      }
+    },
+    {
+      "resource_id": "bubbleran.persistent-interference.alerts.v1",
+      "dataset_id": "bubbleran-persistent-interference",
+      "dataset_version": "fa4e3333855d64474e710bc5bebf11a9ec075e0b",
+      "filename": "bubbleran-alerts-predicted.json",
+      "source_url": "https://raw.githubusercontent.com/bubbleran/open-telco-datasets/fa4e3333855d64474e710bc5bebf11a9ec075e0b/datasets/anomaly-detection-persistent-interference/data/raw/alerts_predicted.json",
+      "allowed_hosts": ["raw.githubusercontent.com"],
+      "sha256": "5e0970c81ec855f9c837e5757ff3efdb12de54cebf4614111bec38bb752ebdc6",
+      "size_bytes": 74529,
+      "media_type": "application/json",
+      "adapter": "bubbleran_alerts_v1",
+      "license": {
+        "id": "CC-BY-SA-4.0",
+        "name": "Creative Commons Attribution-ShareAlike 4.0 International",
+        "url": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "evidence_url": "https://raw.githubusercontent.com/bubbleran/open-telco-datasets/fa4e3333855d64474e710bc5bebf11a9ec075e0b/LICENSE",
+        "evidence_sha256": "a25b2415e77fbec63d46ddf10c638218cffdcf63875386c59e766f4fba59897a",
+        "attribution": "BubbleRAN Open Telco Datasets contributors",
+        "reviewed_at": "2026-08-30",
+        "acceptance_required": true
+      }
+    }
+  ]
+}

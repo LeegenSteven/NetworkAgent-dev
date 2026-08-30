@@ -39,3 +39,68 @@ imports. This P2b service is intentionally local-only: both the bind host and
 the trusted AgentCard `public_url` must be loopback addresses. The standard
 endpoints are `/.well-known/agent-card.json` and `/` for JSON-RPC; cancellation
 uses `tasks/cancel`.
+
+## Local governance HTTP API
+
+The same loopback-only Starlette application exposes a separate, versioned
+Local Governance surface while leaving the A2A root and Agent Card unchanged:
+
+- `GET /local/v1/incidents/{incident_id}` returns the safe governance view.
+- `POST /local/v1/incidents/{incident_id}/prepare` runs deterministic local
+  triage and RCA and prepares an approval-bound proposal.
+- `POST /local/v1/incidents/{incident_id}/decide` records an explicit decision
+  bound to the returned action hash and Incident revision.
+- `POST /local/v1/incidents/{incident_id}/execute` performs and verifies only
+  the fixed, side-effect-free `LOCAL_SIMULATION` action.
+
+Every governance request requires a loopback `Host`. Every POST additionally
+requires `Content-Type: application/json` and
+`X-NetworkAgent-Local-Operation: governance-v1`. Request bodies are limited to
+64 KiB and responses to 256 KiB. Inputs use strict, extra-forbidden schemas;
+responses expose only a safe Incident summary, RCA conclusion, action hash and
+scope, approval status, and action/verification status.
+
+The operation header is an explicit local-operation intent guard, not an
+authentication mechanism. Governance requests are supported only through the
+official runner bound directly to a loopback interface; both the HTTP `Host`
+and the connected client address must be loopback. Do not expose this API via
+an external bind, port forward, or reverse proxy.
+
+This API is not a Fault ingestion endpoint and does not connect to Pub/Sub,
+Cloud MCP, Engineer, GitOps, GKE, or a Network Operator. It cannot perform a
+real network change.
+
+## Local canonical Fault receiver
+
+`POST /local/v1/faults/replay` is the separate loopback-only ingress for the
+public `telco-lab` replay wire contract. It requires both a loopback `Host` and
+a directly connected loopback client, `Content-Type: application/json`,
+`X-NetworkAgent-Local-Operation: replay-v1`, and an `Idempotency-Key` exactly
+matching the validated wire payload. The operation header expresses local
+intent; it is not authentication. Use this endpoint only through the official
+loopback runner, never through an external bind, proxy, or port forward.
+
+Requests are capped at 256 KiB and responses at 64 KiB. The receiver accepts
+only the frozen BubbleRAN dataset/version and persistent-interference scenario,
+with a `5G_SA` `lab:5g-sa:gnb:*` resource. It delegates wire identity and
+privacy validation to the public `telco-lab` contract. A `202` receipt is sent
+only after the Incident, audit event, idempotency record, and immutable source
+association have committed, then the current Incident, initial audit binding,
+and source association have been read back. Exact replay fails closed if any
+part of that durable snapshot is missing or inconsistent. The
+receipt exposes only the source and payload hashes, Incident identifier,
+original status/revision, technology, and safe resource scope. Exact retries,
+including retries after later governance, return the original receipt without
+another write.
+
+Each source event intentionally owns a separate deterministic Incident; this
+slice does not perform cross-event or time-window aggregation. Only the exact
+controlled local rule (`ran.mac.ul_bler` greater than `0.15`) adds rule-backed
+evidence that can produce a conclusive RCA. Other valid events remain durably
+audited but non-actionable. The threshold is a local test fixture and must not
+be interpreted as a production-network rule.
+
+The receiver does not ingest Pub/Sub events, use Spanner or GCP credentials,
+call Cloud MCP or Engineer, expose a legacy/public Fault route, approve an
+action, or make a real network change. Any later execution remains the separate
+approval-gated, side-effect-free `LOCAL_SIMULATION` governance flow above.

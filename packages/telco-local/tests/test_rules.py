@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
+import telco_local
 import telco_local.rules as rules_module
 
 from telco_domain import (
@@ -16,14 +18,20 @@ from telco_domain import (
     Technology,
 )
 from telco_local.rules import (
+    BUBBLERAN_REPLAY_DETECTOR_ALGORITHM,
+    BUBBLERAN_REPLAY_RULE_ID,
     JsonRuleRepository,
     RcaRule,
     RuleLoadError,
+    resolve_rules_for_incident,
     rule_content_sha256,
 )
 
 
 BASE_TIME = datetime(2025, 11, 24, 18, 18, 40, tzinfo=UTC)
+RULES_DIRECTORY = (
+    Path(__file__).resolve().parents[3] / "data" / "rca-rules" / "lte"
+)
 
 
 def _rule_payload(**updates: object) -> dict[str, object]:
@@ -107,6 +115,80 @@ def _incident(value: float = 94.5) -> Incident:
     )
 
 
+def _five_g_rule_payload(**updates: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "schema_version": "1.0",
+        "rule_id": BUBBLERAN_REPLAY_RULE_ID,
+        "version": "1.0.0",
+        "technology": "5G_SA",
+        "is_current": True,
+        "description_zh": (
+            "仅识别受控 BubbleRAN 回放签名；0.15 是本地测试阈值，"
+            "不得外推生产网络。"
+        ),
+        "detection": {
+            "kpi_name": "ran.mac.ul_bler",
+            "comparator": "GT",
+            "threshold": 0.15,
+            "unit": "ratio",
+            "max_gap_minutes": 5,
+        },
+        "analysis": {
+            "evidence_types": ["METRIC"],
+            "when": {
+                "operator": "ALL",
+                "predicates": [
+                    {
+                        "fact": "kpi.ran.mac.ul_bler",
+                        "comparator": "GT",
+                        "value": 0.15,
+                    }
+                ],
+            },
+            "hypothesis_zh": (
+                "受控 BubbleRAN 回放中，上行 BLER 超过本地测试阈值可能"
+                "对应持久干扰签名；不得外推生产。"
+            ),
+            "root_cause_zh": (
+                "该受控 BubbleRAN 回放签名与持久干扰场景一致；0.15 仅为"
+                "本地测试阈值，不代表生产网络诊断结论，不得外推生产网络。"
+            ),
+        },
+        "severity": {"cases": [], "default": "MEDIUM"},
+    }
+    payload.update(updates)
+    return payload
+
+
+def _five_g_incident(rule: RcaRule) -> Incident:
+    return Incident(
+        incident_id="incident-bubbleran-ul-bler",
+        trace_id="trace-bubbleran-ul-bler",
+        technology=Technology.FIVE_G_SA,
+        detected_at=BASE_TIME,
+        window_start=datetime(2025, 11, 24, 18, 0, tzinfo=UTC),
+        window_end=BASE_TIME,
+        violated_kpis=(
+            KpiViolation(
+                kpi_name="ran.mac.ul_bler",
+                observed_value=0.2,
+                threshold_value=0.15,
+                comparator=KpiComparator.GT,
+                unit="ratio",
+                rule_id=rule.rule_id,
+                rule_version=rule.version,
+            ),
+        ),
+        rule_versions={rule.rule_id: rule.version},
+        model_metadata={
+            "detector_algorithm": BUBBLERAN_REPLAY_DETECTOR_ALGORITHM,
+            "rule_content_hashes": {
+                rule.rule_id: rule_content_sha256(rule),
+            },
+        },
+    )
+
+
 def test_rule_model_is_strict_and_structured() -> None:
     rule = RcaRule.model_validate(_rule_payload())
 
@@ -127,7 +209,7 @@ def test_rule_model_is_strict_and_structured() -> None:
     [
         ("schema_version", "2.0"),
         ("version", "latest"),
-        ("technology", "5G_SA"),
+        ("technology", "5G_NSA"),
         ("is_current", "yes"),
     ],
 )
@@ -136,6 +218,82 @@ def test_rule_model_rejects_invalid_versioning_and_scope(
 ) -> None:
     with pytest.raises(ValidationError):
         RcaRule.model_validate(_rule_payload(**{field: value}))
+
+
+def test_rule_model_accepts_only_frozen_lte_and_five_g_sa_technologies() -> None:
+    five_g_rule = RcaRule.model_validate(_five_g_rule_payload())
+
+    assert five_g_rule.technology == "5G_SA"
+    with pytest.raises(ValidationError):
+        RcaRule.model_validate(_five_g_rule_payload(technology="NR"))
+
+
+def test_bubbleran_provenance_contract_is_publicly_exported() -> None:
+    assert telco_local.BUBBLERAN_REPLAY_RULE_ID == (
+        "5g-sa.bubbleran.persistent-interference.ul-bler"
+    )
+    assert telco_local.BUBBLERAN_REPLAY_DETECTOR_ALGORITHM == (
+        "deterministic-bubbleran-replay-threshold-v1"
+    )
+    assert telco_local.rule_content_sha256 is rule_content_sha256
+
+
+def test_repository_loads_controlled_bubbleran_replay_rule() -> None:
+    rule = next(
+        item
+        for item in JsonRuleRepository(RULES_DIRECTORY).load_all_versions()
+        if item.rule_id == BUBBLERAN_REPLAY_RULE_ID
+    )
+
+    assert rule.version == "1.0.0"
+    assert rule.technology == "5G_SA"
+    assert rule.detection.kpi_name == "ran.mac.ul_bler"
+    assert rule.detection.unit == "ratio"
+    assert rule.detection.comparator is KpiComparator.GT
+    assert rule.detection.threshold == 0.15
+    assert "受控 BubbleRAN 回放" in rule.description_zh
+    assert "不得外推生产" in rule.analysis.root_cause_zh
+
+
+def test_rule_resolution_requires_exact_incident_technology() -> None:
+    five_g_rule = RcaRule.model_validate(_five_g_rule_payload())
+    cross_technology_rule = RcaRule.model_validate(
+        _five_g_rule_payload(technology="LTE")
+    )
+    incident = _five_g_incident(five_g_rule)
+
+    exact = resolve_rules_for_incident(incident, [five_g_rule])
+    cross_technology = resolve_rules_for_incident(
+        incident, [cross_technology_rule]
+    )
+
+    assert exact.status == "EXACT"
+    assert exact.rules == (five_g_rule,)
+    assert cross_technology.status == "CONFLICT"
+    assert cross_technology.rules == ()
+
+
+def test_non_bubbleran_five_g_rule_keeps_generic_exact_provenance_semantics() -> None:
+    rule = RcaRule.model_validate(
+        _five_g_rule_payload(rule_id="5g-sa.future.generic-ul-bler")
+    )
+    incident_payload = _five_g_incident(rule).model_dump(
+        mode="python", round_trip=True
+    )
+    incident_payload["model_metadata"]["detector_algorithm"] = (
+        "future-generic-five-g-detector-v1"
+    )
+
+    resolution = resolve_rules_for_incident(
+        Incident.model_validate(incident_payload), [rule]
+    )
+
+    assert resolution.status == "EXACT"
+    assert resolution.rules == (rule,)
+    assert all(
+        issue.code != "DETECTOR_ALGORITHM_MISMATCH"
+        for issue in resolution.issues
+    )
 
 
 def test_rule_model_requires_detection_gap_and_rejects_unknown_nested_fields() -> None:

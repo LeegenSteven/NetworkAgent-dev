@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "rule_id": "5g-sa.bubbleran.persistent-interference.ul-bler",
+  "version": "1.0.0",
+  "technology": "5G_SA",
+  "is_current": true,
+  "description_zh": "仅识别受控 BubbleRAN 回放签名；0.15 是本地测试阈值，不得外推生产网络。",
+  "detection": {
+    "kpi_name": "ran.mac.ul_bler",
+    "comparator": "GT",
+    "threshold": 0.15,
+    "unit": "ratio",
+    "max_gap_minutes": 5
+  },
+  "analysis": {
+    "evidence_types": [
+      "METRIC"
+    ],
+    "when": {
+      "operator": "ALL",
+      "predicates": [
+        {
+          "fact": "kpi.ran.mac.ul_bler",
+          "comparator": "GT",
+          "value": 0.15
+        }
+      ]
+    },
+    "hypothesis_zh": "受控 BubbleRAN 回放中，上行 BLER 超过本地测试阈值可能对应持久干扰签名；不得外推生产。",
+    "root_cause_zh": "该受控 BubbleRAN 回放签名与持久干扰场景一致；0.15 仅为本地测试阈值，不代表生产网络诊断结论，不得外推生产网络。"
+  },
+  "severity": {
+    "cases": [],
+    "default": "MEDIUM"
+  }
+}

@@ -42,6 +42,7 @@ _EVIDENCE_FILENAMES = {
     "sbom.cdx.json",
     "wheel-content-scan.json",
 }
+_SAFE_SUPPLEMENTAL_BASENAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 
 _FORBIDDEN_PARTS = {
     ".git",
@@ -943,6 +944,7 @@ def _evidence_files(
     evidence_root: Path,
     output: Path,
     expected_wheels: Iterable[str],
+    supplemental_evidence: Iterable[Path] = (),
 ) -> list[dict[str, object]]:
     base = Path.cwd().resolve()
     if evidence_root.is_symlink() or not evidence_root.is_dir():
@@ -951,6 +953,26 @@ def _evidence_files(
     if output.parent.resolve() != evidence_root.resolve():
         raise ValueError("release manifest must be inside the evidence root")
     allowed.add(output.name)
+    supplemental_paths: list[Path] = []
+    reserved_names = {name.casefold() for name in allowed}
+    supplemental_names: set[str] = set()
+    for raw_path in supplemental_evidence:
+        candidate = Path(raw_path)
+        name = candidate.name
+        if _SAFE_SUPPLEMENTAL_BASENAME.fullmatch(name) is None:
+            raise ValueError(f"unsafe supplemental evidence basename: {name!r}")
+        if candidate.resolve().parent != evidence_root.resolve():
+            raise ValueError("supplemental evidence must be inside the evidence root")
+        normalized = name.casefold()
+        if normalized in reserved_names:
+            raise ValueError(
+                f"supplemental evidence conflicts with a reserved file: {name}"
+            )
+        if normalized in supplemental_names:
+            raise ValueError(f"duplicate supplemental evidence file: {name}")
+        supplemental_names.add(normalized)
+        supplemental_paths.append(candidate)
+        allowed.add(name)
     actual_entries = tuple(evidence_root.iterdir())
     unexpected = sorted(
         entry.name for entry in actual_entries if entry.name not in allowed
@@ -962,10 +984,16 @@ def _evidence_files(
     missing = sorted(
         name for name in _EVIDENCE_FILENAMES if not (evidence_root / name).is_file()
     )
+    missing.extend(
+        path.name
+        for path in supplemental_paths
+        if path.is_symlink() or not path.is_file()
+    )
     if missing:
         raise ValueError(f"missing release evidence files: {missing}")
     paths: set[Path] = set(_expected_wheels(wheel_root, expected_wheels))
     paths.update(evidence_root / name for name in _EVIDENCE_FILENAMES)
+    paths.update(supplemental_paths)
     return [_file_record(path, base=base) for path in sorted(paths)]
 
 
@@ -1074,7 +1102,15 @@ def build_manifest(args: argparse.Namespace) -> int:
     try:
         source = _source_metadata()
         wheel_paths = _expected_wheels(wheel_root, args.expected_wheel)
-        files = _evidence_files(wheel_root, evidence_root, output, args.expected_wheel)
+        raw_supplementals = getattr(args, "supplemental_evidence", ())
+        supplemental_evidence = tuple(raw_supplementals or ())
+        files = _evidence_files(
+            wheel_root,
+            evidence_root,
+            output,
+            args.expected_wheel,
+            supplemental_evidence,
+        )
     except (OSError, ValueError) as error:
         print(f"release evidence error: {error}", file=sys.stderr)
         return 2
@@ -1203,6 +1239,10 @@ def build_manifest(args: argparse.Namespace) -> int:
         "status": "PASS" if not failures else "FAIL",
         "failures": failures,
     }
+    if supplemental_evidence:
+        manifest["supplemental_evidence"] = sorted(
+            Path(path).name for path in supplemental_evidence
+        )
     _write_json(output, manifest)
     _append_summary(
         args.summary,
@@ -1230,8 +1270,14 @@ def verify_manifest(args: argparse.Namespace) -> int:
         wheel_root = args.wheel_root.resolve()
         evidence_root = args.evidence_root.resolve()
         wheels = _expected_wheels(wheel_root, args.expected_wheel)
+        raw_supplementals = getattr(args, "supplemental_evidence", ())
+        supplemental_evidence = tuple(raw_supplementals or ())
         files = _evidence_files(
-            wheel_root, evidence_root, args.manifest.resolve(), args.expected_wheel
+            wheel_root,
+            evidence_root,
+            args.manifest.resolve(),
+            args.expected_wheel,
+            supplemental_evidence,
         )
         tool_versions = _installed_tool_versions()
         inventory, runtime_dependencies = _runtime_inventory_summary(
@@ -1254,6 +1300,14 @@ def verify_manifest(args: argparse.Namespace) -> int:
             errors.append("manifest_expected_wheels_mismatch")
         if payload.get("files") != files:
             errors.append("manifest_file_digest_or_size_mismatch")
+        expected_supplemental = sorted(
+            Path(path).name for path in supplemental_evidence
+        )
+        if expected_supplemental:
+            if payload.get("supplemental_evidence") != expected_supplemental:
+                errors.append("manifest_supplemental_evidence_mismatch")
+        elif "supplemental_evidence" in payload:
+            errors.append("manifest_supplemental_evidence_unexpected")
         if payload.get("wheel_count") != len(wheels):
             errors.append("manifest_wheel_count_mismatch")
         if payload.get("runtime_inventory") != inventory:
@@ -1395,6 +1449,9 @@ def _parser() -> argparse.ArgumentParser:
     manifest.add_argument("--python-version", required=True)
     manifest.add_argument("--artifact-name", required=True)
     manifest.add_argument("--artifact-retention-days", type=int, required=True)
+    manifest.add_argument(
+        "--supplemental-evidence", type=Path, action="append", default=[]
+    )
     manifest.add_argument("--summary", type=Path, required=True)
     manifest.set_defaults(func=build_manifest)
 
@@ -1412,6 +1469,9 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--python-version", required=True)
     verify.add_argument("--artifact-name", required=True)
     verify.add_argument("--artifact-retention-days", type=int, required=True)
+    verify.add_argument(
+        "--supplemental-evidence", type=Path, action="append", default=[]
+    )
     verify.set_defaults(func=verify_manifest)
     return parser
 

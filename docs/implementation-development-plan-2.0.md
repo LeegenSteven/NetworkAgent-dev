@@ -54,7 +54,8 @@
 | P3a–P3d Cloud 代码与 Emulator | `DONE` | Spanner v2、事务型 Inbox/Outbox、Fault Ingress、只读 MCP、FGAC 制品和迁移逻辑已通过远程 Spanner Emulator Gate；不代表 Cloud Staging 已通过。 |
 | Local 模拟治理闭环 | `DONE` | 13,440 条 KPI、579 条安全 Trace、15 个候选；独立审批后可到 `RESOLVED`，验证失败到 `REOPENED`，无真实网络副作用。 |
 | Local Stack | `DONE` | `doctor/init/status/demo/serve/reset` 已具备工作区所有权、loopback、默认禁用动作、安全 reset 与提交响应丢失恢复。 |
-| S7-01 原生一键答辩闭环 | `READY FOR REVIEW` | 固定命令在两个隔离工作区完成 `RESOLVED/PASSED` 与 `REOPENED/FAILED`，精确重放原审批请求并验证记录不放大，最后安全 reset；当前仅有本地真实运行与测试证据，等待新提交的远程双 Python 验收。 |
+| S7-01 原生一键答辩闭环 | `DONE` | RC `c08d634c9c3deb628df5f98d4f60dd1675cd5706` 的远程 Python 3.12/3.13 Local jobs 均运行固定命令并核对 `commit_bound=true`、`commit_sha=GITHUB_SHA`、`RESOLVED/PASSED`、`REOPENED/FAILED` 与双安全清理。 |
+| S7-02 运行手册与证据包 | `IN PROGRESS` | 第三方运行手册已建立；发布制品路径冻结为 `release-evidence/defense-demo-summary.json`，但 S7-01 历史 artifact 9736486858 尚不包含该文件，等待新 RC 完成 manifest bytes/SHA 绑定与 verify。 |
 | S2-02 容器化治理恢复 | `DONE` | 精确绑定 RC 的远程真实 Docker 已覆盖 `RESOLVED`/`REOPENED` 两分支、Assurance 重启、原请求 exact replay、离线数据库核验和项目卷清理；真实网络副作用为 0。 |
 | BubbleRAN Data Lab | `IN PROGRESS` | 下载锁定、隐私投影、离线评估、immutable `ReplayPlan`、公开 `ReplayWirePayload`、loopback transport、单调 paced runner、caller-owned 本地持久 checkpoint 与 Assurance Canonical Fault 持久接收器已完成；每个 source event 独立映射 Incident，不做跨事件聚合，RCAEval 尚未完成。 |
 
@@ -74,6 +75,8 @@
 - Sprint 2 S2-02 的受测 release candidate 为 `d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4`；[telco-container run 33314782750](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750) 的 `headSha` 精确绑定该 SHA，[compose-policy job 99266075811](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750/job/99266075811) 与 [build-inspect-smoke job 99266104885](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750/job/99266104885) 均为 `success`，Linux 政策门禁为 `128 passed`。真实容器治理 JSON 中成功分支为 `RESOLVED`、故意验证失败分支为 `REOPENED`；两分支均为 `restart_observed=true`、`exact_replay=true`、`real_network_side_effects=false`，顶层 `projects_removed=true` 证明两个 Compose 项目均已清理。
 - 同一 RC 的 [Local CI run 33314782757](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757) 两个 job [99266075954](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/job/99266075954) / [99266075805](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/job/99266075805) 均为 `success`。两版 Python 各通过 Domain + Local `518 passed`、local-stack `29 passed, 2 skipped`、Local E2E `2 passed`；Python 3.12 发布 [VERIFIED RC artifact 9733117877](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/artifacts/9733117877)，archive digest 为 `sha256:3d557a52a80960add94c04b443c14f613892701c5b5b93dcfba4174fd78f3469`。
 - Sprint 2 S2-03 的受测 release candidate 为 `68b16ea528a85b743aa8c05044948bac195ee8ec`；[telco-container run 33320667296](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296) 的 `headSha` 精确绑定该 SHA，[compose-policy job 99281949020](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296/job/99281949020) 与 [build-inspect-smoke job 99281979960](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296/job/99281979960) 均为 `success`。该 run 发布了保留 14 天的 [artifact 9734817516](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296/artifacts/9734817516)，名称 `telco-container-release-attempt-1`，archive digest 为 `sha256:e35d8eb12484feeb474477bae0f3d937019f3ab19e9f8ccf1fd491b8a95f0394`，分类为 `VERIFIED RUNNER-LOCAL EVIDENCE`；其绑定 runner 本地 image/config digest `sha256:0e8caa8418d93e1f9654655b84331723e8223d9dc94e66274aed1ca3fa7d00bb`、Trivy 0.74.0 fixable Critical/High gate `0/0`、full diagnostic `5` Critical + `29` High 且全部 unfixed，以及 CycloneDX 1.7 SBOM `145` components。
+- S7-01 的受测 release candidate 为 `c08d634c9c3deb628df5f98d4f60dd1675cd5706`。[Local run 33326721937](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33326721937) 的 Python 3.12/3.13 jobs [99298066127](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33326721937/job/99298066127) / [99298066217](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33326721937/job/99298066217) 均为 `success`：两版各通过 Domain + Local `518 passed`、local-stack `47 passed, 2 skipped`、Local E2E `2 passed`，并直接运行一键脚本，核对 `commit_bound=true`、`commit_sha=GITHUB_SHA`、`RESOLVED/PASSED`、`REOPENED/FAILED` 与双 `workspace_removed=true`。[Data Lab run 33326721947](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33326721947) 和 [Assurance run 33326721991](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33326721991) 也绑定同一 SHA 且全绿。
+- 同一 Local run 的 Python 3.12 job 发布 S7-01 历史 [artifact 9736486858](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33326721937/artifacts/9736486858)：102,753 bytes，archive digest `sha256:a1961b1897cdb86c802ce3dbd9762381ef7726e28476a1d24657162014b330f2`，到期时间 `2026-09-13T18:02:15Z`。该制品不含演示 JSON，不能作为 S7-02 完成证据；后续契约固定由 Python 3.12 上传 `release-evidence/defense-demo-summary.json`，并作为 release manifest 的可选 supplemental evidence 记录 bytes/SHA 后执行 verify，Python 3.13 仍必须运行演示。
 - 本次证据回填形成的文档提交晚于且不等于上述受测 RC。S2-01 与 S2-02 的 `telco-container` runs 上传 0 个 artifact，保留为历史行为证据；当前容器供应链状态以 S2-03 RC 为准。S2-03 的 runner-local artifact 不是 container registry artifact：未发布 registry image/digest，未提供签名、attestation、provenance 或 Trivy DB OCI digest/signature，且由于未上传镜像、scanner binary 与数据库，不能离线独立重验。Gate A、Gate B、G2、S3、G4 与独立 secret/SAST/license policy 仍未完成。
 
 ### 3.3 已知缺口
@@ -87,8 +90,9 @@
 - S2-02 已在精确绑定 RC `d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4` 的远程 Docker runner 上通过成功/失败治理分支、Assurance 重启、exact replay、离线核验和项目卷清理，因此该工作包为 `DONE`；其 Local 双 Python 矩阵与 Python 3.12 `VERIFIED RC` artifact 也已通过同一 RC。
 - 当前 Sprint 1/Local RC 已发布 wheel、manifest、CycloneDX SBOM、runtime inventory、内容扫描与 `pip-audit` 证据；S2-03 已补齐 runner-local 容器 release manifest、Trivy 双报告与 CycloneDX SBOM artifact，但仍未发布 registry image/digest，未提供签名、attestation、provenance 或 Trivy DB OCI digest/signature，且 artifact 不能离线独立重验。
 - S2-04 已在相同 Trivy 0.74.0/数据库快照下完成四个候选镜像实扫；没有候选能同时满足当前 CPython 3.12/glibc/provenance 契约和完整 Critical/High `0/0`，因此按 `BLOCKED` 收口，G2/Gate B 继续开放。
-- S7-01 原生一键答辩脚本已在本地真实依赖环境中完成两分支运行；当前候选为 `READY FOR REVIEW`，还不能在新提交的远程 Python 3.12/3.13 CI 前标记 `DONE`，且不覆盖拒绝/过期、容器执行、真实动作、Cloud、G2/G4/G5。
-- 跨组件结构化日志、指标、分布式追踪、本地 SLO、告警和完整 Runbook 尚未交付。
+- S7-01 原生一键答辩脚本已由精确绑定 RC `c08d634c9c3deb628df5f98d4f60dd1675cd5706` 的远程 Python 3.12/3.13 jobs 验收，因此为 `DONE`；其范围仍不覆盖拒绝/过期、容器执行、真实动作、Cloud、G2/G4/G5。
+- S7-02 已建立第三方运行手册并冻结发布证据路径/manifest 校验规则，但 S7-01 历史 artifact 9736486858 不含演示 JSON，仍需新 RC 生成并独立核验 `release-evidence/defense-demo-summary.json`，因此保持 `IN PROGRESS`。
+- 跨组件结构化日志、指标、分布式追踪、本地 SLO、告警和完整运维 Runbook 尚未交付；S7-02 当前只提供原生答辩演示运行手册。
 - Cloud Staging IAM/OIDC、Pub/Sub DLQ、Workload Identity 及真实基础设施验收尚未进行。
 
 ## 4. 无 GCP 开发原则
@@ -231,15 +235,25 @@
 | S4 可观测与运维 | OTel、指标、SLO、告警、Runbook、演练 | E | `NOT STARTED` | Gate E 通过并形成演练报告。 |
 | S5 Cloud 就绪 | IaC、权限矩阵、Staging 验收包 | F | `IN PROGRESS` | Gate F-local 通过，状态变为 `READY FOR STAGING`。 |
 | S6 Cloud Staging | 真实 IAM/OIDC/DLQ/WI/Spanner/GKE | F | `WAITING FOR CLOUD` | 获得最小权限身份并通过真实 Cloud Gate。 |
-| S7 答辩发布 | 固化版本、证据包、演示脚本、限制声明 | A–F | `IN PROGRESS` | S7-01 原生一键双分支脚本已完成本地真实运行并为 `READY FOR REVIEW`；仍需新提交远程矩阵、答辩证据包、可观测/Runbook 与最终限制声明。 |
+| S7 答辩发布 | 固化版本、证据包、演示脚本、限制声明 | A–F | `IN PROGRESS` | S7-01 原生一键双分支脚本已由 RC `c08d634c9c3deb628df5f98d4f60dd1675cd5706` 的远程双 Python 矩阵验收并标记 `DONE`；S7-02 运行手册/证据包正在实施，且仍缺可观测性、最终限制声明及其适用 Gate。 |
 
 ### 6.1 S7-01 原生一键答辩闭环
 
-**状态**：`READY FOR REVIEW`。
+**状态**：`DONE`。
 
 固定入口为 `python tools/local-stack/run_defense_demo.py --approve-local-simulation`，不接受 workspace、URL、header、actor、Cloud、Docker 或任意命令参数。它在 `.local/networkagent-defense` 下创建两个随机、marker-owned 的隔离工作区，分别完成 `RESOLVED/PASSED` 与 `REOPENED/FAILED`；每条路径均验证 13,440 条 KPI、579 条安全 Trace、15 个候选、action hash/revision 双绑定、八事件审计链、一个 ActionRun/VerificationRun、`side_effects=false`，再原样重放首次审批命令并确认终态和记录不放大。最终两个工作区都必须由安全 reset 删除，原子 JSON 报告及 SHA-256 留在 run 目录。
 
-本地证据为脚本定向/真实集成 `18 passed`、local-stack 全套 `49 passed`，以及一次直接命令运行：两分支、精确重试和双清理均通过。当前工作区含本次未提交实现，因此直接运行诚实标记为 `LOCAL_WORKTREE_SIMULATION_EVIDENCE`；只有 Git 可用、前后 commit 相同且 tracked tree 始终干净时才标记 `LOCAL_NATIVE_SIMULATION_EVIDENCE`。S7-01 在新提交远程 Python 3.12/3.13 通过前不得标记 `DONE`；S7 总阶段也不因本工作包通过而关闭。
+本地证据为脚本定向/真实集成 `18 passed`、local-stack 全套 `49 passed`，以及一次直接命令运行：两分支、精确重试和双清理均通过。未提交工作树中的直接运行诚实标记为 `LOCAL_WORKTREE_SIMULATION_EVIDENCE`；只有 Git 可用、前后 commit 相同且 tracked tree 始终干净时才标记 `LOCAL_NATIVE_SIMULATION_EVIDENCE`。
+
+远程验收绑定 RC `c08d634c9c3deb628df5f98d4f60dd1675cd5706`：[Local run 33326721937](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33326721937) 的 Python 3.12/3.13 jobs 99298066127/99298066217 均为 `success`，每版通过 Domain + Local `518 passed`、local-stack `47 passed, 2 skipped`、Local E2E `2 passed`；两版直接命令均验证 `commit_bound=true`、`commit_sha=GITHUB_SHA`、双终态与双清理。同一 SHA 的 Data Lab run 33326721947 与 Assurance run 33326721991 也全绿。因此 S7-01 标记 `DONE`，但 S7 总阶段不因本工作包通过而关闭。
+
+### 6.2 S7-02 运行手册与证据包
+
+**状态**：`IN PROGRESS`。
+
+[Local 原生答辩演示运行手册](runbooks/local-defense-demo.md) 已给出第三方前提、唯一命令、6–8 分钟讲解顺序、JSON 字段解释、报告 SHA-256 核验、失败处理/安全清理、证据表和限制声明。发布证据路径冻结为 `release-evidence/defense-demo-summary.json`：仅 Python 3.12 job 上传 release artifact，Python 3.13 job 仍执行并校验演示；该文件作为 release manifest 的可选 supplemental evidence 记录 bytes/SHA-256，并必须通过 `verify-manifest` 复核。
+
+S7-01 历史 [Local artifact 9736486858](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33326721937/artifacts/9736486858) 为 102,753 bytes，archive digest `sha256:a1961b1897cdb86c802ce3dbd9762381ef7726e28476a1d24657162014b330f2`，到期时间 `2026-09-13T18:02:15Z`，但尚不包含演示 JSON。因此不能将 S7-02 标记为 `DONE`，也不能编造新 artifact；必须等待包含固定 supplemental evidence、manifest bytes/SHA 绑定和 verify 结果的新 RC。
 
 ## 7. Sprint 1：Governance HTTP + Loopback Replay
 
@@ -404,3 +418,4 @@
 | 2026-08-30 | 2.0 | RC `68b16ea528a85b743aa8c05044948bac195ee8ec` 的 `telco-container` run 33320667296 全绿：compose-policy job 99281949020 与 build-inspect-smoke job 99281979960 成功；14 天 artifact 9734817516 分类 `VERIFIED RUNNER-LOCAL EVIDENCE`，archive digest 为 `sha256:e35d8eb12484feeb474477bae0f3d937019f3ab19e9f8ccf1fd491b8a95f0394`。该 artifact 绑定 runner-local image/config digest `sha256:0e8caa8418d93e1f9654655b84331723e8223d9dc94e66274aed1ca3fa7d00bb`、Trivy 0.74.0 fixable Critical/High gate `0/0`、full diagnostic `5` Critical + `29` High 且全部 unfixed，以及 CycloneDX 1.7 SBOM `145` components。 | S2-03=`DONE`；S2/Workflow B/P7 保持 `IN PROGRESS`，Gate B、G2、Gate A、S3 与 G4 保持开放；仍无 registry image/digest、签名/attestation/provenance、Trivy DB OCI digest/signature 与离线独立重验。 |
 | 2026-08-31 | 2.0 | 完成 S2-04 完整 Critical/High 关闭可行性评估：同一 Trivy 0.74.0/冻结数据库下，Bookworm=`5C+29H`、Trixie=`3C+16H`、Distroless Python 3/Debian 13=`0C+17H`；公开 Chainguard `latest` 的 `0/0` 对应 Python 3.14，不满足当前 `<3.14` 一方包与 CPython 3.12 锁定契约。拒绝 `--ignore-unfixed`、漏洞白名单和丢弃包 provenance 的扫描假清零。 | S2-04=`BLOCKED`；S2/Workflow B/P7 继续 `IN PROGRESS`，Gate B、G2、Gate A、S3、G4 均保持开放；后续只能以 provenance 可验证的 3.12 镜像或独立 Python/base migration 重新开启。 |
 | 2026-08-31 | 2.0 | 新增固定无 Docker 的 S7-01 原生一键答辩入口：同一命令在两个隔离工作区完成 `RESOLVED/PASSED` 与 `REOPENED/FAILED`，验证原审批请求精确重放、记录不放大、`side_effects=false` 与双安全 reset，并原子保留报告及 SHA-256。本地脚本定向/真实集成为 `18 passed`，local-stack 全套为 `49 passed`。 | S7-01=`READY FOR REVIEW`、S7=`IN PROGRESS`；等待新提交远程 Python 3.12/3.13 验收，不声明拒绝/过期、容器、真实动作、Cloud 或 G2/G4/G5 完成。 |
+| 2026-08-31 | 2.0 | RC `c08d634c9c3deb628df5f98d4f60dd1675cd5706` 的 Local run 33326721937 双 Python jobs 99298066127/99298066217 全绿：各为 Domain + Local `518 passed`、local-stack `47 passed, 2 skipped`、Local E2E `2 passed`，一键命令核对源码绑定、双终态和双清理；同 SHA 的 Data Lab 33326721947 与 Assurance 33326721991 也全绿。新增 S7-02 第三方运行手册，并冻结 `release-evidence/defense-demo-summary.json` supplemental-evidence/manifest 契约。S7-01 历史 artifact 9736486858 为 102,753 bytes、archive digest `sha256:a1961b1897cdb86c802ce3dbd9762381ef7726e28476a1d24657162014b330f2`，但不含该 JSON。 | S7-01=`DONE`；S7-02/S7=`IN PROGRESS`。等待新 RC 生成并核验演示 supplemental evidence；S2-04 保持 `BLOCKED`，不声明 G2/G4/G5、S4、Cloud、真实动作或生产完成。 |

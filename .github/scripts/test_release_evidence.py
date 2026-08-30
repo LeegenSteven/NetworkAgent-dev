@@ -216,16 +216,103 @@ class ReleaseEvidenceTests(unittest.TestCase):
             python_version=args.python_version,
             artifact_name=args.artifact_name,
             artifact_retention_days=args.artifact_retention_days,
+            supplemental_evidence=getattr(args, "supplemental_evidence", []),
         )
 
     def test_positive_manifest_and_verification_pass(self) -> None:
         _, args = self._fixture()
         self.assertEqual(release_evidence.build_manifest(args), 0)
+        payload = json.loads(args.output.read_text(encoding="utf-8"))
+        self.assertNotIn("supplemental_evidence", payload)
         self.assertIn(
             "Artifact classification: **PENDING VERIFY-MANIFEST**",
             args.summary.read_text(encoding="utf-8"),
         )
         self.assertEqual(release_evidence.verify_manifest(self._verify_args(args)), 0)
+
+    def test_supplemental_evidence_is_hashed_and_reverified(self) -> None:
+        _, args = self._fixture("supplemental")
+        supplemental = args.evidence_root / "defense-demo-summary.json"
+        release_evidence._write_json(
+            supplemental,
+            {"schema": "networkagent-native-defense-demo/1.0", "ok": True},
+        )
+        args.supplemental_evidence = [supplemental]
+
+        self.assertEqual(release_evidence.build_manifest(args), 0)
+        payload = json.loads(args.output.read_text(encoding="utf-8"))
+        matching = [
+            item
+            for item in payload["files"]
+            if item["path"].endswith("defense-demo-summary.json")
+        ]
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(
+            matching[0],
+            release_evidence._file_record(supplemental, base=self.root),
+        )
+        verify_args = self._verify_args(args)
+        self.assertEqual(release_evidence.verify_manifest(verify_args), 0)
+
+        without_supplemental = self._verify_args(args)
+        without_supplemental.supplemental_evidence = []
+        self.assertEqual(release_evidence.verify_manifest(without_supplemental), 1)
+
+        payload["supplemental_evidence"] = []
+        release_evidence._write_json(args.output, payload)
+        self.assertEqual(release_evidence.verify_manifest(verify_args), 1)
+        self.assertEqual(release_evidence.build_manifest(args), 0)
+
+        supplemental.write_text('{"ok":false}\n', encoding="utf-8", newline="\n")
+        self.assertEqual(release_evidence.verify_manifest(verify_args), 1)
+
+        supplemental.unlink()
+        self.assertEqual(release_evidence.verify_manifest(verify_args), 1)
+
+    def test_supplemental_evidence_boundary_rejects_unsafe_inputs(self) -> None:
+        _, args = self._fixture("supplemental-boundary")
+        valid = args.evidence_root / "defense-demo-summary.json"
+        valid.write_text("{}\n", encoding="utf-8", newline="\n")
+        outside = args.evidence_root.parent / "outside.json"
+        outside.write_text("{}\n", encoding="utf-8", newline="\n")
+
+        invalid_sets = (
+            [outside],
+            [args.evidence_root / ".." / "outside.json"],
+            [args.evidence_root / "pip-audit.json"],
+            [args.output],
+            [valid, valid],
+            [args.evidence_root / ".hidden.json"],
+            [args.evidence_root / "nested" / "evidence.json"],
+        )
+        for supplementals in invalid_sets:
+            with self.subTest(supplementals=supplementals):
+                args.supplemental_evidence = supplementals
+                self.assertEqual(release_evidence.build_manifest(args), 2)
+
+    def test_supplemental_evidence_rejects_links_missing_and_unlisted_files(
+        self,
+    ) -> None:
+        _, args = self._fixture("supplemental-entries")
+        supplemental = args.evidence_root / "defense-demo-summary.json"
+        args.supplemental_evidence = [supplemental]
+
+        self.assertEqual(release_evidence.build_manifest(args), 2)
+        supplemental.write_text("{}\n", encoding="utf-8", newline="\n")
+        (args.evidence_root / "unlisted.json").write_text(
+            "{}\n", encoding="utf-8", newline="\n"
+        )
+        self.assertEqual(release_evidence.build_manifest(args), 2)
+
+        (args.evidence_root / "unlisted.json").unlink()
+        target = args.evidence_root.parent / "target.json"
+        target.write_text("{}\n", encoding="utf-8", newline="\n")
+        supplemental.unlink()
+        try:
+            supplemental.symlink_to(target)
+        except OSError:
+            self.skipTest("symlink creation is unavailable on this platform")
+        self.assertEqual(release_evidence.build_manifest(args), 2)
 
     def test_inventory_and_sbom_finalization_pass(self) -> None:
         wheel = self._wheel()

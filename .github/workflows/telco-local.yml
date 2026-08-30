@@ -79,8 +79,50 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
-          python tools/local-stack/run_defense_demo.py --approve-local-simulation > /tmp/networkagent-defense-demo.json
-          python -c 'import json, os; report=json.load(open("/tmp/networkagent-defense-demo.json", encoding="utf-8")); assert report["source"]["commit_bound"] is True; assert report["source"]["commit_sha"] == os.environ["GITHUB_SHA"]; assert report["results"]["success"]["terminal"] == {"closed_loop": True, "state": "RESOLVED", "verification": "PASSED"}; assert report["results"]["failure"]["terminal"] == {"closed_loop": False, "state": "REOPENED", "verification": "FAILED"}; assert all(item["workspace_removed"] is True for item in report["cleanup"].values())'
+          mkdir -p release-evidence
+          python tools/local-stack/run_defense_demo.py --approve-local-simulation > release-evidence/defense-demo-summary.json
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(
+              Path("release-evidence/defense-demo-summary.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          assert report["schema"] == "networkagent-native-defense-demo/1.0"
+          assert report["ok"] is True
+          assert report["classification"] == "LOCAL_NATIVE_SIMULATION_EVIDENCE"
+          assert report["source"]["commit_bound"] is True
+          assert report["source"]["commit_sha"] == os.environ["GITHUB_SHA"]
+          assert set(report["results"]) == {"success", "failure"}
+          assert report["results"]["success"]["terminal"] == {"closed_loop": True, "state": "RESOLVED", "verification": "PASSED"}
+          assert report["results"]["failure"]["terminal"] == {"closed_loop": False, "state": "REOPENED", "verification": "FAILED"}
+          for item in report["results"].values():
+              assert item["exact_retry"]["approval_command_reused"] is True
+              assert item["exact_retry"]["terminal_unchanged"] is True
+              assert item["exact_retry"]["verification_unchanged"] is True
+              assert item["exact_retry"] == {
+                  "approval_command_reused": True,
+                  "terminal_unchanged": True,
+                  "verification_unchanged": True,
+              }
+          assert set(report["cleanup"]) == {"success", "failure"}
+          assert all(
+              item["workspace_removed"] is True
+              for item in report["cleanup"].values()
+          )
+          assert report["coverage"]["not_claimed"] == [
+              "CLOUD_EXECUTION",
+              "CONTAINER_EXECUTION",
+              "FULL_G2_SECURITY_CLOSURE",
+              "G4_CLOUD_REHEARSAL",
+              "G5_FINAL_ACCEPTANCE",
+              "REAL_NETWORK_REMEDIATION",
+              "REJECTION_OR_EXPIRY_BRANCHES",
+          ]
+          PY
       - name: Build both wheels
         run: |
           python -m pip install "build>=1,<2"
@@ -170,6 +212,7 @@ jobs:
             --python-version "${{ matrix.python-version }}" \
             --artifact-name "$RELEASE_ARTIFACT_NAME" \
             --artifact-retention-days 14 \
+            --supplemental-evidence release-evidence/defense-demo-summary.json \
             --summary "$GITHUB_STEP_SUMMARY"
           python .github/scripts/release_evidence.py verify-manifest \
             --manifest release-evidence/release-manifest.json \
@@ -184,7 +227,8 @@ jobs:
             --expected-pip-audit-version "2.10.1" \
             --python-version "${{ matrix.python-version }}" \
             --artifact-name "$RELEASE_ARTIFACT_NAME" \
-            --artifact-retention-days 14
+            --artifact-retention-days 14 \
+            --supplemental-evidence release-evidence/defense-demo-summary.json
       - name: Upload release or diagnostic evidence
         id: release_artifact
         if: ${{ always() && matrix.python-version == '3.12' }}

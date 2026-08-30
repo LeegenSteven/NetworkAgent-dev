@@ -50,6 +50,19 @@ action input is accepted. The command does not cover rejection/expiry branches,
 container execution, real remediation, Cloud rehearsal, full G2/G4 closure, or
 final G5 acceptance.
 
+For the third-party prerequisites, 6–8 minute presentation sequence, report
+field checklist, SHA-256 verification, safe failure cleanup, remote RC evidence,
+and the exact limitation statement, follow the
+[Local native defense demonstration runbook](../../docs/runbooks/local-defense-demo.md).
+S7-01 is complete at RC `c08d634c9c3deb628df5f98d4f60dd1675cd5706`:
+the Python 3.12/3.13 Local jobs both ran this command and verified the source
+binding, two terminal states, and two cleanups. S7-02 remains in progress. Its
+frozen artifact path is `release-evidence/defense-demo-summary.json`; only the
+Python 3.12 job uploads the release artifact, while Python 3.13 still executes
+the demonstration. The S7-01 historical artifact 9736486858 predates that
+supplemental file and must not be presented as a downloadable demonstration
+JSON.
+
 ## Safe governance demo
 
 Actions are disabled by default. This command confirms the deterministic sample

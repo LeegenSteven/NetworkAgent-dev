@@ -5,6 +5,13 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "telco-local.yml"
+SLO_RUNBOOK_PATH = REPOSITORY_ROOT / "docs" / "runbooks" / "local-slo-evidence.md"
+
+
+def test_slo_runbook_exists_with_stable_breach_anchor() -> None:
+    assert SLO_RUNBOOK_PATH.is_file()
+    runbook = SLO_RUNBOOK_PATH.read_text(encoding="utf-8")
+    assert "## Acceptance SLO breach" in runbook
 
 
 def test_defense_demo_is_strictly_validated_in_both_python_jobs() -> None:
@@ -141,7 +148,9 @@ def test_lifecycle_projection_runs_in_both_jobs_and_enters_312_closure() -> None
     assert 'len(report_bytes) == lifecycle["report"]["bytes"]' in workflow
     lifecycle_step = workflow.split(
         "- name: Exercise canonical local lifecycle projection evidence", 1
-    )[1].split("- name: Build both wheels", 1)[0]
+    )[1].split("- name: Exercise fixed three-window local acceptance SLO evidence", 1)[
+        0
+    ]
     assert "relative_path" not in lifecycle_step
     assert 'assert_exact(lifecycle["privacy"], {' in workflow
     assert 'lifecycle["coverage"]["not_claimed"] == [' in workflow
@@ -157,3 +166,57 @@ def test_lifecycle_projection_runs_in_both_jobs_and_enters_312_closure() -> None
         "CLOUD_OR_PRODUCTION_EXECUTION",
     ):
         assert f'"{boundary}"' in workflow
+
+
+def test_fixed_three_window_slo_runs_in_both_jobs_and_enters_312_closure() -> None:
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    command = (
+        "python tools/local-stack/run_slo_evidence_demo.py "
+        "--approve-local-simulation > "
+        "release-evidence/local-slo-summary.json"
+    )
+    supplemental = "--supplemental-evidence release-evidence/local-slo-summary.json"
+
+    assert "timeout-minutes: 20" in workflow
+    assert command in workflow
+    assert workflow.count(command) == 1
+    assert workflow.count(supplemental) == 2
+    assert 'slo["schema"] == "networkagent-local-slo-evidence/1.0"' in workflow
+    assert 'slo["classification"] == "LOCAL_DEMO_ACCEPTANCE_SLO_EVIDENCE"' in workflow
+    assert 'slo["source"]["commit_bound"] is True' in workflow
+    assert 'slo["source"]["commit_sha"] == os.environ["GITHUB_SHA"]' in workflow
+    assert 'assert_exact(slo["scope"], {' in workflow
+    assert 'assert_exact(slo["privacy"], {' in workflow
+    assert 'assert_exact(slo["coverage"], {' in workflow
+    assert 'assert_exact(slo["evaluation"], {' in workflow
+    assert "expected_window_keys" in workflow
+    assert "type(window[field]) is int" in workflow
+    assert 'window["observation_contract_valid"] is True' in workflow
+    assert "numerator * 1_000_000 // denominator" in workflow
+    assert 'assert_exact(slo["slis"], recomputed_slis)' in workflow
+    assert 'timing["diagnostic_only"] is True' in workflow
+    assert 'timing["sample_count"] == 3' in workflow
+    assert "nested_keys(persisted_body).isdisjoint(forbidden_keys)" in workflow
+    assert 'Path(".local/networkagent-defense").glob(' in workflow
+    assert 'slo["report"]["filename"] == "local-slo-report.json"' in workflow
+    assert 'len(report_bytes) == slo["report"]["bytes"]' in workflow
+    slo_step = workflow.split(
+        "- name: Exercise fixed three-window local acceptance SLO evidence", 1
+    )[1].split("- name: Build both wheels", 1)[0]
+    assert '"relative_path"' in slo_step
+    assert 'slo["report"]["relative_path"]' not in slo_step
+    for boundary in (
+        "TIME_BASED_AVAILABILITY_SLO",
+        "LATENCY_SLO",
+        "LONG_TERM_STATISTICAL_RELIABILITY",
+        "RUNTIME_STRUCTURED_LOGGING",
+        "OPEN_TELEMETRY_EXPORT",
+        "COLLECTOR_OR_DISTRIBUTED_TRACE",
+        "PROMETHEUS_RECORDING_RULES",
+        "EXTERNAL_ALERT_DELIVERY",
+        "MULTI_REPLICA_LOAD_OR_CAPACITY",
+        "BACKUP_OR_RECOVERY",
+        "GATE_E_OR_G5_CLOSURE",
+        "CLOUD_OR_PRODUCTION_SLO",
+    ):
+        assert f'"{boundary}"' in slo_step

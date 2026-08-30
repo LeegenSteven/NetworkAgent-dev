@@ -38,7 +38,7 @@ permissions:
 jobs:
   local-profile-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       SOURCE_DATE_EPOCH: "946684800"
     strategy:
@@ -450,6 +450,256 @@ jobs:
           assert hashlib.sha256(report_bytes).hexdigest() == lifecycle["report"]["sha256"]
           assert json.loads(report_bytes) == persisted_body
           PY
+      - name: Exercise fixed three-window local acceptance SLO evidence
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python tools/local-stack/run_slo_evidence_demo.py --approve-local-simulation > release-evidence/local-slo-summary.json
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import stat
+          from pathlib import Path
+
+          slo = json.loads(
+              Path("release-evidence/local-slo-summary.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          def assert_exact(value, expected):
+              assert type(value) is type(expected)
+              if isinstance(expected, dict):
+                  assert set(value) == set(expected)
+                  for key in expected:
+                      assert_exact(value[key], expected[key])
+              elif isinstance(expected, list):
+                  assert len(value) == len(expected)
+                  for item, expected_item in zip(value, expected, strict=True):
+                      assert_exact(item, expected_item)
+              else:
+                  assert value == expected
+
+          expected_body_keys = {
+              "classification",
+              "coverage",
+              "evaluation",
+              "ok",
+              "privacy",
+              "schema",
+              "scope",
+              "slis",
+              "source",
+              "timing_snapshot",
+              "windows",
+          }
+          assert set(slo) == expected_body_keys | {"report"}
+          assert slo["schema"] == "networkagent-local-slo-evidence/1.0"
+          assert slo["classification"] == "LOCAL_DEMO_ACCEPTANCE_SLO_EVIDENCE"
+          assert slo["ok"] is True
+          assert_exact(slo["source"], {
+              "binding_stable": True,
+              "commit_bound": True,
+              "commit_sha": os.environ["GITHUB_SHA"],
+              "git_available": True,
+              "tracked_clean": True,
+          })
+          assert slo["source"]["commit_bound"] is True
+          assert slo["source"]["commit_sha"] == os.environ["GITHUB_SHA"]
+          assert_exact(slo["scope"], {
+              "execution_mode": "SEQUENTIAL",
+              "isolated_run_directories": True,
+              "latency_slo": False,
+              "production_or_cloud_slo": False,
+              "statistical_reliability_claim": False,
+              "window_count": 3,
+              "window_type": "FIXED_THREE_ISOLATED_RUN_ACCEPTANCE_WINDOW",
+          })
+          assert_exact(slo["coverage"], {
+              "delivered": [
+                  "FIXED_THREE_RUN_LOCAL_ACCEPTANCE_WINDOW",
+                  "INTEGER_PPM_ACCEPTANCE_SLIS",
+                  "ZERO_ERROR_BUDGET_ACCEPTANCE_OBJECTIVE",
+                  "IN_REPORT_BREACH_EVALUATION",
+              ],
+              "not_claimed": [
+                  "TIME_BASED_AVAILABILITY_SLO",
+                  "LATENCY_SLO",
+                  "LONG_TERM_STATISTICAL_RELIABILITY",
+                  "RUNTIME_STRUCTURED_LOGGING",
+                  "OPEN_TELEMETRY_EXPORT",
+                  "COLLECTOR_OR_DISTRIBUTED_TRACE",
+                  "PROMETHEUS_RECORDING_RULES",
+                  "EXTERNAL_ALERT_DELIVERY",
+                  "MULTI_REPLICA_LOAD_OR_CAPACITY",
+                  "BACKUP_OR_RECOVERY",
+                  "GATE_E_OR_G5_CLOSURE",
+                  "CLOUD_OR_PRODUCTION_SLO",
+              ],
+          })
+          assert_exact(slo["privacy"], {
+              "absolute_paths_recorded": False,
+              "child_stderr_recorded": False,
+              "child_stdout_recorded": False,
+              "domain_identifiers_recorded": False,
+              "environment_recorded": False,
+              "high_cardinality_metric_labels": False,
+              "observation_identifiers_recorded": False,
+              "raw_arguments_recorded": False,
+              "raw_events_recorded": False,
+              "report_paths_recorded": False,
+              "status": "PASS",
+              "workspace_identifiers_recorded": False,
+          })
+
+          windows = slo["windows"]
+          assert type(windows) is list and len(windows) == 3
+          expected_window_keys = {
+              "duration_ms",
+              "exact_retry_integrities",
+              "expected_branch_outcomes",
+              "local_alerts_ok",
+              "observation_contract_valid",
+              "sequence",
+              "stage_command_successes",
+              "workspace_cleanups",
+          }
+          bounded_counts = {
+              "exact_retry_integrities": (2, 2),
+              "expected_branch_outcomes": (2, 2),
+              "local_alerts_ok": (4, 4),
+              "stage_command_successes": (22, 22),
+              "workspace_cleanups": (2, 2),
+          }
+          for sequence, window in enumerate(windows, start=1):
+              assert type(window) is dict
+              assert set(window) == expected_window_keys
+              assert type(window["sequence"]) is int
+              assert window["sequence"] == sequence
+              assert type(window["duration_ms"]) is int
+              assert window["duration_ms"] >= 0
+              assert type(window["observation_contract_valid"]) is bool
+              assert window["observation_contract_valid"] is True
+              for field, (minimum, maximum) in bounded_counts.items():
+                  assert type(window[field]) is int
+                  assert minimum <= window[field] <= maximum
+
+          sli_specs = [
+              ("LOCAL_STAGE_COMMAND_SUCCESS", "stage_command_successes", 66),
+              ("LOCAL_EXPECTED_BRANCH_OUTCOME", "expected_branch_outcomes", 6),
+              ("LOCAL_EXACT_RETRY_INTEGRITY", "exact_retry_integrities", 6),
+              ("LOCAL_WORKSPACE_CLEANUP", "workspace_cleanups", 6),
+              ("LOCAL_OBSERVATION_CONTRACT_VALID", "observation_contract_valid", 3),
+          ]
+          recomputed_slis = {}
+          breached_slis = []
+          for name, field, denominator in sli_specs:
+              if field == "observation_contract_valid":
+                  numerator = sum(1 for window in windows if window[field] is True)
+              else:
+                  numerator = sum(window[field] for window in windows)
+              observed_ppm = numerator * 1_000_000 // denominator
+              state = "OK" if observed_ppm >= 1_000_000 else "BREACH"
+              recomputed_slis[name] = {
+                  "denominator": denominator,
+                  "error_budget_ppm": 0,
+                  "numerator": numerator,
+                  "objective_ppm": 1_000_000,
+                  "observed_ppm": observed_ppm,
+                  "state": state,
+              }
+              if state == "BREACH":
+                  breached_slis.append(name)
+          assert_exact(slo["slis"], recomputed_slis)
+          assert_exact(slo["evaluation"], {
+              "breached_slis": breached_slis,
+              "external_delivery": False,
+              "name": "LOCAL_DEMO_ACCEPTANCE_SLO_BREACH",
+              "owner": "networkagent-local-owner",
+              "runbook_anchor": "local-slo-evidence#acceptance-slo-breach",
+              "state": "BREACH" if breached_slis else "OK",
+              "threshold": "any_sli_observed_ppm < objective_ppm",
+          })
+          assert slo["evaluation"]["state"] == "OK"
+
+          timing = slo["timing_snapshot"]
+          assert set(timing) == {
+              "diagnostic_only",
+              "max_duration_ms",
+              "median_duration_ms",
+              "min_duration_ms",
+              "sample_count",
+          }
+          assert timing["diagnostic_only"] is True
+          for field in (
+              "max_duration_ms",
+              "median_duration_ms",
+              "min_duration_ms",
+              "sample_count",
+          ):
+              assert type(timing[field]) is int
+          assert timing["sample_count"] == 3
+          durations = sorted(window["duration_ms"] for window in windows)
+          assert timing["min_duration_ms"] == durations[0]
+          assert timing["median_duration_ms"] == durations[1]
+          assert timing["max_duration_ms"] == durations[2]
+
+          forbidden_keys = {
+              "incident_id",
+              "workspace_id",
+              "observation_id",
+              "trace_id",
+              "resource_id",
+              "action_hash",
+              "action_id",
+              "approval_id",
+              "verification_id",
+              "request_id",
+              "correlation_id",
+              "event_id",
+              "idempotency_key",
+              "relative_path",
+              "absolute_path",
+              "events",
+              "metrics",
+          }
+          def nested_keys(value):
+              if isinstance(value, dict):
+                  return set(value).union(*(nested_keys(item) for item in value.values()))
+              if isinstance(value, list):
+                  return set().union(*(nested_keys(item) for item in value))
+              return set()
+          persisted_body = {key: value for key, value in slo.items() if key != "report"}
+          assert set(persisted_body) == expected_body_keys
+          assert nested_keys(persisted_body).isdisjoint(forbidden_keys)
+          assert str(Path.cwd().resolve()) not in json.dumps(persisted_body)
+
+          report = slo["report"]
+          assert type(report) is dict
+          assert set(report) == {"bytes", "filename", "sha256"}
+          assert type(report["bytes"]) is int and report["bytes"] > 0
+          assert report["filename"] == "local-slo-report.json"
+          assert slo["report"]["filename"] == "local-slo-report.json"
+          assert type(report["sha256"]) is str
+          assert len(report["sha256"]) == 64
+          assert all(character in "0123456789abcdef" for character in report["sha256"])
+          report_candidates = list(
+              Path(".local/networkagent-defense").glob(
+                  "*/local-slo-report.json"
+              )
+          )
+          assert len(report_candidates) == 1
+          report_path = report_candidates[0]
+          assert not report_path.is_symlink()
+          is_junction = getattr(report_path, "is_junction", None)
+          assert not (callable(is_junction) and is_junction())
+          assert stat.S_ISREG(os.lstat(report_path).st_mode)
+          report_bytes = report_path.read_bytes()
+          assert len(report_bytes) == slo["report"]["bytes"]
+          assert hashlib.sha256(report_bytes).hexdigest() == slo["report"]["sha256"]
+          assert json.loads(report_bytes) == persisted_body
+          PY
       - name: Build both wheels
         run: |
           python -m pip install "build>=1,<2"
@@ -542,6 +792,7 @@ jobs:
             --supplemental-evidence release-evidence/defense-demo-summary.json \
             --supplemental-evidence release-evidence/local-observability-summary.json \
             --supplemental-evidence release-evidence/local-lifecycle-summary.json \
+            --supplemental-evidence release-evidence/local-slo-summary.json \
             --summary "$GITHUB_STEP_SUMMARY"
           python .github/scripts/release_evidence.py verify-manifest \
             --manifest release-evidence/release-manifest.json \
@@ -559,7 +810,8 @@ jobs:
             --artifact-retention-days 14 \
             --supplemental-evidence release-evidence/defense-demo-summary.json \
             --supplemental-evidence release-evidence/local-observability-summary.json \
-            --supplemental-evidence release-evidence/local-lifecycle-summary.json
+            --supplemental-evidence release-evidence/local-lifecycle-summary.json \
+            --supplemental-evidence release-evidence/local-slo-summary.json
       - name: Upload release or diagnostic evidence
         id: release_artifact
         if: ${{ always() && matrix.python-version == '3.12' }}

@@ -912,6 +912,7 @@ def test_symlinked_evidence_input_is_rejected_when_supported(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     module, paths = _fixture(tmp_path, monkeypatch)
+    capsys.readouterr()
     target = tmp_path / "real-scan.json"
     target.write_bytes(paths["scan"].read_bytes())
     paths["scan"].unlink()

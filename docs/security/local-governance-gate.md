@@ -14,6 +14,7 @@
 > S2-03 container release evidence: **DONE for RC `68b16ea528a85b743aa8c05044948bac195ee8ec`**
 > S2-04 compatible base-image closure: **BLOCKED**
 > S4-01 local observability evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
+> S4-02 Canonical lifecycle projection evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
 > Workflow E / Gate E / G5: **NOT PASSED BY THIS GATE**
 > Gate B overall: **NOT PASSED**
 > Cloud/production authorization: **NOT APPLICABLE**
@@ -65,6 +66,16 @@ evaluation. That evidence does not expand this Governance Gate: it has no
 OpenTelemetry export, propagated trace, Prometheus metrics, external alert
 delivery, or SLO, and does not pass Workflow E, Gate E, or G5. The 579 safe
 Trace rows referenced below are Local input records, not OpenTelemetry spans.
+
+The separate S4-02 wrapper reads the completed durable Canonical records and
+projects them into eight revision groups / 14 allowlisted events per terminal
+branch. It proves exact bindings, one execution attempt, exact retry, cleanup,
+`read_only=true`, and `side_effects=false` while omitting domain/workspace
+identifiers and hashes, paths, correlation values, and raw records. Its frozen
+`distributed_trace=false` contract means this evidence is not runtime
+structured logging, OpenTelemetry, Prometheus, a distributed trace, an SLO, or
+external alert delivery. It does not expand this Governance Gate or authorize
+Cloud/production execution.
 
 ## S2-01 container review
 
@@ -172,7 +183,7 @@ attestation, provenance, or Trivy DB OCI digest/signature capture, and does
 not supply an offline-independent re-verification bundle because the image,
 scanner binary, and database are not uploaded.
 
-## S2-04 and S4-01 boundary updates
+## S2-04, S4-01, and S4-02 boundary updates
 
 S2-04 is `BLOCKED`: under the same Trivy 0.74.0/frozen database snapshot, none
 of four candidates simultaneously preserves the current CPython 3.12, glibc,
@@ -188,6 +199,24 @@ The RC's path filters selected only Local, so this statement does not claim a
 same-SHA Data Lab or Assurance run. S4/Workflow E/S7 remain `IN PROGRESS`, and
 Gate E/G5, G2/G4 remain open. This section is a cross-document boundary note,
 not an additional PASS row in the Governance Gate below.
+
+S4-02 is `DONE` only for the read-only Canonical lifecycle projection slice on
+RC `69643e8a6f79b1264d60e5517eeb9a24035c8e7d`. The commit-bound [Local run
+33336341831](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33336341831)
+completed Python 3.12 job 99323794962 and Python 3.13 job 99323795037
+successfully; each passed Domain + Local `576 passed`, local-stack `89 passed, 2
+skipped`, and Local E2E `2 passed`, with `18` release-boundary tests on 3.12.
+Its [VERIFIED RC artifact
+9739212391](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33336341831/artifacts/9739212391)
+is documented and independently reproducible through the [Local lifecycle
+projection runbook](../runbooks/local-lifecycle-projection.md). Assurance run
+33336341877, Container run 33336341805, and Cloud run 33336341859 also passed on
+the same SHA; Data Lab was not triggered. The Cloud workflow result is CI and
+Emulator evidence, not Cloud Staging or production authorization.
+
+S4/Workflow E/P7/S7 therefore remain `IN PROGRESS`; Gate E/G5 and G2/G4 remain
+open, and S2-04 remains `BLOCKED`. Like S4-01, this S4-02 note is assessed
+separately and does not add a PASS row to the Governance Gate below.
 
 ## Reviewed flow
 

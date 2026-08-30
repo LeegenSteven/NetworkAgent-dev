@@ -61,6 +61,34 @@ manifest) with no extra, missing, or drifted entry. Only Local was selected by
 the RC's path filters; no same-SHA Data Lab or Assurance run is claimed. S4,
 Workflow E, and S7 remain in progress; Gate E and G5 remain open.
 
+For a read-only, revision-grouped projection of the durable Canonical lifecycle,
+run:
+
+```text
+python tools/local-stack/run_lifecycle_evidence_demo.py --approve-local-simulation
+```
+
+The S4-02 wrapper reuses the fixed native defense flow and emits two projections:
+`RESOLVED/PASSED` and `REOPENED/FAILED`. Each branch has exactly eight contiguous
+revision groups and 14 allowlisted events, with `read_only=true`, exact durable
+bindings, one execution attempt, `side_effects=false`, and
+`distributed_trace=false`. The projection contains no domain/workspace
+identifiers or hashes, absolute paths, pseudonymous correlation, raw records,
+resource/KPI values, root cause, or evidence URI; source and report integrity
+metadata remain outside the projection. See the
+[Local Canonical lifecycle projection runbook](docs/runbooks/local-lifecycle-projection.md)
+for the exact field and event graph.
+
+S4-02 is complete for RC
+`69643e8a6f79b1264d60e5517eeb9a24035c8e7d`: [Local run
+33336341831](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33336341831)
+passed on Python 3.12/3.13, and Python 3.12 published [VERIFIED RC artifact
+9739212391](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33336341831/artifacts/9739212391).
+The same SHA's Assurance, Container, and Cloud workflows also passed; Data Lab
+was not triggered. This Cloud result is CI/Emulator evidence, not Cloud Staging
+or production evidence. S4, Workflow E, P7, and S7 remain in progress; Gate E,
+G5, G2, and G4 remain open, and S2-04 remains blocked.
+
 The demo stops at `AWAITING_APPROVAL`. A second command may enable
 `--action-mode simulate` and approve only the exact `action_hash` and Incident
 revision returned by that preview. The sole action is `LOCAL_SIMULATION`;

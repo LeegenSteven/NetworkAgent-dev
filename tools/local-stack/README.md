@@ -125,6 +125,64 @@ for the exact event graph, report SHA verification, four alert procedures, and
 limitations. S4, Workflow E, and S7 remain in progress; Gate E, G5, G2, and G4
 remain open, and S2-04 remains blocked.
 
+## One-command Canonical lifecycle projection evidence
+
+The following fixed wrapper projects the durable records created by the same
+native two-branch defense flow without changing them:
+
+```powershell
+.venv/Scripts/python.exe tools/local-stack/run_lifecycle_evidence_demo.py --approve-local-simulation
+```
+
+The only accepted argument is `--approve-local-simulation`. Standard output is
+one `networkagent-local-lifecycle-evidence/1.0` JSON document. Its `success` and
+`failure` branches are `networkagent-local-lifecycle-projection/1.0` documents
+with exactly eight revision groups and 14 events each. The success branch ends
+at `RESOLVED/PASSED`; the intentional failure branch ends at
+`REOPENED/FAILED`. Both projections require contiguous revisions, exact durable
+bindings, one ActionRun attempt, exact retry without record amplification,
+marker-owned cleanup, `read_only=true`, `side_effects=false`, and
+`distributed_trace=false`.
+
+Each projected event contains only
+`sequence/occurred_at/record_type/component/operation/outcome`; time is a record
+attribute, not an ordering label. The projections omit domain and workspace
+identifiers/hashes, absolute paths, correlation values, raw records, resource
+or KPI values, root-cause text, evidence URIs, actors, reasons, environment,
+stdout/stderr, and idempotency keys. The outer evidence envelope retains only
+the bounded source/report integrity fields needed to bind and verify the run.
+
+S4-02 is `DONE` for RC
+`69643e8a6f79b1264d60e5517eeb9a24035c8e7d`. [Local run
+33336341831](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33336341831)
+completed Python 3.12 [job
+99323794962](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33336341831/job/99323794962)
+and Python 3.13 [job
+99323795037](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33336341831/job/99323795037)
+successfully. Each job reported Domain + Local `576 passed`, local-stack
+`89 passed, 2 skipped`, and Local E2E `2 passed`; Python 3.12 also passed `18`
+release-boundary tests.
+
+Python 3.12 published [VERIFIED RC artifact
+9739212391](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33336341831/artifacts/9739212391),
+named `telco-local-release-py3.12-attempt-1`: 115,482 bytes, archive digest
+`sha256:237bcb207e29e53aba6c907f94efcb1999b77b1640f59dd95b8d3c9c30b27aa7`,
+expiring `2026-09-13T21:30:29Z`. Independent download confirmed 12 files: 11
+manifest records plus the manifest, with exact closure. The lifecycle summary
+is 8,431 bytes / SHA-256
+`5726b4eec6f0c4621a3d804b0f6973a24d41ae14ea1878b2e57205a299966e45`;
+removing its stdout-only `report` envelope reconstructs the persisted report at
+8,290 bytes / SHA-256
+`21528fd8694da0cb0c51452b14c45af864b24951282475367addbcd1b74fa004`.
+
+Follow the [Local Canonical lifecycle projection
+runbook](../../docs/runbooks/local-lifecycle-projection.md) for the exact
+14-node graph, field allowlists, artifact verification, same-SHA workflow
+evidence, and limitations. This slice does not provide runtime structured logs,
+OpenTelemetry/Collector, Prometheus, a distributed trace, SLOs, external alert
+delivery, or Cloud production evidence. S4, Workflow E, P7, and S7 remain in
+progress; Gate E/G5/G2/G4 remain open, and S2-04 remains blocked.
+
 ## Safe governance demo
 
 Actions are disabled by default. This command confirms the deterministic sample

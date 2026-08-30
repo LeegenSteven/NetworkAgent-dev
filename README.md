@@ -91,14 +91,24 @@ intentionally performs no cross-event aggregation. This path does not connect
 to Cloud Fault ingress, Spanner, Pub/Sub, Engineer, MCP write tools, GitOps, or
 a Network Operator.
 
-Current post-RC local evidence is `222 passed, 1 skipped` for Data Lab + Lab E2E
-under both Pydantic 2.5.3 and 2.13.4, Assurance full `54 passed`, the combined
-Domain + Local + shared-contract suites `520 passed`, and status probes
-`4 passed`. Local E2E is `3 passed`, including the single real TCP persistent-
-checkpoint restart case; A2A contracts are `33 passed` and A2A E2E is
-`4 passed`. A new remote RC has not run yet. Release artifact, CycloneDX SBOM,
-and `pip-audit` evidence generation are implemented but await remote acceptance;
-no new artifact URL or digest is claimed here.
+Current local evidence is `222 passed, 1 skipped` for Data Lab + Lab E2E under
+both Pydantic 2.5.3 and 2.13.4, Assurance full `54 passed`, the combined Domain,
+Local, and shared-contract suites `520 passed`, and status probes `4 passed`.
+Local E2E is `3 passed`, including the real TCP persistent-checkpoint restart
+case; A2A contracts are `33 passed` and A2A E2E is `4 passed`.
+
+Remote RC `6ba631929c312bbff27ef0ad4a9136d2cb390ae1` is now green in
+[Data Lab](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104518),
+[Local](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104520),
+[Assurance](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104511),
+and the additional
+[Cloud/Emulator regression](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104595).
+The three Python 3.12 release jobs uploaded 14-day `VERIFIED RC` artifacts with
+wheel SHA-256 values, CycloneDX 1.4 SBOMs, exact runtime inventories, wheel
+content scans, and `pip-audit` reports showing zero known vulnerabilities.
+These hashes prove integrity, not publisher identity: signing/attestation,
+hash-locked offline installation, full supply-chain scanning, and Cloud
+Staging authorization remain open.
 
 * [Implementation Development Plan 2.0](docs/implementation-development-plan-2.0.md)
 * [Living implementation plan](docs/unified-platform-implementation-plan.md)

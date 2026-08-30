@@ -3,8 +3,8 @@
 > Review date: 2026-08-30
 > Local simulation scope: **PASS**
 > BubbleRAN replay-to-governance slice: **READY FOR REVIEW**
-> Remote GitHub Actions: **PASS for RC `427fc6832bf6b115d035e5d2cb492a25ffd82395`**
-> Post-RC health/checkpoint/release-evidence changes: **LOCAL TESTED; NEW REMOTE RC NOT RUN**
+> Remote GitHub Actions: **PASS for RC `6ba631929c312bbff27ef0ad4a9136d2cb390ae1`**
+> Health/checkpoint/release-evidence changes: **REMOTE TESTED; VERIFIED RC ARTIFACTS**
 > Cloud/production authorization: **NOT APPLICABLE**
 
 ## Decision
@@ -23,15 +23,16 @@ exact rule-version/content provenance only for the controlled
 `ran.mac.ul_bler > 0.15 ratio` signature. The same two-stage governance engine
 then covers success, verification failure, rejection, and approval expiry.
 This slice remains ready for independent review. Its RC-bound remote
-compatibility and security matrix has passed; that result closes S1-06 but does
-not itself complete the review, the Sprint, or the release-evidence work.
+compatibility and security matrix has passed. S1-06 and the evidence-specific
+S1-07 work are closed, but that result does not itself complete the independent
+review, the Sprint, P3e, or the wider supply-chain release Gate.
 
 After that RC, the loopback service gained bounded `healthz`, `readyz`, and
 `version` endpoints, while Data Lab gained an opt-in caller-owned persistent
 checkpoint wrapper. The real TCP scenario now asserts that a completed
-checkpoint restarts with zero selected, attempted, or delivered events; its
-final local rerun passed. The supporting additions have confirmed local tests
-but no new remote RC result yet.
+checkpoint restarts with zero selected, attempted, or delivered events. The
+supporting additions passed the new remote RC matrix and its Python 3.12 jobs
+published independently rechecked `VERIFIED RC` artifacts.
 
 This Gate authorizes only the side-effect-free local demonstration. It does not
 authorize or attest GCP credentials, Spanner, Pub/Sub, Cloud MCP, Engineer A2A,
@@ -174,17 +175,12 @@ Completed counts are recorded exactly:
 | A2A E2E | 4 passed |
 | Real loopback TCP BubbleRAN → Governance E2E | 1 passed |
 
-The latest local `telco-lab 0.1.0` wheel is 67,653 bytes with SHA-256
-`96B5D696CB769E29256C5319FF391DA5CC30F2B25D108F5730FF9F8BD467C40B`.
-It remains local build evidence only. The remote RC jobs rebuilt and checked
-wheel contents, installation outside the source tree, and dependency
-consistency, but did not print remote wheel byte sizes/SHA-256 values or upload
-downloadable artifacts. The local digest therefore is not an RC artifact
-digest.
-
-Release artifact upload, CycloneDX SBOM, and `pip-audit` evidence generation
-are now implemented but await a new remote RC run. No new artifact URL,
-wheel/SBOM digest, or audit result is claimed by this Gate.
+The canonical remote `telco-lab 0.1.0` wheel is 74,425 bytes with SHA-256
+`4c646e7ad618884284bf5f0b484b579c19dbcaccc8ef01571eccfc4ea197d900`.
+The downloaded remote artifacts were rehashed locally: every wheel and evidence
+file matched its manifest. CycloneDX 1.4 structure, runtime inventory, wheel
+content scans, and `pip-audit==2.10.1` all passed with zero known
+vulnerabilities. Artifacts are retained for 14 days and expire on 2026-09-13.
 
 The real entry point was also exercised against a fresh disposable workspace:
 `doctor` reported ready; `init` loaded schema 1.1 with 13,440 performance rows
@@ -196,16 +192,25 @@ returned hash/revision and reached `RESOLVED`; confirmed reset removed only
 ### Remote RC evidence
 
 The tested release candidate is
-`427fc6832bf6b115d035e5d2cb492a25ffd82395`. Every run below completed with
+`6ba631929c312bbff27ef0ad4a9136d2cb390ae1`. Every run below completed with
 `success`, and each run's `headSha` is exactly that value:
 
-* [Assurance CI run 33296728012](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728012): on both Python 3.12 and 3.13, Domain 323, Lab 197, Local 195, Lab E2E 1 with 1 skipped, Local E2E 3, Assurance 50, A2A contracts 33, and A2A E2E 4 passed; all four wheels, outside-source-tree smoke, and `pip check` passed.
-* [Data Lab CI run 33296728022](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728022): Python 3.12 and 3.13 with Pydantic 2.13.4 each reported `198 passed, 1 skipped`; Python 3.12 with the declared Pydantic 2.5.3 minimum also reported `198 passed, 1 skipped`; the wheel content allowlist, outside-source-tree smoke, and `pip check` passed.
-* [Local CI run 33296728032](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728032): both Python jobs reported Domain+Local `518 passed`, local-stack `19 passed, 2 skipped`, and Local-only E2E `2 passed`; the real CLI reached `RESOLVED`, performed the guarded reset, and both wheels plus `pip check` passed.
-* [Cloud CI run 33296727982](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296727982): the additional Cloud/Emulator regression passed. It does not authorize or attest Cloud Staging.
+* [Assurance CI run 33301104511](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104511): both Python jobs passed Domain 323, Lab 219 with 2 skipped, Local 195, Lab E2E 1 with 1 skipped, Local E2E 3, Assurance 54, A2A contracts 33, and A2A E2E 4; Supervisor 57 and the legacy wire fixture also passed.
+* [Data Lab CI run 33301104518](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104518): Python 3.12/3.13 current-boundary jobs and the Python 3.12 Pydantic 2.5.3 minimum job each reported `220 passed, 3 skipped`.
+* [Local CI run 33301104520](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104520): both Python jobs reported Domain+Local `518 passed`, local-stack `19 passed, 2 skipped`, and Local-only E2E `2 passed`; the real CLI, outside-source-tree wheel smoke, and `pip check` passed.
+* [Cloud CI run 33301104595](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104595): Cloud profile and real Spanner Emulator contracts passed on Python 3.12/3.13. It does not authorize or attest Cloud Staging.
+
+The Python 3.12 jobs published these 14-day artifacts:
+
+* [Data Lab artifact 9728965310](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104518/artifacts/9728965310), manifest SHA-256 `9c2f4e2c5a9d35cb900a94b64f3ef6b2f604ceb34910a4638f926791f0b9d63d`.
+* [Local artifact 9728983176](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104520/artifacts/9728983176), manifest SHA-256 `337578af2a1a37d6bed33f4d8314439b13ceb80a58d3d515cfa8fbb67dec45cb`.
+* [Assurance artifact 9729018617](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104511/artifacts/9729018617), manifest SHA-256 `84d7978fb585202a5641850b0af0604b132540fe3e9c38f491fe194f91816d73`.
 
 This evidence update is a later documentation-only commit. It is not the tested
-RC and must not replace the `headSha` recorded by those runs.
+RC and must not replace the `headSha` recorded by those runs. Artifact hashes
+prove integrity, not publisher identity; signing/attestation, hash-locked
+offline installation, SPDX, independent secret/SAST/license policy, and the
+complete S3 Gate remain open.
 
 ## Residual limitations
 

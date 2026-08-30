@@ -57,15 +57,19 @@
 
 ### 3.2 当前发布证据
 
-- Sprint 1 的受测 release candidate 为 `427fc6832bf6b115d035e5d2cb492a25ffd82395`。下列四个成功 run 的 `headSha` 均精确等于该 SHA：
-  - [Assurance CI run 33296728012](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728012)：Python 3.12/3.13 各通过 Domain 323、Lab 197、Local 195、Lab E2E 1（另 1 skipped）、Local E2E 3、Assurance 50、A2A contracts 33、A2A E2E 4；四个 wheel 构建、源码树外 smoke 与 `pip check` 全绿。
-  - [Data Lab CI run 33296728022](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728022)：Python 3.12/3.13 + Pydantic 2.13.4 各 `198 passed, 1 skipped`，Python 3.12 + 声明下限 Pydantic 2.5.3 为 `198 passed, 1 skipped`；wheel 内容 allowlist、源码树外安装 smoke 与 `pip check` 全绿。
-  - [Local CI run 33296728032](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728032)：Python 3.12/3.13 各通过 Domain+Local `518 passed`、local-stack `19 passed, 2 skipped`、Local-only E2E `2 passed`；真实 CLI 走到 `RESOLVED` 并完成受控 reset，两个 wheel 与 `pip check` 全绿。
-  - [Cloud CI run 33296727982](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296727982)：额外 Cloud/Emulator 回归为 `success`；这仍不是 Cloud Staging IAM/OIDC/DLQ/Workload Identity 验收。
-- 最新本地 `telco-lab 0.1.0` wheel 为 67,653 bytes，SHA-256 为 `96B5D696CB769E29256C5319FF391DA5CC30F2B25D108F5730FF9F8BD467C40B`。这是本地构建证据；上述远程 workflows 只证明 RC 上的构建、内容 allowlist、源码树外安装和依赖一致性，没有输出远程 wheel 字节数/SHA-256，也没有上传可下载 artifact，因此该本地摘要不得冒充 RC 制品摘要。
-- 本次证据回填会形成晚于 RC 的文档提交；该文档提交不是受测 RC，也不得替换上述 runs 的 `headSha`。S1-06 可据此关闭，但 S1-07、Sprint 1、P3e 与 S3 仍按各自未完成项保持 `IN PROGRESS`。
-- RC 之后的当前本地实现证据为：Data Lab + Lab E2E 在 Pydantic 2.5.3 与 2.13.4 下各 `222 passed, 1 skipped`；Assurance full `54 passed`；Domain + Local + shared contracts `520 passed`；status 定向 `4 passed`；Local E2E `3 passed`；A2A contracts `33 passed`；A2A E2E `4 passed`。其中单个真实 loopback TCP 业务 E2E `1 passed`，确认持久 checkpoint 重启 selected/attempted/delivered 均为 0。新远程 RC 尚未运行，因此这些本地计数不能改写上述历史 runs。
-- release artifact、CycloneDX SBOM 与 `pip-audit` 证据生成已经实现，待新远程 RC 验收；当前没有可回填的新 artifact URL、wheel/SBOM 摘要或扫描结论。
+- Sprint 1 当前受测 release candidate 为 `6ba631929c312bbff27ef0ad4a9136d2cb390ae1`。下列四个成功 run 的 `headSha` 均精确等于该 SHA：
+  - [Assurance CI run 33301104511](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104511)：Python 3.12/3.13 各通过 Domain 323、Lab 219（另 2 skipped）、Local 195、Lab E2E 1（另 1 skipped）、Local E2E 3、Assurance 54、A2A contracts 33、A2A E2E 4；Supervisor 57 及 legacy wire fixture 也全绿。
+  - [Data Lab CI run 33301104518](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104518)：Python 3.12/3.13 + 当前 Pydantic 边界，以及 Python 3.12 + Pydantic 2.5.3 声明下限，均为 `220 passed, 3 skipped`；三个 skip 是两个 Windows 专用 drive probe 和未配置全量 BubbleRAN 外部目录。
+  - [Local CI run 33301104520](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104520)：Python 3.12/3.13 各通过 Domain+Local `518 passed`、local-stack `19 passed, 2 skipped`、Local-only E2E `2 passed`；真实 CLI、两 wheel、源码树外 smoke 与 `pip check` 全绿。
+  - [Cloud CI run 33301104595](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104595)：Python 3.12/3.13 的 Cloud profile 323+195+146+63+38+2+1 组回归与真实 Spanner Emulator `5 passed` 全绿；这仍不是 Cloud Staging IAM/OIDC/DLQ/Workload Identity 验收。
+- 三个 Python 3.12 release job 均产出 14 天保留的 `VERIFIED RC` artifact，并绑定上述 SHA、run ID、Python 3.12.14、精确 runtime inventory 与 requirements、CycloneDX 1.4、wheel 内容扫描和 `pip-audit==2.10.1` 零已知漏洞结果：
+  - [Data Lab artifact 9728965310](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104518/artifacts/9728965310) `telco-lab-release-py3.12-attempt-1`：ZIP 109,803 bytes，archive digest `sha256:17f27d11f6a247d581fbd54e031ceb2fb1af4ddec3fb1dc411cef639cd051c9f`，到期 `2026-09-13T08:15:21Z`；manifest SHA-256 `9c2f4e2c5a9d35cb900a94b64f3ef6b2f604ceb34910a4638f926791f0b9d63d`；SBOM SHA-256 `bfe4d7233ee1efeba99d89ebb2fd1140529f5fa7c2b6e62a4721f9c610810105`。
+  - [Local artifact 9728983176](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104520/artifacts/9728983176) `telco-local-release-py3.12-attempt-1`：ZIP 102,748 bytes，archive digest `sha256:21d6e4a19f73ebb68311739a27e7c703ab3d0d1ae28b4ad38c7ab0bebca4a266`，到期 `2026-09-13T08:16:44Z`；manifest SHA-256 `337578af2a1a37d6bed33f4d8314439b13ceb80a58d3d515cfa8fbb67dec45cb`；SBOM SHA-256 `2ee7a946a7e4eb68f144ea14532540d9ae48e062b8da1d06f8dc91b3ae82ba34`。
+  - [Assurance artifact 9729018617](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104511/artifacts/9729018617) `telco-assurance-release-py3.12-attempt-1`：ZIP 224,324 bytes，archive digest `sha256:6c4e7d7f16c97fad3c3615d384f54191ffa9e6ae2f995b2477dc9847e86de6f7`，到期 `2026-09-13T08:19:28Z`；manifest SHA-256 `84d7978fb585202a5641850b0af0604b132540fe3e9c38f491fe194f91816d73`；SBOM SHA-256 `ac0037fdbba351b3e00ff9dea5a1dfabc5b2a3296fa7629d7c693bcedf9c2a34`。
+- 远程 canonical wheel 为：`telco_domain-0.1.0` 32,547 bytes / SHA-256 `53f0b118041c5897d4e01813b777744263f849894f6c211cc67cb9df41fd104e`；`telco_lab-0.1.0` 74,425 bytes / `4c646e7ad618884284bf5f0b484b579c19dbcaccc8ef01571eccfc4ea197d900`；`telco_local-0.1.0` 66,728 bytes / `f86b66dbd9a157ca0ecbdb0fb1d63743f48fc96195a12629e01780f809dd7e3f`；`telco_assurance_agent-0.1.0` 46,556 bytes / `29c6ffedfd3493e3eca93218ef5a58f3e751cb73005f04d96babc52a6aa51860`。下载后二次重算与 manifest 全部一致。
+- 当前本地补充证据保持为：Data Lab + Lab E2E 在 Pydantic 2.5.3 与 2.13.4 下各 `222 passed, 1 skipped`；Assurance full `54 passed`；Domain + Local + shared contracts `520 passed`；status `4 passed`；Local E2E `3 passed`；A2A contracts `33 passed`；A2A E2E `4 passed`。真实 loopback TCP E2E `1 passed`，确认完成计划重启后 selected/attempted/delivered 均为 0。
+- Lab artifact 的 Pydantic 为 2.13.4，Local/Assurance artifacts 为 2.13.5；SBOM 如实记录各自依赖闭包，不宣称三环境完全相同。
+- 本次证据回填形成的文档提交晚于且不等于受测 RC。SHA-256 证明制品完整性而非发布者身份；artifact 于 2026-09-13 到期。签名/attestation、hash-locked 离线安装、SPDX、独立 secret/SAST/license policy、容器与完整 S3 Gate 仍未完成。
 
 ### 3.3 已知缺口
 
@@ -74,7 +78,7 @@
 - `/local/v1/healthz`、`readyz`、`version` 已实现并冻结。`readyz` 只做一次 1 秒有界本地 Repository 读；依赖异常、超时或前一个超时 worker 仍未结束时固定返回 503，不启动第二个并行探针，也不代表 Cloud readiness。
 - BubbleRAN 事件已进入 Canonical Incident 治理链路，但当前是每 source 独立 Incident，不做跨事件聚合；RCA 仅识别受控 `5G_SA` BubbleRAN UL BLER 签名，不得外推生产。
 - 新 Local/Data Lab 组件尚无统一的最小权限容器和 Compose 发布入口。
-- 受测旧 RC 的远程 workflows 未发布 wheel 字节数/SHA-256 或可下载 artifact。release artifact、SBOM 与 `pip-audit` 流程现已实现但待新远程验收；签名/证明和完整发布报告仍未完成。
+- 当前 RC 已发布 14 天保留的 wheel、manifest、CycloneDX SBOM、runtime inventory、内容扫描与 `pip-audit` 证据；签名/attestation、hash-locked 离线安装、SPDX、独立 secret/SAST/license policy、容器和完整发布报告仍未完成。
 - 跨组件结构化日志、指标、分布式追踪、本地 SLO、告警和完整 Runbook 尚未交付。
 - Cloud Staging IAM/OIDC、Pub/Sub DLQ、Workload Identity 及真实基础设施验收尚未进行。
 
@@ -216,8 +220,8 @@
 | S1-03 | 持久接收与幂等恢复 | `READY FOR REVIEW` | 公开 `ReplayWirePayload` 为唯一 sender/receiver 契约；HTTP 202 只在有界回读 current Incident 不可变事实、初始 revision-0 Audit 与 SourceAssociation 通过后返回。删除 Incident 或初始 Audit 时返回 503 且零新增写；变更 payload 冲突，response-loss exact replay 返回首次持久回执。 |
 | S1-04 | Loopback HTTP ReplaySink | `READY FOR REVIEW` | 在原有禁代理/重定向、逐事件重验、固定预算和 plan/event-bound checkpoint 上，新增单调 paced runner、硬 deadline、cancel/不确定序号证据、仅 network/timeout 的有限 transient retry，以及 caller-owned 原子持久 checkpoint wrapper；checkpoint 仍为非签名 ACK 的单-writer 本地 continuation claim。 |
 | S1-05 | BubbleRAN → Governance E2E | `READY FOR REVIEW` | 真实 loopback TCP E2E `1 passed`，使用受控 5G SA UL BLER 规则的 exact provenance，覆盖 `RESOLVED`/`REOPENED`/`REJECTED`/审批过期 `FAILED`、标签不泄漏、持久 checkpoint 重启零投递和 settled exact replay 零写。 |
-| S1-06 | 安全与兼容矩阵 | `DONE` | RC `427fc6832bf6b115d035e5d2cb492a25ffd82395` 的 Assurance、Data Lab、Local 与额外 Cloud workflows 全部 `success`；双 Python、Pydantic 2.13.4/2.5.3、边界/E2E、wheel allowlist/源码树外 smoke 与 `pip check` 证据见 3.2。 |
-| S1-07 | 操作文档与证据 | `IN PROGRESS` | README/Gate 已同步 health/ready/version、caller-owned 持久 checkpoint、真实 TCP 重启零投递与当前本地计数；release artifact、SBOM 与 `pip-audit` 实现待新远程 RC 验收。尚无新 run URL、远程 wheel/SBOM 摘要或可下载 artifact，因此仍不关闭。 |
+| S1-06 | 安全与兼容矩阵 | `DONE` | RC `6ba631929c312bbff27ef0ad4a9136d2cb390ae1` 的 Assurance、Data Lab、Local 与额外 Cloud workflows 全部 `success`；双 Python、当前/最低 Pydantic、边界/E2E、wheel allowlist/源码树外 smoke 与 `pip check` 证据见 3.2。 |
+| S1-07 | 操作文档与证据 | `DONE` | README/Gate 已同步 health/ready/version、caller-owned 持久 checkpoint、真实 TCP 重启零投递；三个 Python 3.12 job 的 `VERIFIED RC` artifacts、wheel/manifest/SBOM 摘要、runtime inventory、内容扫描与零已知漏洞 `pip-audit` 结果均已下载复核并绑定同一 RC。 |
 
 ### 7.2 Sprint 1 DoD
 
@@ -356,3 +360,4 @@
 | 2026-08-30 | 2.0 | 完成 Sprint 1 第二批本地实现：冻结公开 `ReplayWirePayload`；增加单调 paced runner、有界 transient retry/deadline/cancel 证据与 durable-before-202 Canonical Fault receiver。受控 BubbleRAN 5G SA UL BLER 规则只使用服务端 exact provenance；真实 TCP E2E 覆盖成功、验证失败、拒绝、过期和 settled exact replay 零写。保留每 source 独立 Incident，未实现 checkpoint 持久化、跨事件聚合、真实动作、Cloud 或 RCAEval。 | S1-03/04/05=`READY FOR REVIEW`；远程 CI、health/ready 与其余 DoD 未完成，S1 保持 `IN PROGRESS`。 |
 | 2026-08-30 | 2.0 | RC `427fc6832bf6b115d035e5d2cb492a25ffd82395` 的 Assurance、Data Lab、Local 与额外 Cloud workflows 全部成功，且四个 run 的 `headSha` 均绑定该 RC；双 Python、双 Pydantic、E2E、wheel 内容/外部安装与依赖检查证据已回填。远程 workflows 未输出 wheel digest 或上传 artifact，后续证据文档提交也不是受测 RC。 | S1-06=`DONE`；S1-01..05 保持 `READY FOR REVIEW`；S1-07、Sprint 1、P3e 与 S3 保持 `IN PROGRESS`。 |
 | 2026-08-30 | 2.0 | 在上述 RC 之后实现严格 loopback `healthz/readyz/version`、caller-owned 原子持久 checkpoint 与持久 paced wrapper；真实 TCP E2E `1 passed`，确认完成计划重启后零选择/零尝试/零投递。当前本地 Lab+Lab E2E 双 Pydantic 各 `222 passed, 1 skipped`、Assurance full `54 passed`、Domain+Local+shared contracts `520 passed`、status `4 passed`、Local E2E `3 passed`、A2A contracts `33 passed`、A2A E2E `4 passed`。release artifact、SBOM 与 `pip-audit` 证据生成已实现，尚待新远程 RC 验收。 | S1-04 仍 `READY FOR REVIEW`；S1-07、Sprint 1、P3e 与 S3 仍 `IN PROGRESS`，不编造新 run URL、artifact 或摘要。 |
+| 2026-08-30 | 2.0 | RC `6ba631929c312bbff27ef0ad4a9136d2cb390ae1` 的 Assurance、Data Lab、Local 与额外 Cloud workflows 全部成功；三个 Python 3.12 jobs 上传 14 天 `VERIFIED RC` artifacts。下载后确认全部文件字节数/SHA 与 manifest 一致，CycloneDX 1.4、runtime inventory、wheel scan 与 `pip-audit==2.10.1` 零已知漏洞均 PASS。 | S1-07=`DONE`；S1-01..05 仍 `READY FOR REVIEW`，Sprint 1、P3e 与 S3 因独立评审、RCAEval、签名/attestation、离线 hash-lock、容器等缺口继续 `IN PROGRESS`。 |

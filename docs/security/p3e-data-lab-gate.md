@@ -113,11 +113,10 @@
 - 单个真实 loopback TCP BubbleRAN → Governance E2E `1 passed`：持久 checkpoint 首次完成 4 个事件，重新打开同一 store 后零选择/零尝试/零投递；绕过 checkpoint 的 settled exact replay 零新增 Incident/Audit/Action/Verification 写。
 - receiver 在 ACK 前有界回读 current Incident 不可变事实、初始 revision-0 Audit 与 SourceAssociation；删除 Incident 或初始 Audit 的故障注入均返回 503 且不新增业务写。
 - `healthz/readyz/version` 只在直接 loopback 暴露；readiness 以 1 秒预算读取一次 Repository，依赖失败、超时或已有卡住 worker 时固定返回 503，不并发创建第二个 worker；所有标准非 GET 方法使用固定有界 JSON 405 契约，HEAD 按 HTTP 语义省略 body，也不构成 Cloud readiness。
-- RC `427fc6832bf6b115d035e5d2cb492a25ffd82395` 的 [Data Lab CI run 33296728022](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728022) 为 `success`，其 `headSha` 精确等于该 RC。Python 3.12/3.13 + Pydantic 2.13.4 各为 `198 passed, 1 skipped`，Python 3.12 + 声明下限 Pydantic 2.5.3 也为 `198 passed, 1 skipped`；wheel 内容 allowlist、源码树外安装 smoke 与 `pip check` 全绿。
-- 同一 RC 上的 [Assurance CI run 33296728012](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728012) 与 [Local CI run 33296728032](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728032) 均为 `success`：Assurance 的两个 Python job 各通过 Domain 323、Lab 197、Local 195、Lab E2E 1（另 1 skipped）、Local E2E 3、Assurance 50、A2A contracts 33、A2A E2E 4，并完成四 wheel/源码树外 smoke/`pip check`；Local 的两个 Python job 各通过 Domain+Local 518、local-stack 19（另 2 skipped）、Local-only E2E 2，真实 CLI 到达 `RESOLVED` 后安全 reset，并完成两 wheel/`pip check`。
-- 同一 RC 上的额外 [Cloud CI run 33296727982](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296727982) 也为 `success`，但不替代 Cloud Staging 验收。
-- 最新本地 `telco-lab 0.1.0` wheel 为 67,653 bytes，SHA-256=`96B5D696CB769E29256C5319FF391DA5CC30F2B25D108F5730FF9F8BD467C40B`。远程 jobs 验证了构建、内容 allowlist、源码树外安装与依赖一致性，但没有输出远程 wheel 字节数/SHA-256，也没有上传 artifact；该摘要仍只是本地证据。
-- 本段证据回填形成的后续提交不是受测 RC，不得替换上述 runs 的 `headSha`。release artifact、CycloneDX SBOM 与 `pip-audit` 证据生成已经实现，待新远程 RC 验收；当前不宣称新 artifact URL、wheel/SBOM digest 或扫描结论。远程历史矩阵与当前本地实现都不关闭跨事件聚合、RCAEval 或发布终验，P3e 继续保持 `IN PROGRESS`。
+- RC `6ba631929c312bbff27ef0ad4a9136d2cb390ae1` 的 [Data Lab CI run 33301104518](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104518) 为 `success`，其 Python 3.12/3.13 当前边界与 Python 3.12 + Pydantic 2.5.3 最低边界均为 `220 passed, 3 skipped`；[Assurance CI run 33301104511](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104511)、[Local CI run 33301104520](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104520) 与额外 [Cloud CI run 33301104595](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104595) 也全部 `success` 且 `headSha` 相同。Cloud run 仍不替代 Staging 验收。
+- [Data Lab artifact 9728965310](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104518/artifacts/9728965310) 为 `VERIFIED RC`：`telco_lab-0.1.0` 74,425 bytes / SHA-256 `4c646e7ad618884284bf5f0b484b579c19dbcaccc8ef01571eccfc4ea197d900`；manifest SHA-256 `9c2f4e2c5a9d35cb900a94b64f3ef6b2f604ceb34910a4638f926791f0b9d63d`；CycloneDX 1.4 SBOM SHA-256 `bfe4d7233ee1efeba99d89ebb2fd1140529f5fa7c2b6e62a4721f9c610810105`。
+- [Local artifact 9728983176](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104520/artifacts/9728983176) 与 [Assurance artifact 9729018617](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104511/artifacts/9729018617) 也为 `VERIFIED RC`。三份 artifact 的运行、GitHub metadata 和 manifest 三层均绑定受测 SHA/run ID；下载后的 ZIP digest、逐文件字节数/SHA、runtime inventory、wheel scan、CycloneDX 1.4 与 `pip-audit==2.10.1` 交叉验证 0 错误、0 已知漏洞。
+- 本段证据回填提交晚于且不等于受测 RC；artifact 于 2026-09-13 到期。SHA-256 证明完整性而非发布者身份，签名/attestation、hash-locked 离线安装、SPDX、独立 secret/SAST/license policy 与完整发布终验仍开放。远程矩阵不关闭跨事件聚合或 RCAEval，P3e 继续保持 `IN PROGRESS`。
 
 ## 9. 退出标准
 
@@ -137,7 +136,7 @@ P3e 第一版只有同时满足下列条件才可标记 `DONE`：
 - loopback HTTP transport、paced runner、有限 transient retry、caller-owned 持久 checkpoint、Canonical Fault/Incident 业务接收器与真实 TCP 治理 E2E 已实现。checkpoint 仍只是非签名 continuation claim；store 为非阻塞单 writer，response loss 恢复依赖 receiver 幂等，不能作为共享数据库或认证 ACK。
 - checkpoint 路径在 Windows 拒绝 UNC/device 并只接受 `DRIVE_FIXED`；POSIX mount topology 与恶意同用户 ancestor rename/swap TOCTOU 仍属于本机文件系统信任边界。
 - 当前 receiver 为每 source event 独立 Incident，尚无 episode/跨事件聚合。受控 UL BLER 阈值只用于 BubbleRAN 本地测试 provenance，不是生产 RCA。
-- BubbleRAN 当前使用全量基线和代码生成的极小 CI fixture；独立答辩脚本、延迟/峰值内存预算，以及新远程 RC 的 artifact/SBOM/`pip-audit` 与完整发布证据仍待验收。
+- BubbleRAN 当前使用全量基线和代码生成的极小 CI fixture；远程 RC artifact/SBOM/`pip-audit` 已验收，但独立答辩脚本、延迟/峰值内存预算、签名/attestation、离线 hash-lock 与完整发布证据仍待完成。
 - 本 Gate 不包含真实 Engineer/MCP/GitOps/Operator 动作或任何 Cloud Staging 验收。
 - NIST、RANalyzer、TelecomTS 的适配优先级将在前两个适配器通过 Gate 后确定。
 - 公司对 CC BY-SA 派生数据演示/再分发的合规要求需要在对外交付前确认。

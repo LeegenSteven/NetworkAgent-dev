@@ -47,6 +47,17 @@ same bounded JSON 405 contract; HEAD keeps the normal empty-body semantics.
 These unsigned local probes do not attest Cloud readiness or deployment
 identity.
 
+The direct h11 ingress admits at most 32 live transports and applies a
+one-second header deadline. Governance, Fault, and A2A share one request-body
+slot with zero queue and a two-second body deadline; Governance/Fault also
+share one isolated business worker with zero queue and a five-second operation
+deadline. Busy, timeout, unknown-path, and wrong-method responses are fixed,
+non-reflecting JSON and close the connection. Header/body timers remain
+cooperative on the ASGI event loop: legacy synchronous A2A DuckDB work can
+delay them, and SDK-managed background/streaming tasks can outlive the
+synchronous admission lease. Only Governance/Fault business work is claimed
+to have the dedicated worker isolation described above.
+
 P3e adds an independent Local Data Lab for reproducible tests against vetted
 public telecom datasets. Dataset downloads are always explicit, license-gated,
 version/checksum pinned, cached outside Git, and converted through privacy-safe
@@ -92,23 +103,26 @@ to Cloud Fault ingress, Spanner, Pub/Sub, Engineer, MCP write tools, GitOps, or
 a Network Operator.
 
 Current local evidence is `222 passed, 1 skipped` for Data Lab + Lab E2E under
-both Pydantic 2.5.3 and 2.13.4, Assurance full `54 passed`, the combined Domain,
-Local, and shared-contract suites `520 passed`, and status probes `4 passed`.
-Local E2E is `3 passed`, including the real TCP persistent-checkpoint restart
-case; A2A contracts are `33 passed` and A2A E2E is `4 passed`.
+both Pydantic 2.5.3 and 2.13.4, Assurance full `76 passed`, local-stack
+`22 passed`, and Local E2E `3 passed`, including the real TCP
+persistent-checkpoint restart case. A2A contracts are `33 passed` and A2A E2E
+is `4 passed`.
 
-Remote RC `6ba631929c312bbff27ef0ad4a9136d2cb390ae1` is now green in
-[Data Lab](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104518),
-[Local](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104520),
-[Assurance](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104511),
-and the additional
-[Cloud/Emulator regression](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104595).
-The three Python 3.12 release jobs uploaded 14-day `VERIFIED RC` artifacts with
-wheel SHA-256 values, CycloneDX 1.4 SBOMs, exact runtime inventories, wheel
-content scans, and `pip-audit` reports showing zero known vulnerabilities.
-These hashes prove integrity, not publisher identity: signing/attestation,
-hash-locked offline installation, full supply-chain scanning, and Cloud
-Staging authorization remain open.
+Sprint 1 is closed on remote RC
+`7cbff490ccb71befb42c7cd30204f7f88e3b2f38`: all 4
+[Assurance jobs](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33308634938),
+all 3 [Data Lab jobs](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33308635073),
+and both [Local jobs](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33308634955)
+completed successfully with an exact matching `headSha`. Their Python 3.12
+release jobs uploaded 14-day `VERIFIED RC` artifacts with archive/wheel
+SHA-256 values, SBOMs, exact runtime inventories, content scans, and dependency
+audits showing zero known vulnerabilities. The prior
+[Cloud/Emulator run](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104595)
+belongs to the previous RC: it remains historical Emulator evidence but does
+not attest this RC or Cloud Staging. Sprint 2's secure container/Compose package
+has not started. Signing/attestation, hash-locked offline installation, full
+supply-chain scanning, cross-event aggregation, RCAEval, and Cloud Staging
+authorization remain open.
 
 * [Implementation Development Plan 2.0](docs/implementation-development-plan-2.0.md)
 * [Living implementation plan](docs/unified-platform-implementation-plan.md)

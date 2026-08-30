@@ -2,10 +2,11 @@
 
 > Review date: 2026-08-30
 > Local simulation scope: **PASS**
-> BubbleRAN replay-to-governance slice: **READY FOR REVIEW**
-> Remote GitHub Actions: **PASS for RC `6ba631929c312bbff27ef0ad4a9136d2cb390ae1`**
+> BubbleRAN replay-to-governance slice: **PASS**
+> Remote GitHub Actions: **PASS for RC `7cbff490ccb71befb42c7cd30204f7f88e3b2f38`**
 > Health/checkpoint/release-evidence changes: **REMOTE TESTED; VERIFIED RC ARTIFACTS**
-> Latest HTTP admission/deadline hardening: **LOCAL PASS; NEW REMOTE RC PENDING**
+> Latest HTTP admission/deadline hardening: **LOCAL AND REMOTE PASS**
+> Sprint 1 Governance HTTP + Loopback Replay: **DONE**
 > Cloud/production authorization: **NOT APPLICABLE**
 
 ## Decision
@@ -23,11 +24,10 @@ event owns one deterministic 5G SA Incident. A server-owned fixed rule attaches
 exact rule-version/content provenance only for the controlled
 `ran.mac.ul_bler > 0.15 ratio` signature. The same two-stage governance engine
 then covers success, verification failure, rejection, and approval expiry.
-This slice has passed independent local review. Its previous RC-bound remote
-compatibility and security matrix also passed, while the newest HTTP
-admission/deadline changes still require a replacement remote RC. S1-06 and
-the evidence-specific S1-07 work are closed, but that result does not itself
-complete the Sprint, P3e, or the wider supply-chain release Gate.
+This slice has passed independent local review and the replacement RC-bound
+remote compatibility and security matrix. S1-01 through S1-07 and the Sprint 1
+Governance HTTP/Loopback Replay scope are closed. This result does not complete
+P3e, the wider supply-chain release Gate, or any Cloud Gate.
 
 The independent Gate C/D review has now passed locally. Its final HTTP
 hardening adds a strict 32-connection transport cap, a one-second header
@@ -36,14 +36,14 @@ deadline, and one isolated business worker with zero queue and a five-second
 operation deadline. Timeouts and caller cancellation do not cancel a possibly
 committed repository operation; the service remains busy until it settles and
 then relies on the existing idempotency contract for exact recovery. These
-changes still require a new remote RC before Sprint 1 can be marked complete.
+changes passed the same replacement RC used to close Sprint 1.
 
-After that RC, the loopback service gained bounded `healthz`, `readyz`, and
-`version` endpoints, while Data Lab gained an opt-in caller-owned persistent
-checkpoint wrapper. The real TCP scenario now asserts that a completed
-checkpoint restarts with zero selected, attempted, or delivered events. The
-supporting additions passed the new remote RC matrix and its Python 3.12 jobs
-published independently rechecked `VERIFIED RC` artifacts.
+The loopback service also has bounded `healthz`, `readyz`, and `version`
+endpoints, while Data Lab has an opt-in caller-owned persistent checkpoint
+wrapper. The real TCP scenario asserts that a completed checkpoint restarts
+with zero selected, attempted, or delivered events. These additions and the
+final HTTP hardening passed one shared remote RC matrix; its Python 3.12 jobs
+published `VERIFIED RC` artifacts retained for 14 days.
 
 This Gate authorizes only the side-effect-free local demonstration. It does not
 authorize or attest GCP credentials, Spanner, Pub/Sub, Cloud MCP, Engineer A2A,
@@ -179,7 +179,7 @@ Completed counts are recorded exactly:
 |---|---:|
 | Data Lab + Lab E2E, Pydantic 2.5.3 | 222 passed, 1 skipped |
 | Data Lab + Lab E2E, Pydantic 2.13.4 | 222 passed, 1 skipped |
-| Assurance full suite, latest Gate C candidate | 76 passed |
+| Assurance full suite, Sprint 1 RC | 76 passed |
 | Domain + Local + shared contracts | 520 passed |
 | local-stack safety suite | 22 passed |
 | Local E2E | 3 passed |
@@ -187,12 +187,14 @@ Completed counts are recorded exactly:
 | A2A E2E | 4 passed |
 | Real loopback TCP BubbleRAN → Governance E2E | 1 passed |
 
-The canonical remote `telco-lab 0.1.0` wheel is 74,425 bytes with SHA-256
-`4c646e7ad618884284bf5f0b484b579c19dbcaccc8ef01571eccfc4ea197d900`.
-The downloaded remote artifacts were rehashed locally: every wheel and evidence
-file matched its manifest. CycloneDX 1.4 structure, runtime inventory, wheel
-content scans, and `pip-audit==2.10.1` all passed with zero known
-vulnerabilities. Artifacts are retained for 14 days and expire on 2026-09-13.
+The canonical remote wheels are `telco-lab 0.1.0` at 74,425 bytes with SHA-256
+`4c646e7ad618884284bf5f0b484b579c19dbcaccc8ef01571eccfc4ea197d900`
+and `telco-assurance-agent 0.1.0` at 56,893 bytes with SHA-256
+`9f7d47ea0c45d2a01a60a5a726055a7368f3d2cf86d4d8a8ac1445bde08ce96d`.
+The Domain, Lab, and Local wheel summaries are unchanged from the prior RC.
+CycloneDX structure, runtime inventory, wheel content scans, and dependency
+audits passed with zero known vulnerabilities. The verified RC artifacts are
+retained for 14 days.
 
 The real entry point was also exercised against a fresh disposable workspace:
 `doctor` reported ready; `init` loaded schema 1.1 with 13,440 performance rows
@@ -204,19 +206,22 @@ returned hash/revision and reached `RESOLVED`; confirmed reset removed only
 ### Remote RC evidence
 
 The tested release candidate is
-`6ba631929c312bbff27ef0ad4a9136d2cb390ae1`. Every run below completed with
+`7cbff490ccb71befb42c7cd30204f7f88e3b2f38`. Every run below completed with
 `success`, and each run's `headSha` is exactly that value:
 
-* [Assurance CI run 33301104511](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104511): both Python jobs passed Domain 323, Lab 219 with 2 skipped, Local 195, Lab E2E 1 with 1 skipped, Local E2E 3, Assurance 54, A2A contracts 33, and A2A E2E 4; Supervisor 57 and the legacy wire fixture also passed.
-* [Data Lab CI run 33301104518](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104518): Python 3.12/3.13 current-boundary jobs and the Python 3.12 Pydantic 2.5.3 minimum job each reported `220 passed, 3 skipped`.
-* [Local CI run 33301104520](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104520): both Python jobs reported Domain+Local `518 passed`, local-stack `19 passed, 2 skipped`, and Local-only E2E `2 passed`; the real CLI, outside-source-tree wheel smoke, and `pip check` passed.
-* [Cloud CI run 33301104595](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104595): Cloud profile and real Spanner Emulator contracts passed on Python 3.12/3.13. It does not authorize or attest Cloud Staging.
+* [Assurance CI run 33308634938](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33308634938): all 4 jobs passed.
+* [Data Lab CI run 33308635073](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33308635073): all 3 jobs passed.
+* [Local CI run 33308634955](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33308634955): both jobs passed.
 
-The Python 3.12 jobs published these 14-day artifacts:
+The Python 3.12 jobs published these `VERIFIED RC`, 14-day artifacts:
 
-* [Data Lab artifact 9728965310](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104518/artifacts/9728965310), manifest SHA-256 `9c2f4e2c5a9d35cb900a94b64f3ef6b2f604ceb34910a4638f926791f0b9d63d`.
-* [Local artifact 9728983176](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104520/artifacts/9728983176), manifest SHA-256 `337578af2a1a37d6bed33f4d8314439b13ceb80a58d3d515cfa8fbb67dec45cb`.
-* [Assurance artifact 9729018617](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104511/artifacts/9729018617), manifest SHA-256 `84d7978fb585202a5641850b0af0604b132540fe3e9c38f491fe194f91816d73`.
+* [Assurance artifact 9731341117](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33308634938/artifacts/9731341117), archive digest `sha256:30cee4d4ca7c8e7d09cdde27449a8165a5e1da3e16efa8dc0fc30c4af44d454e`; runtime inventory 34, dependency audit 0, SBOM components 38.
+* [Data Lab artifact 9731281738](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33308635073/artifacts/9731281738), archive digest `sha256:2e314321e990f38ef82696a6df78fe9f11538f6c582996004d4b66d2d11a2231`; runtime inventory 5, dependency audit 0, SBOM components 7.
+* [Local artifact 9731294281](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33308634955/artifacts/9731294281), archive digest `sha256:adee5fba5887a4d61a4f59fba9a946c8d211038144095918e3045a6f56b0bee0`; runtime inventory 7, dependency audit 0, SBOM components 9.
+
+The prior RC's [Cloud CI run 33301104595](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104595)
+remains historical Cloud/Spanner Emulator evidence. Its `headSha` is not the
+new RC above, and it does not authorize or attest Cloud Staging.
 
 This evidence update is a later documentation-only commit. It is not the tested
 RC and must not replace the `headSha` recorded by those runs. Artifact hashes
@@ -224,9 +229,9 @@ prove integrity, not publisher identity; signing/attestation, hash-locked
 offline installation, SPDX, independent secret/SAST/license policy, and the
 complete S3 Gate remain open.
 
-The 76-test Assurance and 22-test local-stack counts above belong to the newer
-HTTP admission/deadline candidate. They are local evidence only until a new
-commit and its remote matrix replace the RC references in this section.
+The 76-test Assurance, 22-test local-stack, 3-test Local E2E, 33-test A2A
+contract, and 4-test A2A E2E results are the independent local evidence for the
+same HTTP admission/deadline implementation now covered by the remote RC.
 
 ## Residual limitations
 

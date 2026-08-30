@@ -7,8 +7,9 @@
 > Health/checkpoint/release-evidence changes: **REMOTE TESTED; VERIFIED RC ARTIFACTS**
 > Latest HTTP admission/deadline hardening: **LOCAL AND REMOTE PASS**
 > Sprint 1 Governance HTTP + Loopback Replay: **DONE**
-> S2-01 secure container candidate: **READY FOR REVIEW (STATIC ONLY)**
-> Gate B / real Docker runtime: **NOT RUN**
+> S2-01 secure container baseline: **DONE for RC `d0a020fb7a5d8a33cd136cd18917d21b7e067946`**
+> S2-01 `telco-container`: **REMOTE DOCKER PASS**
+> Gate B overall: **NOT PASSED**
 > Cloud/production authorization: **NOT APPLICABLE**
 
 ## Decision
@@ -52,14 +53,28 @@ authorize or attest GCP credentials, Spanner, Pub/Sub, Cloud MCP, Engineer A2A,
 GitOps, GKE, Network Operator, real network actions, Cloud Staging IAM/OIDC,
 DLQ behavior, or Workload Identity.
 
-## S2-01 static container review
+## S2-01 container review
 
-The S2-01 candidate has passed an independent static security review, but it
-has not passed Gate B. The local workstation has neither Docker nor actionlint,
-and the `telco-container` GitHub workflow has not run. The current evidence is
-therefore limited to source/configuration policy and Python-level artifact
-tests: `56 passed, 1 skipped`, where the single skip is the Windows symlink
-condition. Black, flake8, YAML/JSON parsing, and diff checks passed.
+The S2-01 baseline has passed both an independent static security review and
+remote Docker behavior checks on exact RC
+`d0a020fb7a5d8a33cd136cd18917d21b7e067946`; S2-01 is therefore `DONE`. Gate B
+overall is not passed. The local workstation has neither Docker nor actionlint,
+so the local evidence remains the Python-level policy/artifact suite:
+`75 passed, 1 skipped`, where the single skip is the Windows symlink condition.
+Black, flake8, YAML/JSON parsing, and diff checks passed. The remote Linux
+policy suite passed `76 passed, 0 skipped`.
+
+The matching [telco-container run 33311995755](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33311995755)
+completed [compose-policy job 99258612862](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33311995755/job/99258612862)
+and [build-inspect-smoke job 99258640065](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33311995755/job/99258640065)
+successfully. It resolved the Compose policy, built and inspected runner-local
+image ID `sha256:0acef50a2ee7978ea67a8b37582a19698a21b1303451ce37a0a569d48fef6cff`
+(not a registry digest), scanned 5 application layers / 2,570 members and 9,148
+merged-rootfs members, and initialized 13,440 performance rows and 579 trace
+rows with 0 incidents and `external_access=false`. Health, live isolation,
+shared-loopback smoke, and the probe step succeeded; the probe emitted no
+stdout. Reset removed state, artifacts, and marker with
+`workspace_removed=true`, followed by successful cleanup.
 
 The frozen network model keeps `assurance`, `init`, and `reset` on
 `network_mode: none`. Only `probe` and `smoke` join
@@ -76,13 +91,14 @@ volume is the only persistent writable mount. Approved LTE inputs are read-only
 binds and are checked against an image-owned exact-file/size/SHA-256 manifest;
 they are not copied into image layers.
 
-Promotion remains blocked on real Docker Compose resolution, image build and
-inspection, application-layer scanning, live isolation inspection,
-shared-loopback smoke/probe, and marker-owned reset. It also remains open on a
-`--require-hashes` dependency lock, Trivy Critical/High policy, container SBOM,
-signing, attestation, and provenance. Until those applicable checks pass on the
-same candidate, S2-01 remains `READY FOR REVIEW`, Workflow B/S2 remain
-`IN PROGRESS`, and Gate B remains not passed.
+The remote run closes the S2-01 Docker-resolution, build/inspect, content-scan,
+live-isolation, shared-loopback-step, reset, and cleanup checks. It uploaded 0
+artifacts and did not publish a registry image, container SBOM, signature,
+attestation, or provenance. Promotion under the wider Gate B remains open on a
+`--require-hashes` dependency lock, Trivy Critical/High policy, the complete
+success/failure governance demonstration, and restart recovery. S2-01 is
+`DONE`; Workflow B/S2/P7 remain `IN PROGRESS`, while Gate B, Gate A, S3, and
+G4 remain open.
 
 ## Reviewed flow
 

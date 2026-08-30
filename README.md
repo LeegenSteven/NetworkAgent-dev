@@ -121,24 +121,39 @@ audits showing zero known vulnerabilities. The prior
 belongs to the previous RC: it remains historical Emulator evidence but does
 not attest this RC or Cloud Staging.
 
-Sprint 2 is now in progress with an S2-01 secure container candidate. The
+Sprint 2 remains in progress, while its S2-01 secure container baseline is
+complete for remote RC `d0a020fb7a5d8a33cd136cd18917d21b7e067946`. The
 `assurance`, `init`, and `reset` services use `network_mode: none`; `probe` and
 `smoke` use `network_mode: service:assurance` so they can verify the server over
 the same namespace's loopback without a published port or bridge network. The
 digest-pinned image runs as UID/GID `10001:10001` with a read-only root,
 `cap_drop: ALL`, `no-new-privileges`, bounded resources, a hardened `/tmp`
 tmpfs, one writable named workspace volume, and manifest-verified read-only
-input mounts. Static policy and artifact tests passed `56 passed, 1 skipped`
+input mounts. Local policy and artifact tests passed `75 passed, 1 skipped`
 (the skip is the Windows symlink condition); Black, flake8, YAML/JSON parsing,
-and diff checks also passed.
+and diff checks also passed. The remote Linux policy suite passed
+`76 passed, 0 skipped`.
 
-S2-01 is **READY FOR REVIEW**, not Gate B complete. This workstation has no
-Docker or actionlint, and the new `telco-container` workflow is `NOT RUN`.
-Real Compose resolution, build/inspect, application-layer scan,
-shared-loopback smoke/probe, and reset must pass remotely. Hash-locked
-`--require-hashes` installation, a Trivy Critical/High Gate, container SBOM,
-signing, attestation/provenance, full supply-chain scanning, cross-event
-aggregation, RCAEval, and Cloud Staging authorization remain open.
+The matching [telco-container run 33311995755](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33311995755)
+passed both [compose-policy job 99258612862](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33311995755/job/99258612862)
+and [build-inspect-smoke job 99258640065](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33311995755/job/99258640065).
+It resolved the Compose policy, built and inspected local image ID
+`sha256:0acef50a2ee7978ea67a8b37582a19698a21b1303451ce37a0a569d48fef6cff`
+(an ephemeral runner build ID, not a registry digest), scanned 5
+application layers / 2,570 members and 9,148 merged-rootfs members, initialized
+13,440 performance rows and 579 trace rows with 0 incidents and
+`external_access=false`, and passed health, live isolation, shared-loopback
+smoke and probe steps; the probe step emitted no stdout. Reset removed state,
+artifacts, and marker with `workspace_removed=true`, followed by successful
+cleanup.
+
+S2-01 is **DONE**, but Workflow B/Sprint 2/P7 and Gate B remain `IN PROGRESS` /
+not passed. This workstation still has no Docker or actionlint, so no local
+result is claimed for those tools. The run uploaded 0 artifacts and published
+no registry image, container SBOM, signature, attestation, or provenance.
+Hash-locked `--require-hashes` installation, a Trivy Critical/High Gate, the
+complete success/failure governance demo, restart recovery, Gate A/S3/G4,
+cross-event aggregation, RCAEval, and Cloud Staging authorization remain open.
 
 * [Implementation Development Plan 2.0](docs/implementation-development-plan-2.0.md)
 * [Living implementation plan](docs/unified-platform-implementation-plan.md)

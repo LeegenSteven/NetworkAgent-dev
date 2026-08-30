@@ -316,11 +316,38 @@ def test_resolved_rprivate_bind_default_is_accepted() -> None:
     module.validate_compose_config(config)
 
 
+def test_resolved_compose_may_omit_safe_bind_defaults() -> None:
+    module = _load_module()
+    config = _secure_config()
+    for service in config["services"].values():
+        for mount in service.get("volumes", []):
+            if mount.get("type") == "bind":
+                mount["bind"] = {}
+    module.validate_compose_config(config)
+
+
 def test_nonprivate_bind_propagation_is_rejected() -> None:
     module = _load_module()
     config = _secure_config()
     config["services"]["assurance"]["volumes"][1]["bind"]["propagation"] = "rshared"
     with pytest.raises(module.PolicyViolation, match="propagation"):
+        module.validate_compose_config(config)
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "message"),
+    [
+        ("recursive", "writable", "recursion"),
+        ("selinux", "Z", "SELinux"),
+    ],
+)
+def test_unsafe_normalized_bind_option_is_rejected(
+    key: str, value: str, message: str
+) -> None:
+    module = _load_module()
+    config = _secure_config()
+    config["services"]["assurance"]["volumes"][1]["bind"][key] = value
+    with pytest.raises(module.PolicyViolation, match=message):
         module.validate_compose_config(config)
 
 
@@ -402,7 +429,30 @@ def test_cli_accepts_resolved_json(tmp_path: Path) -> None:
     module = _load_module()
     config_path = tmp_path / "compose.json"
     config_path.write_text(json.dumps(_secure_config()), encoding="utf-8")
-    assert module.main(["--resolved-json", str(config_path)]) == 0
+    repository_root = MODULE_PATH.parents[2]
+    assert (
+        module.main(
+            [
+                "--resolved-json",
+                str(config_path),
+                "--repository-root",
+                str(repository_root),
+            ]
+        )
+        == 0
+    )
+
+
+def test_source_compose_policy_digest_rejects_drift(tmp_path: Path) -> None:
+    module = _load_module()
+    source = MODULE_PATH.parents[2] / "deploy" / "local" / "compose.yaml"
+    changed = source.read_text(encoding="utf-8").replace(
+        "create_host_path: false", "create_host_path: true", 1
+    )
+    candidate = tmp_path / "compose.yaml"
+    candidate.write_text(changed, encoding="utf-8")
+    with pytest.raises(module.PolicyViolation, match="policy digest"):
+        module.validate_source_compose(candidate)
 
 
 def test_unknown_service_is_rejected() -> None:

@@ -148,6 +148,10 @@ PINNED_BASE = (
     "python:3.12-slim-bookworm@sha256:"
     "0f5b26b9518d002b6173fd61daad821fa340635ebfec5bba471013f9ca114579"
 )
+EXPECTED_COMPOSE_SHA256 = (
+    "9e712375c67fc01efa081ecefa7874eb7d4783f58ea0a61a7fe9e0a19f6b08c9"
+)
+MAX_COMPOSE_SOURCE_BYTES = 64 * 1024
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
 
@@ -313,15 +317,26 @@ def _validate_mounts(name: str, service: Mapping[str, object]) -> None:
         if not source.endswith("/" + suffix):
             raise PolicyViolation(f"service {name} input bind source is unexpected")
         bind = _mapping(mount.get("bind"), f"service {name} bind")
-        if "create_host_path" not in bind or set(bind) - {
+        if set(bind) - {
             "create_host_path",
             "propagation",
+            "recursive",
+            "selinux",
         }:
             raise PolicyViolation(f"service {name} bind options are not exact")
-        if bind.get("create_host_path") is not False:
+        # Compose 2.38.x omits an explicit false create_host_path value from
+        # `config --format json`. The source file is independently pinned by
+        # validate_source_compose(), so an omitted resolved value is safe here.
+        if "create_host_path" in bind and bind.get("create_host_path") is not False:
             raise PolicyViolation(f"service {name} bind create_host_path must be false")
         if bind.get("propagation") not in (None, "", "rprivate"):
             raise PolicyViolation(f"service {name} bind propagation must be rprivate")
+        if bind.get("recursive") not in (None, "", "enabled"):
+            raise PolicyViolation(f"service {name} bind recursion must stay enabled")
+        if bind.get("selinux") not in (None, ""):
+            raise PolicyViolation(
+                f"service {name} bind SELinux relabeling is forbidden"
+            )
 
 
 def _validate_profiles_and_health(name: str, service: Mapping[str, object]) -> None:
@@ -582,9 +597,11 @@ def validate_source_manifest(repository_root: Path, manifest_path: Path) -> None
 
 
 def validate_repository_artifacts(repository_root: Path) -> None:
+    compose = repository_root / "deploy" / "local" / "compose.yaml"
     dockerfile = repository_root / "deploy" / "local" / "Dockerfile"
     dockerignore = repository_root / "deploy" / "local" / "Dockerfile.dockerignore"
     manifest = repository_root / "deploy" / "local" / "input-manifest.json"
+    validate_source_compose(compose)
     try:
         dockerfile_text = dockerfile.read_text(encoding="utf-8")
         ignore_text = dockerignore.read_text(encoding="utf-8")
@@ -648,6 +665,31 @@ def validate_repository_artifacts(repository_root: Path) -> None:
     validate_source_manifest(repository_root, manifest)
 
 
+def validate_source_compose(compose_path: Path) -> None:
+    """Pin the source contract that normalized Compose JSON cannot preserve."""
+
+    try:
+        metadata = compose_path.lstat()
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or compose_path.is_symlink()
+            or metadata.st_size > MAX_COMPOSE_SOURCE_BYTES
+            or metadata.st_size <= 0
+        ):
+            raise PolicyViolation("source Compose file is unsafe")
+        source = compose_path.read_text(encoding="utf-8")
+    except PolicyViolation:
+        raise
+    except (OSError, UnicodeError):
+        raise PolicyViolation("source Compose file is unavailable") from None
+    normalized = source.replace("\r\n", "\n")
+    if "\r" in normalized:
+        raise PolicyViolation("source Compose line endings are invalid")
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    if digest != EXPECTED_COMPOSE_SHA256:
+        raise PolicyViolation("source Compose policy digest does not match")
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="networkagent-compose-guard")
     parser.add_argument(
@@ -655,7 +697,7 @@ def _parser() -> argparse.ArgumentParser:
         required=True,
         help="docker compose config --format json output, or '-' for stdin",
     )
-    parser.add_argument("--repository-root", type=Path)
+    parser.add_argument("--repository-root", type=Path, required=True)
     return parser
 
 

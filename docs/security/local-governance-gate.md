@@ -4,6 +4,7 @@
 > Local simulation scope: **PASS**
 > BubbleRAN replay-to-governance slice: **READY FOR REVIEW**
 > Remote GitHub Actions: **PASS for RC `427fc6832bf6b115d035e5d2cb492a25ffd82395`**
+> Post-RC health/checkpoint/release-evidence changes: **LOCAL TESTED; NEW REMOTE RC NOT RUN**
 > Cloud/production authorization: **NOT APPLICABLE**
 
 ## Decision
@@ -24,6 +25,13 @@ then covers success, verification failure, rejection, and approval expiry.
 This slice remains ready for independent review. Its RC-bound remote
 compatibility and security matrix has passed; that result closes S1-06 but does
 not itself complete the review, the Sprint, or the release-evidence work.
+
+After that RC, the loopback service gained bounded `healthz`, `readyz`, and
+`version` endpoints, while Data Lab gained an opt-in caller-owned persistent
+checkpoint wrapper. The real TCP scenario now asserts that a completed
+checkpoint restarts with zero selected, attempted, or delivered events; its
+final local rerun passed. The supporting additions have confirmed local tests
+but no new remote RC result yet.
 
 This Gate authorizes only the side-effect-free local demonstration. It does not
 authorize or attest GCP credentials, Spanner, Pub/Sub, Cloud MCP, Engineer A2A,
@@ -61,6 +69,7 @@ pinned BubbleRAN artifact
   → label-free ReplayPlan → public ReplayWirePayload
   → monotonic paced loopback HTTP
   → durable Incident + source association → HTTP 202
+  → atomically persist caller-owned checkpoint → restart selects zero events
   → fixed 5G SA RCA provenance → separate prepare/decide/execute
   ├─ PASSED → RESOLVED
   ├─ verification FAILED → REOPENED
@@ -76,6 +85,7 @@ pinned BubbleRAN artifact
 | Safe workspace ownership | PASS | Repository-contained workspaces are accepted only below `.local`; filesystem root, home, repository root/parents, symlinks, Windows junctions/reparse points, UNC/device paths, non-fixed Windows drives, and non-empty unowned directories fail closed before state is opened. A marker identifies owned state. |
 | Failure-safe initialization and reset | PASS | A failed first `init` removes only entries created for that uncommitted initialization. `reset` requires `--yes`, removes marker-owned `state`/`artifacts`, and preserves extra entries at the workspace root. |
 | Network exposure | PASS | The optional service is foreground-only, fixed to `127.0.0.1`, and rejects any action mode other than `disabled`. The governance action/verification gateways perform no external I/O. |
+| Local status surface | PASS | Direct-loopback `healthz` is dependency-free; `readyz` performs one 1-second-bounded Repository read and returns fixed 503 on failure, timeout, or an existing stuck worker; `version` returns only unsigned allowlisted package/contract versions. Every standard non-GET method uses the fixed bounded JSON 405 contract; HEAD has the standard empty body. None attests Cloud readiness. |
 | Proposal policy | PASS | Read-only RCA cannot propose actions directly. Only a conclusive, evidence-backed report with affected resources can receive exactly one fixed, low-risk, reversible `LOCAL_SIMULATION` proposal. |
 | Two-stage explicit approval | PASS | Preparing an Incident persists a `PENDING` record and returns the reviewed action hash/revision. Decision requires a separate call with exact hash, revision, actor, non-empty reason, and idempotency key. First confirmation and action approval cannot be combined. |
 | Approval freshness and scope | PASS | The decision binds Incident, report/version, action/hash, resource scope, revision, and expiry. Default TTL is 15 minutes and maximum TTL is 24 hours. Execution re-resolves the latest durable decision using a trusted clock. |
@@ -88,7 +98,8 @@ pinned BubbleRAN artifact
 | Durable replay reception | PASS | `POST /local/v1/faults/replay` requires loopback Host and peer, strict `replay-v1`, matching idempotency header, and bounded strict JSON. Before 202 it performs bounded readback of current Incident immutable facts, the initial revision-0 Audit, and SourceAssociation. Missing Incident/Audit returns 503 with zero added write; changed retries conflict and exact response-loss recovery is read-only. |
 | Controlled 5G provenance | PASS | Only the exact pinned BubbleRAN dataset/version/scenario and 5G SA GNB identity are admitted. `ran.mac.ul_bler > 0.15 ratio` uses the server-owned version 1.0.0 rule and content hash; the threshold is explicitly local-test-only. |
 | Paced replay resilience | PASS | The serial runner uses a finite monotonic clock, scheduled offsets/rate floor, total deadline, cancellation/uncertain-sequence evidence, and opt-in finite retries only for network/timeout failures. Checkpoints advance only on durable ACK. |
-| Real TCP business E2E | PASS | One real loopback TCP test reaches `RESOLVED`, `REOPENED`, `REJECTED`, and approval-expiry `FAILED`; exact replay after all four settle adds zero Incident/Audit/Action/Verification writes. |
+| Persistent replay checkpoint | PASS | The opt-in caller-owned store exposes load/save/clear plus a persistent paced wrapper. It uses strict 4 KiB JSON, exact plan/window/event/payload binding, atomic replace, monotonic no-regression, and a non-blocking single-writer lock; corruption, cross-plan/old-window, links/path escape, UNC/device, non-fixed Windows drive, and API failure fail closed. |
+| Real TCP business E2E | PASS | The one-case flow reaches `RESOLVED`, `REOPENED`, `REJECTED`, and approval-expiry `FAILED`; completed-checkpoint restart delivers zero events before the separate settled exact-replay zero-write check. |
 
 ## Open-data replay boundary
 
@@ -136,21 +147,31 @@ For the controlled success path, only a server-owned versioned rule can attach
 the `ran.mac.ul_bler > 0.15 ratio` KPI violation and rule-content hash. The
 receiver never trusts client rule fields and does no cross-event aggregation.
 The threshold is a lab signature, not a general 5G detector threshold or a
-production RCA conclusion. The caller-owned continuation checkpoint is still
-not a signed receiver acknowledgement and is not persisted by `telco-lab`.
+production RCA conclusion.
+
+The optional persistent runner saves a new canonical checkpoint after each
+valid 202/204 receipt and before advancing or emitting the next event. A lost
+response or local save failure retains the older checkpoint, so restart can
+send the same stable idempotency key again and depends on receiver exact-replay
+semantics. The checkpoint remains a caller-owned continuation claim, not a
+signed receiver acknowledgement. Store operations are single-writer and fail
+busy rather than wait; they are not a shared checkpoint service.
 
 ## Reproduction evidence
 
 The current focused local evidence was run with bytecode/cache writes disabled.
-Only completed runs are recorded here:
+Completed counts are recorded exactly:
 
 | Suite | Confirmed result |
 |---|---:|
-| `telco-lab` full suite, Pydantic 2.5.3 | 197 passed |
-| `telco-lab` full suite, Pydantic 2.13.4 | 197 passed |
-| Assurance replay receiver focused suite | 22 passed |
-| Assurance full suite | 50 passed |
-| Combined release regression | 133 passed |
+| Data Lab + Lab E2E, Pydantic 2.5.3 | 222 passed, 1 skipped |
+| Data Lab + Lab E2E, Pydantic 2.13.4 | 222 passed, 1 skipped |
+| Assurance full suite | 54 passed |
+| Domain + Local + shared contracts | 520 passed |
+| Assurance status focused suite | 4 passed |
+| Local E2E | 3 passed |
+| A2A contracts | 33 passed |
+| A2A E2E | 4 passed |
 | Real loopback TCP BubbleRAN → Governance E2E | 1 passed |
 
 The latest local `telco-lab 0.1.0` wheel is 67,653 bytes with SHA-256
@@ -160,6 +181,10 @@ wheel contents, installation outside the source tree, and dependency
 consistency, but did not print remote wheel byte sizes/SHA-256 values or upload
 downloadable artifacts. The local digest therefore is not an RC artifact
 digest.
+
+Release artifact upload, CycloneDX SBOM, and `pip-audit` evidence generation
+are now implemented but await a new remote RC run. No new artifact URL,
+wheel/SBOM digest, or audit result is claimed by this Gate.
 
 The real entry point was also exercised against a fresh disposable workspace:
 `doctor` reported ready; `init` loaded schema 1.1 with 13,440 performance rows
@@ -191,15 +216,19 @@ RC and must not replace the `headSha` recorded by those runs.
   does not expose the new governance approval/execution loop over A2A.
 * The BubbleRAN receiver intentionally creates one Incident per source event;
   it does not aggregate a multi-event episode or correlate multiple resources.
-* Replay continuation checkpoints are caller-owned in-memory values. The
-  repository does not yet provide checkpoint persistence across process loss.
+* Replay continuation checkpoints can be persisted locally, but remain
+  caller-owned, unsigned claims. The store is non-blocking single-writer;
+  response-loss recovery still depends on the receiver's idempotency contract.
 * The fixed BubbleRAN 5G SA rule proves controlled test provenance only. It is
   not a production detector threshold, multi-source RCA, or RCAEval result.
 * Replay identity stability is scoped to an identical plan/replay-window start;
   changing the replay window intentionally creates a new replay identity.
-* The workspace guard rejects supplied and resolved Windows network/reparse
-  paths, but still treats the host filesystem and same-user ancestor directory
-  integrity as an operating-system trust boundary.
+* Windows checkpoint paths reject UNC/device namespaces before filesystem
+  probes and require `DRIVE_FIXED`. POSIX mount topology and malicious
+  same-user ancestor rename/swap TOCTOU remain host-filesystem trust boundaries.
+* A timed-out readiness read runs in a worker that cannot be force-terminated;
+  while it remains stuck, later `readyz` calls fail closed with 503 rather than
+  create concurrent workers.
 * No real remediation, production rollback, Cloud identity/delivery, or
   infrastructure isolation claim follows from this Gate. The successful RC
   matrix attests only the listed repository tests, builds, smoke checks, and

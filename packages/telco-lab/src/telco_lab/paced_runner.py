@@ -268,7 +268,7 @@ def _cancelled(
     )
 
 
-async def run_paced_replay(
+async def _run_paced_replay(
     plan: ReplayPlan,
     sink: LoopbackHttpReplaySink,
     *,
@@ -276,6 +276,7 @@ async def run_paced_replay(
     retry_policy: ReplayRetryPolicy = ReplayRetryPolicy.NONE,
     deadline_seconds: float | None = None,
     clock: ReplayPacingClock | None = None,
+    checkpoint_committer: Callable[[ReplayDeliveryCheckpoint], None] | None = None,
 ) -> PacedReplayResult:
     """Deliver the canonical plan suffix at its bounded wall-clock schedule.
 
@@ -334,6 +335,7 @@ async def run_paced_replay(
     for event in selected:
         retry_index = 0
         retry_not_before = -math.inf
+        event_outcome_uncertain = False
         while True:
             plan_due = schedule_origin + event.scheduled_offset_seconds
             rate_due = (
@@ -352,7 +354,10 @@ async def run_paced_replay(
                 or due_at >= deadline_at
                 or due_at - now >= real_remaining
             ):
-                return deadline_result(event.sequence_number, uncertain=False)
+                return deadline_result(
+                    event.sequence_number,
+                    uncertain=event_outcome_uncertain,
+                )
             delay = due_at - now
             if delay > _CLOCK_TOLERANCE_SECONDS:
                 try:
@@ -367,17 +372,25 @@ async def run_paced_replay(
                         attempted_count=attempted_count,
                         delivered_count=delivered_count,
                         retry_count=retry_count,
-                        uncertain_sequence_number=None,
+                        uncertain_sequence_number=(
+                            event.sequence_number if event_outcome_uncertain else None
+                        ),
                     ) from None
                 if not completed:
-                    return deadline_result(event.sequence_number, uncertain=False)
+                    return deadline_result(
+                        event.sequence_number,
+                        uncertain=event_outcome_uncertain,
+                    )
 
             attempt_started_at = checked_clock.now()
             real_remaining = real_deadline_at - asyncio.get_running_loop().time()
             logical_remaining = deadline_at - attempt_started_at
             remaining = min(real_remaining, logical_remaining)
             if remaining <= 0:
-                return deadline_result(event.sequence_number, uncertain=False)
+                return deadline_result(
+                    event.sequence_number,
+                    uncertain=event_outcome_uncertain,
+                )
             last_attempt_at = attempt_started_at
             attempted_count += 1
             if retry_index > 0:
@@ -399,9 +412,10 @@ async def run_paced_replay(
             except TimeoutError:
                 return deadline_result(event.sequence_number, uncertain=True)
             except ReplayDeliveryError as error:
-                if error.code in _TRANSIENT_DELIVERY_CODES and retry_index < len(
-                    backoffs
-                ):
+                current_failure_is_transient = error.code in _TRANSIENT_DELIVERY_CODES
+                if current_failure_is_transient:
+                    event_outcome_uncertain = True
+                if current_failure_is_transient and retry_index < len(backoffs):
                     retry_not_before = checked_clock.now() + backoffs[retry_index]
                     if not math.isfinite(retry_not_before):
                         raise ReplayDeliveryError("replay_pacing_clock_invalid")
@@ -419,7 +433,9 @@ async def run_paced_replay(
                     failed_sequence_number=event.sequence_number,
                     error_code=error.code,
                     deadline_exceeded=False,
-                    uncertain_sequence_number=None,
+                    uncertain_sequence_number=(
+                        event.sequence_number if event_outcome_uncertain else None
+                    ),
                 )
 
             if (
@@ -440,11 +456,18 @@ async def run_paced_replay(
                     failed_sequence_number=event.sequence_number,
                     error_code="replay_delivery_transport_invalid",
                     deadline_exceeded=False,
-                    uncertain_sequence_number=None,
+                    uncertain_sequence_number=(
+                        event.sequence_number if event_outcome_uncertain else None
+                    ),
                 )
+            candidate_checkpoint = _canonical_checkpoint(
+                normalized,
+                event.sequence_number,
+            )
+            if checkpoint_committer is not None:
+                checkpoint_committer(candidate_checkpoint)
             delivered_count += 1
             checkpoint_sequence = event.sequence_number
-            _canonical_checkpoint(normalized, checkpoint_sequence)
             break
 
     return _result(
@@ -460,6 +483,27 @@ async def run_paced_replay(
         error_code=None,
         deadline_exceeded=False,
         uncertain_sequence_number=None,
+    )
+
+
+async def run_paced_replay(
+    plan: ReplayPlan,
+    sink: LoopbackHttpReplaySink,
+    *,
+    checkpoint: ReplayDeliveryCheckpoint | None = None,
+    retry_policy: ReplayRetryPolicy = ReplayRetryPolicy.NONE,
+    deadline_seconds: float | None = None,
+    clock: ReplayPacingClock | None = None,
+) -> PacedReplayResult:
+    """Deliver the canonical plan suffix without persisting its checkpoint."""
+
+    return await _run_paced_replay(
+        plan,
+        sink,
+        checkpoint=checkpoint,
+        retry_policy=retry_policy,
+        deadline_seconds=deadline_seconds,
+        clock=clock,
     )
 
 

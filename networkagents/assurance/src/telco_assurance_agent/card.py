@@ -5,6 +5,7 @@ from __future__ import annotations
 from a2a.types import AgentCapabilities, AgentCard, AgentSkill
 
 from .config import AssuranceConfig
+from .version import PACKAGE_VERSION
 
 
 ASSURANCE_AGENT_NAME = "Local Assurance Agent"
@@ -17,7 +18,7 @@ def build_agent_card(config: AssuranceConfig) -> AgentCard:
             "对已批准的本地 LTE 数据执行确定性异常扫描、显式确认和只读根因分析。"
         ),
         url=config.public_url,
-        version="0.1.0",
+        version=PACKAGE_VERSION,
         protocol_version="0.3.0",
         preferred_transport="JSONRPC",
         default_input_modes=["application/json", "text/plain"],

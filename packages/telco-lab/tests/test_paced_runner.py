@@ -105,6 +105,7 @@ def test_default_retry_policy_stops_after_one_transient_attempt(tmp_path) -> Non
     assert result.delivered_count == 0
     assert result.retry_count == 0
     assert result.checkpoint.sequence_number == 0
+    assert result.uncertain_sequence_number == 1
     assert len(transport.requests) == 1
     assert "must-not-leak" not in str(result)
 
@@ -132,6 +133,7 @@ def test_frozen_transient_retry_is_bounded_with_fixed_backoff(tmp_path) -> None:
     assert result.attempted_count == 3
     assert result.delivered_count == 1
     assert result.retry_count == 2
+    assert result.uncertain_sequence_number is None
     assert clock.sleeps == pytest.approx([0.25, 1.0])
     assert len(transport.requests) == 3
     assert (
@@ -194,6 +196,66 @@ def test_retry_policy_never_retries_nontransient_failure(tmp_path) -> None:
     assert result.attempted_count == 1
     assert result.retry_count == 0
     assert len(transport.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "failure",
+    (OSError("network response lost"), TimeoutError("response timed out")),
+)
+def test_exhausted_transient_retry_marks_the_current_event_uncertain(
+    tmp_path,
+    failure,
+) -> None:  # noqa: ANN001
+    plan = _plan(_source(tmp_path / "workspace", offsets=(0,)))
+    transport = _FakeTransport(failure, failure)
+
+    result = asyncio.run(
+        run_paced_replay(
+            plan,
+            _sink(plan, transport),
+            retry_policy=ReplayRetryPolicy.TRANSIENT_ONCE,
+            deadline_seconds=3,
+            clock=_FakeClock(),
+        )
+    )
+
+    assert result.error_code in {
+        "replay_delivery_network",
+        "replay_delivery_timeout",
+    }
+    assert result.attempted_count == 2
+    assert result.retry_count == 1
+    assert result.delivered_count == 0
+    assert result.checkpoint.sequence_number == 0
+    assert result.failed_sequence_number == 1
+    assert result.uncertain_sequence_number == 1
+
+
+def test_transient_response_loss_remains_uncertain_after_a_later_http_nack(
+    tmp_path,
+) -> None:  # noqa: ANN001
+    plan = _plan(_source(tmp_path / "workspace", offsets=(0,)))
+    transport = _FakeTransport(
+        TimeoutError("response lost"),
+        LoopbackHttpResponse(status_code=500),
+    )
+
+    result = asyncio.run(
+        run_paced_replay(
+            plan,
+            _sink(plan, transport),
+            retry_policy=ReplayRetryPolicy.TRANSIENT_ONCE,
+            deadline_seconds=3,
+            clock=_FakeClock(),
+        )
+    )
+
+    assert result.error_code == "replay_delivery_status"
+    assert result.attempted_count == 2
+    assert result.retry_count == 1
+    assert result.checkpoint.sequence_number == 0
+    assert result.failed_sequence_number == 1
+    assert result.uncertain_sequence_number == 1
 
 
 def test_deadline_before_next_schedule_returns_checkpoint_and_can_resume(

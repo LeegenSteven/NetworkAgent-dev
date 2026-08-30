@@ -58,6 +58,21 @@ remain fixed to `127.0.0.1`; local-stack never creates a background process.
 .venv/Scripts/python.exe tools/local-stack/local_stack.py --workspace .local/networkagent-stack --port 8085 serve
 ```
 
+From another local shell, the supported operational checks are:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8085/local/v1/healthz
+Invoke-RestMethod http://127.0.0.1:8085/local/v1/readyz
+Invoke-RestMethod http://127.0.0.1:8085/local/v1/version
+```
+
+`healthz` means only that the foreground process responds. `readyz` adds one
+bounded read of the local Canonical Incident repository; a fixed `503` means
+the service must not receive replay or governance traffic yet. `version`
+returns allowlisted package/API/schema versions and is not a signature. All
+three reject a non-loopback Host or direct client, accept no query string, and
+must not be placed behind a reverse proxy or port forward.
+
 ## Reset safety
 
 `reset` without `--yes` only returns a JSON confirmation requirement. The

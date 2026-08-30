@@ -18,6 +18,7 @@ from .executor import AssuranceAgentExecutor
 from .fault_receiver import LocalReplayFaultReceiver, fault_receiver_routes
 from .governance_http import governance_routes
 from .service import AfterIncidentWriteHook, AssuranceService, Clock
+from .status_http import status_routes
 from .stores import (
     DuckDbPendingConfirmationStore,
     DuckDbTaskStore,
@@ -124,6 +125,7 @@ def create_app(
     )
     application = Starlette(
         routes=[
+            *status_routes(components.profile.incident_repository),
             *fault_receiver_routes(components.fault_receiver),
             *governance_routes(components.governance_engine),
             Mount("/", app=SafeA2ARequestBoundary(sdk_application)),

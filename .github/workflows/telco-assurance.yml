@@ -24,6 +24,8 @@ on:
       - "tests/e2e/lab/**"
       - "tests/e2e/a2a/**"
       - "docs/implementation-development-plan-2.0.md"
+      - ".github/scripts/release_evidence.py"
+      - ".github/scripts/test_release_evidence.py"
       - ".github/workflows/telco-assurance.yml"
   pull_request:
     paths:
@@ -48,6 +50,8 @@ on:
       - "tests/e2e/lab/**"
       - "tests/e2e/a2a/**"
       - "docs/implementation-development-plan-2.0.md"
+      - ".github/scripts/release_evidence.py"
+      - ".github/scripts/test_release_evidence.py"
       - ".github/workflows/telco-assurance.yml"
 
 permissions:
@@ -61,8 +65,8 @@ jobs:
       PYTHONPATH: networkagents/supervisor/src
 
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.13"
           cache: pip
@@ -114,8 +118,8 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
       - name: Install only the isolated legacy A2A SDK
@@ -138,10 +142,11 @@ jobs:
         python-version: ["3.12", "3.13"]
     env:
       PYTHONPATH: networkagents/supervisor/src
+      SOURCE_DATE_EPOCH: "946684800"
 
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -150,6 +155,9 @@ jobs:
             packages/telco-lab/pyproject.toml
             packages/telco-local/pyproject.toml
             networkagents/assurance/pyproject.toml
+      - name: Exercise the fail-closed release-evidence boundary
+        if: matrix.python-version == '3.12'
+        run: python .github/scripts/test_release_evidence.py
       - name: Install Local Profile, Data Lab, Assurance Agent, and test dependencies
         run: |
           python -m pip install -e "packages/telco-domain[test]"
@@ -185,7 +193,169 @@ jobs:
           python -m pip install dist/local/telco_local-*.whl
           python -m pip install dist/assurance/telco_assurance_agent-*.whl
           cd /tmp
-          python -c "import telco_assurance_agent, telco_domain, telco_lab, telco_local; from importlib.metadata import version; from telco_assurance_agent.fault_receiver import LocalReplayFaultReceiver; from telco_assurance_agent.governance_http import LocalGovernanceHttpApi; from telco_lab import ReplayWirePayload, run_paced_replay; assert version('a2a-sdk') == '0.3.11'; assert telco_domain.SCHEMA_VERSION == '1.0'; assert ReplayWirePayload.model_fields['schema_version'].default == '1.0'; assert callable(run_paced_replay)"
+          python - <<'PY'
+          import telco_assurance_agent
+          import telco_domain
+          import telco_lab
+          import telco_local
+          from importlib.metadata import version
+
+          from telco_assurance_agent import (
+              LOCAL_HTTP_API_VERSION,
+              PACKAGE_VERSION,
+              LocalServiceStatusApi,
+          )
+          from telco_assurance_agent.fault_receiver import LocalReplayFaultReceiver
+          from telco_assurance_agent.governance_http import LocalGovernanceHttpApi
+          from telco_lab import ReplayWirePayload, run_paced_replay
+
+          assert version("a2a-sdk") == "0.3.11"
+          assert version("telco-assurance-agent") == PACKAGE_VERSION == "0.1.0"
+          assert LOCAL_HTTP_API_VERSION == "1.0"
+          assert LocalServiceStatusApi.__module__ == "telco_assurance_agent.status_http"
+          assert telco_domain.SCHEMA_VERSION == "1.0"
+          assert ReplayWirePayload.model_fields["schema_version"].default == "1.0"
+          assert callable(run_paced_replay)
+          PY
           telco-assurance-agent --help
       - name: Verify dependency consistency
         run: python -m pip check
+      - name: Generate release evidence and audit runtime dependencies
+        id: release_evidence
+        if: matrix.python-version == '3.12'
+        env:
+          RELEASE_ARTIFACT_NAME: telco-assurance-release-py3.12-attempt-${{ github.run_attempt }}
+        run: |
+          python -m pip install \
+            "pip-audit==2.10.1" \
+            "setuptools>=77,<83" \
+            "wheel>=0.45,<1"
+          release_env="$RUNNER_TEMP/telco-assurance-release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          python -m pip install \
+            --ignore-installed \
+            --target "$release_env" \
+            dist/domain/telco_domain-*.whl \
+            dist/lab/telco_lab-*.whl \
+            dist/local/telco_local-*.whl \
+            dist/assurance/telco_assurance_agent-*.whl
+          mkdir -p release-evidence
+          python .github/scripts/release_evidence.py inventory \
+            --environment-path "$release_env" \
+            --first-party "telco-domain" \
+            --first-party "telco-lab" \
+            --first-party "telco-local" \
+            --first-party "telco-assurance-agent" \
+            --output release-evidence/runtime-inventory.json \
+            --requirements-output release-evidence/runtime-requirements.txt
+          set +e
+          python .github/scripts/release_evidence.py scan-wheels \
+            --wheel-root dist \
+            --output release-evidence/wheel-content-scan.json
+          python -m pip_audit \
+            --requirement release-evidence/runtime-requirements.txt \
+            --no-deps \
+            --disable-pip \
+            --strict \
+            --progress-spinner off \
+            --timeout 30 \
+            --format json \
+            --output release-evidence/pip-audit.json
+          audit_status=$?
+          python -m pip_audit \
+            --requirement release-evidence/runtime-requirements.txt \
+            --no-deps \
+            --disable-pip \
+            --strict \
+            --progress-spinner off \
+            --timeout 30 \
+            --format cyclonedx-json \
+            --output release-evidence/pip-audit-sbom.cdx.json
+          sbom_status=$?
+          python .github/scripts/release_evidence.py finalize-sbom \
+            --input release-evidence/pip-audit-sbom.cdx.json \
+            --output release-evidence/sbom.cdx.json \
+            --wheel-root dist \
+            --runtime-inventory release-evidence/runtime-inventory.json \
+            --runtime-requirements release-evidence/runtime-requirements.txt \
+            --expected-wheel "telco_domain-*.whl" \
+            --expected-wheel "telco_lab-*.whl" \
+            --expected-wheel "telco_local-*.whl" \
+            --expected-wheel "telco_assurance_agent-*.whl"
+          finalize_status=$?
+          if [ "$finalize_status" -ne 0 ]; then sbom_status=2; fi
+          set -e
+          python .github/scripts/release_evidence.py manifest \
+            --wheel-root dist \
+            --evidence-root release-evidence \
+            --output release-evidence/release-manifest.json \
+            --audit-report release-evidence/pip-audit.json \
+            --audit-exit-code "$audit_status" \
+            --expected-pip-audit-version "2.10.1" \
+            --sbom release-evidence/sbom.cdx.json \
+            --sbom-exit-code "$sbom_status" \
+            --wheel-scan release-evidence/wheel-content-scan.json \
+            --expected-wheel "telco_domain-*.whl" \
+            --expected-wheel "telco_lab-*.whl" \
+            --expected-wheel "telco_local-*.whl" \
+            --expected-wheel "telco_assurance_agent-*.whl" \
+            --expected-component "telco-domain" \
+            --expected-component "telco-lab" \
+            --expected-component "telco-local" \
+            --expected-component "telco-assurance-agent" \
+            --python-version "${{ matrix.python-version }}" \
+            --artifact-name "$RELEASE_ARTIFACT_NAME" \
+            --artifact-retention-days 14 \
+            --summary "$GITHUB_STEP_SUMMARY"
+          python .github/scripts/release_evidence.py verify-manifest \
+            --manifest release-evidence/release-manifest.json \
+            --wheel-root dist \
+            --evidence-root release-evidence \
+            --expected-wheel "telco_domain-*.whl" \
+            --expected-wheel "telco_lab-*.whl" \
+            --expected-wheel "telco_local-*.whl" \
+            --expected-wheel "telco_assurance_agent-*.whl" \
+            --expected-component "telco-domain" \
+            --expected-component "telco-lab" \
+            --expected-component "telco-local" \
+            --expected-component "telco-assurance-agent" \
+            --audit-exit-code "$audit_status" \
+            --sbom-exit-code "$sbom_status" \
+            --expected-pip-audit-version "2.10.1" \
+            --python-version "${{ matrix.python-version }}" \
+            --artifact-name "$RELEASE_ARTIFACT_NAME" \
+            --artifact-retention-days 14
+      - name: Upload release or diagnostic evidence
+        id: release_artifact
+        if: ${{ always() && matrix.python-version == '3.12' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: telco-assurance-release-py3.12-attempt-${{ github.run_attempt }}
+          path: |
+            dist/domain/*.whl
+            dist/lab/*.whl
+            dist/local/*.whl
+            dist/assurance/*.whl
+            release-evidence/*.json
+            release-evidence/*.txt
+          if-no-files-found: error
+          retention-days: 14
+      - name: Summarize uploaded artifact
+        if: ${{ always() && matrix.python-version == '3.12' && steps.release_artifact.outcome == 'success' }}
+        env:
+          ARTIFACT_ID: ${{ steps.release_artifact.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.release_artifact.outputs.artifact-url }}
+          ARTIFACT_DIGEST: ${{ steps.release_artifact.outputs.artifact-digest }}
+          EVIDENCE_OUTCOME: ${{ steps.release_evidence.outcome }}
+        run: |
+          classification="DIAGNOSTIC ONLY"
+          if [ "$EVIDENCE_OUTCOME" = "success" ] && python -c "import json; from pathlib import Path; raise SystemExit(0 if json.loads(Path('release-evidence/release-manifest.json').read_text())['status'] == 'PASS' else 1)"; then
+            classification="VERIFIED RC"
+          fi
+          {
+            echo "### Uploaded GitHub artifact"
+            echo ""
+            echo "- Classification: **$classification**"
+            echo "- Artifact ID: \`$ARTIFACT_ID\`"
+            echo "- Download URL: $ARTIFACT_URL"
+            echo "- GitHub archive digest (not a wheel digest): \`$ARTIFACT_DIGEST\`"
+          } >> "$GITHUB_STEP_SUMMARY"

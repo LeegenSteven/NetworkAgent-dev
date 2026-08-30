@@ -35,6 +35,8 @@ from telco_lab import (
     TelcoLab,
     adapt_bubbleran_persistent_interference_csv,
     build_replay_plan,
+    load_replay_checkpoint,
+    run_persistent_paced_replay,
     run_paced_replay,
 )
 
@@ -301,6 +303,25 @@ def test_bubbleran_real_tcp_replay_closes_all_local_governance_branches(
     app = create_app(config, clock=clock)
 
     with _serve(app, port=selected_port) as port:
+        with httpx.Client(
+            base_url=f"http://127.0.0.1:{port}",
+            timeout=5,
+            trust_env=False,
+        ) as probe_client:
+            health = probe_client.get("/local/v1/healthz")
+            ready = probe_client.get("/local/v1/readyz")
+            version = probe_client.get("/local/v1/version")
+        assert health.status_code == ready.status_code == version.status_code == 200
+        assert health.json()["data"]["status"] == "alive"
+        assert ready.json()["data"]["status"] == "ready"
+        assert version.json()["data"] == {
+            "service": "telco-assurance-agent",
+            "package_version": "0.1.0",
+            "local_http_api_version": "1.0",
+            "replay_schema_version": "1.0",
+            "domain_schema_version": "1.0",
+        }
+
         endpoint = f"http://127.0.0.1:{port}/local/v1/faults/replay"
         policy = ReplayPolicy(
             endpoint=endpoint,
@@ -343,11 +364,42 @@ def test_bubbleran_real_tcp_replay_closes_all_local_governance_branches(
             environ=LOCAL_ENVIRONMENT,
             timeout_seconds=5,
         )
-        first_delivery = asyncio.run(run_paced_replay(plan, sink))
+        checkpoint_workspace = tmp_path / "replay-checkpoint-workspace"
+        checkpoint_workspace.mkdir()
+        checkpoint_directory = checkpoint_workspace / "checkpoints"
+        first_delivery = asyncio.run(
+            run_persistent_paced_replay(
+                plan,
+                sink,
+                workspace=checkpoint_workspace,
+                checkpoint_directory=checkpoint_directory,
+            )
+        )
         assert first_delivery.plan_complete is True
         assert first_delivery.delivered_count == 4
         assert first_delivery.retry_count == 0
         assert first_delivery.error_code is None
+        persisted = load_replay_checkpoint(
+            plan,
+            workspace=checkpoint_workspace,
+            checkpoint_directory=checkpoint_directory,
+        )
+        assert persisted == first_delivery.checkpoint
+        assert persisted.sequence_number == len(plan.events)
+
+        resumed_delivery = asyncio.run(
+            run_persistent_paced_replay(
+                plan,
+                sink,
+                workspace=checkpoint_workspace,
+                checkpoint_directory=checkpoint_directory,
+            )
+        )
+        assert resumed_delivery.plan_complete is True
+        assert resumed_delivery.selected_count == 0
+        assert resumed_delivery.attempted_count == 0
+        assert resumed_delivery.delivered_count == 0
+        assert resumed_delivery.checkpoint == persisted
 
         repository = app.state.assurance_components.profile.incident_repository
 

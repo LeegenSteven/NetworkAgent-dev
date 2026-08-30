@@ -4,7 +4,7 @@
 > 首次建立：2026-08-28  
 > 最近更新：2026-08-30
 > 下一轮执行基线：[实施开发计划 2.0](implementation-development-plan-2.0.md)
-> 当前里程碑：P0、P1、P2 已完成 / P3 Cloud 代码与远程 Emulator Gate 已通过，等待 Cloud Staging 验收；P3e BubbleRAN 已完成锁定下载、适配、离线评估、受控回放、持久 Canonical Fault 接收与本地治理 E2E，但 checkpoint 持久化、跨事件聚合和 RCAEval 仍待开发；P4/P5/P7 的 Local 模拟治理与部署切片已完成，Cloud Resolver、真实动作和统一 UI 仍待开发
+> 当前里程碑：P0、P1、P2 已完成 / P3 Cloud 代码与远程 Emulator Gate 已通过，等待 Cloud Staging 验收；P3e BubbleRAN 已完成锁定下载、适配、离线评估、受控回放、caller-owned 持久 checkpoint、持久 Canonical Fault 接收与本地治理 E2E，但跨事件聚合、RCAEval 与新远程发布验收仍待完成；P4/P5/P7 的 Local 模拟治理与部署切片已完成，Cloud Resolver、真实动作和统一 UI 仍待开发
 > 目标主仓库：`NetworkAgent-dev`  
 > 输入项目：`NetworkAgent-dev`、`telco-autonomous-networks-data-demo-main`
 
@@ -364,7 +364,7 @@ P2a 验收证据（2026-08-28）：
 - **P3b（本地完成）**：已建立严格 Pub/Sub push Fault Ingress，以同一 Spanner 事务写 Inbox + Incident/Audit + SourceAssociation + Outbox；默认 `shadow`，仅 durable success/replay 返回 2xx，瞬时故障返回可重试状态，poison message 交给订阅 DLQ。
 - **P3c（本地完成）**：已建立与 Engineering 写工具分离的独立 FastMCP 服务，只注册六个只读 Canonical Incident/KPI/Evidence/Resource 工具，并在出站边界执行逐项与累计预算。
 - **P3d（本地完成）**：已建立 checksummed Canonical DuckDB → Spanner 一次性迁移；运行时/导出无 DDL，保留完整来源证明，重放交叉核验持久组件。legacy Spanner 语义不明确的行只读保留并进入人工映射队列。
-- **P3e（IN PROGRESS）**：新增本地开放数据实验室。现有 P3c 已由只读 Cloud MCP 占用，因此开放数据工作正式编号为 P3e，不复用 P3c。当前已完成安全 catalog/lock、许可证据与归属锁定、显式许可下载、BubbleRAN 精确 schema CSV/JSON 适配、候选有界的离线评估、immutable label-free `ReplayPlan` 和公开 `ReplayWirePayload`。loopback transport 现支持立即投递与单调 paced runner，只对显式启用的 network/timeout 瞬时失败做有限重试，并保留 deadline/cancel 证据。Assurance `POST /local/v1/faults/replay` 只在 Canonical Incident/source association 持久后返回 202；每 source 独立 Incident，精确锁定的 5G SA BubbleRAN `ran.mac.ul_bler > 0.15` 只使用服务端规则版本和内容摘要作 provenance，不得外推生产。RCAEval、多源/跨事件聚合和 checkpoint 持久化仍未实现。
+- **P3e（IN PROGRESS）**：新增本地开放数据实验室。现有 P3c 已由只读 Cloud MCP 占用，因此开放数据工作正式编号为 P3e，不复用 P3c。当前已完成安全 catalog/lock、许可证据与归属锁定、显式许可下载、BubbleRAN 精确 schema CSV/JSON 适配、候选有界的离线评估、immutable label-free `ReplayPlan` 和公开 `ReplayWirePayload`。loopback transport 现支持立即投递与单调 paced runner，只对显式启用的 network/timeout 瞬时失败做有限重试，并保留 deadline/cancel 证据；可选 caller-owned store 以严格 plan-bound JSON、原子替换和非阻塞单-writer 锁持久化 checkpoint。Assurance `POST /local/v1/faults/replay` 只在 Canonical Incident/source association 持久后返回 202；每 source 独立 Incident，精确锁定的 5G SA BubbleRAN `ran.mac.ul_bler > 0.15` 只使用服务端规则版本和内容摘要作 provenance，不得外推生产。RCAEval 与多源/跨事件聚合仍未实现。
 - 共享 Repository 已统一：source event 全生命周期只属于一个 Incident；新关联不增加 revision；分裂 selector fail closed；`CLOSED → REOPENED` 在同一事务重新获取全部活动键。
 - 本地发布矩阵已通过：领域 323 项、Local 166 项、共享 Repository 合同 2 项、Cloud/迁移/FGAC 146 项、Fault Ingress 与 Cloud MCP 101 项；P2b Assurance 26 项和 Local E2E 1 项也保持绿色。Spanner 迁移与常规生命周期均已覆盖 1,000 条来源的批量边界。提交 `fa07096` 的 [Cloud CI run 33202370157](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33202370157) 已在 Python 3.12/3.13 上分别通过真实 Spanner Emulator 对象 DDL、共享 Repository、50 路并发、迁移重放、1,000 条来源、reopen 与 Inbox/Outbox 验收，并完成五 wheel 源码树外安装、四 CLI 冒烟和 `pip check`。
 
@@ -375,7 +375,9 @@ Sprint 1 远程回归绑定 release candidate `427fc6832bf6b115d035e5d2cb492a25f
 - [Local CI run 33296728032](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728032)：Python 3.12/3.13 各通过 Domain+Local 518、local-stack 19（另 2 skipped）、Local-only E2E 2；真实 CLI 到达 `RESOLVED` 后执行安全 reset，两个 wheel 和 `pip check` 全绿。
 - [Cloud CI run 33296727982](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296727982)：额外 Cloud/Emulator 回归为 `success`，但不能替代 Cloud Staging IAM/OIDC/DLQ/Workload Identity 验收。
 
-这些 workflows 没有输出远程 wheel 字节数/SHA-256，也没有上传 artifact；此前 67,653 bytes、`96B5D696CB769E29256C5319FF391DA5CC30F2B25D108F5730FF9F8BD467C40B` 仍仅是本地 `telco-lab` wheel 证据。本次回填产生的后续文档提交不是受测 RC，不得替换 runs 的 `headSha`。该矩阵只关闭实施计划 S1-06；P3e、P3 总阶段及发布/供应链工作仍保持 `IN PROGRESS`。
+这些 workflows 没有输出远程 wheel 字节数/SHA-256，也没有上传 artifact；此前 67,653 bytes、`96B5D696CB769E29256C5319FF391DA5CC30F2B25D108F5730FF9F8BD467C40B` 仍仅是本地 `telco-lab` wheel 证据。本次回填产生的后续提交不是受测 RC，不得替换 runs 的 `headSha`。该矩阵只关闭实施计划 S1-06。
+
+RC 之后已在本地实现 `healthz/readyz/version`、caller-owned 持久 checkpoint 和 release artifact/CycloneDX SBOM/`pip-audit` 证据生成。当前已确认 Data Lab + Lab E2E 在 Pydantic 2.5.3 与 2.13.4 下各 `222 passed, 1 skipped`，Assurance full `54 passed`、Domain + Local + shared contracts `520 passed`、status 定向 `4 passed`、Local E2E `3 passed`、A2A contracts `33 passed`、A2A E2E `4 passed`。其中真实 loopback TCP E2E `1 passed`，确认完成计划重启后零选择/零尝试/零投递。新远程 RC 尚未运行，因此不宣称新 run URL、artifact、wheel/SBOM digest 或 audit 结论。S1-01..05（含 S1-04）仍为 `READY FOR REVIEW`；S1-07、Sprint 1、P3e、P3 总阶段与 S3 仍为 `IN PROGRESS`。
 
 交付物：
 
@@ -389,7 +391,7 @@ Sprint 1 远程回归绑定 release candidate `427fc6832bf6b115d035e5d2cb492a25f
 - P3e 以 catalog/lock 驱动的本地端口接入许可明确的开放数据；原始大文件仅进入 `.local/telco-lab` 摘要锁定缓存，Git 只保存 catalog、适配器和代码生成的极小脱敏 fixture。
 - P3e 首批政策白名单为 BubbleRAN（CC BY-SA 4.0）、NIST RAN Anomalous State（NIST Open Data）、RANalyzer（CC BY 4.0）、TelecomTS（MIT）和 RCAEval（MIT）；许可不清或无法固定版本的数据默认禁用。
 - P3e 先交付 BubbleRAN Detector 与 RCAEval 多源 RCA 两个互补纵向切片，再扩展其余白名单；完整设计见[本地开放数据实验室](local-data-lab.md)，发布边界见[P3e Data Lab Gate](security/p3e-data-lab-gate.md)。
-- P3e 的回放计划只接受已验证且与 lock 精确绑定的 bundle、审批过的 adapter 字段/单位投影、显式 loopback URL 和 `disabled|simulate`；限制事件数、速率、时长、单项/累计载荷、资源数、并发与倍速，并为重复、乱序和断点续传测试提供稳定序列。仓内 transport 已能以公开 wire 契约执行立即或单调节奏 loopback HTTP 投递，并在默认零重试基础上可显式选择有限 network/timeout transient retry。Assurance 持久接收器与真实 TCP 业务 E2E 已完成；checkpoint 仍未仓内持久化，也无跨事件聚合或真实动作。
+- P3e 的回放计划只接受已验证且与 lock 精确绑定的 bundle、审批过的 adapter 字段/单位投影、显式 loopback URL 和 `disabled|simulate`；限制事件数、速率、时长、单项/累计载荷、资源数、并发与倍速，并为重复、乱序和断点续传测试提供稳定序列。仓内 transport 已能以公开 wire 契约执行立即或单调节奏 loopback HTTP 投递，并在默认零重试基础上可显式选择有限 network/timeout transient retry。caller-owned store 在有效 202/204 后先原子保存再推进，拒绝损坏/跨 plan/回退/多 writer/路径与 Windows drive 越界；真实 TCP E2E 已验证 checkpoint 重启零投递。它仍不是接收端签名 ACK，response loss 依赖 receiver 幂等，POSIX mount 与同用户 TOCTOU 属本机文件系统信任边界；当前也无跨事件聚合或真实动作。
 
 退出标准：
 
@@ -400,7 +402,7 @@ Sprint 1 远程回归绑定 release candidate `427fc6832bf6b115d035e5d2cb492a25f
 - P3e 的 BubbleRAN 与 RCAEval 完成精确版本/许可/校验和锁定、隐私扫描、Canonical 适配、确定性离线评估和 loopback 受限回放；仓库与发布 wheel 不包含第三方原始数据。
 - P3e 即使完成也不能替代 Cloud Staging 的 IAM/OIDC、Pub/Sub DLQ 和 Workload Identity 验收，P3 总阶段仍以两个 Gate 各自真实证据判断。
 
-当前 P3e 尚未满足退出标准：BubbleRAN 已交付确定性计划、公开 wire、loopback transport、paced runner、有界 transient retry、Canonical Fault 持久接收器和真实 TCP 治理 E2E；但 checkpoint 持久化、跨事件聚合与 RCAEval 纵向切片尚未完成。因此 P3e 保持 `IN PROGRESS`。
+当前 P3e 尚未满足退出标准：BubbleRAN 已交付确定性计划、公开 wire、loopback transport、paced runner、有界 transient retry、caller-owned 持久 checkpoint、Canonical Fault 持久接收器和真实 TCP 治理 E2E；但跨事件聚合、RCAEval 纵向切片、独立答辩与新远程发布验收尚未完成。因此 P3e 保持 `IN PROGRESS`。
 
 ### P4：统一 Resolver Pipeline
 
@@ -478,7 +480,7 @@ Local 子切片（2026-08-30 已完成）：`prepare` 只创建 append-only `PEN
 ### P7：部署、CI、可观测性与安全
 
 Local 部署子切片（2026-08-30 已完成）：新增
-`tools/local-stack/local_stack.py` 作为跨平台 JSON 入口，提供 `doctor`、`init`、`status`、`demo`、前台 `serve` 和显式 `reset --yes`。工作区必须显式指定且由 marker 所有，仓库内只允许 `.local` 子目录；root/home/repository、symlink/junction/reparse、UNC/device、非固定 Windows 驱动器和 unowned 路径失败关闭。服务固定绑定 `127.0.0.1`，只允许 `ACTION_MODE=disabled`，动作演示默认禁用且只能显式切换为 `simulate`。Local CI 已纳入 stack 安全测试、治理单元/E2E 与公共导出冒烟。
+`tools/local-stack/local_stack.py` 作为跨平台 JSON 入口，提供 `doctor`、`init`、`status`、`demo`、前台 `serve` 和显式 `reset --yes`。工作区必须显式指定且由 marker 所有，仓库内只允许 `.local` 子目录；root/home/repository、symlink/junction/reparse、UNC/device、非固定 Windows 驱动器和 unowned 路径失败关闭。服务固定绑定 `127.0.0.1`，只允许 `ACTION_MODE=disabled`，动作演示默认禁用且只能显式切换为 `simulate`。Assurance 另提供直接 loopback 的 `healthz/readyz/version`：liveness 不读依赖，readiness 以 1 秒预算做一次 Repository 读，失败/超时/已有卡住 worker 固定 503，版本端点只返回未签名 allowlist 元数据；所有标准非 GET 方法使用固定有界 JSON 405 契约，HEAD 按 HTTP 语义省略 body。三者都不证明 Cloud readiness。Local CI 已纳入 stack 安全测试、治理单元/E2E 与公共导出冒烟。
 
 该入口尚未交付统一 Dashboard、容器发布、Cloud 组合部署、SLO/告警和完整 Runbook，因此 P7 总阶段保持 `IN PROGRESS`。
 
@@ -709,10 +711,10 @@ python tools/local-stack/local_stack.py --workspace .local/networkagent-stack st
 | 首个 Local 纵向切片（P2a） | DONE | 2026-08-28 | 13,440 KPI + 579 安全 Trace → 15 候选；预览零写、确认唯一写、RCA 只读；双依赖矩阵各 468 项通过，wheel/CLI 冒烟成功，安全 Gate PASS |
 | A2A/Supervisor 接入（P2b） | DONE | 2026-08-28 | 独立 Assurance A2A 0.3.11、持久 challenge/task、真实 HTTP detect/confirm/analyze/restart、Supervisor 单播与结构化审批桥均通过；本地门禁与[GitHub Actions run 33179490152](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33179490152) 全绿，三个 wheel 与依赖检查通过 |
 | Cloud 数据接入 | IN PROGRESS | 2026-08-30 | P3a–P3d 代码与远程 Emulator Gate 已完成：Spanner v2、事务 Inbox/Outbox、严格 Fault Ingress、六工具只读 MCP、四角色 FGAC 和一次性 Canonical 迁移；[GitHub Actions run 33202370157](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33202370157) 的 Python 3.12/3.13 Emulator、五 wheel 与依赖检查全绿，RC 上的额外 [Cloud CI run 33296727982](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296727982) 也为 `success`。仍需 Cloud Staging IAM/OIDC/DLQ/Workload Identity 验收后才能标 DONE |
-| 本地开放数据实验室（P3e） | IN PROGRESS | 2026-08-30 | 已交付 `telco-lab` Python/CLI、稳定 lock ID、artifact/catalog/source URL 指纹、许可证据/归属/复核日期、BubbleRAN 固定 commit 的三 artifact catalog、未知列失败关闭的 CSV/JSON 投影、离线评估、immutable `ReplayPlan`、公开 `ReplayWirePayload`、loopback transport 与单调 paced runner。Assurance receiver 对 exact BubbleRAN 5G SA UL BLER 签名做每 source 独立 Incident 映射；202 前有界回读 current immutable facts、revision-0 Audit 与 SourceAssociation，缺失 Incident/Audit 则 503 零新写。真实 TCP E2E 覆盖 `RESOLVED`/`REOPENED`/`REJECTED`/过期 `FAILED` 和 settled exact replay 零写。RC `427fc6832bf6b115d035e5d2cb492a25ffd82395` 的 Data Lab、Assurance、Local 与额外 Cloud runs 全部成功且 `headSha` 一致；远程 wheel digest/artifact 未生成。checkpoint 持久化、跨事件聚合、真实动作/Cloud Staging 和 RCAEval 未完成，因此不标 DONE |
+| 本地开放数据实验室（P3e） | IN PROGRESS | 2026-08-30 | 已交付 `telco-lab` Python/CLI、稳定 lock ID、artifact/catalog/source URL 指纹、许可证据/归属/复核日期、BubbleRAN 固定 commit 的三 artifact catalog、未知列失败关闭的 CSV/JSON 投影、离线评估、immutable `ReplayPlan`、公开 `ReplayWirePayload`、loopback transport、单调 paced runner 与 caller-owned 持久 checkpoint。Assurance receiver 对 exact BubbleRAN 5G SA UL BLER 签名做每 source 独立 Incident 映射；202 前有界回读 current immutable facts、revision-0 Audit 与 SourceAssociation，缺失 Incident/Audit 则 503 零新写。真实 TCP E2E `1 passed`，覆盖持久 checkpoint 重启零投递、`RESOLVED`/`REOPENED`/`REJECTED`/过期 `FAILED` 和 settled exact replay 零写。旧 RC 四个 runs 全部成功且 `headSha` 一致；新 artifact/SBOM/`pip-audit` 实现待新远程 RC 验收。跨事件聚合、真实动作/Cloud Staging、RCAEval 与发布终验未完成，因此不标 DONE |
 | Resolver 合并 | IN PROGRESS | 2026-08-30 | Local 无框架编排骨架已完成：确定性 triage/investigate/RCA、持久报告/动作、分步幂等与崩溃后续跑；尚未合并现有 Resolver Strategy/Troubleshoot/Resolution Agent、Cloud checkpoint 或 Outbox 消费 |
 | 修复与验证闭环 | IN PROGRESS | 2026-08-30 | Local 模拟切片已完成：两阶段 hash+revision 显式审批、可信执行前复核、唯一 `LOCAL_SIMULATION`、通过 `RESOLVED`/失败 `REOPENED`、审批跨 TTL 的零动作 `FAILED` 收口、exactly-once 重放与响应丢失续跑；本机 stack+governance+full LTE E2E 聚焦验收 39 项通过，结论见 [Local Governance Gate](security/local-governance-gate.md)。真实 Engineer/MCP/GitOps/Operator 与 Cloud Tester 尚未接入 |
-| Local 部署与 CI | IN PROGRESS | 2026-08-30 | `local-stack` 已提供 `doctor/init/status/demo/serve/reset`、marker-owned workspace、固定 loopback/前台服务、默认 disabled 与安全 reset；新工作区实测装载 schema 1.1、13,440 performance、579 safe trace，发现 15 候选，两阶段命令到达 `RESOLVED` 后精确 reset。RC 的 [Local CI run 33296728032](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728032) 已在 Python 3.12/3.13 通过真实命令冒烟、stack 测试、治理 E2E、两 wheel 和依赖检查；仍待统一 UI、容器/Cloud 部署、SLO、Runbook 与远程制品摘要/上传 |
+| Local 部署与 CI | IN PROGRESS | 2026-08-30 | `local-stack` 已提供 `doctor/init/status/demo/serve/reset`、marker-owned workspace、固定 loopback/前台服务、默认 disabled 与安全 reset；Assurance 已提供严格 loopback `healthz/readyz/version`，本地 Assurance full `54 passed`、Domain+Local+shared contracts `520 passed`、status `4 passed`、Local E2E `3 passed`、A2A contracts `33 passed`、A2A E2E `4 passed`。旧 RC 的 [Local CI run 33296728032](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728032) 已通过既有真实命令/stack/治理 E2E、两 wheel 与依赖检查；新 artifact/SBOM/`pip-audit` 实现待远程验收，统一 UI、容器/Cloud 部署、SLO 与 Runbook 仍待完成 |
 | UI 与发布 | NOT STARTED | 2026-08-28 | — |
 
 ## 18. 文档维护规则
@@ -755,6 +757,7 @@ python tools/local-stack/local_stack.py --workspace .local/networkagent-stack st
 | 2026-08-30 | 完成 loopback transport 首轮终审收口：禁代理/重定向、DNS/IP pin、逐事件重验、固定 ACK/错误预算；恢复 API 移除裸序号，checkpoint 精确绑定 plan/endpoint/window/event/payload。明确 checkpoint 非认证 ACK，且 paced runner、自动重试、持久化与 Canonical Fault 业务 bridge 仍待开发 | Codex |
 | 2026-08-30 | 完成 Sprint 1 第二批本地回放治理：公开 `ReplayWirePayload`、单调 paced runner、有界 transient retry/deadline/cancel 证据、durable-before-202 Assurance Fault receiver 和真实 TCP 业务 E2E 已实现。exact BubbleRAN 5G SA UL BLER 规则仅使用服务端 provenance；成功、验证失败、拒绝、过期和 settled exact replay 零写均通过。仍无 checkpoint 持久化、跨事件聚合、真实动作/Cloud 或 RCAEval，远程 CI 为 PENDING | Codex |
 | 2026-08-30 | RC `427fc6832bf6b115d035e5d2cb492a25ffd82395` 的 Assurance、Data Lab、Local 与额外 Cloud workflows 全部成功且 `headSha` 精确绑定；双 Python、双 Pydantic、治理/E2E、wheel 内容/源码树外安装与依赖检查证据已回填。远程未产出 wheel digest/artifact，后续证据文档提交不是受测 RC；仅 S1-06 关闭，P3e/P3/发布工作仍为 IN PROGRESS | Codex |
+| 2026-08-30 | 在旧 RC 后新增严格 loopback `healthz/readyz/version`、caller-owned 原子持久 checkpoint 与持久 replay wrapper；真实 TCP E2E `1 passed`，确认 checkpoint 重启零投递。当前本地 Lab+Lab E2E 双 Pydantic 各 `222 passed, 1 skipped`、Assurance full `54 passed`、Domain+Local+shared contracts `520 passed`、status `4 passed`、Local E2E `3 passed`、A2A contracts `33 passed`、A2A E2E `4 passed`。release artifact、CycloneDX SBOM 与 `pip-audit` 证据生成已实现，尚待新远程 RC 验收；S1-04 保持 READY FOR REVIEW，S1-07/Sprint/P3e/S3 保持 IN PROGRESS | Codex |
 
 ## 20. 项目完成定义
 

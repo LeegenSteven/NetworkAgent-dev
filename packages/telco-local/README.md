@@ -163,6 +163,13 @@ foreground on the fixed loopback address. It accepts only disabled action mode:
 .venv/Scripts/python.exe tools/local-stack/local_stack.py --workspace .local/networkagent-stack --port 8085 serve
 ```
 
+The foreground service provides `GET /local/v1/healthz`,
+`GET /local/v1/readyz`, and `GET /local/v1/version` for direct loopback
+operations. `healthz` is process liveness only; `readyz` adds one bounded local
+Incident-repository read and returns a fixed 503 when unavailable; `version`
+is allowlisted diagnostic metadata rather than a signed build attestation.
+These probes are unsupported behind a reverse proxy or port forward.
+
 `reset` without `--yes` reports that confirmation is required. The confirmed
 form removes only the marker-owned state and artifacts; it rejects roots, the
 repository, home, symlink/junction/reparse workspaces, UNC/device paths,

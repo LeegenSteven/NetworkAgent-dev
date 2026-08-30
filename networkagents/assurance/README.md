@@ -66,6 +66,27 @@ official runner bound directly to a loopback interface; both the HTTP `Host`
 and the connected client address must be loopback. Do not expose this API via
 an external bind, port forward, or reverse proxy.
 
+## Local operational probes
+
+The same direct loopback application exposes three read-only probes. They do
+not require an operation header, accept no query string, perform no write, and
+still require both the HTTP `Host` and connected peer to be loopback:
+
+- `GET /local/v1/healthz` proves only that the process can answer locally. It
+  does not read DuckDB and does not imply dependency or Cloud readiness.
+- `GET /local/v1/readyz` performs one bounded, one-second Canonical Incident
+  repository read. It returns `200` only for the supported Local Profile and a
+  fixed `503 LOCAL_SERVICE_NOT_READY` response on dependency failure.
+- `GET /local/v1/version` returns only the service/package, local HTTP,
+  Replay-schema, and Domain-schema versions. This allowlisted JSON is useful
+  for diagnostics but is not a signed build attestation.
+
+The probe response budget is 4 KiB. They expose no filesystem path,
+environment variable, raw dependency exception, credential, Incident content,
+or build identity. Their supported deployment remains the foreground runner
+bound directly to loopback; a reverse proxy can hide the real peer and is not
+supported.
+
 This API is not a Fault ingestion endpoint and does not connect to Pub/Sub,
 Cloud MCP, Engineer, GitOps, GKE, or a Network Operator. It cannot perform a
 real network change.

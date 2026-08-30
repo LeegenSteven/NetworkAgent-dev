@@ -79,7 +79,8 @@ and that sequence's `source_event_id` and `payload_sha256`; sequence zero uses
 or out-of-order events for fault tests. Each selected occurrence is attempted at
 most once. The first delivery failure returns its fixed error code and highest
 contiguous checkpoint without retrying; a caller must explicitly persist and
-resume it.
+resume it, either through the public checkpoint functions below or through a
+separately reviewed store.
 
 `ReplayPlan.plan_id` binds the complete policy (including its loopback endpoint),
 replay window, and event sequence, so checkpoint validation detects plan,
@@ -108,8 +109,84 @@ environment, event, payload, response, redirect, status and poison failures are
 never retried. Deadline and cancellation evidence never advances the checkpoint
 for an unconfirmed event. An in-flight deadline/cancellation reports its sequence
 as uncertain, and explicit recovery reuses the event's stable idempotency key.
-The package neither persists checkpoints nor interprets them as authenticated
-receiver acknowledgements.
+`run_paced_replay()` itself remains non-persistent and never interprets a
+checkpoint as an authenticated receiver acknowledgement.
+
+## Persistent caller-owned checkpoints
+
+The opt-in local store exposes `load_replay_checkpoint()`,
+`save_replay_checkpoint()`, and `clear_replay_checkpoint()`. Every call requires
+both an explicit, already existing workspace and an explicit checkpoint
+directory strictly below that workspace. The directory is created when safe,
+but a path escape, `..`, symlink, Windows junction/reparse point, non-directory,
+or non-regular checkpoint/lock file fails closed. One checkpoint directory owns
+at most one active plan.
+
+On Windows, UNC forms (`\\server\share` and `//server/share`) and device
+namespaces (`\\?\` and `\\.\`) are rejected from the input text before any
+filesystem path probe. After normalization, `GetDriveTypeW` must report
+`DRIVE_FIXED`; an API failure, unknown drive type, or any non-fixed drive also
+fails closed. These checks assume a trusted local filesystem. POSIX mount
+topology is not classified, and a malicious same-user process that can rename
+or swap an ancestor between validation and use remains outside this local-store
+trust boundary; the store is not a hostile same-user filesystem sandbox.
+
+The checkpoint file uses a strict, duplicate-key-free JSON schema with a 4 KiB
+limit. It contains only the schema version and the exact
+`ReplayDeliveryCheckpoint` fields. Loading revalidates all four continuation
+fields against the supplied plan, so endpoint, replay-window, event sequence,
+source-event, or payload drift is rejected. Saving is monotonic: an exact save
+is idempotent and a lower sequence is rejected. Writes use a same-directory
+temporary file, file flush, `fsync`, and atomic replace. A non-blocking
+cross-process file lock makes overlapping load/save/clear/run operations fail
+with `replay_checkpoint_busy` instead of waiting or becoming multi-writer.
+
+`run_persistent_paced_replay()` loads that store and reuses the same bounded
+pacing, retry, deadline, and cancellation core as `run_paced_replay()`. After a
+valid 202/204 receipt, it atomically saves the new canonical checkpoint before
+the in-memory runner advances or emits the next event. A deadline or cancellation
+therefore leaves the last confirmed checkpoint restartable. If the receiver
+committed but its response was lost, or the local checkpoint write failed, the
+older checkpoint is intentionally retained; the next run sends the same event
+with the same idempotency key and depends on receiver-side exact replay.
+
+```python
+import asyncio
+from pathlib import Path
+
+from telco_lab import (
+    LoopbackHttpReplaySink,
+    clear_replay_checkpoint,
+    run_persistent_paced_replay,
+)
+
+workspace = Path(".local/telco-lab")
+checkpoint_directory = workspace / "replay-checkpoints"
+sink = LoopbackHttpReplaySink(
+    plan.policy,
+    environ={"RUNTIME_PROFILE": "local", "ACTION_MODE": plan.policy.action_mode},
+)
+result = asyncio.run(
+    run_persistent_paced_replay(
+        plan,
+        sink,
+        workspace=workspace,
+        checkpoint_directory=checkpoint_directory,
+    )
+)
+
+# Clear is plan-bound and refuses to delete corrupt or cross-plan state.
+clear_replay_checkpoint(
+    plan,
+    workspace=workspace,
+    checkpoint_directory=checkpoint_directory,
+)
+```
+
+Persistence does not change the trust model. The file remains a sender/caller-
+owned continuation claim, not a signed or authenticated receiver ACK. It does
+not prove exactly-once delivery by itself, does not permit continuation across
+a changed plan/window, and does not add Cloud delivery or multi-writer support.
 
 ```python
 import asyncio
@@ -170,9 +247,10 @@ One real loopback TCP acceptance test drives four source events through replay,
 durable reception, RCA, two-stage approval, and side-effect-free local
 simulation. It verifies `RESOLVED`, verification-failed `REOPENED`, approval
 `REJECTED`, approval-expiry `FAILED`, label non-disclosure, and zero durable
-writes on an exact replay after settlement. There is still no persistent
-checkpoint store, cross-event Incident aggregation, real remediation, Cloud
-delivery, or RCAEval vertical slice.
+writes on an exact replay after settlement. The optional local checkpoint store
+adds restartable sender-side continuation, but remains unauthenticated and
+single-writer. There is still no cross-event Incident aggregation, real
+remediation, Cloud delivery, or RCAEval vertical slice.
 
 Replay construction fails closed unless all of the following remain true:
 

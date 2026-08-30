@@ -38,6 +38,15 @@ the existing A2A JSON-RPC and Agent Card routes remain unchanged. A separate
 facts, its initial revision-0 Audit, and its source-event association. Neither
 local route can invoke a real network action.
 
+The same direct-loopback surface exposes `GET /local/v1/healthz`, `readyz`,
+and `version`. Liveness does not read a repository; readiness performs one
+bounded Canonical repository read and returns a fixed 503 for dependency
+failure, timeout, or a still-running timed-out worker; version returns only
+allowlisted package and contract versions. All standard non-GET methods use the
+same bounded JSON 405 contract; HEAD keeps the normal empty-body semantics.
+These unsigned local probes do not attest Cloud readiness or deployment
+identity.
+
 P3e adds an independent Local Data Lab for reproducible tests against vetted
 public telecom datasets. Dataset downloads are always explicit, license-gated,
 version/checksum pinned, cached outside Git, and converted through privacy-safe
@@ -68,10 +77,28 @@ the threshold is a controlled local-test signature, not a production rule.
 
 A real loopback TCP E2E covers `RESOLVED`, verification-failed `REOPENED`,
 approval `REJECTED`, and approval-expiry `FAILED`; replaying settled events
-performs no additional durable writes. Checkpoints remain caller-owned and are
-not persisted by `telco-lab`; the receiver intentionally performs no
-cross-event aggregation. This path does not connect to Cloud Fault ingress,
-Spanner, Pub/Sub, Engineer, MCP write tools, GitOps, or a Network Operator.
+performs no additional durable writes. `telco-lab` now also provides an opt-in,
+caller-owned local checkpoint store and persistent paced wrapper. The wrapper
+atomically saves each plan-bound checkpoint after a valid 202/204 receipt and
+before advancing; the updated real TCP E2E asserts that reopening a completed
+store selects, attempts, and delivers zero events; its final local rerun passed.
+The store uses strict bounded JSON, a non-blocking single-writer lock, and an
+explicit local workspace/checkpoint
+directory. It is still not a signed receiver acknowledgement: response-loss
+recovery depends on receiver idempotency, and POSIX mount topology plus
+malicious same-user filesystem swaps remain host trust boundaries. The receiver
+intentionally performs no cross-event aggregation. This path does not connect
+to Cloud Fault ingress, Spanner, Pub/Sub, Engineer, MCP write tools, GitOps, or
+a Network Operator.
+
+Current post-RC local evidence is `222 passed, 1 skipped` for Data Lab + Lab E2E
+under both Pydantic 2.5.3 and 2.13.4, Assurance full `54 passed`, the combined
+Domain + Local + shared-contract suites `520 passed`, and status probes
+`4 passed`. Local E2E is `3 passed`, including the single real TCP persistent-
+checkpoint restart case; A2A contracts are `33 passed` and A2A E2E is
+`4 passed`. A new remote RC has not run yet. Release artifact, CycloneDX SBOM,
+and `pip-audit` evidence generation are implemented but await remote acceptance;
+no new artifact URL or digest is claimed here.
 
 * [Implementation Development Plan 2.0](docs/implementation-development-plan-2.0.md)
 * [Living implementation plan](docs/unified-platform-implementation-plan.md)

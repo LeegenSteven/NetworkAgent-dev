@@ -2,7 +2,7 @@
 
 > 日期：2026-08-30
 > 范围：第三方开放数据的 catalog、下载、缓存、解包、脱敏、适配、离线评估与本地回放
-> 当前结论：**IN PROGRESS（BubbleRAN 下载、适配、离线评估、公开 Replay wire、paced loopback transport、durable Canonical Fault 业务回放与真实 TCP 治理 E2E Gate 已通过；checkpoint 持久化、跨事件聚合、RCAEval 及发布终验待完成）**
+> 当前结论：**IN PROGRESS（BubbleRAN 下载、适配、离线评估、公开 Replay wire、paced loopback transport、caller-owned 持久 checkpoint、durable Canonical Fault 业务回放与真实 TCP 持久重启治理 E2E Gate 已通过；跨事件聚合、RCAEval 及发布终验待完成）**
 
 ## 1. 发布边界
 
@@ -26,6 +26,7 @@
 - KPI 单位、时区、资源和标签误映射，导致看似正确但业务含义错误的评估；
 - 测试标签泄漏到规则/提示、只挑成功场景、非确定抽样和基准结果不可复现；
 - 历史回放误发到 Cloud、复用生产凭据、触发真实动作、制造无界事件或绕过 Fault Ingress；
+- checkpoint 损坏、跨 plan/旧 window 复用、单调回退、并发多 writer、路径逃逸或远程/设备文件系统触发；
 - 原始行、URL 查询参数、令牌或敏感字段进入日志、报告、MCP 或 A2A TextPart。
 
 ## 3. 首批准入表
@@ -58,7 +59,8 @@
 | Provenance | dataset/lock/artifact/catalog/source-URL/license/adapter/contract/window 可从 lock、manifest 与报告反查；package 版本随 CLI 证据输出 | PASS | 默认 catalog、workspace lock、`LabBundleManifest`、`test_pipeline.py` |
 | Deterministic evaluation | 相同输入与配置生成相同摘要、计数和指标；ground truth/prediction 类型隔离；重叠候选计算有硬预算 | PASS | `test_evaluation.py`、`test_pipeline.py`、哈希绑定的真实全量重放 |
 | Replay confinement | 非 loopback、Cloud Profile、真实动作、GCP 配置或超速/超量均拒绝；transport 禁代理/重定向并逐事件重验 endpoint/env/event；paced runner 只可对 network/timeout 做明确有限重试 | PASS（BubbleRAN ReplayPlan + transport + receiver） | `test_replay.py`、`test_loopback_sink.py`、`test_paced_runner.py`、`test_fault_receiver.py` |
-| Replay idempotency | durable-before-202；精确重放、响应丢失恢复和 settled replay 不重复创建 Incident/Audit/Action/Verification，改变 payload 冲突 | PASS（每 source 独立 Incident） | `test_fault_receiver.py`、`test_bubbleran_replay_governance.py` |
+| Replay checkpoint persistence | 显式本地 workspace/checkpoint 目录；checkpoint 严格绑定 plan/window/event/payload，严格 JSON/大小预算、原子保存、单调不回退、非阻塞单 writer；损坏、跨 plan、旧 window、路径/链接/Windows drive 越界失败关闭 | PASS（caller-owned local store） | `test_checkpoint_store.py`、`test_bubbleran_replay_governance.py` |
+| Replay idempotency | durable-before-202；持久 checkpoint 重启零投递；精确重放、响应丢失恢复和 settled replay 不重复创建 Incident/Audit/Action/Verification，改变 payload 冲突 | PASS（每 source 独立 Incident） | `test_fault_receiver.py`、`test_bubbleran_replay_governance.py` |
 | Repository hygiene | Git/构建产物/wheel 不含第三方大文件、原始数据、quarantine 或本机秘密 | PASS | 当前源码构建的 domain/lab wheels 内容扫描、源码树外强制安装、`pip check` 与受控清理 |
 | Offline E2E | 无 GCP、无模型 API 完成数据适配/评估；本地 loopback 上完成 Replay→Incident→RCA→审批→模拟验证 | PASS（BubbleRAN 切片） | `test_local_dataset_pipeline.py`、`test_bubbleran_replay_governance.py` |
 
@@ -66,7 +68,7 @@
 
 | 数据集 | Fetch/Lock | Privacy | Adapter | Offline Eval | Replay | License/Attribution | 总状态 |
 |---|---|---|---|---|---|---|---|
-| BubbleRAN | PASS | PASS | PASS | PASS | PASS（plan/wire/paced transport/durable receiver/governance E2E） | PASS | PASS（当前单数据集切片） |
+| BubbleRAN | PASS | PASS | PASS | PASS | PASS（plan/wire/paced transport/persistent checkpoint/durable receiver/governance E2E） | PASS | PASS（当前单数据集切片） |
 | NIST RAN Anomalous State | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN |
 | RANalyzer | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN |
 | TelecomTS | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN |
@@ -87,7 +89,7 @@
 7. KPI 单位或时区缺失、标签列映射成观测特征、测试集标签泄漏到规则生成。
 8. adapter 输出未知字段、过大 Evidence、原始日志进入 TextPart/MCP、错误回显敏感行。
 9. 回放目标为非 loopback、环境含 Cloud Profile、动作模式为真实执行、速率/总数越界。
-10. 同场景精确重放、乱序、重复 source event、回放中断后恢复和 poison event。
+10. 同场景精确重放、乱序、重复 source event、回放中断后恢复和 poison event；checkpoint 损坏/跨 plan/回退、并发 writer、路径逃逸、UNC/device、非固定 Windows drive 与 API 失败。
 11. Git status、构建上下文和 wheel 扫描发现 raw/cache/quarantine、凭据或大文件。
 12. 白名单之外的 dataset ID、许可证据哈希变化或 catalog/lock 签核不一致。
 
@@ -107,14 +109,15 @@
 
 ## 8. 当前验收证据
 
-- `telco-lab` 全套在 Pydantic 2.5.3 与 2.13.4 下各 197 项通过；Assurance receiver 定向 22 项、Assurance 全套 50 项、组合发布回归 133 项通过。
-- 真实 loopback TCP BubbleRAN → Governance E2E 1 项通过，覆盖 `RESOLVED`、验证失败 `REOPENED`、审批 `REJECTED`、审批过期 `FAILED`、标签不泄漏与 settled exact replay 零写。
+- 当前本地 Data Lab + Lab E2E 在 Pydantic 2.5.3 与 2.13.4 下各 `222 passed, 1 skipped`；Assurance full `54 passed`，Domain + Local + shared contracts `520 passed`，status 定向 `4 passed`，Local E2E `3 passed`，A2A contracts `33 passed`，A2A E2E `4 passed`。
+- 单个真实 loopback TCP BubbleRAN → Governance E2E `1 passed`：持久 checkpoint 首次完成 4 个事件，重新打开同一 store 后零选择/零尝试/零投递；绕过 checkpoint 的 settled exact replay 零新增 Incident/Audit/Action/Verification 写。
 - receiver 在 ACK 前有界回读 current Incident 不可变事实、初始 revision-0 Audit 与 SourceAssociation；删除 Incident 或初始 Audit 的故障注入均返回 503 且不新增业务写。
+- `healthz/readyz/version` 只在直接 loopback 暴露；readiness 以 1 秒预算读取一次 Repository，依赖失败、超时或已有卡住 worker 时固定返回 503，不并发创建第二个 worker；所有标准非 GET 方法使用固定有界 JSON 405 契约，HEAD 按 HTTP 语义省略 body，也不构成 Cloud readiness。
 - RC `427fc6832bf6b115d035e5d2cb492a25ffd82395` 的 [Data Lab CI run 33296728022](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728022) 为 `success`，其 `headSha` 精确等于该 RC。Python 3.12/3.13 + Pydantic 2.13.4 各为 `198 passed, 1 skipped`，Python 3.12 + 声明下限 Pydantic 2.5.3 也为 `198 passed, 1 skipped`；wheel 内容 allowlist、源码树外安装 smoke 与 `pip check` 全绿。
 - 同一 RC 上的 [Assurance CI run 33296728012](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728012) 与 [Local CI run 33296728032](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728032) 均为 `success`：Assurance 的两个 Python job 各通过 Domain 323、Lab 197、Local 195、Lab E2E 1（另 1 skipped）、Local E2E 3、Assurance 50、A2A contracts 33、A2A E2E 4，并完成四 wheel/源码树外 smoke/`pip check`；Local 的两个 Python job 各通过 Domain+Local 518、local-stack 19（另 2 skipped）、Local-only E2E 2，真实 CLI 到达 `RESOLVED` 后安全 reset，并完成两 wheel/`pip check`。
 - 同一 RC 上的额外 [Cloud CI run 33296727982](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296727982) 也为 `success`，但不替代 Cloud Staging 验收。
 - 最新本地 `telco-lab 0.1.0` wheel 为 67,653 bytes，SHA-256=`96B5D696CB769E29256C5319FF391DA5CC30F2B25D108F5730FF9F8BD467C40B`。远程 jobs 验证了构建、内容 allowlist、源码树外安装与依赖一致性，但没有输出远程 wheel 字节数/SHA-256，也没有上传 artifact；该摘要仍只是本地证据。
-- 本段证据回填形成的后续文档提交不是受测 RC，不得替换上述 runs 的 `headSha`。远程矩阵通过不关闭 checkpoint 持久化、跨事件聚合、RCAEval 或发布终验，P3e 继续保持 `IN PROGRESS`。
+- 本段证据回填形成的后续提交不是受测 RC，不得替换上述 runs 的 `headSha`。release artifact、CycloneDX SBOM 与 `pip-audit` 证据生成已经实现，待新远程 RC 验收；当前不宣称新 artifact URL、wheel/SBOM digest 或扫描结论。远程历史矩阵与当前本地实现都不关闭跨事件聚合、RCAEval 或发布终验，P3e 继续保持 `IN PROGRESS`。
 
 ## 9. 退出标准
 
@@ -131,9 +134,10 @@ P3e 第一版只有同时满足下列条件才可标记 `DONE`：
 ## 10. 当前未关闭事项
 
 - RCAEval 的精确 artifact、最小案例、适配器和多源 RCA 评估尚未实现。
-- loopback HTTP transport、paced runner、有限 transient retry、Canonical Fault/Incident 业务接收器与真实 TCP 治理 E2E 已实现；checkpoint 仍只是 caller-owned continuation claim，尚无仓内持久化。
+- loopback HTTP transport、paced runner、有限 transient retry、caller-owned 持久 checkpoint、Canonical Fault/Incident 业务接收器与真实 TCP 治理 E2E 已实现。checkpoint 仍只是非签名 continuation claim；store 为非阻塞单 writer，response loss 恢复依赖 receiver 幂等，不能作为共享数据库或认证 ACK。
+- checkpoint 路径在 Windows 拒绝 UNC/device 并只接受 `DRIVE_FIXED`；POSIX mount topology 与恶意同用户 ancestor rename/swap TOCTOU 仍属于本机文件系统信任边界。
 - 当前 receiver 为每 source event 独立 Incident，尚无 episode/跨事件聚合。受控 UL BLER 阈值只用于 BubbleRAN 本地测试 provenance，不是生产 RCA。
-- BubbleRAN 当前使用全量基线和代码生成的极小 CI fixture；独立答辩脚本、延迟/峰值内存预算、远程 wheel digest/artifact 与完整发布证据仍待固化。
+- BubbleRAN 当前使用全量基线和代码生成的极小 CI fixture；独立答辩脚本、延迟/峰值内存预算，以及新远程 RC 的 artifact/SBOM/`pip-audit` 与完整发布证据仍待验收。
 - 本 Gate 不包含真实 Engineer/MCP/GitOps/Operator 动作或任何 Cloud Staging 验收。
 - NIST、RANalyzer、TelecomTS 的适配优先级将在前两个适配器通过 Gate 后确定。
 - 公司对 CC BY-SA 派生数据演示/再分发的合规要求需要在对外交付前确认。

@@ -16,6 +16,16 @@ from .adapters import (
     adapt_bubbleran_persistent_interference_csv,
 )
 from .catalog import CatalogProvider, FixtureCatalogProvider, PackageCatalogProvider
+from .checkpoint_store import (
+    CHECKPOINT_FILENAME,
+    MAX_REPLAY_CHECKPOINT_BYTES,
+    REPLAY_CHECKPOINT_SCHEMA_VERSION,
+    ReplayCheckpointError,
+    clear_replay_checkpoint,
+    load_replay_checkpoint,
+    run_persistent_paced_replay,
+    save_replay_checkpoint,
+)
 from .downloader import DownloadReceipt, SecureDownloader
 from .errors import LabError
 from .evaluation import (
@@ -143,6 +153,7 @@ __all__ = [
     "BUBBLERAN_RESOURCE_IDS",
     "BUBBLERAN_SOURCE_LICENSE",
     "CATALOG_SCHEMA_VERSION",
+    "CHECKPOINT_FILENAME",
     "LOCK_SCHEMA_VERSION",
     "MAX_DOWNLOAD_BYTES",
     "MAX_EVALUATION_CANDIDATES",
@@ -156,6 +167,7 @@ __all__ = [
     "HARD_MAX_SPEED",
     "HARD_MAX_TOTAL_PAYLOAD_BYTES",
     "MAX_REPLAY_CONCURRENCY",
+    "MAX_REPLAY_CHECKPOINT_BYTES",
     "MAX_REPLAY_DURATION_SECONDS",
     "MAX_REPLAY_EVENTS",
     "MAX_REPLAY_PAYLOAD_BYTES",
@@ -205,11 +217,13 @@ __all__ = [
     "StrictJsonError",
     "TelcoLab",
     "PredictedEpisode",
+    "REPLAY_CHECKPOINT_SCHEMA_VERSION",
     "REPLAY_SCHEMA_VERSION",
     "ReplayDeliveryCheckpoint",
     "ReplayDeliveryError",
     "ReplayDeliveryReceipt",
     "ReplayDeliveryResult",
+    "ReplayCheckpointError",
     "ReplayError",
     "ReplayEvent",
     "ReplayPlan",
@@ -226,6 +240,7 @@ __all__ = [
     "build_replay_plan",
     "canonical_json_bytes",
     "catalog_resource_sha256",
+    "clear_replay_checkpoint",
     "compute_bundle_content_sha256",
     "deliver_replay_plan",
     "evaluate_episodes",
@@ -233,8 +248,11 @@ __all__ = [
     "evaluate_predictions",
     "fetch_and_evaluate_bubbleran",
     "load_strict_json",
+    "load_replay_checkpoint",
     "replay_wire_payload_from_event",
     "run_paced_replay",
+    "run_persistent_paced_replay",
+    "save_replay_checkpoint",
     "source_url_sha256",
     "stable_content_id",
     "temporal_iou",

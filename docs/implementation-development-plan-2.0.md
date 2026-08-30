@@ -53,7 +53,7 @@
 | P3a–P3d Cloud 代码与 Emulator | `DONE` | Spanner v2、事务型 Inbox/Outbox、Fault Ingress、只读 MCP、FGAC 制品和迁移逻辑已通过远程 Spanner Emulator Gate；不代表 Cloud Staging 已通过。 |
 | Local 模拟治理闭环 | `DONE` | 13,440 条 KPI、579 条安全 Trace、15 个候选；独立审批后可到 `RESOLVED`，验证失败到 `REOPENED`，无真实网络副作用。 |
 | Local Stack | `DONE` | `doctor/init/status/demo/serve/reset` 已具备工作区所有权、loopback、默认禁用动作、安全 reset 与提交响应丢失恢复。 |
-| BubbleRAN Data Lab | `IN PROGRESS` | 下载锁定、隐私投影、离线评估、immutable `ReplayPlan`、公开 `ReplayWirePayload`、loopback transport、单调 paced runner 与 Assurance Canonical Fault 持久接收器已完成；每个 source event 独立映射 Incident，不做跨事件聚合，仓内 checkpoint 持久化和 RCAEval 尚未完成。 |
+| BubbleRAN Data Lab | `IN PROGRESS` | 下载锁定、隐私投影、离线评估、immutable `ReplayPlan`、公开 `ReplayWirePayload`、loopback transport、单调 paced runner、caller-owned 本地持久 checkpoint 与 Assurance Canonical Fault 持久接收器已完成；每个 source event 独立映射 Incident，不做跨事件聚合，RCAEval 尚未完成。 |
 
 ### 3.2 当前发布证据
 
@@ -64,14 +64,17 @@
   - [Cloud CI run 33296727982](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296727982)：额外 Cloud/Emulator 回归为 `success`；这仍不是 Cloud Staging IAM/OIDC/DLQ/Workload Identity 验收。
 - 最新本地 `telco-lab 0.1.0` wheel 为 67,653 bytes，SHA-256 为 `96B5D696CB769E29256C5319FF391DA5CC30F2B25D108F5730FF9F8BD467C40B`。这是本地构建证据；上述远程 workflows 只证明 RC 上的构建、内容 allowlist、源码树外安装和依赖一致性，没有输出远程 wheel 字节数/SHA-256，也没有上传可下载 artifact，因此该本地摘要不得冒充 RC 制品摘要。
 - 本次证据回填会形成晚于 RC 的文档提交；该文档提交不是受测 RC，也不得替换上述 runs 的 `headSha`。S1-06 可据此关闭，但 S1-07、Sprint 1、P3e 与 S3 仍按各自未完成项保持 `IN PROGRESS`。
+- RC 之后的当前本地实现证据为：Data Lab + Lab E2E 在 Pydantic 2.5.3 与 2.13.4 下各 `222 passed, 1 skipped`；Assurance full `54 passed`；Domain + Local + shared contracts `520 passed`；status 定向 `4 passed`；Local E2E `3 passed`；A2A contracts `33 passed`；A2A E2E `4 passed`。其中单个真实 loopback TCP 业务 E2E `1 passed`，确认持久 checkpoint 重启 selected/attempted/delivered 均为 0。新远程 RC 尚未运行，因此这些本地计数不能改写上述历史 runs。
+- release artifact、CycloneDX SBOM 与 `pip-audit` 证据生成已经实现，待新远程 RC 验收；当前没有可回填的新 artifact URL、wheel/SBOM 摘要或扫描结论。
 
 ### 3.3 已知缺口
 
 - Governance HTTP 薄层、公开 Replay wire 契约、持久 Canonical Fault receiver 和 paced runner 已在上述 RC 远程矩阵通过；S1-01 至 S1-05 仍等待独立复核，不因 CI 通过自动变为 `DONE`。
-- `ReplaySink` 同时支持立即串行投递与单调节奏 runner；只有明确启用的瞬时 network/timeout 失败才执行有限次重试。checkpoint 仍由调用方持有，仓内未提供持久化存储。
+- `ReplaySink` 同时支持立即串行投递与单调节奏 runner；只有明确启用的瞬时 network/timeout 失败才执行有限次重试。可选持久 wrapper 在有效 202/204 后先原子保存严格 plan-bound checkpoint，再推进内存状态；store 为 caller-owned、单 writer，本地 continuation claim 仍不是接收端签名 ACK。
+- `/local/v1/healthz`、`readyz`、`version` 已实现并冻结。`readyz` 只做一次 1 秒有界本地 Repository 读；依赖异常、超时或前一个超时 worker 仍未结束时固定返回 503，不启动第二个并行探针，也不代表 Cloud readiness。
 - BubbleRAN 事件已进入 Canonical Incident 治理链路，但当前是每 source 独立 Incident，不做跨事件聚合；RCA 仅识别受控 `5G_SA` BubbleRAN UL BLER 签名，不得外推生产。
 - 新 Local/Data Lab 组件尚无统一的最小权限容器和 Compose 发布入口。
-- 远程 workflows 尚未发布 wheel 字节数/SHA-256 或可下载 artifact，SBOM、扫描、签名/证明和完整发布报告也尚未完成。
+- 受测旧 RC 的远程 workflows 未发布 wheel 字节数/SHA-256 或可下载 artifact。release artifact、SBOM 与 `pip-audit` 流程现已实现但待新远程验收；签名/证明和完整发布报告仍未完成。
 - 跨组件结构化日志、指标、分布式追踪、本地 SLO、告警和完整 Runbook 尚未交付。
 - Cloud Staging IAM/OIDC、Pub/Sub DLQ、Workload Identity 及真实基础设施验收尚未进行。
 
@@ -211,10 +214,10 @@
 | S1-01 | HTTP 契约与威胁模型冻结 | `READY FOR REVIEW` | 已冻结四个 `/local/v1/incidents` 查询/治理路由及 `POST /local/v1/faults/replay`；Fault 入口要求 loopback Host+peer、`replay-v1`、唯一幂等键和严格 JSON。 |
 | S1-02 | Governance HTTP 薄适配层 | `READY FOR REVIEW` | 不复制引擎逻辑；查询、准备、决定、执行/验证接口已完成真实 DuckDB/ASGI 回归并通过 RC 远程矩阵，仍等待独立复核。 |
 | S1-03 | 持久接收与幂等恢复 | `READY FOR REVIEW` | 公开 `ReplayWirePayload` 为唯一 sender/receiver 契约；HTTP 202 只在有界回读 current Incident 不可变事实、初始 revision-0 Audit 与 SourceAssociation 通过后返回。删除 Incident 或初始 Audit 时返回 503 且零新增写；变更 payload 冲突，response-loss exact replay 返回首次持久回执。 |
-| S1-04 | Loopback HTTP ReplaySink | `READY FOR REVIEW` | 在原有禁代理/重定向、逐事件重验、固定预算和 plan/event-bound checkpoint 上，新增单调 paced runner、硬 deadline、cancel/不确定序号证据与仅 network/timeout 的有限 transient retry；checkpoint 尚未仓内持久化。 |
-| S1-05 | BubbleRAN → Governance E2E | `READY FOR REVIEW` | 真实 loopback TCP E2E 使用受控 5G SA UL BLER 规则的 exact provenance，覆盖 `RESOLVED`/`REOPENED`/`REJECTED`/审批过期 `FAILED`、标签不泄漏和 settled exact replay 零写。 |
+| S1-04 | Loopback HTTP ReplaySink | `READY FOR REVIEW` | 在原有禁代理/重定向、逐事件重验、固定预算和 plan/event-bound checkpoint 上，新增单调 paced runner、硬 deadline、cancel/不确定序号证据、仅 network/timeout 的有限 transient retry，以及 caller-owned 原子持久 checkpoint wrapper；checkpoint 仍为非签名 ACK 的单-writer 本地 continuation claim。 |
+| S1-05 | BubbleRAN → Governance E2E | `READY FOR REVIEW` | 真实 loopback TCP E2E `1 passed`，使用受控 5G SA UL BLER 规则的 exact provenance，覆盖 `RESOLVED`/`REOPENED`/`REJECTED`/审批过期 `FAILED`、标签不泄漏、持久 checkpoint 重启零投递和 settled exact replay 零写。 |
 | S1-06 | 安全与兼容矩阵 | `DONE` | RC `427fc6832bf6b115d035e5d2cb492a25ffd82395` 的 Assurance、Data Lab、Local 与额外 Cloud workflows 全部 `success`；双 Python、Pydantic 2.13.4/2.5.3、边界/E2E、wheel allowlist/源码树外 smoke 与 `pip check` 证据见 3.2。 |
-| S1-07 | 操作文档与证据 | `IN PROGRESS` | README、Gate、bridge 边界、测试计数、本地 wheel 摘要与 RC 远程 CI URL 已回填；health/ready 操作说明、checkpoint 持久化、远程 wheel digest/artifact 和完整发布证据仍待补。 |
+| S1-07 | 操作文档与证据 | `IN PROGRESS` | README/Gate 已同步 health/ready/version、caller-owned 持久 checkpoint、真实 TCP 重启零投递与当前本地计数；release artifact、SBOM 与 `pip-audit` 实现待新远程 RC 验收。尚无新 run URL、远程 wheel/SBOM 摘要或可下载 artifact，因此仍不关闭。 |
 
 ### 7.2 Sprint 1 DoD
 
@@ -250,8 +253,11 @@
 | `POST /local/v1/incidents/{incident_id}/prepare` | 推进 RCA 并产生固定模拟动作预览 | 最多推进到 `AWAITING_APPROVAL`；不得自动批准。 |
 | `POST /local/v1/incidents/{incident_id}/decide` | 独立审批决定 | 必须携带 `governance-v1` operation header，并绑定 exact hash、expected revision、actor、reason 和幂等键。 |
 | `POST /local/v1/incidents/{incident_id}/execute` | 执行已生效的本地模拟动作并验证 | 必须携带 operation header；仅 `LOCAL_SIMULATION`；通过到 `RESOLVED`，失败到 `REOPENED`。 |
+| `GET /local/v1/healthz` | 本地进程存活探针 | 仅校验直接 loopback Host 与 peer；不读取仓储、不执行写入、不代表依赖就绪。所有标准非 GET 方法使用固定有界 JSON 405 契约，HEAD 按 HTTP 语义省略 body。 |
+| `GET /local/v1/readyz` | 本地依赖就绪探针 | 仅执行一次 1 秒有界 Canonical Incident 仓储读；就绪返回 200，依赖失败、超时或已有卡住 worker 返回固定 503；不代表 Cloud readiness。 |
+| `GET /local/v1/version` | 版本与契约摘要 | 只返回 allowlist 的服务、包、HTTP/Replay API 与 Domain schema 版本；不返回路径、环境变量或未签名的部署身份声明。 |
 
-以上五个 `/local/v1` 路由已经由契约测试冻结；后续破坏性调整必须提升 API 版本。`healthz`、`readyz` 和版本接口仍属于后续待冻结接口，当前不得宣称存在。服务不得提供“真实动作”“任意工具调用”“任意 URL 转发”或自由 SQL 接口。
+以上八个 `/local/v1` 路由构成当前冻结面；后续破坏性调整必须提升 API 版本。三个探针同样只支持官方直接 loopback runner 和 GET；所有其他标准 HTTP 方法使用固定、有界 JSON 405 契约，HEAD 按 HTTP 语义省略 body。`healthz` 仅证明进程可响应，`readyz` 仅证明本地 Canonical 仓储可执行有界读；线程超时不能强制终止底层同步读，因此未结束 worker 存续期间后续 readiness 固定 503，不并发叠加 worker。`version` 仅提供未签名的 allowlist 元数据。服务不得提供“真实动作”“任意工具调用”“任意 URL 转发”或自由 SQL 接口。
 
 ### 8.3 Replay transport 冻结项
 
@@ -259,8 +265,9 @@
 - sink 只接收校验后的 `ReplayEvent` 安全 payload，不接收任意 Mapping、任意 URL 或调用方自报的 artifact 绑定。
 - 默认顺序投递；重复、乱序和 resume 只能由显式测试策略启用，并保持同一 plan/window 的 source-event/idempotency identity。
 - transport 只把 202/204 解释为接收端 ACK，不代表 RCA、审批或动作成功。仓内 Assurance receiver 的 202 已由真实 Repository 测试证明 durable-before-ACK；其他自定义 sink 仍不自动获得这一语义。
-- 当前 transport 只接受完整 `ReplayDeliveryCheckpoint`：精确绑定 plan ID、最高连续成功序号、对应 source event ID 与 payload SHA-256。plan ID 本身绑定完整 policy/endpoint、回放窗口和事件序列；跨 plan、旧窗口或字段漂移会在调用 transport 前拒绝。checkpoint 仍只是 caller-owned continuation claim，不是接收端签名的 ACK 证明，也不由本包持久化。
+- 当前 transport 只接受完整 `ReplayDeliveryCheckpoint`：精确绑定 plan ID、最高连续成功序号、对应 source event ID 与 payload SHA-256。plan ID 本身绑定完整 policy/endpoint、回放窗口和事件序列；跨 plan、旧窗口或字段漂移会在调用 transport 前拒绝。可选 store 要求显式本地 workspace/checkpoint 目录，以严格有界 JSON、原子替换、单调不回退和非阻塞单-writer 锁实现 `load/save/clear`；Windows 在任何路径探测前拒绝 UNC/device 且只允许 `DRIVE_FIXED`。POSIX mount topology 与恶意同用户 ancestor swap 属本机文件系统信任边界。checkpoint 仍只是 caller-owned continuation claim，不是接收端签名的 ACK 证明。
 - `deliver_replay_plan()` 保持立即、串行、每 occurrence 一次尝试，专用于确定性 fault injection。`run_paced_replay()` 按计划偏移与速率执行单调节奏，设硬 deadline，并在 deadline/cancel 时保留最后已确认 checkpoint 及不确定序号证据。
+- `run_persistent_paced_replay()` 在每个有效 202/204 后先持久化新 checkpoint，再允许 runner 推进或发送下一事件。response 丢失或本地保存失败会保留旧 checkpoint；恢复时可能再次发送同一稳定幂等事件，并依赖 receiver 的 exact-replay 幂等语义。
 - paced runner 默认 `NONE`；只有显式的 `TRANSIENT_ONCE|TRANSIENT_TWICE` 可重试 network/timeout 错误，使用固定有界退避。契约、环境、事件、payload、响应、重定向、HTTP 状态与 poison 失败不重试。
 - 接收器只允许精确锁定的 BubbleRAN 数据集/版本/场景与 `5G_SA` GNB；每 source event 独立 Incident。`ran.mac.ul_bler > 0.15 ratio` 时只使用服务端固定 rule version/content hash 建立 provenance，不信任客户端规则字段，也不将该阈值宣称为生产结论。
 
@@ -348,3 +355,4 @@
 | 2026-08-30 | 2.0 | 完成 Sprint 1 第一批本地实现：Assurance 增加四个严格 loopback Governance 路由，并同时校验 Host 与连接 peer；Data Lab 增加 opt-in loopback HTTP transport。终审发现并关闭裸 checkpoint 序号未绑定 plan 的 Gate，恢复现精确绑定 plan、序号、事件与 payload 摘要。两者仍未通过 Canonical Fault 业务接收器连接，Replay 也尚无 paced runner/自动重试/持久 checkpoint。 | S1-01/02/04=`READY FOR REVIEW`；S1 总体仍为 `IN PROGRESS`。 |
 | 2026-08-30 | 2.0 | 完成 Sprint 1 第二批本地实现：冻结公开 `ReplayWirePayload`；增加单调 paced runner、有界 transient retry/deadline/cancel 证据与 durable-before-202 Canonical Fault receiver。受控 BubbleRAN 5G SA UL BLER 规则只使用服务端 exact provenance；真实 TCP E2E 覆盖成功、验证失败、拒绝、过期和 settled exact replay 零写。保留每 source 独立 Incident，未实现 checkpoint 持久化、跨事件聚合、真实动作、Cloud 或 RCAEval。 | S1-03/04/05=`READY FOR REVIEW`；远程 CI、health/ready 与其余 DoD 未完成，S1 保持 `IN PROGRESS`。 |
 | 2026-08-30 | 2.0 | RC `427fc6832bf6b115d035e5d2cb492a25ffd82395` 的 Assurance、Data Lab、Local 与额外 Cloud workflows 全部成功，且四个 run 的 `headSha` 均绑定该 RC；双 Python、双 Pydantic、E2E、wheel 内容/外部安装与依赖检查证据已回填。远程 workflows 未输出 wheel digest 或上传 artifact，后续证据文档提交也不是受测 RC。 | S1-06=`DONE`；S1-01..05 保持 `READY FOR REVIEW`；S1-07、Sprint 1、P3e 与 S3 保持 `IN PROGRESS`。 |
+| 2026-08-30 | 2.0 | 在上述 RC 之后实现严格 loopback `healthz/readyz/version`、caller-owned 原子持久 checkpoint 与持久 paced wrapper；真实 TCP E2E `1 passed`，确认完成计划重启后零选择/零尝试/零投递。当前本地 Lab+Lab E2E 双 Pydantic 各 `222 passed, 1 skipped`、Assurance full `54 passed`、Domain+Local+shared contracts `520 passed`、status `4 passed`、Local E2E `3 passed`、A2A contracts `33 passed`、A2A E2E `4 passed`。release artifact、SBOM 与 `pip-audit` 证据生成已实现，尚待新远程 RC 验收。 | S1-04 仍 `READY FOR REVIEW`；S1-07、Sprint 1、P3e 与 S3 仍 `IN PROGRESS`，不编造新 run URL、artifact 或摘要。 |

@@ -36,6 +36,31 @@ network action. Evidence is commit-bound only when Git is available, the
 tracked tree remains clean, and the same commit is observed before and after
 the run.
 
+For a bounded, privacy-minimized observation of the same defense path, run:
+
+```text
+python tools/local-stack/run_observability_demo.py --approve-local-simulation
+```
+
+This wrapper records 22 fixed local stage events, a diagnostic one-sample
+timing snapshot, low-cardinality in-report metric aggregates, and four
+in-report alert evaluations. It does not export OpenTelemetry, propagate a
+distributed trace, expose Prometheus metrics, deliver external alerts, or
+define an SLO; `propagated_trace=false`. The 579 safe Trace rows are Local
+dataset inputs, not OpenTelemetry spans. See the
+[Local observability evidence runbook](docs/runbooks/local-observability-demo.md)
+for the exact contract and limitations.
+
+The narrow S4-01 slice is complete for RC
+`cb4a4e7191f67aa71ef980668352d55001e23142`:
+[Local run 33330915665](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33330915665)
+passed on Python 3.12/3.13, and Python 3.12 published
+[VERIFIED RC artifact 9737683310](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33330915665/artifacts/9737683310).
+Independent download confirmed 11 files (10 manifest records plus the
+manifest) with no extra, missing, or drifted entry. Only Local was selected by
+the RC's path filters; no same-SHA Data Lab or Assurance run is claimed. S4,
+Workflow E, and S7 remain in progress; Gate E and G5 remain open.
+
 The demo stops at `AWAITING_APPROVAL`. A second command may enable
 `--action-mode simulate` and approve only the exact `action_hash` and Incident
 revision returned by that preview. The sole action is `LOCAL_SIMULATION`;
@@ -118,8 +143,8 @@ intentionally performs no cross-event aggregation. This path does not connect
 to Cloud Fault ingress, Spanner, Pub/Sub, Engineer, MCP write tools, GitOps, or
 a Network Operator.
 
-Current local evidence is `222 passed, 1 skipped` for Data Lab + Lab E2E under
-both Pydantic 2.5.3 and 2.13.4, Assurance full `76 passed`, local-stack
+Sprint 1 closure evidence was `222 passed, 1 skipped` for Data Lab + Lab E2E
+under both Pydantic 2.5.3 and 2.13.4, Assurance full `76 passed`, local-stack
 `22 passed`, and Local E2E `3 passed`, including the real TCP
 persistent-checkpoint restart case. A2A contracts are `33 passed` and A2A E2E
 is `4 passed`.
@@ -209,6 +234,13 @@ or Trivy DB OCI digest/signature capture. The uploaded runner-local artifact is
 not an offline-independent re-verification bundle because the image, scanner
 binary, and database are not uploaded. G2/Gate A/S3/G4, cross-event aggregation,
 RCAEval, and Cloud Staging authorization remain open.
+
+S2-04 is **BLOCKED** after four candidates were scanned with the same Trivy
+0.74.0/database snapshot: none simultaneously preserves the current CPython
+3.12/glibc/provenance contract and reaches complete Critical/High `0/0`.
+Ignoring unfixed findings, allowlisting vulnerabilities, or discarding package
+provenance is not accepted as closure. See the
+[S2-04 base-image evaluation](docs/security/s2-04-base-image-evaluation.md).
 
 * [Implementation Development Plan 2.0](docs/implementation-development-plan-2.0.md)
 * [Living implementation plan](docs/unified-platform-implementation-plan.md)

@@ -71,6 +71,60 @@ progress because its broader security, release, operability, Cloud, and real
 action boundaries are still open. S2-04 also remains blocked; this local
 evidence does not close the complete container Critical/High gate.
 
+## One-command local observability evidence
+
+The following fixed wrapper reruns the same native defense demonstration and
+adds bounded, privacy-minimized stage evidence without changing the underlying
+business flow:
+
+```powershell
+.venv/Scripts/python.exe tools/local-stack/run_observability_demo.py --approve-local-simulation
+```
+
+Its successful `networkagent-local-observability/1.0` document contains 21
+strictly ordered child-process stage events plus one finalization event. Each
+event contains only `sequence/stage/branch/attempt/outcome/duration_ms/error_class`.
+The timing snapshot is diagnostic and has one sample. The
+metric series are in-report aggregates using only the fixed
+`branch/error_class/outcome/stage` labels; they are not Prometheus metrics. The
+four `LOCAL_*` alerts are evaluated only in the report and do not send an
+external notification. `observation_id`, the source commit, and the defense
+report SHA correlate this local evidence only; `propagated_trace=false`.
+
+The wrapper does not record absolute paths, child stdout/stderr, the
+environment, or raw arguments. The 579 safe Trace rows loaded by the Local
+Profile are input data records, not OpenTelemetry spans. The report explicitly
+does not claim OpenTelemetry export/Collector, a cross-HTTP/Replay/A2A/MCP
+trace, Prometheus, external alert delivery, SLOs, Collector failure tolerance,
+Gate E/G5 closure, or Cloud/production observability.
+
+The narrow S4-01 slice is complete for RC
+`cb4a4e7191f67aa71ef980668352d55001e23142`.
+[Local run 33330915665](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33330915665)
+passed on Python 3.12/3.13: each job reported Domain + Local `518 passed`,
+local-stack `66 passed, 2 skipped`, and Local E2E `2 passed`; Python 3.12 also
+passed `18` release-boundary tests. Only Local was selected by the RC's path
+filters, so no same-SHA Data Lab or Assurance run is claimed.
+
+Python 3.12 published
+[VERIFIED RC artifact 9737683310](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33330915665/artifacts/9737683310),
+named `telco-local-release-py3.12-attempt-1`: 106,309 bytes, archive digest
+`sha256:5b26c3ccaff8e57c10c4bb3375ebbad8156d151e26158b1123639e3423006eca`,
+expiring `2026-09-13T19:33:25Z`. Independent download confirmed an exact
+11-file closure: 10 manifest records plus the manifest. The defense summary is
+3,379 bytes / SHA-256
+`14f04bf556f03fd7c22edf0272240dba566610466546362442abdab3dd06a9b7`;
+the observability summary is 9,178 bytes / SHA-256
+`2741c3a25983056a73ea0bcd6ea99ffc14bf83dbd6209e4a9811b93c0a98df49`.
+Python 3.13 executes and verifies both demonstrations but does not upload a
+duplicate release artifact.
+
+Follow the
+[Local observability evidence runbook](../../docs/runbooks/local-observability-demo.md)
+for the exact event graph, report SHA verification, four alert procedures, and
+limitations. S4, Workflow E, and S7 remain in progress; Gate E, G5, G2, and G4
+remain open, and S2-04 remains blocked.
+
 ## Safe governance demo
 
 Actions are disabled by default. This command confirms the deterministic sample

@@ -1,6 +1,6 @@
 # Local deployment and governance security Gate
 
-> Review date: 2026-08-30
+> Review date: 2026-08-31
 > Local simulation scope: **PASS**
 > BubbleRAN replay-to-governance slice: **PASS**
 > Remote GitHub Actions: **PASS for RC `7cbff490ccb71befb42c7cd30204f7f88e3b2f38`**
@@ -12,6 +12,9 @@
 > S2-02 container governance recovery: **DONE for RC `d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4`**
 > S2-02 container + Local CI: **REMOTE PASS**
 > S2-03 container release evidence: **DONE for RC `68b16ea528a85b743aa8c05044948bac195ee8ec`**
+> S2-04 compatible base-image closure: **BLOCKED**
+> S4-01 local observability evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
+> Workflow E / Gate E / G5: **NOT PASSED BY THIS GATE**
 > Gate B overall: **NOT PASSED**
 > Cloud/production authorization: **NOT APPLICABLE**
 
@@ -55,6 +58,13 @@ This Gate authorizes only the side-effect-free local demonstration. It does not
 authorize or attest GCP credentials, Spanner, Pub/Sub, Cloud MCP, Engineer A2A,
 GitOps, GKE, Network Operator, real network actions, Cloud Staging IAM/OIDC,
 DLQ behavior, or Workload Identity.
+
+The separate S4-01 wrapper can observe this fixed native demonstration with
+bounded in-process stage events, diagnostic timing, and in-report metric/alert
+evaluation. That evidence does not expand this Governance Gate: it has no
+OpenTelemetry export, propagated trace, Prometheus metrics, external alert
+delivery, or SLO, and does not pass Workflow E, Gate E, or G5. The 579 safe
+Trace rows referenced below are Local input records, not OpenTelemetry spans.
 
 ## S2-01 container review
 
@@ -161,6 +171,23 @@ does not publish a registry image/digest, does not provide signing,
 attestation, provenance, or Trivy DB OCI digest/signature capture, and does
 not supply an offline-independent re-verification bundle because the image,
 scanner binary, and database are not uploaded.
+
+## S2-04 and S4-01 boundary updates
+
+S2-04 is `BLOCKED`: under the same Trivy 0.74.0/frozen database snapshot, none
+of four candidates simultaneously preserves the current CPython 3.12, glibc,
+public-availability and provenance contract while reaching complete
+Critical/High `0/0`. Ignoring unfixed findings, allowlisting vulnerabilities,
+or discarding package identity is not accepted. Gate B and G2 remain open.
+
+S4-01 is `DONE` only for the narrow local observability evidence slice on RC
+`cb4a4e7191f67aa71ef980668352d55001e23142`; its evidence and alert procedures
+are recorded in the
+[Local observability evidence runbook](../runbooks/local-observability-demo.md).
+The RC's path filters selected only Local, so this statement does not claim a
+same-SHA Data Lab or Assurance run. S4/Workflow E/S7 remain `IN PROGRESS`, and
+Gate E/G5, G2/G4 remain open. This section is a cross-document boundary note,
+not an additional PASS row in the Governance Gate below.
 
 ## Reviewed flow
 

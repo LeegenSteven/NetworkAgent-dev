@@ -26,6 +26,7 @@ def test_compose_source_has_no_host_publish_or_network_definition() -> None:
         encoding="utf-8"
     )
     forbidden_lines = {
+        "x-runtime:",
         "ports:",
         "expose:",
         "networks:",

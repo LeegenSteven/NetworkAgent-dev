@@ -1,29 +1,26 @@
 name: networkagent-local
 
-x-runtime: &runtime
-  image: networkagent-local:dev
-  pull_policy: never
-  user: "10001:10001"
-  read_only: true
-  init: true
-  restart: "no"
-  cap_drop:
-    - ALL
-  security_opt:
-    - no-new-privileges:true
-  pids_limit: 128
-  cpus: 1.0
-  mem_limit: 768m
-  ulimits:
-    nofile:
-      soft: 1024
-      hard: 1024
-  tmpfs:
-    - /tmp:rw,noexec,nosuid,nodev,size=67108864,mode=1777
-
 services:
   assurance:
-    <<: *runtime
+    image: networkagent-local:dev
+    pull_policy: never
+    user: "10001:10001"
+    read_only: true
+    init: true
+    restart: "no"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    cpus: 1.0
+    mem_limit: 768m
+    ulimits:
+      nofile:
+        soft: 1024
+        hard: 1024
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=67108864,mode=1777
     build:
       context: ../..
       dockerfile: deploy/local/Dockerfile
@@ -71,7 +68,25 @@ services:
       start_period: 10s
 
   init:
-    <<: *runtime
+    image: networkagent-local:dev
+    pull_policy: never
+    user: "10001:10001"
+    read_only: true
+    init: true
+    restart: "no"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    cpus: 1.0
+    mem_limit: 768m
+    ulimits:
+      nofile:
+        soft: 1024
+        hard: 1024
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=67108864,mode=1777
     profiles:
       - ops
     command:
@@ -108,7 +123,25 @@ services:
           create_host_path: false
 
   reset:
-    <<: *runtime
+    image: networkagent-local:dev
+    pull_policy: never
+    user: "10001:10001"
+    read_only: true
+    init: true
+    restart: "no"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    cpus: 1.0
+    mem_limit: 768m
+    ulimits:
+      nofile:
+        soft: 1024
+        hard: 1024
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=67108864,mode=1777
     profiles:
       - ops
     command:
@@ -121,7 +154,25 @@ services:
         read_only: false
 
   probe:
-    <<: *runtime
+    image: networkagent-local:dev
+    pull_policy: never
+    user: "10001:10001"
+    read_only: true
+    init: true
+    restart: "no"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    cpus: 1.0
+    mem_limit: 768m
+    ulimits:
+      nofile:
+        soft: 1024
+        hard: 1024
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=67108864,mode=1777
     profiles:
       - diagnostics
     command:
@@ -132,7 +183,25 @@ services:
         condition: service_healthy
 
   smoke:
-    <<: *runtime
+    image: networkagent-local:dev
+    pull_policy: never
+    user: "10001:10001"
+    read_only: true
+    init: true
+    restart: "no"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    cpus: 1.0
+    mem_limit: 768m
+    ulimits:
+      nofile:
+        soft: 1024
+        hard: 1024
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=67108864,mode=1777
     profiles:
       - test
     command:

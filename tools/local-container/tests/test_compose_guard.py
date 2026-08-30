@@ -214,6 +214,14 @@ def test_secure_resolved_compose_config_is_accepted() -> None:
     module.validate_compose_config(_secure_config())
 
 
+def test_resolved_compose_extension_is_rejected() -> None:
+    module = _load_module()
+    config = _secure_config()
+    config["x-runtime"] = {"read_only": True}
+    with pytest.raises(module.PolicyViolation, match="top-level key x-runtime"):
+        module.validate_compose_config(config)
+
+
 def test_empty_resolved_defaults_are_accepted_but_nonempty_entrypoint_is_not() -> None:
     module = _load_module()
     config = _secure_config()

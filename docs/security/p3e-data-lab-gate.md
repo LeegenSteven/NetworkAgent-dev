@@ -110,7 +110,11 @@
 - `telco-lab` 全套在 Pydantic 2.5.3 与 2.13.4 下各 197 项通过；Assurance receiver 定向 22 项、Assurance 全套 50 项、组合发布回归 133 项通过。
 - 真实 loopback TCP BubbleRAN → Governance E2E 1 项通过，覆盖 `RESOLVED`、验证失败 `REOPENED`、审批 `REJECTED`、审批过期 `FAILED`、标签不泄漏与 settled exact replay 零写。
 - receiver 在 ACK 前有界回读 current Incident 不可变事实、初始 revision-0 Audit 与 SourceAssociation；删除 Incident 或初始 Audit 的故障注入均返回 503 且不新增业务写。
-- 最新本地 `telco-lab 0.1.0` wheel 为 67,653 bytes，SHA-256=`96B5D696CB769E29256C5319FF391DA5CC30F2B25D108F5730FF9F8BD467C40B`。新远程 CI 仍为 `PENDING`。
+- RC `427fc6832bf6b115d035e5d2cb492a25ffd82395` 的 [Data Lab CI run 33296728022](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728022) 为 `success`，其 `headSha` 精确等于该 RC。Python 3.12/3.13 + Pydantic 2.13.4 各为 `198 passed, 1 skipped`，Python 3.12 + 声明下限 Pydantic 2.5.3 也为 `198 passed, 1 skipped`；wheel 内容 allowlist、源码树外安装 smoke 与 `pip check` 全绿。
+- 同一 RC 上的 [Assurance CI run 33296728012](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728012) 与 [Local CI run 33296728032](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728032) 均为 `success`：Assurance 的两个 Python job 各通过 Domain 323、Lab 197、Local 195、Lab E2E 1（另 1 skipped）、Local E2E 3、Assurance 50、A2A contracts 33、A2A E2E 4，并完成四 wheel/源码树外 smoke/`pip check`；Local 的两个 Python job 各通过 Domain+Local 518、local-stack 19（另 2 skipped）、Local-only E2E 2，真实 CLI 到达 `RESOLVED` 后安全 reset，并完成两 wheel/`pip check`。
+- 同一 RC 上的额外 [Cloud CI run 33296727982](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296727982) 也为 `success`，但不替代 Cloud Staging 验收。
+- 最新本地 `telco-lab 0.1.0` wheel 为 67,653 bytes，SHA-256=`96B5D696CB769E29256C5319FF391DA5CC30F2B25D108F5730FF9F8BD467C40B`。远程 jobs 验证了构建、内容 allowlist、源码树外安装与依赖一致性，但没有输出远程 wheel 字节数/SHA-256，也没有上传 artifact；该摘要仍只是本地证据。
+- 本段证据回填形成的后续文档提交不是受测 RC，不得替换上述 runs 的 `headSha`。远程矩阵通过不关闭 checkpoint 持久化、跨事件聚合、RCAEval 或发布终验，P3e 继续保持 `IN PROGRESS`。
 
 ## 9. 退出标准
 
@@ -129,7 +133,7 @@ P3e 第一版只有同时满足下列条件才可标记 `DONE`：
 - RCAEval 的精确 artifact、最小案例、适配器和多源 RCA 评估尚未实现。
 - loopback HTTP transport、paced runner、有限 transient retry、Canonical Fault/Incident 业务接收器与真实 TCP 治理 E2E 已实现；checkpoint 仍只是 caller-owned continuation claim，尚无仓内持久化。
 - 当前 receiver 为每 source event 独立 Incident，尚无 episode/跨事件聚合。受控 UL BLER 阈值只用于 BubbleRAN 本地测试 provenance，不是生产 RCA。
-- BubbleRAN 当前使用全量基线和代码生成的极小 CI fixture；独立答辩脚本、延迟/峰值内存预算和新远程 CI 仍待固化。
+- BubbleRAN 当前使用全量基线和代码生成的极小 CI fixture；独立答辩脚本、延迟/峰值内存预算、远程 wheel digest/artifact 与完整发布证据仍待固化。
 - 本 Gate 不包含真实 Engineer/MCP/GitOps/Operator 动作或任何 Cloud Staging 验收。
 - NIST、RANalyzer、TelecomTS 的适配优先级将在前两个适配器通过 Gate 后确定。
 - 公司对 CC BY-SA 派生数据演示/再分发的合规要求需要在对外交付前确认。

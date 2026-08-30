@@ -3,7 +3,7 @@
 > Review date: 2026-08-30
 > Local simulation scope: **PASS**
 > BubbleRAN replay-to-governance slice: **READY FOR REVIEW**
-> Remote GitHub Actions run: **PENDING**
+> Remote GitHub Actions: **PASS for RC `427fc6832bf6b115d035e5d2cb492a25ffd82395`**
 > Cloud/production authorization: **NOT APPLICABLE**
 
 ## Decision
@@ -21,8 +21,9 @@ event owns one deterministic 5G SA Incident. A server-owned fixed rule attaches
 exact rule-version/content provenance only for the controlled
 `ran.mac.ul_bler > 0.15 ratio` signature. The same two-stage governance engine
 then covers success, verification failure, rejection, and approval expiry.
-This slice is ready for independent review; its new remote CI run is still
-pending.
+This slice remains ready for independent review. Its RC-bound remote
+compatibility and security matrix has passed; that result closes S1-06 but does
+not itself complete the review, the Sprint, or the release-evidence work.
 
 This Gate authorizes only the side-effect-free local demonstration. It does not
 authorize or attest GCP credentials, Spanner, Pub/Sub, Cloud MCP, Engineer A2A,
@@ -154,8 +155,11 @@ Only completed runs are recorded here:
 
 The latest local `telco-lab 0.1.0` wheel is 67,653 bytes with SHA-256
 `96B5D696CB769E29256C5319FF391DA5CC30F2B25D108F5730FF9F8BD467C40B`.
-It is local build evidence only; the release candidate must be rebuilt and
-checked by remote CI for the same commit.
+It remains local build evidence only. The remote RC jobs rebuilt and checked
+wheel contents, installation outside the source tree, and dependency
+consistency, but did not print remote wheel byte sizes/SHA-256 values or upload
+downloadable artifacts. The local digest therefore is not an RC artifact
+digest.
 
 The real entry point was also exercised against a fresh disposable workspace:
 `doctor` reported ready; `init` loaded schema 1.1 with 13,440 performance rows
@@ -164,14 +168,19 @@ candidates and stopped at `AWAITING_APPROVAL`; the second command copied the
 returned hash/revision and reached `RESOLVED`; confirmed reset removed only
 `state`, `artifacts`, and the marker, then removed the empty workspace.
 
-The Local workflow runs domain/local tests, local-stack safety tests, the two
-Local-only E2E cases, wheel builds, and public governance export smoke checks on
-Python 3.12 and 3.13. The cross-package real TCP BubbleRAN E2E runs in the
-Assurance workflow, which installs Domain, Data Lab, Local, and Assurance in
-dependency order. The Data Lab workflow runs replay tests as part of the
-hermetic lab suite and verifies replay exports from both the editable install
-and the built wheel. A remote workflow URL must be added before claiming remote
-CI completion.
+### Remote RC evidence
+
+The tested release candidate is
+`427fc6832bf6b115d035e5d2cb492a25ffd82395`. Every run below completed with
+`success`, and each run's `headSha` is exactly that value:
+
+* [Assurance CI run 33296728012](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728012): on both Python 3.12 and 3.13, Domain 323, Lab 197, Local 195, Lab E2E 1 with 1 skipped, Local E2E 3, Assurance 50, A2A contracts 33, and A2A E2E 4 passed; all four wheels, outside-source-tree smoke, and `pip check` passed.
+* [Data Lab CI run 33296728022](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728022): Python 3.12 and 3.13 with Pydantic 2.13.4 each reported `198 passed, 1 skipped`; Python 3.12 with the declared Pydantic 2.5.3 minimum also reported `198 passed, 1 skipped`; the wheel content allowlist, outside-source-tree smoke, and `pip check` passed.
+* [Local CI run 33296728032](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728032): both Python jobs reported Domain+Local `518 passed`, local-stack `19 passed, 2 skipped`, and Local-only E2E `2 passed`; the real CLI reached `RESOLVED`, performed the guarded reset, and both wheels plus `pip check` passed.
+* [Cloud CI run 33296727982](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296727982): the additional Cloud/Emulator regression passed. It does not authorize or attest Cloud Staging.
+
+This evidence update is a later documentation-only commit. It is not the tested
+RC and must not replace the `headSha` recorded by those runs.
 
 ## Residual limitations
 
@@ -192,8 +201,9 @@ CI completion.
   paths, but still treats the host filesystem and same-user ancestor directory
   integrity as an operating-system trust boundary.
 * No real remediation, production rollback, Cloud identity/delivery, or
-  infrastructure isolation claim follows from this Gate. The new remote CI is
-  still `PENDING`.
+  infrastructure isolation claim follows from this Gate. The successful RC
+  matrix attests only the listed repository tests, builds, smoke checks, and
+  dependency checks.
 
 Within those explicit boundaries, the local deployment and simulated
 operations-governance loop is accepted.

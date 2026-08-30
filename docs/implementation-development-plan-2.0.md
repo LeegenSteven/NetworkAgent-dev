@@ -57,19 +57,21 @@
 
 ### 3.2 当前发布证据
 
-- `telco-lab` 完整本地套件在 Pydantic 2.5.3 与 2.13.4 下各 197 项通过；Assurance Fault receiver 定向 22 项、Assurance 全套 50 项、组合发布回归 133 项通过。
-- 真实 loopback TCP E2E 1 项通过，覆盖 `RESOLVED`、验证失败 `REOPENED`、审批 `REJECTED`、审批过期 `FAILED` 和 settled exact replay 零新增写入。
-- 最新 `telco-lab 0.1.0` wheel 为 67,653 bytes，SHA-256 为 `96B5D696CB769E29256C5319FF391DA5CC30F2B25D108F5730FF9F8BD467C40B`；该摘要是本地构建证据，正式 RC 仍须在同一提交的远程 CI 重新生成。
-- P1、P2a、P2b 和 P3 Cloud Emulator 已有历史远程成功证据。
-- 当前 Local Governance 和 Data Lab 增量仍处于未提交工作树；对应的新远程 CI 仍为 `PENDING`，因此不能宣称 2.0 发布完成。
+- Sprint 1 的受测 release candidate 为 `427fc6832bf6b115d035e5d2cb492a25ffd82395`。下列四个成功 run 的 `headSha` 均精确等于该 SHA：
+  - [Assurance CI run 33296728012](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728012)：Python 3.12/3.13 各通过 Domain 323、Lab 197、Local 195、Lab E2E 1（另 1 skipped）、Local E2E 3、Assurance 50、A2A contracts 33、A2A E2E 4；四个 wheel 构建、源码树外 smoke 与 `pip check` 全绿。
+  - [Data Lab CI run 33296728022](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728022)：Python 3.12/3.13 + Pydantic 2.13.4 各 `198 passed, 1 skipped`，Python 3.12 + 声明下限 Pydantic 2.5.3 为 `198 passed, 1 skipped`；wheel 内容 allowlist、源码树外安装 smoke 与 `pip check` 全绿。
+  - [Local CI run 33296728032](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728032)：Python 3.12/3.13 各通过 Domain+Local `518 passed`、local-stack `19 passed, 2 skipped`、Local-only E2E `2 passed`；真实 CLI 走到 `RESOLVED` 并完成受控 reset，两个 wheel 与 `pip check` 全绿。
+  - [Cloud CI run 33296727982](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296727982)：额外 Cloud/Emulator 回归为 `success`；这仍不是 Cloud Staging IAM/OIDC/DLQ/Workload Identity 验收。
+- 最新本地 `telco-lab 0.1.0` wheel 为 67,653 bytes，SHA-256 为 `96B5D696CB769E29256C5319FF391DA5CC30F2B25D108F5730FF9F8BD467C40B`。这是本地构建证据；上述远程 workflows 只证明 RC 上的构建、内容 allowlist、源码树外安装和依赖一致性，没有输出远程 wheel 字节数/SHA-256，也没有上传可下载 artifact，因此该本地摘要不得冒充 RC 制品摘要。
+- 本次证据回填会形成晚于 RC 的文档提交；该文档提交不是受测 RC，也不得替换上述 runs 的 `headSha`。S1-06 可据此关闭，但 S1-07、Sprint 1、P3e 与 S3 仍按各自未完成项保持 `IN PROGRESS`。
 
 ### 3.3 已知缺口
 
-- Governance HTTP 薄层、公开 Replay wire 契约、持久 Canonical Fault receiver 和 paced runner 已有本地证据，但远程 CI 尚未运行。
+- Governance HTTP 薄层、公开 Replay wire 契约、持久 Canonical Fault receiver 和 paced runner 已在上述 RC 远程矩阵通过；S1-01 至 S1-05 仍等待独立复核，不因 CI 通过自动变为 `DONE`。
 - `ReplaySink` 同时支持立即串行投递与单调节奏 runner；只有明确启用的瞬时 network/timeout 失败才执行有限次重试。checkpoint 仍由调用方持有，仓内未提供持久化存储。
 - BubbleRAN 事件已进入 Canonical Incident 治理链路，但当前是每 source 独立 Incident，不做跨事件聚合；RCA 仅识别受控 `5G_SA` BubbleRAN UL BLER 签名，不得外推生产。
 - 新 Local/Data Lab 组件尚无统一的最小权限容器和 Compose 发布入口。
-- 新增 CI 尚未在提交后的 Python 3.12/3.13 远程环境运行。
+- 远程 workflows 尚未发布 wheel 字节数/SHA-256 或可下载 artifact，SBOM、扫描、签名/证明和完整发布报告也尚未完成。
 - 跨组件结构化日志、指标、分布式追踪、本地 SLO、告警和完整 Runbook 尚未交付。
 - Cloud Staging IAM/OIDC、Pub/Sub DLQ、Workload Identity 及真实基础设施验收尚未进行。
 
@@ -207,12 +209,12 @@
 | ID | 工作包 | 状态 | 验收摘要 |
 |---|---|---|---|
 | S1-01 | HTTP 契约与威胁模型冻结 | `READY FOR REVIEW` | 已冻结四个 `/local/v1/incidents` 查询/治理路由及 `POST /local/v1/faults/replay`；Fault 入口要求 loopback Host+peer、`replay-v1`、唯一幂等键和严格 JSON。 |
-| S1-02 | Governance HTTP 薄适配层 | `READY FOR REVIEW` | 不复制引擎逻辑；查询、准备、决定、执行/验证接口已完成真实 DuckDB/ASGI 回归并通过本地独立终审，等待远程 CI。 |
+| S1-02 | Governance HTTP 薄适配层 | `READY FOR REVIEW` | 不复制引擎逻辑；查询、准备、决定、执行/验证接口已完成真实 DuckDB/ASGI 回归并通过 RC 远程矩阵，仍等待独立复核。 |
 | S1-03 | 持久接收与幂等恢复 | `READY FOR REVIEW` | 公开 `ReplayWirePayload` 为唯一 sender/receiver 契约；HTTP 202 只在有界回读 current Incident 不可变事实、初始 revision-0 Audit 与 SourceAssociation 通过后返回。删除 Incident 或初始 Audit 时返回 503 且零新增写；变更 payload 冲突，response-loss exact replay 返回首次持久回执。 |
 | S1-04 | Loopback HTTP ReplaySink | `READY FOR REVIEW` | 在原有禁代理/重定向、逐事件重验、固定预算和 plan/event-bound checkpoint 上，新增单调 paced runner、硬 deadline、cancel/不确定序号证据与仅 network/timeout 的有限 transient retry；checkpoint 尚未仓内持久化。 |
 | S1-05 | BubbleRAN → Governance E2E | `READY FOR REVIEW` | 真实 loopback TCP E2E 使用受控 5G SA UL BLER 规则的 exact provenance，覆盖 `RESOLVED`/`REOPENED`/`REJECTED`/审批过期 `FAILED`、标签不泄漏和 settled exact replay 零写。 |
-| S1-06 | 安全与兼容矩阵 | `IN PROGRESS` | 本地双 Pydantic、边界用例和公共导出已通过；CI 已配置 Python 3.12/3.13 + Pydantic 2.13.4，以及 Python 3.12 + 声明下限 2.5.3，待提交后执行。 |
-| S1-07 | 操作文档与证据 | `IN PROGRESS` | README、Gate、bridge 边界、测试计数与本地 wheel 摘要已回填；health/ready 操作说明、checkpoint 持久化和远程 CI URL 待补。 |
+| S1-06 | 安全与兼容矩阵 | `DONE` | RC `427fc6832bf6b115d035e5d2cb492a25ffd82395` 的 Assurance、Data Lab、Local 与额外 Cloud workflows 全部 `success`；双 Python、Pydantic 2.13.4/2.5.3、边界/E2E、wheel allowlist/源码树外 smoke 与 `pip check` 证据见 3.2。 |
+| S1-07 | 操作文档与证据 | `IN PROGRESS` | README、Gate、bridge 边界、测试计数、本地 wheel 摘要与 RC 远程 CI URL 已回填；health/ready 操作说明、checkpoint 持久化、远程 wheel digest/artifact 和完整发布证据仍待补。 |
 
 ### 7.2 Sprint 1 DoD
 
@@ -345,3 +347,4 @@
 | 2026-08-30 | 2.0 | 建立实施开发计划 2.0；记录当前 Local/Cloud/Data Lab 基线，定义无 GCP 原则、A–F 工作流、接口冻结、Gate/DoD、风险和 Cloud 后置清单；启动 Governance HTTP 与 Loopback Replay Sprint。 | S1=`IN PROGRESS`；Cloud G6=`WAITING FOR CLOUD`。 |
 | 2026-08-30 | 2.0 | 完成 Sprint 1 第一批本地实现：Assurance 增加四个严格 loopback Governance 路由，并同时校验 Host 与连接 peer；Data Lab 增加 opt-in loopback HTTP transport。终审发现并关闭裸 checkpoint 序号未绑定 plan 的 Gate，恢复现精确绑定 plan、序号、事件与 payload 摘要。两者仍未通过 Canonical Fault 业务接收器连接，Replay 也尚无 paced runner/自动重试/持久 checkpoint。 | S1-01/02/04=`READY FOR REVIEW`；S1 总体仍为 `IN PROGRESS`。 |
 | 2026-08-30 | 2.0 | 完成 Sprint 1 第二批本地实现：冻结公开 `ReplayWirePayload`；增加单调 paced runner、有界 transient retry/deadline/cancel 证据与 durable-before-202 Canonical Fault receiver。受控 BubbleRAN 5G SA UL BLER 规则只使用服务端 exact provenance；真实 TCP E2E 覆盖成功、验证失败、拒绝、过期和 settled exact replay 零写。保留每 source 独立 Incident，未实现 checkpoint 持久化、跨事件聚合、真实动作、Cloud 或 RCAEval。 | S1-03/04/05=`READY FOR REVIEW`；远程 CI、health/ready 与其余 DoD 未完成，S1 保持 `IN PROGRESS`。 |
+| 2026-08-30 | 2.0 | RC `427fc6832bf6b115d035e5d2cb492a25ffd82395` 的 Assurance、Data Lab、Local 与额外 Cloud workflows 全部成功，且四个 run 的 `headSha` 均绑定该 RC；双 Python、双 Pydantic、E2E、wheel 内容/外部安装与依赖检查证据已回填。远程 workflows 未输出 wheel digest 或上传 artifact，后续证据文档提交也不是受测 RC。 | S1-06=`DONE`；S1-01..05 保持 `READY FOR REVIEW`；S1-07、Sprint 1、P3e 与 S3 保持 `IN PROGRESS`。 |

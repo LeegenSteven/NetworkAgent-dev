@@ -213,7 +213,7 @@ Canonical Dataset + Provenance Manifest
 | P3e-2 | 安全解析、精确 schema 投影、通用隐私扫描与隔离流程 | IN PROGRESS（BubbleRAN CSV/JSON 精确 schema 已完成；通用扫描/quarantine、归档与其他格式未启用） |
 | P3e-3 | BubbleRAN 与 RCAEval 两个最小适配器及 Canonical fixture | IN PROGRESS（BubbleRAN 已完成；RCAEval 待开发） |
 | P3e-4 | Detector/RCA 离线评估器、机器可读报告和基线阈值 | IN PROGRESS（BubbleRAN episode/duration 评估已完成；RCA 待开发） |
-| P3e-5 | loopback 限定回放、重复/乱序/中断场景和答辩演示 | IN PROGRESS（BubbleRAN 公开 wire、paced transport、durable receiver 与真实 TCP 治理 E2E `READY FOR REVIEW`；checkpoint 持久化、独立答辩脚本与远程 CI 待完成） |
+| P3e-5 | loopback 限定回放、重复/乱序/中断场景和答辩演示 | IN PROGRESS（BubbleRAN 公开 wire、paced transport、durable receiver 与真实 TCP 治理 E2E `READY FOR REVIEW`，RC 远程矩阵已通过；checkpoint 持久化、独立答辩脚本与远程制品摘要/上传待完成） |
 | P3e-6 | 其余三套白名单适配器、容量基准和发布归属材料 | NOT STARTED |
 
 第一版退出标准以 BubbleRAN + RCAEval 两条互补路径为最低范围；其余白名单数据集可在接口和 Gate 稳定后逐步接入。任何切片只有在 [P3e Data Lab Gate](security/p3e-data-lab-gate.md) 对应证据完成后才能标为 `DONE`。
@@ -231,8 +231,11 @@ Canonical Dataset + Provenance Manifest
 - `ReplayWirePayload` 为 sender/receiver 共享严格契约；paced runner 具有单调节奏、有限 transient retry、deadline/cancel 与不确定序号证据；
 - `POST /local/v1/faults/replay` 在有界回读 current Incident 不可变事实、revision-0 Audit 与 SourceAssociation 后才返回 202，删除 Incident/Audit 则 503 且零新写；精确重放只读，改变 payload 冲突；
 - 真实 loopback TCP E2E 1 项通过，覆盖 `RESOLVED`、验证失败 `REOPENED`、审批 `REJECTED`、审批过期 `FAILED`、标签不泄漏与 settled exact replay 零写；
-- `telco-lab` 在 Pydantic 2.5.3/2.13.4 下各 197 项通过，receiver 22 项、Assurance 全套 50 项、组合回归 133 项通过；
-- 本地 `telco-lab 0.1.0` wheel 为 67,653 bytes，SHA-256=`96B5D696CB769E29256C5319FF391DA5CC30F2B25D108F5730FF9F8BD467C40B`；新远程 CI 仍为 `PENDING`。
+- 远程受测 RC 为 `427fc6832bf6b115d035e5d2cb492a25ffd82395`；[Data Lab CI run 33296728022](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728022) 的 `headSha` 精确绑定该 RC，Python 3.12/3.13 + Pydantic 2.13.4 各 `198 passed, 1 skipped`，Python 3.12 + Pydantic 2.5.3 也为 `198 passed, 1 skipped`，wheel 内容 allowlist、源码树外 smoke 与 `pip check` 全绿；
+- 同一 RC 的 [Assurance CI run 33296728012](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728012) 在两个 Python job 中各通过 Domain 323、Lab 197、Local 195、Lab E2E 1（另 1 skipped）、Local E2E 3、Assurance 50、A2A contracts 33、A2A E2E 4，并完成四 wheel/外部 smoke/`pip check`；[Local CI run 33296728032](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296728032) 在两个 Python job 中各通过 Domain+Local 518、local-stack 19（另 2 skipped）、Local-only E2E 2，真实 CLI 到 `RESOLVED` 后 reset，并完成两 wheel/`pip check`；
+- 同一 RC 的额外 [Cloud CI run 33296727982](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33296727982) 也为 `success`，但不构成 Cloud Staging 证据；
+- 本地 `telco-lab 0.1.0` wheel 为 67,653 bytes，SHA-256=`96B5D696CB769E29256C5319FF391DA5CC30F2B25D108F5730FF9F8BD467C40B`。远程 workflows 未输出 wheel 字节数/SHA-256，也未上传 artifact，因此该值仍是本地摘要，不是 RC artifact digest；
+- 上述四个成功 run 的 `headSha` 均为受测 RC；本次证据回填产生的后续文档提交不是该 RC。P3e 仍因 checkpoint 持久化、跨事件聚合和 RCAEval 未完成而保持 `IN PROGRESS`。
 
 ## 11. 与 Cloud Staging 的边界
 

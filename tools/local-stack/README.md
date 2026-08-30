@@ -56,12 +56,20 @@ and the exact limitation statement, follow the
 [Local native defense demonstration runbook](../../docs/runbooks/local-defense-demo.md).
 S7-01 is complete at RC `c08d634c9c3deb628df5f98d4f60dd1675cd5706`:
 the Python 3.12/3.13 Local jobs both ran this command and verified the source
-binding, two terminal states, and two cleanups. S7-02 remains in progress. Its
-frozen artifact path is `release-evidence/defense-demo-summary.json`; only the
-Python 3.12 job uploads the release artifact, while Python 3.13 still executes
-the demonstration. The S7-01 historical artifact 9736486858 predates that
-supplemental file and must not be presented as a downloadable demonstration
-JSON.
+binding, two terminal states, and two cleanups. S7-02 is complete at RC
+`79feeee6771749bbdd1ce7ce44b77193a1db544f`: Local run 33327786238 passed
+on Python 3.12/3.13 with `518 passed`, local-stack `49 passed, 2 skipped`, and
+Local E2E `2 passed` per job. Its Python 3.12 VERIFIED RC artifact 9736785325
+contains `release-evidence/defense-demo-summary.json` as manifest-verified
+supplemental evidence; Python 3.13 also executes the demonstration but does not
+upload a second release artifact. The independently downloaded summary is 3,379
+bytes with SHA-256
+`ae0b412a42d9430a35117dd9e8987662c7359cc95ea72a076fa2f869bcaa51ef`.
+The S7-01 historical artifact 9736486858 predates that supplemental file and
+must not be presented as the S7-02 evidence package. S7 overall remains in
+progress because its broader security, release, operability, Cloud, and real
+action boundaries are still open. S2-04 also remains blocked; this local
+evidence does not close the complete container Critical/High gate.
 
 ## Safe governance demo
 

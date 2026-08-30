@@ -1,8 +1,8 @@
 # Local 原生答辩演示运行手册
 
 > 工作包：S7-02 运行手册与证据包
-> 当前状态：`IN PROGRESS`
-> 已验收演示基线：`c08d634c9c3deb628df5f98d4f60dd1675cd5706`
+> 当前状态：`DONE`
+> 已验收证据包 RC：`79feeee6771749bbdd1ce7ce44b77193a1db544f`
 > 适用范围：无 Docker、无 GCP 凭据、无外部网络动作的本地模拟治理闭环
 
 ## 1. 先读结论与边界
@@ -23,7 +23,7 @@ marker-owned 工作区并保留一份原子 JSON 报告。
 ```text
 git clone https://github.com/LeegenSteven/NetworkAgent-dev.git
 cd NetworkAgent-dev
-git checkout --detach c08d634c9c3deb628df5f98d4f60dd1675cd5706
+git checkout --detach 79feeee6771749bbdd1ce7ce44b77193a1db544f
 ```
 
 准备 Python 3.12 或 3.13 的隔离环境，并安装 Domain 与 Local Profile 测试依赖。
@@ -115,11 +115,12 @@ Linux/macOS 使用 `sha256sum '<report.relative_path>'`。结果必须逐字符�
 `commit_bound=false`、任一终态不符、任一 workspace 未清理或摘要不符，本次就不能作为
 commit-bound 答辩证据。
 
-S7-02 的发布制品契约冻结为 `release-evidence/defense-demo-summary.json`。Python 3.12
-job 才上传 release artifact；Python 3.13 仍必须执行并校验双分支。该文件将作为 release
-manifest 的可选 supplemental evidence，manifest 记录其 bytes/SHA-256，随后由
-`verify-manifest` 复核。S7-01 历史 artifact 9736486858 尚不包含该 JSON，因此它不能
-替代本地保留报告或作为 S7-02 已完成的证据。
+S7-02 的发布制品路径为 `release-evidence/defense-demo-summary.json`。Python 3.12 job
+上传 release artifact；Python 3.13 仍执行并校验双分支。该文件作为 release manifest
+的可选 supplemental evidence，manifest 记录其 bytes/SHA-256，随后由
+`verify-manifest` 复核。RC `79feeee6771749bbdd1ce7ce44b77193a1db544f` 已按此契约
+发布 VERIFIED RC artifact 9736785325；独立下载验证见第 8 节。S7-01 历史 artifact
+9736486858 不含该 JSON，只保留为上一工作包的历史证据。
 
 ## 7. 失败处理与安全清理
 
@@ -149,16 +150,18 @@ workspace。若 reset 仍失败，停止操作并记录精确错误码。
 
 | 证据 | 已确认结果 | 适用边界 |
 |---|---|---|
-| 受测 RC | `c08d634c9c3deb628df5f98d4f60dd1675cd5706` | S7-01 原生本地演示基线。 |
-| [Local run 33326721937](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33326721937) | jobs [99298066127](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33326721937/job/99298066127) / [99298066217](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33326721937/job/99298066217) 全绿；Python 3.12/3.13 各为 Domain + Local `518 passed`、local-stack `47 passed, 2 skipped`、Local E2E `2 passed`。 | 两版都直接运行一键命令，并核对 `commit_bound=true`、`commit_sha=GITHUB_SHA`、双终态与双清理。 |
-| [Data Lab run 33326721947](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33326721947) | 全绿且绑定同一 RC。 | 回归证据，不等同于本演示报告。 |
-| [Assurance run 33326721991](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33326721991) | 全绿且绑定同一 RC。 | 回归证据，不等同于 Cloud 或生产验收。 |
-| [Local artifact 9736486858](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33326721937/artifacts/9736486858) | S7-01 历史 14 天 Local release artifact，102,753 bytes，archive digest `sha256:a1961b1897cdb86c802ce3dbd9762381ef7726e28476a1d24657162014b330f2`，到期时间 `2026-09-13T18:02:15Z`；内容不含 `defense-demo-summary.json`。 | 不能据此宣称 S7-02 证据包完成；后续新 RC 才按冻结 supplemental-evidence 契约生成。 |
+| 当前 S7-02 RC | `79feeee6771749bbdd1ce7ce44b77193a1db544f` | 演示证据包实现与 supplemental evidence 的受测源码；本次证据回填文档提交晚于且不等于该 RC。 |
+| [Local run 33327786238](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33327786238) | jobs [99300888630](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33327786238/job/99300888630)（Python 3.12）/[99300888747](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33327786238/job/99300888747)（Python 3.13）全绿；两版各为 Domain + Local `518 passed`、local-stack `49 passed, 2 skipped`、Local E2E `2 passed`；3.12 release boundary `18 tests passed`。 | 两版都运行一键命令并核对 `commit_bound=true`、`commit_sha=GITHUB_SHA`、双终态、exact retry 与双清理。 |
+| [Data Lab run 33327786237](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33327786237) | jobs [99300888644](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33327786237/job/99300888644) / [99300888752](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33327786237/job/99300888752) / [99300888782](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33327786237/job/99300888782) 全绿；各适用矩阵为 `220 passed, 3 skipped`。 | 同 RC 回归证据，不等同于本演示报告。 |
+| [Assurance run 33327786211](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33327786211) | jobs [99300888597](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33327786211/job/99300888597) / [99300888619](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33327786211/job/99300888619) / [99300888628](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33327786211/job/99300888628) / [99300888662](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33327786211/job/99300888662) 全绿；两个主 job 各为 `854 passed, 3 skipped`，Supervisor 为 `57 passed`。 | 同 RC 回归证据，不等同于 Cloud 或生产验收。 |
+| [VERIFIED RC artifact 9736785325](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33327786238/artifacts/9736785325) | 名称 `telco-local-release-py3.12-attempt-1`，104,109 bytes，archive digest `sha256:b4b6f6ab762695a367169d54078ab1f6d2ec64c4ef3c21c132190421ed31cff3`，到期时间 `2026-09-13T18:24:17Z`。 | 独立下载共 10 个文件：manifest 记录 9 个文件，加 manifest 自身；闭包无额外、缺失或摘要漂移。 |
+| 演示 supplemental evidence | `defense-demo-summary.json` 为 3,379 bytes，SHA-256 `ae0b412a42d9430a35117dd9e8987662c7359cc95ea72a076fa2f869bcaa51ef`；其中 `report.sha256` 为 `a91676e52789d5c520d3cb3e2e8b0a47d19d7801f5bebbb51f3f10ffa613bc5f`。 | 独立核对双终态、exact retry、双 cleanup 与 source binding 均通过。 |
+| S7-01 历史证据 | RC `c08d634c9c3deb628df5f98d4f60dd1675cd5706`；[artifact 9736486858](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33326721937/artifacts/9736486858) 为 102,753 bytes、archive digest `sha256:a1961b1897cdb86c802ce3dbd9762381ef7726e28476a1d24657162014b330f2`，且不含 `defense-demo-summary.json`。 | 只证明 S7-01，不替代当前 S7-02 VERIFIED RC。 |
 
 ## 9. 限制声明
 
-- S7-01 已由上述精确 RC 的远程双 Python 矩阵验收；本手册与制品接入仍属于 S7-02
-  `IN PROGRESS`，S7 总体仍为 `IN PROGRESS`。
+- S7-01 与 S7-02 均已由各自精确 RC 验收并标记 `DONE`；S7 总体仍为
+  `IN PROGRESS`，不能由两个子工作包推导阶段关闭。
 - 本演示不启动容器、不访问外部网络、不读 Cloud/GCP 凭据，不执行真实网络动作。
 - 失败分支证明验证失败会 reopen，不代表已覆盖审批拒绝或审批过期；这些属于其他 E2E
   证据，不能从本命令推导。

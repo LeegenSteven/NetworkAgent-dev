@@ -907,7 +907,9 @@ def test_manifest_source_context_cannot_be_replayed_for_another_job(
 
 
 def test_symlinked_evidence_input_is_rejected_when_supported(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     module, paths = _fixture(tmp_path, monkeypatch)
     target = tmp_path / "real-scan.json"
@@ -917,8 +919,14 @@ def test_symlinked_evidence_input_is_rejected_when_supported(
         os.symlink(target, paths["scan"])
     except (OSError, NotImplementedError):
         pytest.skip("symlink creation is unavailable")
-    assert module.main(_manifest_args(paths)) == 1
-    assert "trivy_scan_invalid" in _payload(paths["manifest"])["failures"]
+    assert module.main(_manifest_args(paths)) == 2
+    assert not paths["manifest"].exists()
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == (
+        "container release evidence error: "
+        "evidence root entries must be regular files\n"
+    )
 
 
 def test_workflow_pins_actions_trivy_database_and_always_uploads() -> None:

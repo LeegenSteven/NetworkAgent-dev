@@ -74,7 +74,9 @@ def _source_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(name, value)
 
 
-def _docker_archive(path: Path) -> tuple[str, list[str]]:
+def _docker_archive(
+    path: Path, *, modern_blob_layout: bool = False
+) -> tuple[str, list[str]]:
     layer_payloads: list[bytes] = []
     for member_name, content in (
         ("opt/networkagent/bin/container_entrypoint.py", b"safe\n"),
@@ -100,22 +102,25 @@ def _docker_archive(path: Path) -> tuple[str, list[str]]:
         sort_keys=True,
     ).encode("utf-8")
     digest = hashlib.sha256(config).hexdigest()
+    config_name = f"blobs/sha256/{digest}" if modern_blob_layout else f"{digest}.json"
+    layer_names = (
+        [f"blobs/sha256/{value.removeprefix('sha256:')}" for value in diff_ids]
+        if modern_blob_layout
+        else ["layer/layer.tar", "layer-2/layer.tar"]
+    )
     manifest = json.dumps(
         [
             {
-                "Config": f"{digest}.json",
+                "Config": config_name,
                 "RepoTags": [IMAGE_TAG],
-                "Layers": ["layer/layer.tar", "layer-2/layer.tar"],
+                "Layers": layer_names,
             }
         ]
     ).encode("utf-8")
     with tarfile.open(path, mode="w") as archive:
-        for name, content in (
-            ("manifest.json", manifest),
-            (f"{digest}.json", config),
-            ("layer/layer.tar", layer_payloads[0]),
-            ("layer-2/layer.tar", layer_payloads[1]),
-        ):
+        entries = [("manifest.json", manifest), (config_name, config)]
+        entries.extend(zip(layer_names, layer_payloads, strict=True))
+        for name, content in entries:
             member = tarfile.TarInfo(name)
             member.size = len(content)
             archive.addfile(member, io.BytesIO(content))
@@ -123,7 +128,10 @@ def _docker_archive(path: Path) -> tuple[str, list[str]]:
 
 
 def _fixture(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    modern_blob_layout: bool = False,
 ) -> tuple[object, dict[str, Path | str]]:
     module = _load_module()
     _source_env(monkeypatch)
@@ -149,7 +157,7 @@ def _fixture(
     )
 
     archive = tmp_path / "image.tar"
-    image_id, diff_ids = _docker_archive(archive)
+    image_id, diff_ids = _docker_archive(archive, modern_blob_layout=modern_blob_layout)
     image_inspect = evidence / "image-inspect.json"
     _write_json(
         image_inspect,
@@ -809,6 +817,34 @@ def test_archive_config_digest_must_match_local_image_id(
     assert "container_image_identity_invalid" in _payload(paths["manifest"])["failures"]
 
 
+def test_modern_docker_blob_archive_is_bound_and_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module, paths = _fixture(tmp_path, monkeypatch, modern_blob_layout=True)
+    assert module.main(_manifest_args(paths)) == 0
+    assert _payload(paths["manifest"])["status"] == "PASS"
+    assert module.main(_manifest_args(paths, "verify-manifest")) == 0
+
+
+@pytest.mark.parametrize(
+    "config_name",
+    [
+        "blobs/sha512/" + "a" * 64,
+        "blobs/sha256/" + "a" * 64 + "/extra",
+        "other/sha256/" + "a" * 64,
+        "blobs//sha256/" + "a" * 64,
+        "blobs/sha256/" + "A" * 64,
+        "../" + "a" * 64 + ".json",
+        "/blobs/sha256/" + "a" * 64,
+        "blobs\\sha256\\" + "a" * 64,
+    ],
+)
+def test_archive_config_member_shape_is_fail_closed(config_name: str) -> None:
+    module = _load_module()
+    with pytest.raises(module.EvidenceError, match="Docker config member is invalid"):
+        module._archive_config_member_digest(config_name)
+
+
 def test_archive_layers_platform_and_base_prefix_bind_exact_image(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -964,7 +1000,12 @@ def test_workflow_pins_actions_trivy_database_and_always_uploads() -> None:
     assert 'classification="VERIFIED RC"' not in workflow
     assert "Offline independent re-verification: **NOT AVAILABLE**" in workflow
     assert '[[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]' in workflow
-    assert '[[ "$ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]' in workflow
+    assert '[[ "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]' in workflow
+    assert 'normalized_artifact_digest="sha256:$ARTIFACT_DIGEST"' in workflow
+    assert '[[ "$normalized_artifact_digest" =~ ^sha256:[0-9a-f]{64}$ ]]' in workflow
+    assert (
+        "GitHub archive digest: " r"\`${normalized_artifact_digest:-unavailable}\`"
+    ) in workflow
     assert 'artifact_metadata="PASS"' in workflow
     assert "docker push" not in workflow
     assert "cosign" not in workflow.lower()

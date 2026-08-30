@@ -383,6 +383,7 @@ jobs:
           trivy_cache="$RUNNER_TEMP/networkagent-trivy-cache"
           classification="DIAGNOSTIC ONLY"
           artifact_metadata="FAIL"
+          normalized_artifact_digest=""
           final_status=1
           if [ "$UPLOAD_OUTCOME" = "success" ] && [ "$EVIDENCE_OUTCOME" = "success" ]; then
             trivy_binary=$(command -v trivy)
@@ -410,9 +411,14 @@ jobs:
               --manifest "$evidence_root/release-manifest.json"
             final_status=$?
             set -e
+            if [[ "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
+              normalized_artifact_digest="sha256:$ARTIFACT_DIGEST"
+            elif [[ "$ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              normalized_artifact_digest="$ARTIFACT_DIGEST"
+            fi
             expected_artifact_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts/${ARTIFACT_ID}"
             if [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]] \
-              && [[ "$ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] \
+              && [[ "$normalized_artifact_digest" =~ ^sha256:[0-9a-f]{64}$ ]] \
               && [ "$ARTIFACT_URL" = "$expected_artifact_url" ]; then
               artifact_metadata="PASS"
             else
@@ -429,7 +435,7 @@ jobs:
             echo "- Upload outcome: \`$UPLOAD_OUTCOME\`"
             echo "- Artifact ID: \`${ARTIFACT_ID:-unavailable}\`"
             echo "- Download URL: ${ARTIFACT_URL:-unavailable}"
-            echo "- GitHub archive digest: \`${ARTIFACT_DIGEST:-unavailable}\`"
+            echo "- GitHub archive digest: \`${normalized_artifact_digest:-unavailable}\`"
             echo "- GitHub artifact metadata binding: **$artifact_metadata**"
             echo "- Registry image publication: **NOT PERFORMED**"
             echo "- Signing/attestation/provenance: **NOT PERFORMED**"

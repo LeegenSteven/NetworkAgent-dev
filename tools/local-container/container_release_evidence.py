@@ -446,6 +446,23 @@ def _inspect_payload(path: Path) -> dict[str, Any]:
     return value
 
 
+def _archive_config_member_digest(config_name: object) -> str:
+    if not isinstance(config_name, str) or "\\" in config_name:
+        raise EvidenceError("Docker config member is invalid")
+    if config_name.endswith(".json"):
+        digest = config_name[: -len(".json")]
+        if config_name == f"{digest}.json" and SHA256_HEX.fullmatch(digest):
+            return digest
+    parts = config_name.split("/")
+    if (
+        len(parts) == 3
+        and parts[:2] == ["blobs", "sha256"]
+        and SHA256_HEX.fullmatch(parts[2])
+    ):
+        return parts[2]
+    raise EvidenceError("Docker config member is invalid")
+
+
 def _archive_config(path: Path) -> dict[str, object]:
     _regular_file(path, max_bytes=MAX_DOCKER_ARCHIVE_BYTES)
     try:
@@ -483,15 +500,7 @@ def _archive_config(path: Path) -> dict[str, object]:
                 raise EvidenceError("Docker archive must contain one image")
             entry = _mapping(manifest[0], "Docker archive manifest entry")
             config_name = entry.get("Config")
-            if not isinstance(config_name, str):
-                raise EvidenceError("Docker config member is invalid")
-            config_path = PurePosixPath(config_name)
-            if (
-                len(config_path.parts) != 1
-                or config_path.suffix != ".json"
-                or SHA256_HEX.fullmatch(config_path.stem) is None
-            ):
-                raise EvidenceError("Docker config member is invalid")
+            config_digest = _archive_config_member_digest(config_name)
             repo_tags = entry.get("RepoTags")
             if (
                 not isinstance(repo_tags, list)
@@ -547,7 +556,7 @@ def _archive_config(path: Path) -> dict[str, object]:
         raise EvidenceError("Docker archive is invalid") from error
 
     actual_hash = hashlib.sha256(config_bytes).hexdigest()
-    if actual_hash != config_path.stem:
+    if actual_hash != config_digest:
         raise EvidenceError("Docker config digest mismatch")
     config = _mapping(_loads_json(config_bytes), "Docker config object")
     if (

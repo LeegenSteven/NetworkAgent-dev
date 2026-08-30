@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import json
-import sys
-import asyncio
 import os
 import subprocess
+import sys
 from io import StringIO
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -96,6 +96,36 @@ class FakeRuntime:
             "artifacts": ["artifacts/demo-result.json"],
         }
 
+    def seed_container_demo(self) -> dict[str, object]:
+        return {
+            "candidate_count": 15,
+            "incident_id": "incident-container-demo",
+            "status": "DETECTED",
+            "revision": 0,
+        }
+
+    def verify_container_demo(self, *, expected_status: str) -> dict[str, object]:
+        return {
+            "incident_id": "incident-container-demo",
+            "status": expected_status,
+            "expected_status": expected_status,
+            "revision": 7,
+            "rca_reports": 1,
+            "recommendations": 1,
+            "approvals": 2,
+            "action_runs": 1,
+            "verification_runs": 1,
+            "audit_events": 8,
+            "action": {
+                "action_type": "LOCAL_SIMULATION",
+                "status": "SUCCEEDED",
+                "side_effects": False,
+            },
+            "verification": {
+                "status": "PASSED" if expected_status == "RESOLVED" else "FAILED"
+            },
+        }
+
     def serve(self, *, port: int) -> None:  # pragma: no cover - foreground path
         raise AssertionError("serve should not be exercised in unit tests")
 
@@ -108,6 +138,19 @@ def invoke(tmp_path: Path, *args: str) -> tuple[int, object | None, object | Non
         stdout=stdout,
         stderr=stderr,
         runtime_factory=FakeRuntime,
+    )
+    success = json.loads(stdout.getvalue()) if stdout.getvalue() else None
+    error = json.loads(stderr.getvalue()) if stderr.getvalue() else None
+    return code, success, error
+
+
+def invoke_real(tmp_path: Path, *args: str) -> tuple[int, object | None, object | None]:
+    stdout = StringIO()
+    stderr = StringIO()
+    code = local_stack.main(
+        ["--workspace", str(tmp_path / "stack"), *args],
+        stdout=stdout,
+        stderr=stderr,
     )
     success = json.loads(stdout.getvalue()) if stdout.getvalue() else None
     error = json.loads(stderr.getvalue()) if stderr.getvalue() else None
@@ -143,7 +186,9 @@ def test_unc_workspace_is_rejected_before_any_filesystem_probe(
     assert caught.value.code == "unsafe_workspace"
 
 
-def test_doctor_is_read_only_and_json_contains_no_workspace_path(tmp_path: Path) -> None:
+def test_doctor_is_read_only_and_json_contains_no_workspace_path(
+    tmp_path: Path,
+) -> None:
     code, payload, error = invoke(tmp_path, "doctor")
     assert (code, error) == (0, None)
     assert payload["ok"] is True
@@ -164,7 +209,226 @@ def test_init_is_idempotent_for_owned_workspace(tmp_path: Path) -> None:
     assert marker["kind"] == "networkagent-local-stack"
 
 
-def test_init_rejects_nonempty_unowned_directory_without_deleting(tmp_path: Path) -> None:
+def test_container_demo_commands_are_strict_disabled_mode_json_contracts(
+    tmp_path: Path,
+) -> None:
+    invoke(tmp_path, "init")
+
+    seed_code, seed, seed_error = invoke(tmp_path, "demo-seed")
+    assert (seed_code, seed_error) == (0, None)
+    assert seed == {
+        "action_mode": "disabled",
+        "command": "demo-seed",
+        "ok": True,
+        "result": {
+            "candidate_count": 15,
+            "incident_id": "incident-container-demo",
+            "revision": 0,
+            "status": "DETECTED",
+        },
+        "workspace": seed["workspace"],
+    }
+    assert seed["workspace"]["initialized"] is True
+
+    verify_code, verified, verify_error = invoke(
+        tmp_path,
+        "demo-verify",
+        "--expected-status",
+        "REOPENED",
+    )
+    assert (verify_code, verify_error) == (0, None)
+    assert verified["action_mode"] == "disabled"
+    assert verified["result"]["status"] == "REOPENED"
+    assert verified["result"]["expected_status"] == "REOPENED"
+    assert verified["result"]["rca_reports"] == 1
+    assert verified["result"]["recommendations"] == 1
+    assert verified["result"]["approvals"] == 2
+    assert verified["result"]["action_runs"] == 1
+    assert verified["result"]["verification_runs"] == 1
+    assert verified["result"]["audit_events"] == 8
+    assert verified["result"]["action"] == {
+        "action_type": "LOCAL_SIMULATION",
+        "status": "SUCCEEDED",
+        "side_effects": False,
+    }
+    assert verified["result"]["verification"] == {"status": "FAILED"}
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    (
+        ("--action-mode", "simulate", "demo-seed"),
+        ("--action-mode", "simulate", "demo-verify", "--expected-status", "RESOLVED"),
+        ("demo-verify",),
+        ("demo-verify", "--expected-status", "resolved"),
+        ("demo-seed", "--incident-id", "untrusted"),
+    ),
+)
+def test_container_demo_commands_reject_mode_relaxation_or_extra_arguments(
+    tmp_path: Path,
+    arguments: tuple[str, ...],
+) -> None:
+    invoke(tmp_path, "init")
+    code, payload, error = invoke(tmp_path, *arguments)
+    assert (code, payload) == (2, None)
+    assert error["error"]["code"] in {"actions_disabled", "invalid_arguments"}
+
+
+def test_real_container_demo_seed_creates_one_detected_incident_only(
+    tmp_path: Path,
+) -> None:
+    init_code, initialized, init_error = invoke_real(tmp_path, "init")
+    assert (init_code, init_error) == (0, None)
+    assert initialized["database"]["incident_rows"] == 0
+
+    seed_code, seeded, seed_error = invoke_real(tmp_path, "demo-seed")
+    assert (seed_code, seed_error) == (0, None)
+    assert seeded["result"]["candidate_count"] == 15
+    assert seeded["result"]["status"] == "DETECTED"
+    assert seeded["result"]["revision"] == 0
+    assert str(tmp_path) not in json.dumps(seeded)
+
+    from telco_local import LocalProfile
+
+    runtime = local_stack.LocalStackRuntime(local_stack.Workspace(tmp_path / "stack"))
+    profile = LocalProfile.open_existing(runtime._config())
+
+    async def inspect_seed() -> None:
+        incidents = tuple(await profile.incident_repository.list(limit=2, offset=0))
+        assert len(incidents) == 1
+        incident = incidents[0]
+        assert incident.incident_id == seeded["result"]["incident_id"]
+        assert incident.status.value == "DETECTED"
+        assert incident.revision == 0
+        assert incident.rca_reports == ()
+        assert incident.recommendations == ()
+        assert incident.approvals == ()
+        assert incident.action_runs == ()
+        assert incident.verification_runs == ()
+        history = tuple(
+            await profile.incident_repository.history(
+                incident.incident_id,
+                limit=2,
+                offset=0,
+            )
+        )
+        assert len(history) == 1
+        assert history[0].revision == 0
+        assert history[0].to_status.value == "DETECTED"
+
+    asyncio.run(inspect_seed())
+
+    database_before_verify = runtime.workspace.database_path.read_bytes()
+    verify_code, verify_payload, verify_error = invoke_real(
+        tmp_path,
+        "demo-verify",
+        "--expected-status",
+        "RESOLVED",
+    )
+    assert (verify_code, verify_payload) == (2, None)
+    assert verify_error["error"]["code"] == "demo_verification_failed"
+    assert runtime.workspace.database_path.read_bytes() == database_before_verify
+
+    replay_code, replay_payload, replay_error = invoke_real(tmp_path, "demo-seed")
+    assert (replay_code, replay_payload) == (2, None)
+    assert replay_error["error"]["code"] == "demo_seed_requires_fresh_workspace"
+
+
+@pytest.mark.parametrize(
+    ("expected_status", "verification_passed", "verification_status"),
+    (("RESOLVED", True, "PASSED"), ("REOPENED", False, "FAILED")),
+)
+def test_real_container_demo_verify_requires_exact_non_amplified_terminal_state(
+    tmp_path: Path,
+    expected_status: str,
+    verification_passed: bool,
+    verification_status: str,
+) -> None:
+    assert invoke_real(tmp_path, "init")[0] == 0
+    seed_code, seeded, seed_error = invoke_real(tmp_path, "demo-seed")
+    assert (seed_code, seed_error) == (0, None)
+
+    from telco_local import LocalGovernanceEngine, LocalProfile
+
+    runtime = local_stack.LocalStackRuntime(local_stack.Workspace(tmp_path / "stack"))
+    profile = LocalProfile.open_existing(runtime._config())
+
+    async def complete() -> None:
+        incident_id = seeded["result"]["incident_id"]
+        engine = LocalGovernanceEngine(
+            profile.incident_repository,
+            profile.rca_gateway,
+            clock=lambda: local_stack.datetime.now(local_stack.UTC),
+        )
+        prepared = await engine.prepare(
+            incident_id,
+            idempotency_key="container-demo-prepare-v1",
+            actor="container-demo-governance",
+        )
+        assert prepared.action is not None
+        decided = await engine.decide(
+            incident_id,
+            approve=True,
+            expected_action_hash=prepared.action.action_hash,
+            expected_revision=prepared.incident.revision,
+            actor="container-demo-operator",
+            reason="Approve the exact side-effect-free container simulation",
+            idempotency_key="container-demo-decide-v1",
+        )
+        assert decided.incident.status.value == "REMEDIATING"
+        completed = await engine.execute(
+            incident_id,
+            idempotency_key="container-demo-execute-v1",
+            actor="container-demo-simulator",
+            verification_passed=verification_passed,
+        )
+        assert completed.incident.status.value == expected_status
+
+    asyncio.run(complete())
+    database_before_verify = runtime.workspace.database_path.read_bytes()
+
+    code, verified, error = invoke_real(
+        tmp_path,
+        "demo-verify",
+        "--expected-status",
+        expected_status,
+    )
+    assert (code, error) == (0, None)
+    assert verified["result"] == {
+        "action": {
+            "action_type": "LOCAL_SIMULATION",
+            "side_effects": False,
+            "status": "SUCCEEDED",
+        },
+        "action_runs": 1,
+        "approvals": 2,
+        "audit_events": 8,
+        "expected_status": expected_status,
+        "incident_id": seeded["result"]["incident_id"],
+        "rca_reports": 1,
+        "recommendations": 1,
+        "revision": 7,
+        "status": expected_status,
+        "verification": {"status": verification_status},
+        "verification_runs": 1,
+    }
+    assert str(tmp_path) not in json.dumps(verified)
+    assert runtime.workspace.database_path.read_bytes() == database_before_verify
+
+    wrong = "REOPENED" if expected_status == "RESOLVED" else "RESOLVED"
+    wrong_code, wrong_payload, wrong_error = invoke_real(
+        tmp_path,
+        "demo-verify",
+        "--expected-status",
+        wrong,
+    )
+    assert (wrong_code, wrong_payload) == (2, None)
+    assert wrong_error["error"]["code"] == "demo_verification_failed"
+
+
+def test_init_rejects_nonempty_unowned_directory_without_deleting(
+    tmp_path: Path,
+) -> None:
     stack = tmp_path / "stack"
     stack.mkdir()
     sentinel = stack / "keep-me.txt"

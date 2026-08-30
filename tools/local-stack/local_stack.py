@@ -15,7 +15,6 @@ import hashlib
 import importlib
 import json
 import os
-import platform
 import shutil
 import socket
 import sys
@@ -70,6 +69,10 @@ _ERROR_MESSAGES = {
     "approval_requires_prior_preview": "action approval requires a prior preview command",
     "approval_reason_required": "action approval requires a non-empty reason",
     "dependencies_missing": "required local runtime dependencies are unavailable",
+    "demo_seed_requires_fresh_workspace": (
+        "container demo seeding requires a fresh incident store"
+    ),
+    "demo_verification_failed": "container demo state verification failed",
     "governance_unavailable": "the local governance engine is unavailable",
     "invalid_arguments": "command arguments are invalid",
     "no_candidates": "the sample data produced no incident candidates",
@@ -223,7 +226,10 @@ class Workspace:
             value = json.loads(self.marker_path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, json.JSONDecodeError):
             raise SafeCliError("workspace_not_owned") from None
-        if not isinstance(value, dict) or value.get("kind") != "networkagent-local-stack":
+        if (
+            not isinstance(value, dict)
+            or value.get("kind") != "networkagent-local-stack"
+        ):
             raise SafeCliError("workspace_not_owned")
         if value.get("schema_version") != STACK_SCHEMA_VERSION:
             raise SafeCliError("workspace_not_owned")
@@ -351,7 +357,10 @@ class Workspace:
     def reset(self) -> dict[str, object]:
         self._read_marker()
         removed: list[str] = []
-        for label, target in (("state", self.state_dir), ("artifacts", self.artifacts_dir)):
+        for label, target in (
+            ("state", self.state_dir),
+            ("artifacts", self.artifacts_dir),
+        ):
             if target.exists() or _is_link_like(target):
                 self._validate_owned_directory(target)
                 shutil.rmtree(target)
@@ -448,7 +457,9 @@ def _safe_action_preview(action: object) -> dict[str, object]:
         "action_hash": str(_model_value(action, "action_hash", "")),
         "action_type": str(
             _enum_value(
-                _model_value(action, "action_type", _model_value(action, "kind", "SIMULATE"))
+                _model_value(
+                    action, "action_type", _model_value(action, "kind", "SIMULATE")
+                )
             )
         ),
         "resources": safe_resources,
@@ -605,6 +616,215 @@ class LocalStackRuntime:
                 "external_access": False,
             },
         }
+
+    async def _seed_container_demo(self) -> dict[str, object]:
+        """Persist exactly one deterministic DETECTED incident, and nothing else."""
+
+        try:
+            from telco_local import LocalProfile
+        except Exception:
+            raise SafeCliError("dependencies_missing") from None
+
+        profile = LocalProfile.open_existing(self._config())
+        repository = profile.incident_repository
+        if await repository.list(limit=1, offset=0):
+            raise SafeCliError("demo_seed_requires_fresh_workspace")
+
+        triggers = await profile.detector.scan(
+            "container-demo-seed-trace-v1",
+            workflow_id="container-demo-seed-workflow-v1",
+        )
+        if not triggers:
+            raise SafeCliError("no_candidates")
+        selected = sorted(triggers, key=lambda item: item.incident_id)[0]
+        digest = hashlib.sha256(selected.incident_id.encode("utf-8")).hexdigest()[:16]
+        incident = await profile.detector.confirm(
+            selected.incident_id,
+            trace_id=f"container-demo-confirm-trace-{digest}",
+            idempotency_key=f"container-demo-confirm-key-{digest}",
+            actor="container-demo-seeder",
+            reason="Seed one deterministic isolated container demo incident",
+        )
+
+        incidents = tuple(await repository.list(limit=2, offset=0))
+        history = tuple(
+            await repository.history(incident.incident_id, limit=2, offset=0)
+        )
+        if not (
+            len(incidents) == 1
+            and incidents[0].incident_id == incident.incident_id
+            and str(_enum_value(incident.status)) == "DETECTED"
+            and incident.revision == 0
+            and not incident.rca_reports
+            and not incident.recommendations
+            and not incident.approvals
+            and not incident.action_runs
+            and not incident.verification_runs
+            and len(history) == 1
+            and history[0].revision == 0
+            and history[0].from_status is None
+            and str(_enum_value(history[0].to_status)) == "DETECTED"
+        ):
+            raise SafeCliError("demo_verification_failed")
+        return {
+            "candidate_count": len(triggers),
+            "incident_id": incident.incident_id,
+            "status": str(_enum_value(incident.status)),
+            "revision": incident.revision,
+        }
+
+    def seed_container_demo(self) -> dict[str, object]:
+        try:
+            result = asyncio.run(self._seed_container_demo())
+            _assert_project_safe(result)
+            return result
+        except SafeCliError:
+            raise
+        except Exception:
+            raise SafeCliError("runtime_failed") from None
+
+    async def _verify_container_demo(
+        self, *, expected_status: str
+    ) -> dict[str, object]:
+        """Read and verify one completed offline demo without mutating it."""
+
+        expected_verification = {
+            "RESOLVED": "PASSED",
+            "REOPENED": "FAILED",
+        }.get(expected_status)
+        if expected_verification is None:
+            raise SafeCliError("invalid_arguments")
+        try:
+            from telco_local import LocalProfile
+        except Exception:
+            raise SafeCliError("dependencies_missing") from None
+
+        profile = LocalProfile.open_existing(self._config())
+        repository = profile.incident_repository
+        incidents = tuple(await repository.list(limit=2, offset=0))
+        if len(incidents) != 1:
+            raise SafeCliError("demo_verification_failed")
+        incident = incidents[0]
+        history = tuple(
+            await repository.history(incident.incident_id, limit=9, offset=0)
+        )
+        reports = tuple(incident.rca_reports)
+        recommendations = tuple(incident.recommendations)
+        approvals = tuple(incident.approvals)
+        action_runs = tuple(incident.action_runs)
+        verification_runs = tuple(incident.verification_runs)
+        if not (
+            len(reports) == 1
+            and len(recommendations) == 1
+            and len(approvals) == 2
+            and len(action_runs) == 1
+            and len(verification_runs) == 1
+        ):
+            raise SafeCliError("demo_verification_failed")
+
+        report = reports[0]
+        action = recommendations[0]
+        pending_approval, approved_approval = approvals
+        action_run = action_runs[0]
+        verification = verification_runs[0]
+        approval_bindings_are_exact = all(
+            approval.incident_id == incident.incident_id
+            and approval.report_id == report.report_id
+            and approval.report_version == report.version
+            and approval.subject_id == action.action_id
+            and approval.action_hash == action.action_hash
+            for approval in approvals
+        )
+        expected_to_statuses = (
+            "DETECTED",
+            "TRIAGED",
+            "INVESTIGATING",
+            "RCA_COMPLETE",
+            "AWAITING_APPROVAL",
+            "REMEDIATING",
+            "VERIFYING",
+            expected_status,
+        )
+        expected_from_statuses = (
+            None,
+            "DETECTED",
+            "TRIAGED",
+            "INVESTIGATING",
+            "RCA_COMPLETE",
+            "AWAITING_APPROVAL",
+            "REMEDIATING",
+            "VERIFYING",
+        )
+        if not (
+            str(_enum_value(incident.status)) == expected_status
+            and incident.revision == 7
+            and report.incident_id == incident.incident_id
+            and len(report.recommendations) == 1
+            and report.recommendations[0].action_hash == action.action_hash
+            and action.action_type == "LOCAL_SIMULATION"
+            and action.requires_approval is True
+            and action.reversible is True
+            and approval_bindings_are_exact
+            and str(_enum_value(pending_approval.status)) == "PENDING"
+            and pending_approval.sequence == 0
+            and str(_enum_value(approved_approval.status)) == "APPROVED"
+            and approved_approval.sequence == 1
+            and pending_approval.request_id == approved_approval.request_id
+            and action_run.incident_id == incident.incident_id
+            and action_run.action_id == action.action_id
+            and action_run.action_hash == action.action_hash
+            and str(_enum_value(action_run.status)) == "SUCCEEDED"
+            and action_run.attempt == 1
+            and action_run.metadata == {"mode": "simulation", "side_effects": False}
+            and verification.incident_id == incident.incident_id
+            and verification.action_run_ids == (action_run.action_run_id,)
+            and str(_enum_value(verification.status)) == expected_verification
+            and verification.metadata.get("mode") == "simulation"
+            and verification.metadata.get("side_effects") is False
+            and verification.metadata.get("requested_outcome") == expected_verification
+            and len(history) == 8
+            and tuple(item.revision for item in history) == tuple(range(8))
+            and tuple(str(_enum_value(item.to_status)) for item in history)
+            == expected_to_statuses
+            and tuple(
+                None if item.from_status is None else str(_enum_value(item.from_status))
+                for item in history
+            )
+            == expected_from_statuses
+        ):
+            raise SafeCliError("demo_verification_failed")
+        return {
+            "incident_id": incident.incident_id,
+            "status": str(_enum_value(incident.status)),
+            "expected_status": expected_status,
+            "revision": incident.revision,
+            "rca_reports": len(reports),
+            "recommendations": len(recommendations),
+            "approvals": len(approvals),
+            "action_runs": len(action_runs),
+            "verification_runs": len(verification_runs),
+            "audit_events": len(history),
+            "action": {
+                "action_type": action.action_type,
+                "status": str(_enum_value(action_run.status)),
+                "side_effects": action_run.metadata["side_effects"],
+            },
+            "verification": {
+                "status": str(_enum_value(verification.status)),
+            },
+        }
+
+    def verify_container_demo(self, *, expected_status: str) -> dict[str, object]:
+        try:
+            result = asyncio.run(
+                self._verify_container_demo(expected_status=expected_status)
+            )
+            _assert_project_safe(result)
+            return result
+        except SafeCliError:
+            raise
+        except Exception:
+            raise SafeCliError("runtime_failed") from None
 
     async def _run_demo(
         self,
@@ -788,9 +1008,7 @@ class LocalStackRuntime:
             raise SafeCliError("approval_requires_prior_preview")
         if approve_action and action_mode != "simulate":
             raise SafeCliError("actions_disabled")
-        if approve_action and (
-            not expected_action_hash or expected_revision is None
-        ):
+        if approve_action and (not expected_action_hash or expected_revision is None):
             raise SafeCliError("approval_binding_required")
         if not approve_action and (
             expected_action_hash is not None or expected_revision is not None
@@ -877,6 +1095,19 @@ def _parser() -> argparse.ArgumentParser:
     commands.add_parser("doctor", help="check the local runtime without writes")
     commands.add_parser("init", help="initialize an explicitly selected workspace")
     commands.add_parser("status", help="inspect workspace and runtime readiness")
+    commands.add_parser(
+        "demo-seed",
+        help="seed one deterministic DETECTED incident for the container demo",
+    )
+    demo_verify = commands.add_parser(
+        "demo-verify",
+        help="verify the stopped container demo state without writes",
+    )
+    demo_verify.add_argument(
+        "--expected-status",
+        choices=("RESOLVED", "REOPENED"),
+        required=True,
+    )
     demo = commands.add_parser("demo", help="run a deterministic governance demo")
     demo.add_argument("--confirm-incident", action="store_true")
     demo.add_argument("--approve-action", action="store_true")
@@ -886,7 +1117,9 @@ def _parser() -> argparse.ArgumentParser:
     demo.add_argument(
         "--verification-outcome", choices=("passed", "failed"), default="passed"
     )
-    commands.add_parser("serve", help="run the optional loopback A2A service in foreground")
+    commands.add_parser(
+        "serve", help="run the optional loopback A2A service in foreground"
+    )
     reset = commands.add_parser("reset", help="reset only marker-owned local state")
     reset.add_argument("--yes", action="store_true")
     return parser
@@ -916,7 +1149,10 @@ def main(
 
         if arguments.command == "doctor":
             report = runtime.doctor(port=arguments.port)
-            _write_json(output, {"ok": bool(report["ready"]), "command": "doctor", "report": report})
+            _write_json(
+                output,
+                {"ok": bool(report["ready"]), "command": "doctor", "report": report},
+            )
             return 0 if report["ready"] else 1
         if arguments.command == "init":
             workspace_id, created, root_created = workspace.prepare_init()
@@ -946,12 +1182,54 @@ def main(
             payload = {
                 "ok": bool(report["ready"]),
                 "command": "status",
-                "workspace": _workspace_payload(str(marker["workspace_id"]), initialized=True),
+                "workspace": _workspace_payload(
+                    str(marker["workspace_id"]), initialized=True
+                ),
                 "report": report,
                 "action_mode": arguments.action_mode,
             }
             _write_json(output if report["ready"] else errors, payload)
             return 0 if report["ready"] else 1
+        if arguments.command == "demo-seed":
+            marker = workspace.marker()
+            if arguments.action_mode != "disabled":
+                raise SafeCliError("actions_disabled")
+            result = runtime.seed_container_demo()
+            _assert_project_safe(result)
+            _write_json(
+                output,
+                {
+                    "ok": True,
+                    "command": "demo-seed",
+                    "workspace": _workspace_payload(
+                        str(marker["workspace_id"]), initialized=True
+                    ),
+                    "action_mode": "disabled",
+                    "result": result,
+                },
+            )
+            return 0
+        if arguments.command == "demo-verify":
+            marker = workspace.marker()
+            if arguments.action_mode != "disabled":
+                raise SafeCliError("actions_disabled")
+            result = runtime.verify_container_demo(
+                expected_status=arguments.expected_status
+            )
+            _assert_project_safe(result)
+            _write_json(
+                output,
+                {
+                    "ok": True,
+                    "command": "demo-verify",
+                    "workspace": _workspace_payload(
+                        str(marker["workspace_id"]), initialized=True
+                    ),
+                    "action_mode": "disabled",
+                    "result": result,
+                },
+            )
+            return 0
         if arguments.command == "demo":
             marker = workspace.marker()
             if arguments.approve_action and arguments.confirm_incident:
@@ -982,7 +1260,9 @@ def main(
                 {
                     "ok": True,
                     "command": "demo",
-                    "workspace": _workspace_payload(str(marker["workspace_id"]), initialized=True),
+                    "workspace": _workspace_payload(
+                        str(marker["workspace_id"]), initialized=True
+                    ),
                     "result": result,
                 },
             )

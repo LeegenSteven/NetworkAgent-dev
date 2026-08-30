@@ -224,6 +224,8 @@ jobs:
         run: |
           docker compose stop assurance
           docker compose run --rm reset
+      - name: Run simulated governance branches and restart recovery
+        run: python tools/local-container/run_governance_demo.py
       - name: Collect diagnostics on failure
         if: failure()
         run: docker compose logs --no-color assurance

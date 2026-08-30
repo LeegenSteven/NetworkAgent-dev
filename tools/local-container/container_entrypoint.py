@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 from typing import BinaryIO, Sequence
 from urllib.error import HTTPError, URLError
-from urllib.request import ProxyHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 
 INPUT_MANIFEST = Path("/opt/networkagent/share/input-manifest.json")
@@ -29,9 +29,19 @@ MAX_MANIFEST_BYTES = 65_536
 MAX_MANIFEST_FILES = 64
 MAX_INPUT_BYTES = 16 * 1024 * 1024
 MAX_DIRECTORY_ROOTS = 16
+MAX_HTTP_REQUEST_BYTES = 4_096
 MAX_HTTP_RESPONSE_BYTES = 65_536
+MAX_HTTP_JSON_DEPTH = 16
 HTTP_TIMEOUT_SECONDS = 2.0
+GOVERNANCE_HTTP_TIMEOUT_SECONDS = 7.0
+GOVERNANCE_OPERATION_HEADER = "X-NetworkAgent-Local-Operation"
+GOVERNANCE_OPERATION_VALUE = "governance-v1"
+GOVERNANCE_ACTOR = "local-container-governance"
+GOVERNANCE_REASON = "approve exact side-effect-free local simulation"
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_INCIDENT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,255}\Z")
+_REVISION = re.compile(r"(?:0|[1-9][0-9]{0,9})\Z")
+MAX_GOVERNANCE_REVISION = 2_147_483_646
 EXPECTED_RUNTIME_INPUTS = {
     "/opt/networkagent/data/samples/lte-demo/performance.csv",
     "/opt/networkagent/data/samples/lte-demo/safe-cell-traces.csv",
@@ -52,6 +62,17 @@ class InputValidationError(RuntimeError):
 
 class HealthProbeError(RuntimeError):
     """The loopback-only service did not return its bounded status contract."""
+
+
+class GovernanceCommandError(RuntimeError):
+    """A fixed loopback governance operation failed its local contract."""
+
+
+class _RejectRedirects(HTTPRedirectHandler):
+    """Keep fixed loopback operations from following any redirect."""
+
+    def redirect_request(self, *_args, **_kwargs):
+        return None
 
 
 def _bounded_read(handle: BinaryIO, maximum: int) -> bytes:
@@ -336,6 +357,345 @@ def _get_loopback_json(path: str) -> dict[str, object]:
     return value
 
 
+def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError
+        result[key] = value
+    return result
+
+
+def _reject_json_constant(_value: str) -> None:
+    raise ValueError
+
+
+def _json_depth(value: object) -> int:
+    maximum = 1
+    stack: list[tuple[object, int]] = [(value, 1)]
+    while stack:
+        current, level = stack.pop()
+        maximum = max(maximum, level)
+        if maximum > MAX_HTTP_JSON_DEPTH:
+            return maximum
+        if isinstance(current, dict):
+            stack.extend((nested, level + 1) for nested in current.values())
+        elif isinstance(current, list):
+            stack.extend((nested, level + 1) for nested in current)
+    return maximum
+
+
+def _stable_governance_key(operation: str, incident_id: str, *bindings: object) -> str:
+    encoded = json.dumps(
+        ["local-container-governance-v1", operation, incident_id, *bindings],
+        allow_nan=False,
+        ensure_ascii=True,
+        separators=(",", ":"),
+    ).encode("ascii")
+    digest = hashlib.sha256(encoded).hexdigest()
+    return f"local-container-{operation}-v1-{digest}"
+
+
+def _governance_request(
+    operation: str,
+    incident_id: str,
+    payload: dict[str, object],
+) -> dict[str, object]:
+    if operation not in {
+        "governance-prepare",
+        "governance-decide",
+        "governance-execute",
+    }:
+        raise GovernanceCommandError("governance operation is not allowed")
+    route = operation.removeprefix("governance-")
+    url = f"{LOOPBACK_ORIGIN}/local/v1/incidents/{incident_id}/{route}"
+    try:
+        body = json.dumps(
+            payload,
+            allow_nan=False,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("ascii")
+    except (TypeError, ValueError, RecursionError):
+        raise GovernanceCommandError("governance request contract failed") from None
+    if not body or len(body) > MAX_HTTP_REQUEST_BYTES:
+        raise GovernanceCommandError("governance request exceeded byte limit")
+    request = Request(
+        url,
+        data=body,
+        method="POST",
+        headers={
+            "Accept": "application/json",
+            "Connection": "close",
+            "Content-Type": "application/json",
+            GOVERNANCE_OPERATION_HEADER: GOVERNANCE_OPERATION_VALUE,
+        },
+    )
+    opener = build_opener(ProxyHandler({}), _RejectRedirects())
+    try:
+        with opener.open(request, timeout=GOVERNANCE_HTTP_TIMEOUT_SECONDS) as response:
+            if response.status != 200:
+                raise GovernanceCommandError(
+                    "loopback governance status was not successful"
+                )
+            if response.headers.get_content_type() != "application/json":
+                raise GovernanceCommandError(
+                    "loopback governance response was not JSON"
+                )
+            declared_lengths = response.headers.get_all("Content-Length", [])
+            declared_length: int | None = None
+            if len(declared_lengths) > 1:
+                raise GovernanceCommandError(
+                    "loopback governance response contract failed"
+                )
+            if declared_lengths:
+                declared = declared_lengths[0]
+                if (
+                    not isinstance(declared, str)
+                    or not declared.isascii()
+                    or not declared.isdecimal()
+                    or len(declared) > len(str(MAX_HTTP_RESPONSE_BYTES))
+                    or int(declared) > MAX_HTTP_RESPONSE_BYTES
+                ):
+                    raise GovernanceCommandError(
+                        "loopback governance response exceeded byte limit"
+                    )
+                declared_length = int(declared)
+            response_url = getattr(response, "geturl", None)
+            if callable(response_url) and response_url() != url:
+                raise GovernanceCommandError(
+                    "loopback governance response contract failed"
+                )
+            raw = response.read(MAX_HTTP_RESPONSE_BYTES + 1)
+    except GovernanceCommandError:
+        raise
+    except (HTTPError, URLError, OSError, TimeoutError):
+        raise GovernanceCommandError(
+            "loopback governance endpoint is unavailable"
+        ) from None
+    if not isinstance(raw, bytes):
+        raise GovernanceCommandError("loopback governance response contract failed")
+    if len(raw) > MAX_HTTP_RESPONSE_BYTES:
+        raise GovernanceCommandError("loopback governance response exceeded byte limit")
+    if declared_length is not None and declared_length != len(raw):
+        raise GovernanceCommandError("loopback governance response contract failed")
+    try:
+        value = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_unique_json_object,
+            parse_constant=_reject_json_constant,
+        )
+    except (UnicodeError, json.JSONDecodeError, RecursionError, ValueError):
+        raise GovernanceCommandError(
+            "loopback governance response was invalid"
+        ) from None
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"ok", "data"}
+        or value.get("ok") is not True
+        or not isinstance(value.get("data"), dict)
+        or _json_depth(value) > MAX_HTTP_JSON_DEPTH
+    ):
+        raise GovernanceCommandError("loopback governance response contract failed")
+    return value["data"]
+
+
+def _response_object(container: dict[str, object], key: str) -> dict[str, object]:
+    value = container.get(key)
+    if not isinstance(value, dict):
+        raise GovernanceCommandError("loopback governance response contract failed")
+    return value
+
+
+def _response_revision(incident: dict[str, object]) -> int:
+    value = incident.get("revision")
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or not 0 <= value <= MAX_GOVERNANCE_REVISION + 1
+    ):
+        raise GovernanceCommandError("loopback governance response contract failed")
+    return value
+
+
+def _response_replayed(data: dict[str, object]) -> bool:
+    value = data.get("replayed")
+    if not isinstance(value, bool):
+        raise GovernanceCommandError("loopback governance response contract failed")
+    return value
+
+
+def _response_action(data: dict[str, object]) -> tuple[str, dict[str, object]]:
+    action = _response_object(data, "action")
+    action_hash = action.get("action_hash")
+    if (
+        action.get("action_type") != "LOCAL_SIMULATION"
+        or not isinstance(action_hash, str)
+        or _SHA256.fullmatch(action_hash) is None
+    ):
+        raise GovernanceCommandError("loopback governance response contract failed")
+    return action_hash, action
+
+
+def _validate_incident_response(
+    data: dict[str, object], incident_id: str, expected_status: str
+) -> tuple[dict[str, object], int, bool]:
+    incident = _response_object(data, "incident")
+    if (
+        incident.get("incident_id") != incident_id
+        or incident.get("status") != expected_status
+    ):
+        raise GovernanceCommandError("loopback governance response contract failed")
+    return incident, _response_revision(incident), _response_replayed(data)
+
+
+def _print_governance_result(payload: dict[str, object]) -> None:
+    print(
+        json.dumps(
+            payload,
+            allow_nan=False,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
+
+
+def _governance_prepare(incident_id: str) -> None:
+    validate_inputs()
+    data = _governance_request(
+        "governance-prepare",
+        incident_id,
+        {
+            "actor": GOVERNANCE_ACTOR,
+            "idempotency_key": _stable_governance_key(
+                "governance-prepare", incident_id
+            ),
+        },
+    )
+    incident = _response_object(data, "incident")
+    revision = _response_revision(incident)
+    replayed = _response_replayed(data)
+    action_hash, _action = _response_action(data)
+    approval = _response_object(data, "approval")
+    rca = _response_object(data, "rca")
+    status = incident.get("status")
+    expected_approval = "APPROVED" if replayed else "PENDING"
+    if (
+        incident.get("incident_id") != incident_id
+        or (replayed and status not in {"RESOLVED", "REOPENED"})
+        or (not replayed and status != "AWAITING_APPROVAL")
+        or approval.get("status") != expected_approval
+        or approval.get("action_hash") != action_hash
+        or rca.get("conclusion") != "CONCLUSIVE"
+    ):
+        raise GovernanceCommandError("loopback governance response contract failed")
+    _print_governance_result(
+        {
+            "action_hash": action_hash,
+            "command": "governance-prepare",
+            "incident_id": incident["incident_id"],
+            "ok": True,
+            "replayed": replayed,
+            "revision": revision,
+            "status": incident["status"],
+        }
+    )
+
+
+def _governance_decide(
+    incident_id: str, action_hash: str, expected_revision: int
+) -> None:
+    validate_inputs()
+    data = _governance_request(
+        "governance-decide",
+        incident_id,
+        {
+            "actor": GOVERNANCE_ACTOR,
+            "approve": True,
+            "expected_action_hash": action_hash,
+            "expected_revision": expected_revision,
+            "idempotency_key": _stable_governance_key(
+                "governance-decide", incident_id, action_hash, expected_revision
+            ),
+            "reason": GOVERNANCE_REASON,
+        },
+    )
+    incident = _response_object(data, "incident")
+    revision = _response_revision(incident)
+    replayed = _response_replayed(data)
+    returned_hash, _action = _response_action(data)
+    approval = _response_object(data, "approval")
+    status = incident.get("status")
+    if (
+        incident.get("incident_id") != incident_id
+        or (
+            replayed
+            and (
+                status not in {"RESOLVED", "REOPENED"}
+                or revision < expected_revision + 1
+            )
+        )
+        or (
+            not replayed
+            and (status != "REMEDIATING" or revision != expected_revision + 1)
+        )
+        or returned_hash != action_hash
+        or approval.get("status") != "APPROVED"
+        or approval.get("action_hash") != action_hash
+    ):
+        raise GovernanceCommandError("loopback governance response contract failed")
+    _print_governance_result(
+        {
+            "command": "governance-decide",
+            "incident_id": incident["incident_id"],
+            "ok": True,
+            "replayed": replayed,
+            "status": incident["status"],
+        }
+    )
+
+
+def _governance_execute(incident_id: str, outcome: str) -> None:
+    verification_passed = outcome == "passed"
+    expected_incident_status = "RESOLVED" if verification_passed else "REOPENED"
+    expected_verification_status = "PASSED" if verification_passed else "FAILED"
+    validate_inputs()
+    data = _governance_request(
+        "governance-execute",
+        incident_id,
+        {
+            "actor": GOVERNANCE_ACTOR,
+            "idempotency_key": _stable_governance_key(
+                "governance-execute", incident_id, outcome
+            ),
+            "verification_passed": verification_passed,
+        },
+    )
+    incident, _revision, replayed = _validate_incident_response(
+        data, incident_id, expected_incident_status
+    )
+    action_hash, _action = _response_action(data)
+    approval = _response_object(data, "approval")
+    verification = _response_object(data, "verification")
+    if (
+        approval.get("status") != "APPROVED"
+        or approval.get("action_hash") != action_hash
+        or verification.get("status") != expected_verification_status
+    ):
+        raise GovernanceCommandError("loopback governance response contract failed")
+    _print_governance_result(
+        {
+            "command": "governance-execute",
+            "incident_id": incident["incident_id"],
+            "ok": True,
+            "replayed": replayed,
+            "status": incident["status"],
+        }
+    )
+
+
 def _probe() -> None:
     payload = _get_loopback_json("/local/v1/healthz")
     data = payload.get("data")
@@ -365,7 +725,31 @@ def _smoke() -> None:
     print(json.dumps({"ok": True, "command": "smoke"}, separators=(",", ":")))
 
 
-def _exec_local_stack(command: str) -> None:
+def _exec_local_stack(command: str, *command_arguments: str) -> None:
+    allowed_arguments = {
+        "init": (),
+        "serve": (),
+        "reset": ("--yes",),
+        "demo-seed": (),
+        "demo-verify-resolved": ("--expected-status", "RESOLVED"),
+        "demo-verify-reopened": ("--expected-status", "REOPENED"),
+    }
+    lookup = command
+    if command == "demo-verify" and command_arguments == (
+        "--expected-status",
+        "RESOLVED",
+    ):
+        lookup = "demo-verify-resolved"
+    elif command == "demo-verify" and command_arguments == (
+        "--expected-status",
+        "REOPENED",
+    ):
+        lookup = "demo-verify-reopened"
+    expected_arguments = allowed_arguments.get(lookup)
+    if expected_arguments is None or (
+        command != "demo-verify" and command_arguments != ()
+    ):
+        raise GovernanceCommandError("local stack command is not allowed")
     arguments = [
         sys.executable,
         str(LOCAL_STACK),
@@ -376,25 +760,82 @@ def _exec_local_stack(command: str) -> None:
         "--port",
         "8085",
         command,
+        *expected_arguments,
     ]
-    if command == "reset":
-        arguments.append("--yes")
     os.execv(sys.executable, arguments)
+
+
+def _incident_id_argument(value: str) -> str:
+    if _INCIDENT_ID.fullmatch(value) is None:
+        raise argparse.ArgumentTypeError("incident ID is invalid")
+    return value
+
+
+def _action_hash_argument(value: str) -> str:
+    if _SHA256.fullmatch(value) is None:
+        raise argparse.ArgumentTypeError("action hash is invalid")
+    return value
+
+
+def _revision_argument(value: str) -> int:
+    if _REVISION.fullmatch(value) is None:
+        raise argparse.ArgumentTypeError("revision is invalid")
+    revision = int(value)
+    if revision > MAX_GOVERNANCE_REVISION:
+        raise argparse.ArgumentTypeError("revision is invalid")
+    return revision
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="networkagent-local-container")
-    parser.add_argument("command", choices=("init", "serve", "reset", "probe", "smoke"))
+    commands = parser.add_subparsers(dest="command", required=True)
+    for command in ("init", "serve", "reset", "probe", "smoke", "demo-seed"):
+        commands.add_parser(command)
+    verify = commands.add_parser("demo-verify")
+    verify.add_argument(
+        "--expected-status", choices=("RESOLVED", "REOPENED"), required=True
+    )
+    prepare = commands.add_parser("governance-prepare")
+    prepare.add_argument("incident_id", type=_incident_id_argument)
+    decide = commands.add_parser("governance-decide")
+    decide.add_argument("incident_id", type=_incident_id_argument)
+    decide.add_argument("action_hash", type=_action_hash_argument)
+    decide.add_argument("revision", type=_revision_argument)
+    execute = commands.add_parser("governance-execute")
+    execute.add_argument("incident_id", type=_incident_id_argument)
+    execute.add_argument("outcome", choices=("passed", "failed"))
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    command = _parser().parse_args(argv).command
+    arguments = _parser().parse_args(argv)
+    command = arguments.command
     if command == "probe":
         _probe()
         return 0
     if command == "smoke":
         _smoke()
+        return 0
+    if command == "governance-prepare":
+        _governance_prepare(arguments.incident_id)
+        return 0
+    if command == "governance-decide":
+        _governance_decide(
+            arguments.incident_id,
+            arguments.action_hash,
+            arguments.revision,
+        )
+        return 0
+    if command == "governance-execute":
+        _governance_execute(arguments.incident_id, arguments.outcome)
+        return 0
+    if command == "demo-verify":
+        validate_inputs()
+        _exec_local_stack(
+            command,
+            "--expected-status",
+            arguments.expected_status,
+        )
         return 0
     if command != "reset":
         validate_inputs()
@@ -405,7 +846,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 def _run() -> int:
     try:
         return main()
-    except (InputValidationError, HealthProbeError) as exc:
+    except (InputValidationError, HealthProbeError, GovernanceCommandError) as exc:
         print(
             json.dumps(
                 {

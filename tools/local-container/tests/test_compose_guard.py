@@ -306,6 +306,24 @@ def test_bind_that_can_create_host_path_is_rejected() -> None:
         module.validate_compose_config(config)
 
 
+def test_resolved_rprivate_bind_default_is_accepted() -> None:
+    module = _load_module()
+    config = _secure_config()
+    for service in config["services"].values():
+        for mount in service.get("volumes", []):
+            if mount.get("type") == "bind":
+                mount["bind"]["propagation"] = "rprivate"
+    module.validate_compose_config(config)
+
+
+def test_nonprivate_bind_propagation_is_rejected() -> None:
+    module = _load_module()
+    config = _secure_config()
+    config["services"]["assurance"]["volumes"][1]["bind"]["propagation"] = "rshared"
+    with pytest.raises(module.PolicyViolation, match="propagation"):
+        module.validate_compose_config(config)
+
+
 def test_docker_socket_mount_is_rejected() -> None:
     module = _load_module()
     config = _secure_config()

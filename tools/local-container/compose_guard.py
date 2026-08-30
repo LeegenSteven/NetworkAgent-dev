@@ -313,10 +313,15 @@ def _validate_mounts(name: str, service: Mapping[str, object]) -> None:
         if not source.endswith("/" + suffix):
             raise PolicyViolation(f"service {name} input bind source is unexpected")
         bind = _mapping(mount.get("bind"), f"service {name} bind")
-        if set(bind) != {"create_host_path"}:
+        if "create_host_path" not in bind or set(bind) - {
+            "create_host_path",
+            "propagation",
+        }:
             raise PolicyViolation(f"service {name} bind options are not exact")
         if bind.get("create_host_path") is not False:
             raise PolicyViolation(f"service {name} bind create_host_path must be false")
+        if bind.get("propagation") not in (None, "", "rprivate"):
+            raise PolicyViolation(f"service {name} bind propagation must be rprivate")
 
 
 def _validate_profiles_and_health(name: str, service: Mapping[str, object]) -> None:

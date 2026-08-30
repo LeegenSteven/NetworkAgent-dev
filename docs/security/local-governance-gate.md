@@ -7,6 +7,8 @@
 > Health/checkpoint/release-evidence changes: **REMOTE TESTED; VERIFIED RC ARTIFACTS**
 > Latest HTTP admission/deadline hardening: **LOCAL AND REMOTE PASS**
 > Sprint 1 Governance HTTP + Loopback Replay: **DONE**
+> S2-01 secure container candidate: **READY FOR REVIEW (STATIC ONLY)**
+> Gate B / real Docker runtime: **NOT RUN**
 > Cloud/production authorization: **NOT APPLICABLE**
 
 ## Decision
@@ -49,6 +51,38 @@ This Gate authorizes only the side-effect-free local demonstration. It does not
 authorize or attest GCP credentials, Spanner, Pub/Sub, Cloud MCP, Engineer A2A,
 GitOps, GKE, Network Operator, real network actions, Cloud Staging IAM/OIDC,
 DLQ behavior, or Workload Identity.
+
+## S2-01 static container review
+
+The S2-01 candidate has passed an independent static security review, but it
+has not passed Gate B. The local workstation has neither Docker nor actionlint,
+and the `telco-container` GitHub workflow has not run. The current evidence is
+therefore limited to source/configuration policy and Python-level artifact
+tests: `56 passed, 1 skipped`, where the single skip is the Windows symlink
+condition. Black, flake8, YAML/JSON parsing, and diff checks passed.
+
+The frozen network model keeps `assurance`, `init`, and `reset` on
+`network_mode: none`. Only `probe` and `smoke` join
+`network_mode: service:assurance`, reaching the server through the shared
+network namespace's loopback. No service publishes or exposes a port, no
+default/custom bridge is created, and no service-name URL or reverse proxy is
+used to bypass the direct-loopback peer contract.
+
+The candidate also pins the Python 3.12 Debian base by digest, runs as numeric
+UID/GID `10001:10001`, uses a read-only root filesystem, drops all capabilities,
+enables `no-new-privileges`, limits CPU, memory, PIDs, and file descriptors, and
+mounts `/tmp` as a bounded `noexec,nosuid,nodev` tmpfs. A Docker named workspace
+volume is the only persistent writable mount. Approved LTE inputs are read-only
+binds and are checked against an image-owned exact-file/size/SHA-256 manifest;
+they are not copied into image layers.
+
+Promotion remains blocked on real Docker Compose resolution, image build and
+inspection, application-layer scanning, live isolation inspection,
+shared-loopback smoke/probe, and marker-owned reset. It also remains open on a
+`--require-hashes` dependency lock, Trivy Critical/High policy, container SBOM,
+signing, attestation, and provenance. Until those applicable checks pass on the
+same candidate, S2-01 remains `READY FOR REVIEW`, Workflow B/S2 remain
+`IN PROGRESS`, and Gate B remains not passed.
 
 ## Reviewed flow
 

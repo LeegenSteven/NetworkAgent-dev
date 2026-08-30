@@ -119,10 +119,26 @@ SHA-256 values, SBOMs, exact runtime inventories, content scans, and dependency
 audits showing zero known vulnerabilities. The prior
 [Cloud/Emulator run](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104595)
 belongs to the previous RC: it remains historical Emulator evidence but does
-not attest this RC or Cloud Staging. Sprint 2's secure container/Compose package
-has not started. Signing/attestation, hash-locked offline installation, full
-supply-chain scanning, cross-event aggregation, RCAEval, and Cloud Staging
-authorization remain open.
+not attest this RC or Cloud Staging.
+
+Sprint 2 is now in progress with an S2-01 secure container candidate. The
+`assurance`, `init`, and `reset` services use `network_mode: none`; `probe` and
+`smoke` use `network_mode: service:assurance` so they can verify the server over
+the same namespace's loopback without a published port or bridge network. The
+digest-pinned image runs as UID/GID `10001:10001` with a read-only root,
+`cap_drop: ALL`, `no-new-privileges`, bounded resources, a hardened `/tmp`
+tmpfs, one writable named workspace volume, and manifest-verified read-only
+input mounts. Static policy and artifact tests passed `56 passed, 1 skipped`
+(the skip is the Windows symlink condition); Black, flake8, YAML/JSON parsing,
+and diff checks also passed.
+
+S2-01 is **READY FOR REVIEW**, not Gate B complete. This workstation has no
+Docker or actionlint, and the new `telco-container` workflow is `NOT RUN`.
+Real Compose resolution, build/inspect, application-layer scan,
+shared-loopback smoke/probe, and reset must pass remotely. Hash-locked
+`--require-hashes` installation, a Trivy Critical/High Gate, container SBOM,
+signing, attestation/provenance, full supply-chain scanning, cross-event
+aggregation, RCAEval, and Cloud Staging authorization remain open.
 
 * [Implementation Development Plan 2.0](docs/implementation-development-plan-2.0.md)
 * [Living implementation plan](docs/unified-platform-implementation-plan.md)

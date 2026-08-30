@@ -1,0 +1,171 @@
+name: networkagent-local
+
+x-runtime: &runtime
+  image: networkagent-local:dev
+  pull_policy: never
+  user: "10001:10001"
+  read_only: true
+  init: true
+  restart: "no"
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  pids_limit: 128
+  cpus: 1.0
+  mem_limit: 768m
+  ulimits:
+    nofile:
+      soft: 1024
+      hard: 1024
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=67108864,mode=1777
+
+services:
+  assurance:
+    <<: *runtime
+    build:
+      context: ../..
+      dockerfile: deploy/local/Dockerfile
+    command:
+      - serve
+    network_mode: none
+    volumes:
+      - type: volume
+        source: networkagent_workspace
+        target: /var/lib/networkagent
+        read_only: false
+      - type: bind
+        source: ../../data/samples/lte-demo/performance.csv
+        target: /opt/networkagent/data/samples/lte-demo/performance.csv
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../../data/samples/lte-demo/safe-cell-traces.csv
+        target: /opt/networkagent/data/samples/lte-demo/safe-cell-traces.csv
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../../data/rca-rules/lte
+        target: /opt/networkagent/data/rca-rules/lte
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../../data/docs/lte
+        target: /opt/networkagent/data/docs/lte
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - /opt/networkagent/bin/container_entrypoint.py
+        - probe
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+
+  init:
+    <<: *runtime
+    profiles:
+      - ops
+    command:
+      - init
+    network_mode: none
+    volumes:
+      - type: volume
+        source: networkagent_workspace
+        target: /var/lib/networkagent
+        read_only: false
+      - type: bind
+        source: ../../data/samples/lte-demo/performance.csv
+        target: /opt/networkagent/data/samples/lte-demo/performance.csv
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../../data/samples/lte-demo/safe-cell-traces.csv
+        target: /opt/networkagent/data/samples/lte-demo/safe-cell-traces.csv
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../../data/rca-rules/lte
+        target: /opt/networkagent/data/rca-rules/lte
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../../data/docs/lte
+        target: /opt/networkagent/data/docs/lte
+        read_only: true
+        bind:
+          create_host_path: false
+
+  reset:
+    <<: *runtime
+    profiles:
+      - ops
+    command:
+      - reset
+    network_mode: none
+    volumes:
+      - type: volume
+        source: networkagent_workspace
+        target: /var/lib/networkagent
+        read_only: false
+
+  probe:
+    <<: *runtime
+    profiles:
+      - diagnostics
+    command:
+      - probe
+    network_mode: service:assurance
+    depends_on:
+      assurance:
+        condition: service_healthy
+
+  smoke:
+    <<: *runtime
+    profiles:
+      - test
+    command:
+      - smoke
+    network_mode: service:assurance
+    depends_on:
+      assurance:
+        condition: service_healthy
+    volumes:
+      - type: bind
+        source: ../../data/samples/lte-demo/performance.csv
+        target: /opt/networkagent/data/samples/lte-demo/performance.csv
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../../data/samples/lte-demo/safe-cell-traces.csv
+        target: /opt/networkagent/data/samples/lte-demo/safe-cell-traces.csv
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../../data/rca-rules/lte
+        target: /opt/networkagent/data/rca-rules/lte
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../../data/docs/lte
+        target: /opt/networkagent/data/docs/lte
+        read_only: true
+        bind:
+          create_host_path: false
+
+volumes:
+  networkagent_workspace:

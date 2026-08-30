@@ -4,7 +4,7 @@
 > 计划版本：2.0
 > 建立日期：2026-08-30
 > 最近更新：2026-08-30
-> 当前执行阶段：Sprint 2 — 本地发布包（准备启动，`NOT STARTED`）
+> 当前执行阶段：Sprint 2 — 本地发布包（`IN PROGRESS`）
 > 适用仓库：`NetworkAgent-dev`
 > 关系说明：本计划承接《统一智能运维平台实施计划》，作为下一轮发布工程和开发验收的执行基线；历史阶段结论仍以原 Gate 文档和远程 CI 证据为准。
 
@@ -72,13 +72,13 @@
 
 ### 3.3 已知缺口
 
-- Sprint 1 的 Gate C、Gate D、S1-01 至 S1-07 已完成独立本地复核并通过同一新 RC 的 Assurance、Data Lab 与 Local 远程矩阵；Sprint 1 已关闭，下一执行项为尚未启动的 S2 安全容器与 Compose 发布入口。
+- Sprint 1 的 Gate C、Gate D、S1-01 至 S1-07 已完成独立本地复核并通过同一新 RC 的 Assurance、Data Lab 与 Local 远程矩阵；Sprint 1 已关闭，S2 安全容器与 Compose 发布入口已进入实施。
 - `ReplaySink` 同时支持立即串行投递与单调节奏 runner；只有明确启用的瞬时 network/timeout 失败才执行有限次重试。可选持久 wrapper 在有效 202/204 后先原子保存严格 plan-bound checkpoint，再推进内存状态；store 为 caller-owned、单 writer，本地 continuation claim 仍不是接收端签名 ACK。
 - `/local/v1/healthz`、`readyz`、`version` 已实现并冻结。`readyz` 只做一次 1 秒有界本地 Repository 读；依赖异常、超时或前一个超时 worker 仍未结束时固定返回 503，不启动第二个并行探针，也不代表 Cloud readiness。
 - HTTP 首部/body deadline 是 ASGI event loop 上的协作式计时。Governance/Fault 仓储工作由专用 worker 隔离，但 legacy A2A SDK/store 的同步 DuckDB 调用仍可能阻塞该 loop；A2A 后台/流式任务生命周期也不受同步请求 admission lease 覆盖，因此不声明全局硬 wall-clock 隔离。
 - BubbleRAN 事件已进入 Canonical Incident 治理链路，但当前是每 source 独立 Incident，不做跨事件聚合；RCA 仅识别受控 `5G_SA` BubbleRAN UL BLER 签名，不得外推生产。
-- 新 Local/Data Lab 组件尚无统一的最小权限容器和 Compose 发布入口。
-- 当前 RC 已发布 14 天保留的 wheel、manifest、CycloneDX SBOM、runtime inventory、内容扫描与 `pip-audit` 证据；签名/attestation、hash-locked 离线安装、SPDX、独立 secret/SAST/license policy、容器和完整发布报告仍未完成。
+- S2-01 已形成最小权限镜像、Compose、入口守卫、内容/层守卫和远程 workflow 候选，并通过独立静态审计；本机没有 Docker，真实 Compose config、build/inspect、layer scan、共享 loopback smoke/probe 和 reset 尚未执行，`telco-container` 远程 workflow 也尚未运行。
+- 当前 RC 已发布 14 天保留的 wheel、manifest、CycloneDX SBOM、runtime inventory、内容扫描与 `pip-audit` 证据；容器依赖仍未 `--require-hashes`，Trivy Critical/High Gate、容器 SBOM、签名/attestation/provenance 和完整发布报告仍未完成。
 - 跨组件结构化日志、指标、分布式追踪、本地 SLO、告警和完整 Runbook 尚未交付。
 - Cloud Staging IAM/OIDC、Pub/Sub DLQ、Workload Identity 及真实基础设施验收尚未进行。
 
@@ -124,9 +124,17 @@
 - 非 root 用户、只读根文件系统、`tmpfs /tmp`、`cap_drop: ALL`、`no-new-privileges`、资源限制和不可变镜像摘要。
 - 从全新工作区运行 `doctor → init → replay/detect → approval → simulate → verify → reset` 的自动化验收。
 
-**状态**：`NOT STARTED`。
+**状态**：`IN PROGRESS`。
 
 **Gate B**：镜像扫描无 Critical/High；容器无 GCP/模型凭据；安全上下文不降级；成功和失败验证路径均可复现；重启后幂等恢复；发布镜像不包含测试、缓存、构建目录或第三方原始数据。
+
+**当前 S2-01 工作包**：`READY FOR REVIEW`（静态候选已通过独立复核，等待远程 Docker 行为验收）。
+
+- 容器网络冻结为：`assurance`、`init`、`reset` 使用 `network_mode: none`；`probe`、`smoke` 使用 `network_mode: service:assurance` 共享同一网络命名空间中的 loopback。Compose 不发布或 expose 端口，不创建默认/自定义 bridge，也不通过服务名或反向代理绕过 loopback。
+- 运行时使用 digest 固定的 Python 3.12 Debian 基础镜像与 UID/GID `10001:10001`；根文件系统只读，`cap_drop: ALL`、`no-new-privileges`、有界 CPU/内存/PID/nofile 和 `noexec,nosuid,nodev` `/tmp` tmpfs。只有 Docker named workspace volume 可持久写；四类受控 LTE 输入只读 bind，并由镜像内 manifest 校验精确文件集合、字节数和 SHA-256。
+- 本地静态门禁为 `56 passed, 1 skipped`；唯一 skip 是 Windows symlink 条件测试。Black、flake8、YAML/JSON 解析和 `git diff --check` 均通过；本机未安装 Docker 与 actionlint，因此这些工具的结论不得写为本地 PASS。
+- `telco-container` workflow 已定义真实 Compose resolve、镜像构建/inspect、应用层内容扫描、共享 loopback smoke/probe 和 marker-owned reset，但当前为 `NOT RUN`。在该远程 workflow 全绿前，S2-01 不得标 `DONE`，Gate B 不得标 PASS。
+- 后续仍须完成 `--require-hashes` 依赖锁、Trivy Critical/High 策略、容器 SBOM、签名、attestation 和 provenance；这些供应链项目以及成功/失败闭环与重启恢复的完整行为证据属于后续 S2/Gate B 范围。
 
 ### C. Governance HTTP 服务
 
@@ -199,7 +207,7 @@
 |---|---|---|---|---|
 | S0 基线冻结 | 领域契约、现有 Gate、发布计数和边界盘点 | A、F | `DONE` | 基线与缺口写入本计划，Cloud/Local 证据分级明确。 |
 | S1 本地事件治理接入 | Governance HTTP + Loopback Replay Transport | C、D | `DONE` | Gate C、D、本地攻击性/E2E 与同一提交的远程 RC 均已通过。 |
-| S2 本地发布包 | 安全容器、Compose、一键演示 | B | `NOT STARTED` | Gate B 通过，新机器从零完成演示。 |
+| S2 本地发布包 | 安全容器、Compose、一键演示 | B | `IN PROGRESS` | S2-01 静态候选已通过独立复核并等待远程 Docker 行为验收；Gate B 仍未通过。 |
 | S3 发布与供应链 | 远程 CI、SBOM、扫描、签名/证明 | A | `IN PROGRESS` | Gate A 通过并绑定提交和远程证据。 |
 | S4 可观测与运维 | OTel、指标、SLO、告警、Runbook、演练 | E | `NOT STARTED` | Gate E 通过并形成演练报告。 |
 | S5 Cloud 就绪 | IaC、权限矩阵、Staging 验收包 | F | `IN PROGRESS` | Gate F-local 通过，状态变为 `READY FOR STAGING`。 |
@@ -363,3 +371,4 @@
 | 2026-08-30 | 2.0 | RC `6ba631929c312bbff27ef0ad4a9136d2cb390ae1` 的 Assurance、Data Lab、Local 与额外 Cloud workflows 全部成功；三个 Python 3.12 jobs 上传 14 天 `VERIFIED RC` artifacts。下载后确认全部文件字节数/SHA 与 manifest 一致，CycloneDX 1.4、runtime inventory、wheel scan 与 `pip-audit==2.10.1` 零已知漏洞均 PASS。 | S1-07=`DONE`；S1-01..05 仍 `READY FOR REVIEW`，Sprint 1、P3e 与 S3 因独立评审、RCAEval、签名/attestation、离线 hash-lock、容器等缺口继续 `IN PROGRESS`。 |
 | 2026-08-30 | 2.0 | Gate C/D 独立本地复核通过。Assurance 增加严格 32 连接上限、首部/body/业务 deadline、共享零队列 admission、固定 JSON 404/405/408/503、未知提交结果保守恢复和显式禁用 proxy headers；最新本地结果为 Assurance `76 passed`、A2A contracts `33 passed`、A2A E2E `4 passed`、local-stack `22 passed`、Local E2E `3 passed`。 | C/D=`READY FOR REVIEW`；S1-01..05 只剩最新候选的远程 RC，Sprint 1 仍 `IN PROGRESS`。 |
 | 2026-08-30 | 2.0 | RC `7cbff490ccb71befb42c7cd30204f7f88e3b2f38` 的 Assurance、Data Lab、Local 三个 workflows 共 9 个 job 全绿，且三个 run 的 `headSha` 均精确绑定该 SHA；三个 Python 3.12 job 发布 14 天 `VERIFIED RC` artifacts，archive/wheel 摘要、runtime inventory、SBOM 与零已知漏洞审计证据已回填。上一 RC 的 Cloud run 只保留为历史 Emulator 证据。 | S1-01..07、Workflow C/D、S1 与 Sprint 1=`DONE`；当前转入 Sprint 2 准备启动。P3e、S3、Cloud Staging 及其余全局缺口不受此状态变化影响。 |
+| 2026-08-30 | 2.0 | 启动 S2-01 安全容器候选：冻结 `none` + `service:assurance` 共享 loopback 网络模型、digest-pinned 多阶段镜像、non-root/只读根/capability 与资源限制、只读输入 manifest、named workspace volume、固定入口、Compose/镜像层守卫及 `telco-container` workflow。独立静态审计与 `56 passed, 1 skipped`、Black/flake8/YAML/JSON/diff 门禁通过；本机无 Docker/actionlint，远程 workflow 尚未运行。 | Workflow B、S2=`IN PROGRESS`；S2-01=`READY FOR REVIEW`；Gate B 仍未通过。`--require-hashes`、Trivy C/H、容器 SBOM、签名/attestation/provenance 和全部真实 Docker 行为证据保持开放。 |

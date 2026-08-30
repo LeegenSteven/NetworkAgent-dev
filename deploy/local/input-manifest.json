@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "algorithm": "sha256",
+  "max_files": 8,
+  "max_total_bytes": 4194304,
+  "files": [
+    {
+      "source": "data/samples/lte-demo/performance.csv",
+      "container_path": "/opt/networkagent/data/samples/lte-demo/performance.csv",
+      "bytes": 3719510,
+      "sha256": "0d5f0e6d76b0f57c20473961b79f4531e95cd683997990dbb03570a312d89c7b"
+    },
+    {
+      "source": "data/samples/lte-demo/safe-cell-traces.csv",
+      "container_path": "/opt/networkagent/data/samples/lte-demo/safe-cell-traces.csv",
+      "bytes": 46762,
+      "sha256": "76f39e02cd1acf9f58300c331aa2cf176fcc60200fb4eebe78e17364fe15c705"
+    },
+    {
+      "source": "data/rca-rules/lte/5g-sa-bubbleran-persistent-interference-ul-bler.json",
+      "container_path": "/opt/networkagent/data/rca-rules/lte/5g-sa-bubbleran-persistent-interference-ul-bler.json",
+      "bytes": 1079,
+      "sha256": "af4a826aa05d68931ff3d235b12d8fadf3a0cf237d152ba91a956676b8298947"
+    },
+    {
+      "source": "data/rca-rules/lte/erab-security-setup.json",
+      "container_path": "/opt/networkagent/data/rca-rules/lte/erab-security-setup.json",
+      "bytes": 1277,
+      "sha256": "f3642735d50748c2ee810a8a1b7f305e75f1b684da2340b6b8f89a4d13f6e4d0"
+    },
+    {
+      "source": "data/rca-rules/lte/retainability-uplink-rssi.json",
+      "container_path": "/opt/networkagent/data/rca-rules/lte/retainability-uplink-rssi.json",
+      "bytes": 1854,
+      "sha256": "a25601240e21a5e63d6ad92ddbe54270c98c9ef5152f097f8ce55275edcaf693"
+    },
+    {
+      "source": "data/docs/lte/telco-lte-fields-guide.zh-CN.md",
+      "container_path": "/opt/networkagent/data/docs/lte/telco-lte-fields-guide.zh-CN.md",
+      "bytes": 31568,
+      "sha256": "41163dd13a3a8d00c3904f1085cfe6efe8603ba992621479e1244d5ccf1dc07f"
+    }
+  ],
+  "directory_roots": [
+    "/opt/networkagent/data/rca-rules/lte",
+    "/opt/networkagent/data/docs/lte"
+  ]
+}

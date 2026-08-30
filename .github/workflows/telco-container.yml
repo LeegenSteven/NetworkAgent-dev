@@ -117,7 +117,7 @@ jobs:
             --user 10001:10001 \
             --entrypoint python \
             "$image_id" -c \
-            "from importlib.metadata import distribution; from pathlib import Path; import telco_assurance_agent,telco_domain,telco_lab,telco_local; app=Path('/opt/networkagent'); allowed={'bin/container_entrypoint.py','share/input-manifest.json','tools/local-stack/local_stack.py'}; assert {p.relative_to(app).as_posix() for p in app.rglob('*') if p.is_file()} == allowed; forbidden={'test','tests','build','dist','__pycache__'}; [(_ for _ in ()).throw(AssertionError(str(item))) for name in ('telco-domain','telco-local','telco-lab','telco-assurance-agent') for item in (distribution(name).files or ()) if forbidden.intersection(part.lower() for part in item.parts) or item.suffix in {'.pyc','.pyo'}]; assert not any(Path(path).exists() for path in ('/build','/wheels','/tmp/wheels','/root/.cache'))"
+            "from importlib.metadata import distribution; from pathlib import Path; import telco_assurance_agent,telco_domain,telco_lab,telco_local; app=Path('/opt/networkagent'); allowed={'bin/container_entrypoint.py','share/input-manifest.json','tools/local-stack/local_stack.py'}; assert {p.relative_to(app).as_posix() for p in app.rglob('*') if p.is_file()} == allowed; forbidden={'test','tests','build','dist','__pycache__'}; [(_ for _ in ()).throw(AssertionError(str(item))) for name in ('telco-domain','telco-local','telco-lab','telco-assurance-agent') for item in (distribution(name).files or ()) if forbidden.intersection(part.lower() for part in item.parts) or item.suffix in {'.pyc','.pyo'}]; assert not any(Path(path).exists() for path in ('/build','/wheels','/tmp/wheels'))"
       - name: Prove application layers contain no staged wheels, inputs, tests, or caches
         run: |
           image_id=$(docker image inspect --format '{{.Id}}' networkagent-local:dev)
@@ -139,6 +139,18 @@ jobs:
           python tools/local-container/image_layer_guard.py \
             --archive "$RUNNER_TEMP/local-image.tar" \
             --base-layer-count "$base_layer_count"
+          inspection_name=networkagent-rootfs-inspection
+          cleanup_inspection() {
+            docker rm -f "$inspection_name" >/dev/null 2>&1 || true
+          }
+          trap cleanup_inspection EXIT
+          docker create --name "$inspection_name" \
+            --entrypoint /bin/true "$image_id" >/dev/null
+          docker export --output "$RUNNER_TEMP/local-rootfs.tar" "$inspection_name"
+          python tools/local-container/rootfs_guard.py \
+            --archive "$RUNNER_TEMP/local-rootfs.tar"
+          cleanup_inspection
+          trap - EXIT
       - name: Initialize the Docker-managed workspace
         run: docker compose run --rm init
       - name: Start the isolated assurance service and wait for health
@@ -217,4 +229,6 @@ jobs:
         run: docker compose logs --no-color assurance
       - name: Remove ephemeral CI state
         if: always()
-        run: docker compose down --volumes --remove-orphans
+        run: |
+          docker rm -f networkagent-rootfs-inspection >/dev/null 2>&1 || true
+          docker compose down --volumes --remove-orphans

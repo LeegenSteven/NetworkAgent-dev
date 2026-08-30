@@ -20,6 +20,7 @@ from telco_domain import SCHEMA_VERSION, SensitiveDataError, assert_model_safe
 from telco_lab import REPLAY_SCHEMA_VERSION
 
 from .governance_http import _BoundaryFailure, _require_loopback_host
+from .business_boundary import LocalBusinessOperationBoundary
 from .version import LOCAL_HTTP_API_VERSION, PACKAGE_VERSION
 
 
@@ -51,6 +52,7 @@ class _ReadinessRepository(Protocol):
 _ERRORS: dict[str, tuple[int, str]] = {
     "LOCAL_SERVICE_BAD_HOST": (403, "A loopback Host is required."),
     "LOCAL_SERVICE_METHOD_NOT_ALLOWED": (405, "Only GET is supported."),
+    "LOCAL_SERVICE_NOT_FOUND": (404, "The local service route was not found."),
     "LOCAL_SERVICE_INVALID_REQUEST": (422, "The request is invalid."),
     "LOCAL_SERVICE_NOT_READY": (503, "The local service is not ready."),
     "LOCAL_SERVICE_INTERNAL": (500, "The local service probe failed."),
@@ -74,19 +76,30 @@ def _json_bytes(payload: Mapping[str, object]) -> bytes:
     return body
 
 
-def _response(payload: Mapping[str, object], *, status_code: int) -> Response:
+def _response(
+    payload: Mapping[str, object],
+    *,
+    status_code: int,
+    headers: Mapping[str, str] | None = None,
+) -> Response:
     return Response(
         _json_bytes(payload),
         status_code=status_code,
         media_type="application/json",
+        headers=headers,
     )
 
 
-def _error(code: str) -> Response:
+def _error(
+    code: str,
+    *,
+    headers: Mapping[str, str] | None = None,
+) -> Response:
     status_code, message = _ERRORS[code]
     return _response(
         {"ok": False, "error": {"code": code, "message": message}},
         status_code=status_code,
+        headers=headers,
     )
 
 
@@ -96,19 +109,47 @@ def _request_boundary(request: Request) -> Response | None:
     except _BoundaryFailure:
         return _error("LOCAL_SERVICE_BAD_HOST")
     if request.method != "GET":
-        return _error("LOCAL_SERVICE_METHOD_NOT_ALLOWED")
+        return _error(
+            "LOCAL_SERVICE_METHOD_NOT_ALLOWED",
+            headers={"Allow": "GET"},
+        )
     if request.scope.get("query_string", b""):
         return _error("LOCAL_SERVICE_INVALID_REQUEST")
     return None
 
 
+async def local_not_found(request: Request) -> Response:
+    """Keep unknown Local HTTP paths inside the strict JSON boundary."""
+
+    try:
+        _require_loopback_host(request)
+    except _BoundaryFailure:
+        return _error("LOCAL_SERVICE_BAD_HOST")
+    return _error("LOCAL_SERVICE_NOT_FOUND")
+
+
+class LocalNotFoundApplication:
+    """ASGI fallback that accepts every method under the Local prefix."""
+
+    async def __call__(self, scope, receive, send) -> None:
+        request = Request(scope, receive=receive)
+        response = await local_not_found(request)
+        await response(scope, receive, send)
+
+
 class LocalServiceStatusApi:
     """Read-only operational probes for the supported direct loopback runner."""
 
-    def __init__(self, repository: _ReadinessRepository) -> None:
+    def __init__(
+        self,
+        repository: _ReadinessRepository,
+        *,
+        operation_boundary: LocalBusinessOperationBoundary | None = None,
+    ) -> None:
         if not callable(getattr(repository, "list", None)):
             raise TypeError("repository must expose a bounded list operation")
         self._repository = repository
+        self._operation_boundary = operation_boundary
         self._readiness_task: asyncio.Task[Sequence[object]] | None = None
 
     @staticmethod
@@ -159,6 +200,8 @@ class LocalServiceStatusApi:
         failure = _request_boundary(request)
         if failure is not None:
             return failure
+        if self._operation_boundary is not None and self._operation_boundary.is_busy:
+            return _error("LOCAL_SERVICE_NOT_READY")
         try:
             result = await self._readiness_snapshot()
             if (
@@ -201,8 +244,15 @@ class LocalServiceStatusApi:
         )
 
 
-def status_routes(repository: _ReadinessRepository) -> tuple[Route, ...]:
-    api = LocalServiceStatusApi(repository)
+def status_routes(
+    repository: _ReadinessRepository,
+    *,
+    operation_boundary: LocalBusinessOperationBoundary | None = None,
+) -> tuple[Route, ...]:
+    api = LocalServiceStatusApi(
+        repository,
+        operation_boundary=operation_boundary,
+    )
     return (
         Route(
             "/local/v1/healthz",
@@ -227,7 +277,9 @@ def status_routes(repository: _ReadinessRepository) -> tuple[Route, ...]:
 
 __all__ = [
     "LOCAL_READINESS_TIMEOUT_SECONDS",
+    "LocalNotFoundApplication",
     "MAX_LOCAL_STATUS_RESPONSE_BYTES",
     "LocalServiceStatusApi",
+    "local_not_found",
     "status_routes",
 ]

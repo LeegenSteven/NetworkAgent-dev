@@ -10,6 +10,7 @@ import uvicorn
 
 from .app import create_app, initialize_assurance
 from .config import AssuranceConfig
+from .transport_http import BoundedH11Protocol
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -58,7 +59,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         initialize_assurance(config, reset=arguments.reset)
         return 0
     application = create_app(config)
-    uvicorn.run(application, host=config.host, port=config.port)
+    uvicorn.run(
+        application,
+        host=config.host,
+        port=config.port,
+        workers=1,
+        reload=False,
+        interface="asgi3",
+        lifespan="on",
+        http=BoundedH11Protocol,
+        ws="none",
+        proxy_headers=False,
+        forwarded_allow_ips="",
+        access_log=False,
+        server_header=False,
+        date_header=False,
+        limit_concurrency=None,
+        backlog=16,
+        timeout_keep_alive=5,
+        timeout_graceful_shutdown=10,
+        h11_max_incomplete_event_size=16_384,
+    )
     return 0
 
 

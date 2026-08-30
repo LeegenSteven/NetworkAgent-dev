@@ -5,6 +5,7 @@
 > BubbleRAN replay-to-governance slice: **READY FOR REVIEW**
 > Remote GitHub Actions: **PASS for RC `6ba631929c312bbff27ef0ad4a9136d2cb390ae1`**
 > Health/checkpoint/release-evidence changes: **REMOTE TESTED; VERIFIED RC ARTIFACTS**
+> Latest HTTP admission/deadline hardening: **LOCAL PASS; NEW REMOTE RC PENDING**
 > Cloud/production authorization: **NOT APPLICABLE**
 
 ## Decision
@@ -22,10 +23,20 @@ event owns one deterministic 5G SA Incident. A server-owned fixed rule attaches
 exact rule-version/content provenance only for the controlled
 `ran.mac.ul_bler > 0.15 ratio` signature. The same two-stage governance engine
 then covers success, verification failure, rejection, and approval expiry.
-This slice remains ready for independent review. Its RC-bound remote
-compatibility and security matrix has passed. S1-06 and the evidence-specific
-S1-07 work are closed, but that result does not itself complete the independent
-review, the Sprint, P3e, or the wider supply-chain release Gate.
+This slice has passed independent local review. Its previous RC-bound remote
+compatibility and security matrix also passed, while the newest HTTP
+admission/deadline changes still require a replacement remote RC. S1-06 and
+the evidence-specific S1-07 work are closed, but that result does not itself
+complete the Sprint, P3e, or the wider supply-chain release Gate.
+
+The independent Gate C/D review has now passed locally. Its final HTTP
+hardening adds a strict 32-connection transport cap, a one-second header
+deadline, one admitted request body with zero queue and a two-second body
+deadline, and one isolated business worker with zero queue and a five-second
+operation deadline. Timeouts and caller cancellation do not cancel a possibly
+committed repository operation; the service remains busy until it settles and
+then relies on the existing idempotency contract for exact recovery. These
+changes still require a new remote RC before Sprint 1 can be marked complete.
 
 After that RC, the loopback service gained bounded `healthz`, `readyz`, and
 `version` endpoints, while Data Lab gained an opt-in caller-owned persistent
@@ -86,6 +97,7 @@ pinned BubbleRAN artifact
 | Safe workspace ownership | PASS | Repository-contained workspaces are accepted only below `.local`; filesystem root, home, repository root/parents, symlinks, Windows junctions/reparse points, UNC/device paths, non-fixed Windows drives, and non-empty unowned directories fail closed before state is opened. A marker identifies owned state. |
 | Failure-safe initialization and reset | PASS | A failed first `init` removes only entries created for that uncommitted initialization. `reset` requires `--yes`, removes marker-owned `state`/`artifacts`, and preserves extra entries at the workspace root. |
 | Network exposure | PASS | The optional service is foreground-only, fixed to `127.0.0.1`, and rejects any action mode other than `disabled`. The governance action/verification gateways perform no external I/O. |
+| Layered ingress and execution budgets | PASS | The direct h11 server admits at most 32 live transports and gives each initial/keep-alive request header an absolute one-second budget. Governance, Fault, and A2A share one pre-body admission slot with zero queue and a two-second body budget; Governance/Fault additionally share one isolated business worker with zero queue and a five-second operation budget. Busy, timeout, uncertain outcome, unknown local path, and wrong method use fixed non-reflecting JSON with connection-close semantics. |
 | Local status surface | PASS | Direct-loopback `healthz` is dependency-free; `readyz` performs one 1-second-bounded Repository read and returns fixed 503 on failure, timeout, or an existing stuck worker; `version` returns only unsigned allowlisted package/contract versions. Every standard non-GET method uses the fixed bounded JSON 405 contract; HEAD has the standard empty body. None attests Cloud readiness. |
 | Proposal policy | PASS | Read-only RCA cannot propose actions directly. Only a conclusive, evidence-backed report with affected resources can receive exactly one fixed, low-risk, reversible `LOCAL_SIMULATION` proposal. |
 | Two-stage explicit approval | PASS | Preparing an Incident persists a `PENDING` record and returns the reviewed action hash/revision. Decision requires a separate call with exact hash, revision, actor, non-empty reason, and idempotency key. First confirmation and action approval cannot be combined. |
@@ -167,9 +179,9 @@ Completed counts are recorded exactly:
 |---|---:|
 | Data Lab + Lab E2E, Pydantic 2.5.3 | 222 passed, 1 skipped |
 | Data Lab + Lab E2E, Pydantic 2.13.4 | 222 passed, 1 skipped |
-| Assurance full suite | 54 passed |
+| Assurance full suite, latest Gate C candidate | 76 passed |
 | Domain + Local + shared contracts | 520 passed |
-| Assurance status focused suite | 4 passed |
+| local-stack safety suite | 22 passed |
 | Local E2E | 3 passed |
 | A2A contracts | 33 passed |
 | A2A E2E | 4 passed |
@@ -212,6 +224,10 @@ prove integrity, not publisher identity; signing/attestation, hash-locked
 offline installation, SPDX, independent secret/SAST/license policy, and the
 complete S3 Gate remain open.
 
+The 76-test Assurance and 22-test local-stack counts above belong to the newer
+HTTP admission/deadline candidate. They are local evidence only until a new
+commit and its remote matrix replace the RC references in this section.
+
 ## Residual limitations
 
 * The Local Profile remains a single-process/single-writer DuckDB deployment.
@@ -228,6 +244,13 @@ complete S3 Gate remain open.
   not a production detector threshold, multi-source RCA, or RCAEval result.
 * Replay identity stability is scoped to an identical plan/replay-window start;
   changing the replay window intentionally creates a new replay identity.
+* Header and body deadlines are cooperative timers on the ASGI event loop.
+  Governance/Fault repository work is isolated in its dedicated worker, but
+  legacy A2A SDK/store calls can still block that loop and therefore are not
+  claimed to have a hard wall-clock deadline.
+* A2A non-blocking and streaming background work outlives the request boundary;
+  the admission lease covers synchronous request dispatch, not the SDK-managed
+  task lifetime.
 * Windows checkpoint paths reject UNC/device namespaces before filesystem
   probes and require `DRIVE_FIXED`. POSIX mount topology and malicious
   same-user ancestor rename/swap TOCTOU remain host-filesystem trust boundaries.

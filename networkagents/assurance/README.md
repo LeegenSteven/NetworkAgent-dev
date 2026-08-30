@@ -125,3 +125,29 @@ The receiver does not ingest Pub/Sub events, use Spanner or GCP credentials,
 call Cloud MCP or Engineer, expose a legacy/public Fault route, approve an
 action, or make a real network change. Any later execution remains the separate
 approval-gated, side-effect-free `LOCAL_SIMULATION` governance flow above.
+
+## Local HTTP capacity and timeout boundary
+
+The supported foreground runner uses the repository's bounded h11 protocol and
+does not trust proxy headers. It admits at most 32 live TCP transports. Every
+initial or keep-alive request header has a one-second absolute budget. Local
+Governance, Fault, and A2A requests share one pre-body admission slot with no
+queue and a two-second body deadline; Governance and Fault operations then
+share one isolated business worker with no queue and a five-second operation
+deadline. Busy, header/body timeout, unknown local path, and unsupported
+standard methods return fixed JSON where a response can still be delivered;
+the connection is closed and rejected sockets are never retained to improve
+error delivery.
+
+If a Governance/Fault operation times out or its caller disconnects, the
+worker is not cancelled because the DuckDB transaction outcome may already be
+durable. The service reports an uncertain/busy result until that operation
+settles, after which the same idempotency key recovers the exact repository
+result. Do not retry with changed payload, actor, hash, revision, or outcome.
+
+Header and body timers run cooperatively on the ASGI event loop. Governance and
+Fault repository work is isolated from that loop, but legacy A2A SDK/store
+operations may still perform synchronous work there. This release therefore
+does not claim a hard wall-clock deadline for a globally blocked A2A loop.
+A2A non-blocking/streaming background task lifetime is also outside the
+synchronous request admission lease.

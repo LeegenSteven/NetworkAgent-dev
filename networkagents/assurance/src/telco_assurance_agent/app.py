@@ -2,23 +2,25 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from starlette.applications import Starlette
-from starlette.routing import Mount
+from starlette.routing import Mount, Route
 from telco_local import LocalGovernanceEngine, LocalProfile
 
 from .boundary import SafeA2ARequestBoundary
+from .business_boundary import LocalBusinessOperationBoundary, LocalHttpRequestAdmission
 from .card import build_agent_card
 from .config import AssuranceConfig
 from .executor import AssuranceAgentExecutor
 from .fault_receiver import LocalReplayFaultReceiver, fault_receiver_routes
 from .governance_http import governance_routes
 from .service import AfterIncidentWriteHook, AssuranceService, Clock
-from .status_http import status_routes
+from .status_http import LocalNotFoundApplication, local_not_found, status_routes
 from .stores import (
     DuckDbPendingConfirmationStore,
     DuckDbTaskStore,
@@ -30,6 +32,7 @@ from .stores import (
 class AssuranceComponents:
     config: AssuranceConfig
     profile: LocalProfile
+    business_profile: LocalProfile
     pending_store: DuckDbPendingConfirmationStore
     task_store: DuckDbTaskStore
     service: AssuranceService
@@ -63,6 +66,10 @@ def build_components(
     """Open only a fully initialized DB; this runtime path performs no DDL."""
 
     profile = LocalProfile.open_existing(config.local_profile_config, clock=clock)
+    business_profile = LocalProfile.open_existing(
+        config.local_profile_config,
+        clock=clock,
+    )
     pending_store = DuckDbPendingConfirmationStore(
         config.database_path, capacity=config.pending_capacity
     )
@@ -78,13 +85,13 @@ def build_components(
         after_incident_write=after_incident_write,
     )
     governance_engine = LocalGovernanceEngine(
-        profile.incident_repository,
-        profile.rca_gateway,
+        business_profile.incident_repository,
+        business_profile.rca_gateway,
         clock=clock or (lambda: datetime.now(UTC)),
     )
     fault_receiver = LocalReplayFaultReceiver(
-        profile.incident_repository,
-        profile.rule_repository,
+        business_profile.incident_repository,
+        business_profile.rule_repository,
         actor=config.actor,
     )
     executor = AssuranceAgentExecutor(service)
@@ -95,6 +102,7 @@ def build_components(
     return AssuranceComponents(
         config=config,
         profile=profile,
+        business_profile=business_profile,
         pending_store=pending_store,
         task_store=task_store,
         service=service,
@@ -123,13 +131,61 @@ def create_app(
         agent_card_url="/.well-known/agent-card.json",
         rpc_url="/",
     )
+    business_boundary = LocalBusinessOperationBoundary()
+    request_admission = LocalHttpRequestAdmission()
+    a2a_boundary = SafeA2ARequestBoundary(
+        sdk_application,
+        request_admission=request_admission,
+        operation_boundary=business_boundary,
+    )
+
+    @asynccontextmanager
+    async def lifespan(_application: Starlette):
+        try:
+            yield
+        finally:
+            await business_boundary.aclose()
+
     application = Starlette(
+        lifespan=lifespan,
         routes=[
-            *status_routes(components.profile.incident_repository),
-            *fault_receiver_routes(components.fault_receiver),
-            *governance_routes(components.governance_engine),
-            Mount("/", app=SafeA2ARequestBoundary(sdk_application)),
-        ]
+            *status_routes(
+                components.profile.incident_repository,
+                operation_boundary=business_boundary,
+            ),
+            *fault_receiver_routes(
+                components.fault_receiver,
+                operation_boundary=business_boundary,
+                request_admission=request_admission,
+            ),
+            *governance_routes(
+                components.governance_engine,
+                operation_boundary=business_boundary,
+                request_admission=request_admission,
+            ),
+            Route(
+                "/local/v1",
+                endpoint=local_not_found,
+                methods=(
+                    "GET",
+                    "HEAD",
+                    "POST",
+                    "PUT",
+                    "PATCH",
+                    "DELETE",
+                    "OPTIONS",
+                    "TRACE",
+                    "CONNECT",
+                ),
+                name="local-service-root-not-found",
+            ),
+            Mount(
+                "/local/v1",
+                app=LocalNotFoundApplication(),
+                name="local-service-fallback",
+            ),
+            Mount("/", app=a2a_boundary),
+        ],
     )
     # Public audit/test seam: callers can inspect durable stores without
     # reaching into the A2A SDK handler's private attributes.
@@ -139,6 +195,9 @@ def create_app(
     application.state.assurance_task_store = components.task_store
     application.state.local_fault_receiver = components.fault_receiver
     application.state.local_governance_engine = components.governance_engine
+    application.state.local_business_operation_boundary = business_boundary
+    application.state.local_http_request_admission = request_admission
+    application.state.local_a2a_request_admission = a2a_boundary.request_admission
     return application
 
 

@@ -25,7 +25,7 @@ from pydantic import (
     ValidationError,
     model_validator,
 )
-from starlette.requests import Request
+from starlette.requests import ClientDisconnect, Request
 from starlette.responses import Response
 from starlette.routing import Route
 from telco_domain import SensitiveDataError, assert_model_safe
@@ -40,12 +40,31 @@ from telco_local import (
     LocalGovernanceEngine,
 )
 
+from .business_boundary import (
+    LocalBusinessOperationBoundary,
+    LocalBusinessOperationBusy,
+    LocalBusinessOperationTimedOut,
+    LocalHttpRequestAdmission,
+    LocalHttpRequestBodyTimedOut,
+)
+
 
 MAX_GOVERNANCE_REQUEST_BYTES = 64 * 1024
 MAX_GOVERNANCE_RESPONSE_BYTES = 256 * 1024
 MAX_GOVERNANCE_JSON_DEPTH = 16
 LOCAL_OPERATION_HEADER = "x-networkagent-local-operation"
 LOCAL_OPERATION_VALUE = "governance-v1"
+_STANDARD_HTTP_METHODS = (
+    "GET",
+    "HEAD",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+    "TRACE",
+    "CONNECT",
+)
 
 OpaqueId = Annotated[
     StrictStr,
@@ -167,15 +186,27 @@ class GovernanceView(_GovernanceModel):
 
 
 class _BoundaryFailure(RuntimeError):
-    def __init__(self, code: str, status_code: int, message: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        status_code: int,
+        message: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+    ) -> None:
         super().__init__(code)
         self.code = code
         self.status_code = status_code
         self.safe_message = message
+        self.headers = dict(headers or {})
 
 
 _ERRORS: dict[str, tuple[int, str]] = {
     "LOCAL_GOVERNANCE_BAD_HOST": (403, "A loopback Host is required."),
+    "LOCAL_GOVERNANCE_METHOD_NOT_ALLOWED": (
+        405,
+        "The HTTP method is not supported for this governance route.",
+    ),
     "LOCAL_GOVERNANCE_OPERATION_REQUIRED": (
         403,
         "The local governance operation header is required.",
@@ -185,6 +216,10 @@ _ERRORS: dict[str, tuple[int, str]] = {
         "Content-Type must be application/json.",
     ),
     "LOCAL_GOVERNANCE_REQUEST_TOO_LARGE": (413, "The request is too large."),
+    "LOCAL_GOVERNANCE_REQUEST_TIMEOUT": (
+        408,
+        "The governance request body timed out.",
+    ),
     "LOCAL_GOVERNANCE_INVALID_REQUEST": (422, "The request is invalid."),
     "LOCAL_GOVERNANCE_NOT_FOUND": (404, "The Incident was not found."),
     "LOCAL_GOVERNANCE_STATE_CONFLICT": (
@@ -199,6 +234,14 @@ _ERRORS: dict[str, tuple[int, str]] = {
         409,
         "The idempotency key conflicts with an earlier request.",
     ),
+    "LOCAL_GOVERNANCE_OPERATION_BUSY": (
+        503,
+        "The local governance operation worker is busy.",
+    ),
+    "LOCAL_GOVERNANCE_OPERATION_UNCERTAIN": (
+        503,
+        "The local governance operation is still completing.",
+    ),
     "LOCAL_GOVERNANCE_INTERNAL": (500, "The local governance request failed."),
     "LOCAL_GOVERNANCE_RESPONSE_TOO_LARGE": (
         500,
@@ -207,9 +250,18 @@ _ERRORS: dict[str, tuple[int, str]] = {
 }
 
 
-def _failure(code: str) -> _BoundaryFailure:
+def _failure(
+    code: str,
+    *,
+    headers: Mapping[str, str] | None = None,
+) -> _BoundaryFailure:
     status_code, message = _ERRORS[code]
-    return _BoundaryFailure(code, status_code, message)
+    return _BoundaryFailure(
+        code,
+        status_code,
+        message,
+        headers=headers,
+    )
 
 
 def _enum_value(value: object) -> str:
@@ -360,10 +412,14 @@ def _error_response(failure: _BoundaryFailure) -> Response:
         "error": {"code": failure.code, "message": failure.safe_message},
     }
     body = _json_bytes(payload)
+    headers = dict(failure.headers)
+    if failure.status_code == 503:
+        headers["Retry-After"] = "5"
     return Response(
         body,
         status_code=failure.status_code,
         media_type="application/json",
+        headers=headers or None,
     )
 
 
@@ -546,10 +602,49 @@ async def _read_request_model(
 class LocalGovernanceHttpApi:
     """Small Starlette adapter around one injected LocalGovernanceEngine."""
 
-    def __init__(self, engine: LocalGovernanceEngine) -> None:
+    def __init__(
+        self,
+        engine: LocalGovernanceEngine,
+        *,
+        operation_boundary: LocalBusinessOperationBoundary | None = None,
+        request_admission: LocalHttpRequestAdmission | None = None,
+    ) -> None:
         if not isinstance(engine, LocalGovernanceEngine):
             raise TypeError("engine must be a LocalGovernanceEngine")
         self.engine = engine
+        self.operation_boundary = operation_boundary or LocalBusinessOperationBoundary()
+        self.request_admission = request_admission or LocalHttpRequestAdmission()
+
+    def _admit_request(self):
+        return self.request_admission.try_acquire(
+            operation_boundary=self.operation_boundary
+        )
+
+    @staticmethod
+    def _busy_response() -> Response:
+        return _error_response(
+            _failure(
+                "LOCAL_GOVERNANCE_OPERATION_BUSY",
+                headers={"Connection": "close"},
+            )
+        )
+
+    @staticmethod
+    def _body_timeout_response() -> Response:
+        return _error_response(
+            _failure(
+                "LOCAL_GOVERNANCE_REQUEST_TIMEOUT",
+                headers={"Connection": "close"},
+            )
+        )
+
+    @staticmethod
+    def _require_method(request: Request, expected: str) -> None:
+        if request.method != expected:
+            raise _failure(
+                "LOCAL_GOVERNANCE_METHOD_NOT_ALLOWED",
+                headers={"Allow": expected},
+            )
 
     @staticmethod
     def _incident_id(request: Request) -> str:
@@ -568,7 +663,7 @@ class LocalGovernanceHttpApi:
 
     async def _dispatch(self, operation: Any) -> Response:
         try:
-            result = await operation()
+            result = await self.operation_boundary.run(operation)
             view = governance_view(result)
             return _response(
                 {"ok": True, "data": view.model_dump(mode="json", round_trip=True)},
@@ -576,6 +671,10 @@ class LocalGovernanceHttpApi:
             )
         except _BoundaryFailure as failure:
             return _error_response(failure)
+        except LocalBusinessOperationBusy:
+            return _error_response(_failure("LOCAL_GOVERNANCE_OPERATION_BUSY"))
+        except LocalBusinessOperationTimedOut:
+            return _error_response(_failure("LOCAL_GOVERNANCE_OPERATION_UNCERTAIN"))
         except GovernanceNotFoundError:
             return _error_response(_failure("LOCAL_GOVERNANCE_NOT_FOUND"))
         except GovernanceIdempotencyConflictError:
@@ -598,88 +697,195 @@ class LocalGovernanceHttpApi:
             return _error_response(_failure("LOCAL_GOVERNANCE_INTERNAL"))
 
     async def get_incident(self, request: Request) -> Response:
-        async def operation() -> GovernanceResult:
+        admission = None
+        try:
             _require_loopback_host(request)
-            incident = await self.engine.repository.get(self._incident_id(request))
-            if incident is None:
-                raise GovernanceNotFoundError("incident")
-            return GovernanceResult(incident)
+            self._require_method(request, "GET")
+            incident_id = self._incident_id(request)
+            admission = self._admit_request()
+        except _BoundaryFailure as failure:
+            return _error_response(failure)
+        except LocalBusinessOperationBusy:
+            return self._busy_response()
 
-        return await self._dispatch(operation)
+        try:
+
+            async def operation() -> GovernanceResult:
+                incident = await self.engine.repository.get(incident_id)
+                if incident is None:
+                    raise GovernanceNotFoundError("incident")
+                return GovernanceResult(incident)
+
+            return await self._dispatch(operation)
+        finally:
+            admission.release()
 
     async def prepare(self, request: Request) -> Response:
-        async def operation() -> GovernanceResult:
+        admission = None
+        try:
             _require_loopback_host(request)
+            self._require_method(request, "POST")
             _require_post_headers(request)
-            body = await _read_request_model(request, PrepareRequest)
-            assert isinstance(body, PrepareRequest)
-            return await self.engine.prepare(
-                self._incident_id(request),
-                idempotency_key=body.idempotency_key,
-                actor=body.actor,
-            )
+            incident_id = self._incident_id(request)
+            admission = self._admit_request()
+        except _BoundaryFailure as failure:
+            return _error_response(failure)
+        except LocalBusinessOperationBusy:
+            return self._busy_response()
 
-        return await self._dispatch(operation)
+        try:
+            try:
+                body = await self.request_admission.read_body(
+                    lambda: _read_request_model(request, PrepareRequest)
+                )
+                assert isinstance(body, PrepareRequest)
+            except LocalHttpRequestBodyTimedOut:
+                return self._body_timeout_response()
+            except ClientDisconnect:
+                return _error_response(
+                    _failure(
+                        "LOCAL_GOVERNANCE_INVALID_REQUEST",
+                        headers={"Connection": "close"},
+                    )
+                )
+            except _BoundaryFailure as failure:
+                return _error_response(failure)
+
+            async def operation() -> GovernanceResult:
+                return await self.engine.prepare(
+                    incident_id,
+                    idempotency_key=body.idempotency_key,
+                    actor=body.actor,
+                )
+
+            return await self._dispatch(operation)
+        finally:
+            admission.release()
 
     async def decide(self, request: Request) -> Response:
-        async def operation() -> GovernanceResult:
+        admission = None
+        try:
             _require_loopback_host(request)
+            self._require_method(request, "POST")
             _require_post_headers(request)
-            body = await _read_request_model(request, DecideRequest)
-            assert isinstance(body, DecideRequest)
-            return await self.engine.decide(
-                self._incident_id(request),
-                approve=body.approve,
-                expected_action_hash=body.expected_action_hash,
-                expected_revision=body.expected_revision,
-                actor=body.actor,
-                reason=body.reason,
-                idempotency_key=body.idempotency_key,
-            )
+            incident_id = self._incident_id(request)
+            admission = self._admit_request()
+        except _BoundaryFailure as failure:
+            return _error_response(failure)
+        except LocalBusinessOperationBusy:
+            return self._busy_response()
 
-        return await self._dispatch(operation)
+        try:
+            try:
+                body = await self.request_admission.read_body(
+                    lambda: _read_request_model(request, DecideRequest)
+                )
+                assert isinstance(body, DecideRequest)
+            except LocalHttpRequestBodyTimedOut:
+                return self._body_timeout_response()
+            except ClientDisconnect:
+                return _error_response(
+                    _failure(
+                        "LOCAL_GOVERNANCE_INVALID_REQUEST",
+                        headers={"Connection": "close"},
+                    )
+                )
+            except _BoundaryFailure as failure:
+                return _error_response(failure)
+
+            async def operation() -> GovernanceResult:
+                return await self.engine.decide(
+                    incident_id,
+                    approve=body.approve,
+                    expected_action_hash=body.expected_action_hash,
+                    expected_revision=body.expected_revision,
+                    actor=body.actor,
+                    reason=body.reason,
+                    idempotency_key=body.idempotency_key,
+                )
+
+            return await self._dispatch(operation)
+        finally:
+            admission.release()
 
     async def execute(self, request: Request) -> Response:
-        async def operation() -> GovernanceResult:
+        admission = None
+        try:
             _require_loopback_host(request)
+            self._require_method(request, "POST")
             _require_post_headers(request)
-            body = await _read_request_model(request, ExecuteRequest)
-            assert isinstance(body, ExecuteRequest)
-            return await self.engine.execute(
-                self._incident_id(request),
-                idempotency_key=body.idempotency_key,
-                actor=body.actor,
-                verification_passed=body.verification_passed,
-            )
+            incident_id = self._incident_id(request)
+            admission = self._admit_request()
+        except _BoundaryFailure as failure:
+            return _error_response(failure)
+        except LocalBusinessOperationBusy:
+            return self._busy_response()
 
-        return await self._dispatch(operation)
+        try:
+            try:
+                body = await self.request_admission.read_body(
+                    lambda: _read_request_model(request, ExecuteRequest)
+                )
+                assert isinstance(body, ExecuteRequest)
+            except LocalHttpRequestBodyTimedOut:
+                return self._body_timeout_response()
+            except ClientDisconnect:
+                return _error_response(
+                    _failure(
+                        "LOCAL_GOVERNANCE_INVALID_REQUEST",
+                        headers={"Connection": "close"},
+                    )
+                )
+            except _BoundaryFailure as failure:
+                return _error_response(failure)
+
+            async def operation() -> GovernanceResult:
+                return await self.engine.execute(
+                    incident_id,
+                    idempotency_key=body.idempotency_key,
+                    actor=body.actor,
+                    verification_passed=body.verification_passed,
+                )
+
+            return await self._dispatch(operation)
+        finally:
+            admission.release()
 
 
-def governance_routes(engine: LocalGovernanceEngine) -> tuple[Route, ...]:
-    api = LocalGovernanceHttpApi(engine)
+def governance_routes(
+    engine: LocalGovernanceEngine,
+    *,
+    operation_boundary: LocalBusinessOperationBoundary | None = None,
+    request_admission: LocalHttpRequestAdmission | None = None,
+) -> tuple[Route, ...]:
+    api = LocalGovernanceHttpApi(
+        engine,
+        operation_boundary=operation_boundary,
+        request_admission=request_admission,
+    )
     return (
         Route(
             "/local/v1/incidents/{incident_id}",
             endpoint=api.get_incident,
-            methods=["GET"],
+            methods=_STANDARD_HTTP_METHODS,
             name="local-governance-incident",
         ),
         Route(
             "/local/v1/incidents/{incident_id}/prepare",
             endpoint=api.prepare,
-            methods=["POST"],
+            methods=_STANDARD_HTTP_METHODS,
             name="local-governance-prepare",
         ),
         Route(
             "/local/v1/incidents/{incident_id}/decide",
             endpoint=api.decide,
-            methods=["POST"],
+            methods=_STANDARD_HTTP_METHODS,
             name="local-governance-decide",
         ),
         Route(
             "/local/v1/incidents/{incident_id}/execute",
             endpoint=api.execute,
-            methods=["POST"],
+            methods=_STANDARD_HTTP_METHODS,
             name="local-governance-execute",
         ),
     )

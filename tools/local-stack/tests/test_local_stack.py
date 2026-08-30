@@ -8,7 +8,7 @@ import os
 import subprocess
 from io import StringIO
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -614,6 +614,69 @@ def test_reset_rejects_repository_root_even_with_forged_marker(tmp_path: Path) -
     )
     assert code == 2
     assert json.loads(stderr.getvalue())["error"]["code"] == "unsafe_workspace"
+
+
+def test_real_serve_uses_fixed_hardened_uvicorn_budget(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = local_stack.Workspace(tmp_path / "stack")
+    runtime = local_stack.LocalStackRuntime(workspace)
+    application = object()
+    captured = {}
+    assurance_package = ModuleType("telco_assurance_agent")
+    assurance_package.__path__ = []
+    assurance_app = ModuleType("telco_assurance_agent.app")
+    assurance_app.create_app = lambda _config: application
+    assurance_transport = ModuleType("telco_assurance_agent.transport_http")
+
+    class BoundedH11Protocol:
+        pass
+
+    assurance_transport.BoundedH11Protocol = BoundedH11Protocol
+    uvicorn = ModuleType("uvicorn")
+    uvicorn.run = lambda app, **kwargs: captured.update(app=app, **kwargs)
+    monkeypatch.setitem(sys.modules, "telco_assurance_agent", assurance_package)
+    monkeypatch.setitem(sys.modules, "telco_assurance_agent.app", assurance_app)
+    monkeypatch.setitem(
+        sys.modules,
+        "telco_assurance_agent.transport_http",
+        assurance_transport,
+    )
+    monkeypatch.setitem(sys.modules, "uvicorn", uvicorn)
+    monkeypatch.setattr(local_stack, "_port_available", lambda _port: True)
+    monkeypatch.setattr(
+        local_stack.LocalStackRuntime,
+        "status",
+        lambda self, *, port: {"database": {"initialized": True}},
+    )
+    monkeypatch.setattr(
+        local_stack.LocalStackRuntime,
+        "_assurance_config",
+        lambda self, port: SimpleNamespace(port=port),
+    )
+    runtime.serve(port=8085)
+    assert captured == {
+        "app": application,
+        "host": "127.0.0.1",
+        "port": 8085,
+        "workers": 1,
+        "reload": False,
+        "interface": "asgi3",
+        "lifespan": "on",
+        "http": BoundedH11Protocol,
+        "ws": "none",
+        "proxy_headers": False,
+        "forwarded_allow_ips": "",
+        "access_log": False,
+        "server_header": False,
+        "date_header": False,
+        "limit_concurrency": None,
+        "backlog": 16,
+        "timeout_keep_alive": 5,
+        "timeout_graceful_shutdown": 10,
+        "h11_max_incomplete_event_size": 16_384,
+    }
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows junction regression")

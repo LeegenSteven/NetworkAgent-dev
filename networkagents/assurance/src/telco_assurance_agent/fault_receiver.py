@@ -18,7 +18,7 @@ from typing import Any, Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, ValidationError
-from starlette.requests import Request
+from starlette.requests import ClientDisconnect, Request
 from starlette.responses import Response
 from starlette.routing import Route
 from telco_domain import (
@@ -51,6 +51,14 @@ from telco_local import (
     rule_content_sha256,
 )
 
+from .business_boundary import (
+    LocalBusinessOperationBoundary,
+    LocalBusinessOperationBusy,
+    LocalBusinessOperationTimedOut,
+    LocalHttpRequestAdmission,
+    LocalHttpRequestBodyTimedOut,
+)
+
 
 LOCAL_FAULT_ROUTE = "/local/v1/faults/replay"
 LOCAL_FAULT_OPERATION_HEADER = "x-networkagent-local-operation"
@@ -59,6 +67,17 @@ LOCAL_FAULT_IDEMPOTENCY_HEADER = "idempotency-key"
 MAX_FAULT_REQUEST_BYTES = MAX_REPLAY_HTTP_REQUEST_BYTES
 MAX_FAULT_RESPONSE_BYTES = MAX_REPLAY_HTTP_RESPONSE_BYTES
 MAX_FAULT_JSON_DEPTH = 16
+_STANDARD_HTTP_METHODS = (
+    "GET",
+    "HEAD",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+    "TRACE",
+    "CONNECT",
+)
 _INGEST_REASON = "local replay source event ingestion"
 _BUBBLERAN_SCENARIO = "bubbleran-persistent-interference"
 _BUBBLERAN_GNB_RESOURCE = re.compile(r"^lab:5g-sa:gnb:[0-9a-f]{24}$")
@@ -95,15 +114,27 @@ class FaultReceiptView(_FaultViewModel):
 
 
 class _FaultBoundaryFailure(RuntimeError):
-    def __init__(self, code: str, status_code: int, message: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        status_code: int,
+        message: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+    ) -> None:
         super().__init__(code)
         self.code = code
         self.status_code = status_code
         self.safe_message = message
+        self.headers = dict(headers or {})
 
 
 _ERRORS: dict[str, tuple[int, str]] = {
     "LOCAL_FAULT_BAD_HOST": (403, "A loopback Host is required."),
+    "LOCAL_FAULT_METHOD_NOT_ALLOWED": (
+        405,
+        "The HTTP method is not supported for the replay route.",
+    ),
     "LOCAL_FAULT_OPERATION_REQUIRED": (
         403,
         "The local replay operation header is required.",
@@ -121,10 +152,19 @@ _ERRORS: dict[str, tuple[int, str]] = {
         "Content-Type must be application/json.",
     ),
     "LOCAL_FAULT_REQUEST_TOO_LARGE": (413, "The request is too large."),
+    "LOCAL_FAULT_REQUEST_TIMEOUT": (408, "The replay request body timed out."),
     "LOCAL_FAULT_INVALID_REQUEST": (422, "The replay event is invalid."),
     "LOCAL_FAULT_UNAVAILABLE": (
         503,
         "The local fault receiver is temporarily unavailable.",
+    ),
+    "LOCAL_FAULT_OPERATION_BUSY": (
+        503,
+        "The replay operation worker is busy.",
+    ),
+    "LOCAL_FAULT_OPERATION_UNCERTAIN": (
+        503,
+        "The replay operation is still completing.",
     ),
     "LOCAL_FAULT_RESPONSE_TOO_LARGE": (
         500,
@@ -133,9 +173,18 @@ _ERRORS: dict[str, tuple[int, str]] = {
 }
 
 
-def _failure(code: str) -> _FaultBoundaryFailure:
+def _failure(
+    code: str,
+    *,
+    headers: Mapping[str, str] | None = None,
+) -> _FaultBoundaryFailure:
     status_code, message = _ERRORS[code]
-    return _FaultBoundaryFailure(code, status_code, message)
+    return _FaultBoundaryFailure(
+        code,
+        status_code,
+        message,
+        headers=headers,
+    )
 
 
 def _header_values(request: Request, name: str) -> tuple[bytes, ...]:
@@ -544,7 +593,9 @@ def _response(payload: Mapping[str, object], *, status_code: int) -> Response:
 
 
 def _error_response(failure: _FaultBoundaryFailure) -> Response:
-    headers = {"Retry-After": "5"} if failure.status_code == 503 else None
+    headers = dict(failure.headers)
+    if failure.status_code == 503:
+        headers["Retry-After"] = "5"
     return Response(
         _json_bytes(
             {
@@ -557,7 +608,7 @@ def _error_response(failure: _FaultBoundaryFailure) -> Response:
         ),
         status_code=failure.status_code,
         media_type="application/json",
-        headers=headers,
+        headers=headers or None,
     )
 
 
@@ -644,43 +695,103 @@ class LocalReplayFaultReceiver:
 
 
 class LocalReplayFaultHttpApi:
-    def __init__(self, receiver: LocalReplayFaultReceiver) -> None:
+    def __init__(
+        self,
+        receiver: LocalReplayFaultReceiver,
+        *,
+        operation_boundary: LocalBusinessOperationBoundary | None = None,
+        request_admission: LocalHttpRequestAdmission | None = None,
+    ) -> None:
         self.receiver = receiver
+        self.operation_boundary = operation_boundary or LocalBusinessOperationBoundary()
+        self.request_admission = request_admission or LocalHttpRequestAdmission()
 
     async def receive(self, request: Request) -> Response:
+        admission = None
         try:
             _require_loopback(request)
+            if request.method != "POST":
+                raise _failure(
+                    "LOCAL_FAULT_METHOD_NOT_ALLOWED",
+                    headers={"Allow": "POST"},
+                )
             if request.url.query:
                 raise _failure("LOCAL_FAULT_INVALID_REQUEST")
             header_idempotency = _require_headers(request)
-            wire = await _read_wire(request)
-            if header_idempotency != wire.idempotency_key.encode("ascii"):
-                raise _failure("LOCAL_FAULT_IDEMPOTENCY_CONFLICT")
-            receipt = await self.receiver.ingest(wire)
-            return _response(
-                {
-                    "ok": True,
-                    "data": receipt.model_dump(mode="json", round_trip=True),
-                },
-                status_code=202,
+            admission = self.request_admission.try_acquire(
+                operation_boundary=self.operation_boundary
             )
         except _FaultBoundaryFailure as failure:
             return _error_response(failure)
-        except IdempotencyConflictError:
-            return _error_response(_failure("LOCAL_FAULT_IDEMPOTENCY_CONFLICT"))
-        except Exception:
-            return _error_response(_failure("LOCAL_FAULT_UNAVAILABLE"))
+        except LocalBusinessOperationBusy:
+            return _error_response(
+                _failure(
+                    "LOCAL_FAULT_OPERATION_BUSY",
+                    headers={"Connection": "close"},
+                )
+            )
+
+        try:
+            try:
+                wire = await self.request_admission.read_body(
+                    lambda: _read_wire(request)
+                )
+                if header_idempotency != wire.idempotency_key.encode("ascii"):
+                    raise _failure("LOCAL_FAULT_IDEMPOTENCY_CONFLICT")
+                receipt = await self.operation_boundary.run(
+                    lambda: self.receiver.ingest(wire)
+                )
+                return _response(
+                    {
+                        "ok": True,
+                        "data": receipt.model_dump(mode="json", round_trip=True),
+                    },
+                    status_code=202,
+                )
+            except LocalHttpRequestBodyTimedOut:
+                return _error_response(
+                    _failure(
+                        "LOCAL_FAULT_REQUEST_TIMEOUT",
+                        headers={"Connection": "close"},
+                    )
+                )
+            except ClientDisconnect:
+                return _error_response(
+                    _failure(
+                        "LOCAL_FAULT_INVALID_REQUEST",
+                        headers={"Connection": "close"},
+                    )
+                )
+            except _FaultBoundaryFailure as failure:
+                return _error_response(failure)
+            except LocalBusinessOperationBusy:
+                return _error_response(_failure("LOCAL_FAULT_OPERATION_BUSY"))
+            except LocalBusinessOperationTimedOut:
+                return _error_response(_failure("LOCAL_FAULT_OPERATION_UNCERTAIN"))
+            except IdempotencyConflictError:
+                return _error_response(_failure("LOCAL_FAULT_IDEMPOTENCY_CONFLICT"))
+            except Exception:
+                return _error_response(_failure("LOCAL_FAULT_UNAVAILABLE"))
+        finally:
+            admission.release()
 
 
 def fault_receiver_routes(
     receiver: LocalReplayFaultReceiver,
+    *,
+    operation_boundary: LocalBusinessOperationBoundary | None = None,
+    request_admission: LocalHttpRequestAdmission | None = None,
 ) -> tuple[Route, ...]:
-    api = LocalReplayFaultHttpApi(receiver)
+    api = LocalReplayFaultHttpApi(
+        receiver,
+        operation_boundary=operation_boundary,
+        request_admission=request_admission,
+    )
     return (
         Route(
             LOCAL_FAULT_ROUTE,
             endpoint=api.receive,
-            methods=["POST"],
+            methods=_STANDARD_HTTP_METHODS,
             name="local-replay-fault-receiver",
         ),
     )

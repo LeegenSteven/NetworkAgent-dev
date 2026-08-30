@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -9,8 +11,13 @@ import duckdb
 import httpx
 import pytest
 from starlette.applications import Starlette
+from starlette.requests import ClientDisconnect
 
 from telco_assurance_agent import AssuranceConfig, create_app, initialize_assurance
+from telco_assurance_agent.business_boundary import (
+    LocalBusinessOperationBoundary,
+    LocalHttpRequestAdmission,
+)
 from telco_assurance_agent.fault_receiver import (
     LocalReplayFaultReceiver,
     fault_receiver_routes,
@@ -518,6 +525,388 @@ def test_boundary_failures_are_fixed_and_make_zero_writes(
 
     asyncio.run(scenario())
     assert _database_counts(config.database_path) == (0, 0, 0, 0)
+
+
+def test_fault_route_rejects_every_standard_wrong_method_as_fixed_json(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    initialize_assurance(config, clock=lambda: NOW)
+    app = create_app(config, clock=lambda: NOW)
+
+    async def scenario() -> None:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://127.0.0.1",
+        ) as client:
+            for method in (
+                "GET",
+                "HEAD",
+                "PUT",
+                "PATCH",
+                "DELETE",
+                "OPTIONS",
+                "TRACE",
+                "CONNECT",
+            ):
+                response = await client.request(method, "/local/v1/faults/replay")
+                assert response.status_code == 405
+                assert response.headers["content-type"] == "application/json"
+                assert response.headers["allow"] == "POST"
+                if method == "HEAD":
+                    assert response.content == b""
+                else:
+                    assert response.json() == {
+                        "ok": False,
+                        "error": {
+                            "code": "LOCAL_FAULT_METHOD_NOT_ALLOWED",
+                            "message": "The HTTP method is not supported for the replay route.",
+                        },
+                    }
+
+    asyncio.run(scenario())
+    assert _database_counts(config.database_path) == (0, 0, 0, 0)
+
+
+def test_fault_timeout_keeps_unknown_commit_inflight_and_exact_retry_recovers(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    profile = initialize_assurance(config, clock=lambda: NOW)
+    durable_receiver = LocalReplayFaultReceiver(
+        profile.incident_repository,
+        profile.rule_repository,
+        actor=config.actor,
+    )
+    durable_write_finished = threading.Event()
+    release_receipt = threading.Event()
+
+    class _DelayedReceiptReceiver:
+        writes = 0
+        delayed = False
+
+        async def ingest(self, wire: ReplayWirePayload):
+            before = _database_counts(config.database_path)
+            receipt = await durable_receiver.ingest(wire)
+            after = _database_counts(config.database_path)
+            if after != before:
+                self.writes += 1
+            if not self.delayed:
+                self.delayed = True
+                durable_write_finished.set()
+                if not release_receipt.wait(timeout=2.0):
+                    raise RuntimeError("test receipt release timed out")
+            return receipt
+
+    receiver = _DelayedReceiptReceiver()
+    boundary = LocalBusinessOperationBoundary(deadline_seconds=1.0)
+    app = Starlette(
+        routes=[
+            *fault_receiver_routes(
+                receiver,
+                operation_boundary=boundary,
+            )
+        ]
+    )
+    wire, body = _wire("5")
+
+    async def scenario() -> None:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://127.0.0.1",
+        ) as client:
+            started = time.monotonic()
+            uncertain = await client.post(
+                "/local/v1/faults/replay",
+                headers=_headers(wire),
+                content=body,
+            )
+            elapsed = time.monotonic() - started
+            assert elapsed < 1.5
+            assert uncertain.status_code == 503
+            assert uncertain.json()["error"] == {
+                "code": "LOCAL_FAULT_OPERATION_UNCERTAIN",
+                "message": "The replay operation is still completing.",
+            }
+            assert durable_write_finished.is_set()
+
+            busy_body_touched = False
+
+            async def busy_body_that_must_not_be_read():
+                nonlocal busy_body_touched
+                busy_body_touched = True
+                yield body
+
+            busy = await client.post(
+                "/local/v1/faults/replay",
+                headers=_headers(wire),
+                content=busy_body_that_must_not_be_read(),
+            )
+            assert busy.status_code == 503
+            assert busy.headers["connection"] == "close"
+            assert busy.json()["error"] == {
+                "code": "LOCAL_FAULT_OPERATION_BUSY",
+                "message": "The replay operation worker is busy.",
+            }
+            assert not busy_body_touched
+
+            release_receipt.set()
+            assert await asyncio.to_thread(boundary.wait_until_idle, 1.0)
+            recovered = await client.post(
+                "/local/v1/faults/replay",
+                headers=_headers(wire),
+                content=body,
+            )
+            assert recovered.status_code == 202
+            assert recovered.json()["data"]["source_event_id"] == wire.source_event_id
+
+    asyncio.run(scenario())
+    assert receiver.writes == 1
+    assert _database_counts(config.database_path) == (1, 1, 1, 1)
+
+
+def test_fault_slow_body_timeout_is_fixed_and_never_submits_business_work(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    initialize_assurance(config, clock=lambda: NOW)
+
+    class _UnexpectedReceiver:
+        calls = 0
+
+        async def ingest(self, _wire: ReplayWirePayload):
+            self.calls += 1
+            raise AssertionError("a timed-out body must not reach the receiver")
+
+    receiver = _UnexpectedReceiver()
+    operation_boundary = LocalBusinessOperationBoundary(deadline_seconds=1.0)
+    admission = LocalHttpRequestAdmission(body_deadline_seconds=0.05)
+    app = Starlette(
+        routes=[
+            *fault_receiver_routes(
+                receiver,
+                operation_boundary=operation_boundary,
+                request_admission=admission,
+            )
+        ]
+    )
+    wire, _ = _wire("5")
+
+    async def scenario() -> None:
+        cancelled = asyncio.Event()
+
+        async def slow_body():
+            try:
+                yield b'{"schema_version":"1.0"'
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://127.0.0.1",
+        ) as client:
+            response = await client.post(
+                "/local/v1/faults/replay",
+                headers=_headers(wire),
+                content=slow_body(),
+            )
+            assert response.status_code == 408
+            assert response.headers["connection"] == "close"
+            assert response.json() == {
+                "ok": False,
+                "error": {
+                    "code": "LOCAL_FAULT_REQUEST_TIMEOUT",
+                    "message": "The replay request body timed out.",
+                },
+            }
+            assert cancelled.is_set()
+            assert receiver.calls == 0
+            assert not operation_boundary.worker_is_alive
+            assert not admission.is_busy
+
+    asyncio.run(scenario())
+    assert operation_boundary.close()
+    assert _database_counts(config.database_path) == (0, 0, 0, 0)
+
+
+def test_fault_disconnect_releases_admission_without_business_call(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    initialize_assurance(config, clock=lambda: NOW)
+
+    class _UnexpectedReceiver:
+        calls = 0
+
+        async def ingest(self, _wire: ReplayWirePayload):
+            self.calls += 1
+            raise AssertionError("a disconnected body must not reach the receiver")
+
+    receiver = _UnexpectedReceiver()
+    operation_boundary = LocalBusinessOperationBoundary(deadline_seconds=1.0)
+    admission = LocalHttpRequestAdmission(body_deadline_seconds=1.0)
+    app = Starlette(
+        routes=[
+            *fault_receiver_routes(
+                receiver,
+                operation_boundary=operation_boundary,
+                request_admission=admission,
+            )
+        ]
+    )
+    wire, _ = _wire("5")
+
+    async def scenario() -> None:
+        async def disconnected_body():
+            yield b"{"
+            raise ClientDisconnect()
+
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://127.0.0.1",
+        ) as client:
+            response = await client.post(
+                "/local/v1/faults/replay",
+                headers=_headers(wire),
+                content=disconnected_body(),
+            )
+            assert response.status_code == 422
+            assert response.headers["connection"] == "close"
+            assert response.json()["error"]["code"] == "LOCAL_FAULT_INVALID_REQUEST"
+            assert receiver.calls == 0
+            assert not operation_boundary.worker_is_alive
+            assert not admission.is_busy
+
+    asyncio.run(scenario())
+    assert operation_boundary.close()
+    assert _database_counts(config.database_path) == (0, 0, 0, 0)
+
+
+def test_governance_and_fault_share_zero_queue_admission_before_body_read(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    initialize_assurance(config, clock=lambda: NOW)
+    app = create_app(config, clock=lambda: NOW)
+    operation_boundary = app.state.local_business_operation_boundary
+    admission = app.state.local_http_request_admission
+    admission.body_deadline_seconds = 1.0
+    wire, body = _wire("5")
+
+    async def scenario() -> None:
+        first_stream_started = asyncio.Event()
+        release_first_stream = asyncio.Event()
+        second_stream_touched = False
+
+        async def held_governance_body():
+            first_stream_started.set()
+            await release_first_stream.wait()
+            yield json.dumps(
+                {"idempotency_key": "prepare-once", "actor": "operator"},
+                separators=(",", ":"),
+            ).encode("utf-8")
+
+        async def fault_body_that_must_not_be_read():
+            nonlocal second_stream_touched
+            second_stream_touched = True
+            yield body
+
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://127.0.0.1",
+        ) as client:
+            first = asyncio.create_task(
+                client.post(
+                    "/local/v1/incidents/admission-held/prepare",
+                    headers={
+                        "X-NetworkAgent-Local-Operation": "governance-v1",
+                        "Content-Type": "application/json",
+                    },
+                    content=held_governance_body(),
+                )
+            )
+            await asyncio.wait_for(first_stream_started.wait(), timeout=0.5)
+            assert admission.is_busy
+            assert not operation_boundary.worker_is_alive
+
+            busy = await client.post(
+                "/local/v1/faults/replay",
+                headers=_headers(wire),
+                content=fault_body_that_must_not_be_read(),
+            )
+            assert busy.status_code == 503
+            assert busy.headers["connection"] == "close"
+            assert busy.json() == {
+                "ok": False,
+                "error": {
+                    "code": "LOCAL_FAULT_OPERATION_BUSY",
+                    "message": "The replay operation worker is busy.",
+                },
+            }
+            assert not second_stream_touched
+            assert not operation_boundary.worker_is_alive
+            assert _database_counts(config.database_path) == (0, 0, 0, 0)
+
+            release_first_stream.set()
+            first_response = await first
+            assert first_response.status_code == 404
+            assert first_response.json()["error"]["code"] == (
+                "LOCAL_GOVERNANCE_NOT_FOUND"
+            )
+            assert not admission.is_busy
+
+    asyncio.run(scenario())
+    assert operation_boundary.close()
+    assert _database_counts(config.database_path) == (0, 0, 0, 0)
+
+
+def test_governance_and_fault_share_one_zero_queue_business_worker(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    initialize_assurance(config, clock=lambda: NOW)
+    app = create_app(config, clock=lambda: NOW)
+    worker_started = threading.Event()
+    release_worker = threading.Event()
+
+    class _BlockingGovernanceRepository:
+        calls = 0
+
+        async def get(self, _incident_id: str):
+            self.calls += 1
+            worker_started.set()
+            if not release_worker.wait(timeout=2.0):
+                raise RuntimeError("test worker release timed out")
+            return None
+
+    repository = _BlockingGovernanceRepository()
+    app.state.local_governance_engine.repository = repository
+    wire, body = _wire("5")
+
+    async def scenario() -> None:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://127.0.0.1",
+        ) as client:
+            governance = asyncio.create_task(client.get("/local/v1/incidents/blocked"))
+            assert await asyncio.to_thread(worker_started.wait, 1.0)
+
+            fault = await client.post(
+                "/local/v1/faults/replay",
+                headers=_headers(wire),
+                content=body,
+            )
+            assert fault.status_code == 503
+            assert fault.json()["error"]["code"] == "LOCAL_FAULT_OPERATION_BUSY"
+            assert repository.calls == 1
+            assert _database_counts(config.database_path) == (0, 0, 0, 0)
+
+            release_worker.set()
+            completed = await governance
+            assert completed.status_code == 404
+
+    asyncio.run(scenario())
 
 
 def test_valid_wire_changed_under_same_idempotency_conflicts_without_mutation(

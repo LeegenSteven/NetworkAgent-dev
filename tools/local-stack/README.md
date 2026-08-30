@@ -73,6 +73,16 @@ returns allowlisted package/API/schema versions and is not a signature. All
 three reject a non-loopback Host or direct client, accept no query string, and
 must not be placed behind a reverse proxy or port forward.
 
+The foreground runner explicitly disables proxy-header trust and uses a
+bounded local HTTP protocol: at most 32 live transports, a one-second request
+header deadline, one admitted request body with no queue and a two-second body
+deadline, plus one isolated Governance/Fault business operation with no queue
+and a five-second deadline. A timeout never cancels an operation whose commit
+state is unknown; retry only with the same idempotency-bound request after the
+service is no longer busy. Fixed JSON 408/503 responses use
+`Connection: close`. An over-cap socket may be reset before that best-effort
+JSON reaches the caller, especially when the peer already queued unread bytes.
+
 ## Reset safety
 
 `reset` without `--yes` only returns a JSON confirmation requirement. The

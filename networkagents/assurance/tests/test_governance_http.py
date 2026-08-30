@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import threading
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -9,6 +11,13 @@ import duckdb
 import httpx
 
 from telco_assurance_agent import AssuranceConfig, create_app, initialize_assurance
+from telco_assurance_agent.business_boundary import (
+    LocalBusinessOperationBoundary,
+    LocalHttpRequestAdmission,
+)
+from telco_assurance_agent.governance_http import governance_routes
+from starlette.applications import Starlette
+from starlette.requests import ClientDisconnect
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -281,9 +290,62 @@ def test_governance_boundary_rejects_untrusted_or_changed_requests_without_actio
                 "actor": "local-governance",
             }
 
-            preflight = await client.options(base + "/prepare")
-            assert preflight.status_code in {404, 405}
-            assert "access-control-allow-origin" not in preflight.headers
+            method_cases = {
+                base: ("POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE", "CONNECT"),
+                base
+                + "/prepare": (
+                    "GET",
+                    "HEAD",
+                    "PUT",
+                    "PATCH",
+                    "DELETE",
+                    "OPTIONS",
+                    "TRACE",
+                    "CONNECT",
+                ),
+                base
+                + "/decide": (
+                    "GET",
+                    "HEAD",
+                    "PUT",
+                    "PATCH",
+                    "DELETE",
+                    "OPTIONS",
+                    "TRACE",
+                    "CONNECT",
+                ),
+                base
+                + "/execute": (
+                    "GET",
+                    "HEAD",
+                    "PUT",
+                    "PATCH",
+                    "DELETE",
+                    "OPTIONS",
+                    "TRACE",
+                    "CONNECT",
+                ),
+            }
+            for target, methods in method_cases.items():
+                for method in methods:
+                    rejected_method = await client.request(method, target)
+                    assert rejected_method.status_code == 405
+                    assert rejected_method.headers["content-type"] == "application/json"
+                    assert rejected_method.headers["allow"] == (
+                        "GET" if target == base else "POST"
+                    )
+                    assert "access-control-allow-origin" not in rejected_method.headers
+                    if method == "HEAD":
+                        assert rejected_method.content == b""
+                    else:
+                        assert rejected_method.json() == {
+                            "ok": False,
+                            "error": {
+                                "code": "LOCAL_GOVERNANCE_METHOD_NOT_ALLOWED",
+                                "message": "The HTTP method is not supported for this governance route.",
+                            },
+                        }
+            assert _counts(config.database_path) == (0, 0, 0, 0, 0)
 
             wrong_media = await client.post(
                 base + "/prepare",
@@ -440,3 +502,191 @@ def test_governance_boundary_rejects_untrusted_or_changed_requests_without_actio
             assert "IMSI" not in failed.text
 
     asyncio.run(scenario())
+
+
+def test_governance_business_timeout_is_isolated_and_rejects_a_stuck_worker(
+    tmp_path: Path,
+) -> None:
+    worker_started = threading.Event()
+    release_worker = threading.Event()
+
+    class _BlockingRepository:
+        calls = 0
+
+        async def get(self, _incident_id: str):
+            self.calls += 1
+            worker_started.set()
+            if not release_worker.wait(timeout=2.0):
+                raise RuntimeError("test worker release timed out")
+            return None
+
+    config = _config(tmp_path)
+    initialize_assurance(config, clock=lambda: NOW)
+    composed = create_app(config, clock=lambda: NOW)
+    engine = composed.state.local_governance_engine
+    engine.repository = _BlockingRepository()
+    boundary = LocalBusinessOperationBoundary(deadline_seconds=0.05)
+    app = Starlette(
+        routes=[
+            *governance_routes(
+                engine,
+                operation_boundary=boundary,
+            )
+        ]
+    )
+
+    async def scenario() -> None:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://127.0.0.1",
+        ) as client:
+            started = time.monotonic()
+            uncertain = await client.get("/local/v1/incidents/blocked")
+            elapsed = time.monotonic() - started
+            assert elapsed < 0.15
+            assert uncertain.status_code == 503
+            assert uncertain.json()["error"] == {
+                "code": "LOCAL_GOVERNANCE_OPERATION_UNCERTAIN",
+                "message": "The local governance operation is still completing.",
+            }
+            assert worker_started.is_set()
+
+            busy = await client.get("/local/v1/incidents/blocked")
+            assert busy.status_code == 503
+            assert busy.json()["error"] == {
+                "code": "LOCAL_GOVERNANCE_OPERATION_BUSY",
+                "message": "The local governance operation worker is busy.",
+            }
+            assert engine.repository.calls == 1
+
+            release_worker.set()
+            assert await asyncio.to_thread(boundary.wait_until_idle, 1.0)
+            completed = await client.get("/local/v1/incidents/blocked")
+            assert completed.status_code == 404
+            assert completed.json()["error"]["code"] == "LOCAL_GOVERNANCE_NOT_FOUND"
+            assert engine.repository.calls == 2
+
+    asyncio.run(scenario())
+
+
+def test_governance_slow_body_has_absolute_deadline_and_never_starts_worker(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    initialize_assurance(config, clock=lambda: NOW)
+    composed = create_app(config, clock=lambda: NOW)
+    engine = composed.state.local_governance_engine
+
+    class _UnexpectedRepository:
+        calls = 0
+
+        async def get(self, _incident_id: str):
+            self.calls += 1
+            raise AssertionError("a timed-out body must not reach the repository")
+
+    engine.repository = _UnexpectedRepository()
+    operation_boundary = LocalBusinessOperationBoundary(deadline_seconds=1.0)
+    admission = LocalHttpRequestAdmission(body_deadline_seconds=0.05)
+    app = Starlette(
+        routes=[
+            *governance_routes(
+                engine,
+                operation_boundary=operation_boundary,
+                request_admission=admission,
+            )
+        ]
+    )
+
+    async def scenario() -> None:
+        cancelled = asyncio.Event()
+
+        async def slow_body():
+            try:
+                yield b'{"idempotency_key":"partial'
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://127.0.0.1",
+        ) as client:
+            started = time.monotonic()
+            response = await client.post(
+                "/local/v1/incidents/body-timeout/prepare",
+                headers={**LOCAL_HEADERS, "Content-Type": "application/json"},
+                content=slow_body(),
+            )
+            assert time.monotonic() - started < 0.2
+            assert response.status_code == 408
+            assert response.headers["content-type"] == "application/json"
+            assert response.headers["connection"] == "close"
+            assert response.json() == {
+                "ok": False,
+                "error": {
+                    "code": "LOCAL_GOVERNANCE_REQUEST_TIMEOUT",
+                    "message": "The governance request body timed out.",
+                },
+            }
+            assert cancelled.is_set()
+            assert engine.repository.calls == 0
+            assert not operation_boundary.worker_is_alive
+            assert not admission.is_busy
+
+    asyncio.run(scenario())
+    assert operation_boundary.close()
+
+
+def test_governance_disconnect_releases_admission_without_business_call(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    initialize_assurance(config, clock=lambda: NOW)
+    composed = create_app(config, clock=lambda: NOW)
+    engine = composed.state.local_governance_engine
+
+    class _UnexpectedRepository:
+        calls = 0
+
+        async def get(self, _incident_id: str):
+            self.calls += 1
+            raise AssertionError("a disconnected body must not reach the repository")
+
+    engine.repository = _UnexpectedRepository()
+    operation_boundary = LocalBusinessOperationBoundary(deadline_seconds=1.0)
+    admission = LocalHttpRequestAdmission(body_deadline_seconds=1.0)
+    app = Starlette(
+        routes=[
+            *governance_routes(
+                engine,
+                operation_boundary=operation_boundary,
+                request_admission=admission,
+            )
+        ]
+    )
+
+    async def scenario() -> None:
+        async def disconnected_body():
+            yield b"{"
+            raise ClientDisconnect()
+
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://127.0.0.1",
+        ) as client:
+            response = await client.post(
+                "/local/v1/incidents/disconnected/prepare",
+                headers={**LOCAL_HEADERS, "Content-Type": "application/json"},
+                content=disconnected_body(),
+            )
+            assert response.status_code == 422
+            assert response.headers["connection"] == "close"
+            assert response.json()["error"]["code"] == (
+                "LOCAL_GOVERNANCE_INVALID_REQUEST"
+            )
+            assert engine.repository.calls == 0
+            assert not operation_boundary.worker_is_alive
+            assert not admission.is_busy
+
+    asyncio.run(scenario())
+    assert operation_boundary.close()

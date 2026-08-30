@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 import tomllib
 from datetime import UTC, datetime
@@ -10,6 +11,7 @@ import httpx
 from starlette.applications import Starlette
 
 from telco_assurance_agent import AssuranceConfig, create_app, initialize_assurance
+from telco_assurance_agent.business_boundary import LocalBusinessOperationBoundary
 from telco_assurance_agent import PACKAGE_VERSION
 from telco_assurance_agent.status_http import status_routes
 
@@ -113,6 +115,27 @@ def test_real_app_exposes_loopback_health_ready_and_version_without_writes(
                 assert "access-control-allow-origin" not in response.headers
                 assert len(response.content) < 4096
 
+            unknown = await client.get("/local/v1/not-a-public-route")
+            assert unknown.status_code == 404
+            assert unknown.json()["error"] == {
+                "code": "LOCAL_SERVICE_NOT_FOUND",
+                "message": "The local service route was not found.",
+            }
+
+            trailing_slash = await client.get("/local/v1/faults/replay/")
+            assert trailing_slash.status_code == 404
+            assert trailing_slash.headers["content-type"] == "application/json"
+            assert "location" not in trailing_slash.headers
+
+            extended_method = await client.request(
+                "PROPFIND",
+                "/local/v1/faults/replay",
+            )
+            assert extended_method.status_code == 404
+            assert extended_method.json()["error"]["code"] == (
+                "LOCAL_SERVICE_NOT_FOUND"
+            )
+
         after = await profile.incident_repository.list(limit=1, offset=0)
         assert after == before == ()
 
@@ -179,6 +202,7 @@ def test_status_routes_reject_non_loopback_query_and_dependency_failure() -> Non
             ):
                 response = await client.request(method, "/local/v1/readyz")
                 assert response.status_code == 405
+                assert response.headers["allow"] == "GET"
                 assert "access-control-allow-origin" not in response.headers
                 assert response.headers["content-type"] == "application/json"
                 if method != "HEAD":
@@ -232,5 +256,49 @@ def test_readiness_timeout_bounds_a_synchronous_duckdb_style_probe() -> None:
             assert repeated.status_code == 503
             assert repository.calls == [(None, 1, 0)]
             await asyncio.sleep(0.7)
+
+    asyncio.run(scenario())
+
+
+def test_readiness_refuses_to_probe_while_the_business_worker_is_occupied() -> None:
+    repository = _ReadinessRepository()
+    boundary = LocalBusinessOperationBoundary(deadline_seconds=1.0)
+    worker_started = threading.Event()
+    release_worker = threading.Event()
+    app = Starlette(
+        routes=[
+            *status_routes(
+                repository,
+                operation_boundary=boundary,
+            )
+        ]
+    )
+
+    async def blocked_operation() -> str:
+        worker_started.set()
+        if not release_worker.wait(timeout=2.0):
+            raise RuntimeError("test worker release timed out")
+        return "settled"
+
+    async def scenario() -> None:
+        running = asyncio.create_task(boundary.run(blocked_operation))
+        assert await asyncio.to_thread(worker_started.wait, 1.0)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(
+                app=app,
+                client=("127.0.0.1", 43120),
+            ),
+            base_url="http://127.0.0.1:8085",
+        ) as client:
+            ready = await client.get("/local/v1/readyz")
+            assert ready.status_code == 503
+            assert ready.json()["error"]["code"] == "LOCAL_SERVICE_NOT_READY"
+            assert repository.calls == []
+
+            health = await client.get("/local/v1/healthz")
+            assert health.status_code == 200
+
+        release_worker.set()
+        assert await running == "settled"
 
     asyncio.run(scenario())

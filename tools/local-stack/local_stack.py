@@ -823,6 +823,7 @@ class LocalStackRuntime:
         try:
             import uvicorn
             from telco_assurance_agent.app import create_app
+            from telco_assurance_agent.transport_http import BoundedH11Protocol
         except Exception:
             raise SafeCliError("server_dependencies_missing") from None
         status = self.status(port=port)
@@ -830,7 +831,27 @@ class LocalStackRuntime:
             raise SafeCliError("workspace_not_initialized", exit_code=1)
         try:
             application = create_app(self._assurance_config(port))
-            uvicorn.run(application, host=DEFAULT_HOST, port=port)
+            uvicorn.run(
+                application,
+                host=DEFAULT_HOST,
+                port=port,
+                workers=1,
+                reload=False,
+                interface="asgi3",
+                lifespan="on",
+                http=BoundedH11Protocol,
+                ws="none",
+                proxy_headers=False,
+                forwarded_allow_ips="",
+                access_log=False,
+                server_header=False,
+                date_header=False,
+                limit_concurrency=None,
+                backlog=16,
+                timeout_keep_alive=5,
+                timeout_graceful_shutdown=10,
+                h11_max_incomplete_event_size=16_384,
+            )
         except SafeCliError:
             raise
         except Exception:

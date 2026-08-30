@@ -724,6 +724,32 @@ def _run_branch(
     )
 
 
+def _read_lifecycle_projection(
+    branch: str,
+    *,
+    workspace: Path,
+    repository_root: Path,
+    environment: dict[str, str],
+    process_runner: Callable[..., subprocess.CompletedProcess[bytes]],
+) -> dict[str, object]:
+    expected_status = "RESOLVED" if branch == "success" else "REOPENED"
+    payload = _call_stack(
+        process_runner,
+        (
+            "--workspace",
+            str(workspace),
+            "demo-events",
+            "--expected-status",
+            expected_status,
+        ),
+        repository_root=repository_root,
+        environment=environment,
+    )
+    _expect(payload.get("command"), "demo-events")
+    _expect(payload.get("action_mode"), "disabled")
+    return dict(_mapping(payload.get("result")))
+
+
 def _is_link_like(path: Path) -> bool:
     try:
         if path.is_symlink():
@@ -801,6 +827,9 @@ def _execute_demo(
     repository_root: Path,
     utc_now: Callable[[], datetime],
     random_token: Callable[[], str],
+    lifecycle_projection_hook: (
+        Callable[[str, Mapping[str, object]], None] | None
+    ) = None,
 ) -> dict[str, object]:
     environment = _safe_environment()
     source_before = _read_source_binding(
@@ -837,6 +866,26 @@ def _execute_demo(
             )
             results[name] = result
             datasets.append(dataset)
+        if lifecycle_projection_hook is not None:
+            projection_error: DefenseDemoError | None = None
+            for name, workspace in workspaces.items():
+                try:
+                    projection = _read_lifecycle_projection(
+                        name,
+                        workspace=workspace,
+                        repository_root=repository_root,
+                        environment=environment,
+                        process_runner=process_runner,
+                    )
+                    lifecycle_projection_hook(name, projection)
+                except DefenseDemoError as exc:
+                    if projection_error is None:
+                        projection_error = exc
+                except Exception:
+                    if projection_error is None:
+                        projection_error = DefenseDemoError("evidence_contract_failed")
+            if projection_error is not None:
+                raise projection_error
     except DefenseDemoError as exc:
         operation_error = exc
     except Exception:

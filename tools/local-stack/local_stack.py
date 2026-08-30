@@ -75,6 +75,9 @@ _ERROR_MESSAGES = {
     "demo_verification_failed": "container demo state verification failed",
     "governance_unavailable": "the local governance engine is unavailable",
     "invalid_arguments": "command arguments are invalid",
+    "lifecycle_projection_failed": (
+        "local lifecycle projection did not match the fixed contract"
+    ),
     "no_candidates": "the sample data produced no incident candidates",
     "not_awaiting_approval": "the incident has no approvable simulated action",
     "port_unavailable": "the selected loopback port is unavailable",
@@ -826,6 +829,70 @@ class LocalStackRuntime:
         except Exception:
             raise SafeCliError("runtime_failed") from None
 
+    async def _build_lifecycle_events(
+        self, *, expected_status: str
+    ) -> dict[str, object]:
+        """Project one completed demo from durable records without mutations."""
+
+        try:
+            from telco_local import (
+                LifecycleProjectionError,
+                LocalProfile,
+                build_lifecycle_projection,
+            )
+        except Exception:
+            raise SafeCliError("dependencies_missing") from None
+
+        profile = LocalProfile.open_existing(self._config())
+        repository = profile.incident_repository
+        incidents = tuple(await repository.list(limit=2, offset=0))
+        if len(incidents) != 1:
+            raise SafeCliError("lifecycle_projection_failed")
+        incident = incidents[0]
+        history = tuple(
+            await repository.history(incident.incident_id, limit=9, offset=0)
+        )
+        try:
+            result = build_lifecycle_projection(
+                incident,
+                history,
+                expected_status=expected_status,
+            )
+        except LifecycleProjectionError:
+            raise SafeCliError("lifecycle_projection_failed") from None
+        if not isinstance(result, dict):
+            raise SafeCliError("lifecycle_projection_failed")
+        return result
+
+    @staticmethod
+    def _database_digest(path: Path) -> str:
+        try:
+            digest = hashlib.sha256()
+            with path.open("rb") as stream:
+                while block := stream.read(1024 * 1024):
+                    digest.update(block)
+            return digest.hexdigest()
+        except OSError:
+            raise SafeCliError("runtime_failed") from None
+
+    def lifecycle_events(self, *, expected_status: str) -> dict[str, object]:
+        """Return a safe lifecycle projection and prove the database stayed fixed."""
+
+        before = self._database_digest(self.workspace.database_path)
+        try:
+            result = asyncio.run(
+                self._build_lifecycle_events(expected_status=expected_status)
+            )
+            _assert_project_safe(result)
+        except SafeCliError:
+            raise
+        except Exception:
+            raise SafeCliError("runtime_failed") from None
+        after = self._database_digest(self.workspace.database_path)
+        if before != after:
+            raise SafeCliError("lifecycle_projection_failed")
+        return result
+
     async def _run_demo(
         self,
         *,
@@ -1108,6 +1175,15 @@ def _parser() -> argparse.ArgumentParser:
         choices=("RESOLVED", "REOPENED"),
         required=True,
     )
+    demo_events = commands.add_parser(
+        "demo-events",
+        help="project the completed demo from durable lifecycle records",
+    )
+    demo_events.add_argument(
+        "--expected-status",
+        choices=("RESOLVED", "REOPENED"),
+        required=True,
+    )
     demo = commands.add_parser("demo", help="run a deterministic governance demo")
     demo.add_argument("--confirm-incident", action="store_true")
     demo.add_argument("--approve-action", action="store_true")
@@ -1222,6 +1298,25 @@ def main(
                 {
                     "ok": True,
                     "command": "demo-verify",
+                    "workspace": _workspace_payload(
+                        str(marker["workspace_id"]), initialized=True
+                    ),
+                    "action_mode": "disabled",
+                    "result": result,
+                },
+            )
+            return 0
+        if arguments.command == "demo-events":
+            marker = workspace.marker()
+            if arguments.action_mode != "disabled":
+                raise SafeCliError("actions_disabled")
+            result = runtime.lifecycle_events(expected_status=arguments.expected_status)
+            _assert_project_safe(result)
+            _write_json(
+                output,
+                {
+                    "ok": True,
+                    "command": "demo-events",
                     "workspace": _workspace_payload(
                         str(marker["workspace_id"]), initialized=True
                     ),

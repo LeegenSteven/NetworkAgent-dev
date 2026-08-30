@@ -126,6 +126,48 @@ class FakeRuntime:
             },
         }
 
+    def lifecycle_events(self, *, expected_status: str) -> dict[str, object]:
+        verification = "PASSED" if expected_status == "RESOLVED" else "FAILED"
+        return {
+            "schema": "networkagent-local-lifecycle-projection/1.0",
+            "classification": "DERIVED_FROM_DURABLE_CANONICAL_RECORDS",
+            "read_only": True,
+            "distributed_trace": False,
+            "ordering": "REVISION_GROUPED_ATOMIC_PROJECTION",
+            "scenario": (
+                "SUCCESS_BRANCH" if expected_status == "RESOLVED" else "FAILURE_BRANCH"
+            ),
+            "terminal_status": expected_status,
+            "record_counts": {
+                "audit_events": 8,
+                "domain_records": 6,
+                "projected_events": 14,
+                "revision_groups": 8,
+            },
+            "invariants": {
+                "bindings_exact": True,
+                "expected_verification": verification,
+                "single_incident": True,
+                "side_effects": False,
+            },
+            "revision_groups": [
+                {
+                    "revision": revision,
+                    "events": [
+                        {
+                            "sequence": revision + 1,
+                            "occurred_at": "2026-08-31T00:00:00Z",
+                            "record_type": "INCIDENT_AUDIT",
+                            "component": "INCIDENT_REPOSITORY",
+                            "operation": "STATE_TRANSITION",
+                            "outcome": "RECORDED",
+                        }
+                    ],
+                }
+                for revision in range(8)
+            ],
+        }
+
     def serve(self, *, port: int) -> None:  # pragma: no cover - foreground path
         raise AssertionError("serve should not be exercised in unit tests")
 
@@ -253,6 +295,19 @@ def test_container_demo_commands_are_strict_disabled_mode_json_contracts(
     }
     assert verified["result"]["verification"] == {"status": "FAILED"}
 
+    events_code, events, events_error = invoke(
+        tmp_path,
+        "demo-events",
+        "--expected-status",
+        "REOPENED",
+    )
+    assert (events_code, events_error) == (0, None)
+    assert events["action_mode"] == "disabled"
+    assert events["command"] == "demo-events"
+    assert events["result"]["schema"] == ("networkagent-local-lifecycle-projection/1.0")
+    assert events["result"]["terminal_status"] == "REOPENED"
+    assert events["result"]["distributed_trace"] is False
+
 
 @pytest.mark.parametrize(
     "arguments",
@@ -261,6 +316,9 @@ def test_container_demo_commands_are_strict_disabled_mode_json_contracts(
         ("--action-mode", "simulate", "demo-verify", "--expected-status", "RESOLVED"),
         ("demo-verify",),
         ("demo-verify", "--expected-status", "resolved"),
+        ("--action-mode", "simulate", "demo-events", "--expected-status", "RESOLVED"),
+        ("demo-events",),
+        ("demo-events", "--expected-status", "resolved"),
         ("demo-seed", "--incident-id", "untrusted"),
     ),
 )
@@ -424,6 +482,131 @@ def test_real_container_demo_verify_requires_exact_non_amplified_terminal_state(
     )
     assert (wrong_code, wrong_payload) == (2, None)
     assert wrong_error["error"]["code"] == "demo_verification_failed"
+
+
+@pytest.mark.parametrize(
+    ("expected_status", "verification_outcome"),
+    (("RESOLVED", "passed"), ("REOPENED", "failed")),
+)
+def test_real_demo_events_is_repeatable_read_only_public_flow(
+    tmp_path: Path,
+    expected_status: str,
+    verification_outcome: str,
+) -> None:
+    assert invoke_real(tmp_path, "init")[0] == 0
+    preview_code, preview, preview_error = invoke_real(
+        tmp_path,
+        "demo",
+        "--confirm-incident",
+    )
+    assert (preview_code, preview_error) == (0, None)
+    action = preview["result"]["action_preview"]
+    approval = (
+        "--action-mode",
+        "simulate",
+        "demo",
+        "--approve-action",
+        "--reason",
+        "approved fixed isolated local simulation",
+        "--expected-action-hash",
+        action["action_hash"],
+        "--expected-revision",
+        str(action["expected_revision"]),
+        *(
+            ("--verification-outcome", "failed")
+            if verification_outcome == "failed"
+            else ()
+        ),
+    )
+    terminal_code, terminal, terminal_error = invoke_real(tmp_path, *approval)
+    retry_code, retry, retry_error = invoke_real(tmp_path, *approval)
+    assert (terminal_code, terminal_error) == (0, None)
+    assert (retry_code, retry_error) == (0, None)
+    assert terminal["result"]["state"] == expected_status
+    assert retry["result"]["state"] == expected_status
+
+    runtime = local_stack.LocalStackRuntime(local_stack.Workspace(tmp_path / "stack"))
+    database_before_projection = runtime.workspace.database_path.read_bytes()
+    projection_code, projection, projection_error = invoke_real(
+        tmp_path,
+        "demo-events",
+        "--expected-status",
+        expected_status,
+    )
+    repeat_code, repeat_projection, repeat_error = invoke_real(
+        tmp_path,
+        "demo-events",
+        "--expected-status",
+        expected_status,
+    )
+    assert (projection_code, projection_error) == (0, None)
+    assert (repeat_code, repeat_error) == (0, None)
+    assert projection["result"] == repeat_projection["result"]
+    assert runtime.workspace.database_path.read_bytes() == database_before_projection
+    lifecycle = projection["result"]
+    assert set(lifecycle) == {
+        "classification",
+        "distributed_trace",
+        "invariants",
+        "ordering",
+        "read_only",
+        "record_counts",
+        "revision_groups",
+        "scenario",
+        "schema",
+        "terminal_status",
+    }
+    assert lifecycle["schema"] == "networkagent-local-lifecycle-projection/1.0"
+    assert lifecycle["classification"] == "DERIVED_FROM_DURABLE_CANONICAL_RECORDS"
+    assert lifecycle["read_only"] is True
+    assert lifecycle["distributed_trace"] is False
+    assert lifecycle["ordering"] == "REVISION_GROUPED_ATOMIC_PROJECTION"
+    assert lifecycle["terminal_status"] == expected_status
+    assert lifecycle["invariants"] == {
+        "bindings_exact": True,
+        "revision_contiguous": True,
+        "side_effects": False,
+        "single_execution_attempt": True,
+        "single_incident": True,
+    }
+    assert [group["revision"] for group in lifecycle["revision_groups"]] == list(
+        range(8)
+    )
+    assert sum(len(group["events"]) for group in lifecycle["revision_groups"]) == 14
+    forbidden_keys = {
+        "action_hash",
+        "action_id",
+        "approval_id",
+        "correlation_id",
+        "event_id",
+        "incident_id",
+        "idempotency_key",
+        "report_id",
+        "request_id",
+        "resource_id",
+        "trace_id",
+        "verification_id",
+        "workspace_id",
+    }
+
+    def keys(value: object) -> set[str]:
+        if isinstance(value, dict):
+            return set(value).union(*(keys(child) for child in value.values()))
+        if isinstance(value, list):
+            return set().union(*(keys(child) for child in value))
+        return set()
+
+    assert keys(lifecycle).isdisjoint(forbidden_keys)
+    wrong_status = "REOPENED" if expected_status == "RESOLVED" else "RESOLVED"
+    wrong_code, wrong_payload, wrong_error = invoke_real(
+        tmp_path,
+        "demo-events",
+        "--expected-status",
+        wrong_status,
+    )
+    assert (wrong_code, wrong_payload) == (2, None)
+    assert wrong_error["error"]["code"] == "lifecycle_projection_failed"
+    assert runtime.workspace.database_path.read_bytes() == database_before_projection
 
 
 def test_init_rejects_nonempty_unowned_directory_without_deleting(

@@ -272,6 +272,184 @@ jobs:
               key: value for key, value in observation.items() if key != "report"
           }
           PY
+      - name: Exercise canonical local lifecycle projection evidence
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python tools/local-stack/run_lifecycle_evidence_demo.py --approve-local-simulation > release-evidence/local-lifecycle-summary.json
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import stat
+          from pathlib import Path
+
+          lifecycle = json.loads(
+              Path("release-evidence/local-lifecycle-summary.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          assert lifecycle["schema"] == "networkagent-local-lifecycle-evidence/1.0"
+          assert lifecycle["ok"] is True
+          assert lifecycle["classification"] == "LOCAL_CANONICAL_LIFECYCLE_EVIDENCE"
+          assert lifecycle["source"]["commit_bound"] is True
+          assert lifecycle["source"]["commit_sha"] == os.environ["GITHUB_SHA"]
+          assert set(lifecycle["branches"]) == {"success", "failure"}
+          expected_terminal = {"success": "RESOLVED", "failure": "REOPENED"}
+          expected_scenario = {
+              "success": "LOCAL_SIMULATION_RESOLVED",
+              "failure": "LOCAL_SIMULATION_REOPENED",
+          }
+          expected_counts = {
+              "action_runs": 1,
+              "approval_decisions": 2,
+              "incident_audit_events": 8,
+              "incidents": 1,
+              "projected_events": 14,
+              "rca_reports": 1,
+              "remediation_actions": 1,
+              "verification_runs": 1,
+          }
+          expected_invariants = {
+              "bindings_exact": True,
+              "revision_contiguous": True,
+              "side_effects": False,
+              "single_execution_attempt": True,
+              "single_incident": True,
+          }
+          expected_event_keys = {
+              "component",
+              "occurred_at",
+              "operation",
+              "outcome",
+              "record_type",
+              "sequence",
+          }
+          def assert_exact(value, expected):
+              assert type(value) is type(expected)
+              if isinstance(expected, dict):
+                  assert set(value) == set(expected)
+                  for key in expected:
+                      assert_exact(value[key], expected[key])
+              elif isinstance(expected, list):
+                  assert len(value) == len(expected)
+                  for item, expected_item in zip(value, expected, strict=True):
+                      assert_exact(item, expected_item)
+              else:
+                  assert value == expected
+          for branch, projection in lifecycle["branches"].items():
+              assert set(projection) == {
+                  "classification",
+                  "distributed_trace",
+                  "invariants",
+                  "ordering",
+                  "read_only",
+                  "record_counts",
+                  "revision_groups",
+                  "scenario",
+                  "schema",
+                  "terminal_status",
+              }
+              assert projection["schema"] == "networkagent-local-lifecycle-projection/1.0"
+              assert projection["classification"] == "DERIVED_FROM_DURABLE_CANONICAL_RECORDS"
+              assert projection["read_only"] is True
+              assert projection["distributed_trace"] is False
+              assert projection["ordering"] == "REVISION_GROUPED_ATOMIC_PROJECTION"
+              assert projection["scenario"] == expected_scenario[branch]
+              assert projection["terminal_status"] == expected_terminal[branch]
+              assert_exact(projection["record_counts"], expected_counts)
+              assert_exact(projection["invariants"], expected_invariants)
+              assert [item["revision"] for item in projection["revision_groups"]] == list(range(8))
+              events = [
+                  event
+                  for group in projection["revision_groups"]
+                  for event in group["events"]
+              ]
+              assert len(events) == 14
+              assert [item["sequence"] for item in events] == list(range(1, 15))
+              assert all(set(item) == expected_event_keys for item in events)
+          assert_exact(lifecycle["proof"], {
+              "branch_count": 2,
+              "cleanup": {"failure": True, "success": True},
+              "exact_retry": {"failure": True, "success": True},
+              "projected_event_count": 28,
+              "revision_group_count": 16,
+              "terminal": {
+                  "failure": {
+                      "closed_loop": False,
+                      "expected_business_result": True,
+                      "state": "REOPENED",
+                      "verification": "FAILED",
+                  },
+                  "success": {
+                      "closed_loop": True,
+                      "expected_business_result": True,
+                      "state": "RESOLVED",
+                      "verification": "PASSED",
+                  },
+              },
+          })
+          assert_exact(lifecycle["privacy"], {
+              "absolute_paths_recorded": False,
+              "domain_hashes_recorded": False,
+              "domain_identifiers_recorded": False,
+              "pseudonymous_correlation_recorded": False,
+              "raw_records_recorded": False,
+              "status": "PASS",
+              "workspace_identifiers_recorded": False,
+          })
+          assert lifecycle["coverage"]["not_claimed"] == [
+              "OPEN_TELEMETRY_EXPORT",
+              "DISTRIBUTED_TRACE",
+              "RUNTIME_STRUCTURED_LOGGING",
+              "CROSS_HTTP_REPLAY_A2A_MCP_TRACE",
+              "PROMETHEUS_METRICS",
+              "SERVICE_LEVEL_OBJECTIVES",
+              "EXTERNAL_ALERT_DELIVERY",
+              "GATE_E_OR_G5_CLOSURE",
+              "CLOUD_OR_PRODUCTION_EXECUTION",
+          ]
+          forbidden_keys = {
+              "action_hash",
+              "action_id",
+              "approval_id",
+              "correlation_id",
+              "event_id",
+              "incident_id",
+              "idempotency_key",
+              "report_id",
+              "request_id",
+              "resource_id",
+              "trace_id",
+              "verification_id",
+              "workspace_id",
+          }
+          def nested_keys(value):
+              if isinstance(value, dict):
+                  return set(value).union(*(nested_keys(item) for item in value.values()))
+              if isinstance(value, list):
+                  return set().union(*(nested_keys(item) for item in value))
+              return set()
+          persisted_body = {
+              key: value for key, value in lifecycle.items() if key != "report"
+          }
+          assert nested_keys(persisted_body).isdisjoint(forbidden_keys)
+          report_candidates = list(
+              Path(".local/networkagent-defense").glob(
+                  "*/local-lifecycle-report.json"
+              )
+          )
+          assert len(report_candidates) == 1
+          report_path = report_candidates[0]
+          assert report_path.name == lifecycle["report"]["filename"]
+          assert lifecycle["report"]["filename"] == "local-lifecycle-report.json"
+          assert not report_path.is_symlink()
+          assert stat.S_ISREG(os.lstat(report_path).st_mode)
+          report_bytes = report_path.read_bytes()
+          assert len(report_bytes) == lifecycle["report"]["bytes"]
+          assert hashlib.sha256(report_bytes).hexdigest() == lifecycle["report"]["sha256"]
+          assert json.loads(report_bytes) == persisted_body
+          PY
       - name: Build both wheels
         run: |
           python -m pip install "build>=1,<2"
@@ -283,7 +461,7 @@ jobs:
           python -m pip install dist/domain/telco_domain-*.whl
           python -m pip install dist/local/telco_local-*.whl
           cd /tmp
-          python -c "import telco_domain, telco_local; from telco_local import LOCAL_SIMULATION_ACTION_TYPE, LocalGovernanceEngine; assert telco_domain.SCHEMA_VERSION == '1.0' and LOCAL_SIMULATION_ACTION_TYPE == 'LOCAL_SIMULATION'"
+          python -c "import telco_domain, telco_local; from telco_local import LOCAL_SIMULATION_ACTION_TYPE, LifecycleProjectionError, LocalGovernanceEngine, build_lifecycle_projection; assert telco_domain.SCHEMA_VERSION == '1.0' and LOCAL_SIMULATION_ACTION_TYPE == 'LOCAL_SIMULATION' and issubclass(LifecycleProjectionError, ValueError) and callable(build_lifecycle_projection)"
       - name: Verify dependency consistency
         run: python -m pip check
       - name: Generate release evidence and audit runtime dependencies
@@ -363,6 +541,7 @@ jobs:
             --artifact-retention-days 14 \
             --supplemental-evidence release-evidence/defense-demo-summary.json \
             --supplemental-evidence release-evidence/local-observability-summary.json \
+            --supplemental-evidence release-evidence/local-lifecycle-summary.json \
             --summary "$GITHUB_STEP_SUMMARY"
           python .github/scripts/release_evidence.py verify-manifest \
             --manifest release-evidence/release-manifest.json \
@@ -379,7 +558,8 @@ jobs:
             --artifact-name "$RELEASE_ARTIFACT_NAME" \
             --artifact-retention-days 14 \
             --supplemental-evidence release-evidence/defense-demo-summary.json \
-            --supplemental-evidence release-evidence/local-observability-summary.json
+            --supplemental-evidence release-evidence/local-observability-summary.json \
+            --supplemental-evidence release-evidence/local-lifecycle-summary.json
       - name: Upload release or diagnostic evidence
         id: release_artifact
         if: ${{ always() && matrix.python-version == '3.12' }}

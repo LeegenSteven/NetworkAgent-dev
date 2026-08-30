@@ -100,3 +100,60 @@ def test_observability_demo_enters_manifest_closure() -> None:
         "CLOUD_OR_PRODUCTION_OBSERVABILITY",
     ):
         assert f'"{boundary}"' in workflow
+
+
+def test_lifecycle_projection_runs_in_both_jobs_and_enters_312_closure() -> None:
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    command = (
+        "python tools/local-stack/run_lifecycle_evidence_demo.py "
+        "--approve-local-simulation > "
+        "release-evidence/local-lifecycle-summary.json"
+    )
+    supplemental = (
+        "--supplemental-evidence " "release-evidence/local-lifecycle-summary.json"
+    )
+
+    assert command in workflow
+    assert workflow.count(command) == 1
+    assert workflow.count(supplemental) == 2
+    assert (
+        'lifecycle["schema"] == ' '"networkagent-local-lifecycle-evidence/1.0"'
+    ) in workflow
+    assert 'lifecycle["source"]["commit_bound"] is True' in workflow
+    assert ('lifecycle["source"]["commit_sha"] == os.environ["GITHUB_SHA"]') in workflow
+    assert 'set(lifecycle["branches"]) == {"success", "failure"}' in workflow
+    assert 'projection["read_only"] is True' in workflow
+    assert 'projection["distributed_trace"] is False' in workflow
+    assert (
+        'projection["ordering"] == "REVISION_GROUPED_ATOMIC_PROJECTION"'
+    ) in workflow
+    assert 'projection["record_counts"] == expected_counts' not in workflow
+    assert 'assert_exact(projection["record_counts"], expected_counts)' in workflow
+    assert 'assert_exact(projection["invariants"], expected_invariants)' in workflow
+    assert "len(events) == 14" in workflow
+    assert 'assert_exact(lifecycle["proof"], {' in workflow
+    assert "nested_keys(persisted_body).isdisjoint(forbidden_keys)" in workflow
+    assert 'Path(".local/networkagent-defense").glob(' in workflow
+    assert "assert len(report_candidates) == 1" in workflow
+    assert (
+        'lifecycle["report"]["filename"] == "local-lifecycle-report.json"' in workflow
+    )
+    assert 'len(report_bytes) == lifecycle["report"]["bytes"]' in workflow
+    lifecycle_step = workflow.split(
+        "- name: Exercise canonical local lifecycle projection evidence", 1
+    )[1].split("- name: Build both wheels", 1)[0]
+    assert "relative_path" not in lifecycle_step
+    assert 'assert_exact(lifecycle["privacy"], {' in workflow
+    assert 'lifecycle["coverage"]["not_claimed"] == [' in workflow
+    for boundary in (
+        "OPEN_TELEMETRY_EXPORT",
+        "DISTRIBUTED_TRACE",
+        "RUNTIME_STRUCTURED_LOGGING",
+        "CROSS_HTTP_REPLAY_A2A_MCP_TRACE",
+        "PROMETHEUS_METRICS",
+        "SERVICE_LEVEL_OBJECTIVES",
+        "EXTERNAL_ALERT_DELIVERY",
+        "GATE_E_OR_G5_CLOSURE",
+        "CLOUD_OR_PRODUCTION_EXECUTION",
+    ):
+        assert f'"{boundary}"' in workflow

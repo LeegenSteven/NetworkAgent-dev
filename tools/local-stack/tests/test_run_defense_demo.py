@@ -40,6 +40,109 @@ SELECTED_CANDIDATE = {
 }
 
 
+def _lifecycle_projection(branch: str) -> dict[str, object]:
+    terminal = "RESOLVED" if branch == "success" else "REOPENED"
+    scenario = (
+        "LOCAL_SIMULATION_RESOLVED"
+        if branch == "success"
+        else "LOCAL_SIMULATION_REOPENED"
+    )
+    audit = (
+        "INCIDENT_AUDIT_EVENT",
+        "INCIDENT_REPOSITORY",
+        "RECORD_STATE_TRANSITION",
+    )
+    descriptors = [
+        (0, *audit, "DETECTED"),
+        (1, *audit, "TRIAGED"),
+        (2, *audit, "INVESTIGATING"),
+        (3, "RCA_REPORT", "RCA_GATEWAY", "PROPOSE_REPORT", "CONCLUSIVE"),
+        (
+            3,
+            "REMEDIATION_ACTION",
+            "GOVERNANCE_ENGINE",
+            "PROPOSE_ACTION",
+            "LOCAL_SIMULATION",
+        ),
+        (3, *audit, "RCA_COMPLETE"),
+        (
+            4,
+            "APPROVAL_DECISION",
+            "APPROVAL_GATEWAY",
+            "REQUEST_NETWORK_ACTION_APPROVAL",
+            "PENDING",
+        ),
+        (4, *audit, "AWAITING_APPROVAL"),
+        (
+            5,
+            "APPROVAL_DECISION",
+            "APPROVAL_GATEWAY",
+            "DECIDE_NETWORK_ACTION_APPROVAL",
+            "APPROVED",
+        ),
+        (5, *audit, "REMEDIATING"),
+        (
+            6,
+            "ACTION_RUN",
+            "SIMULATED_ACTION_GATEWAY",
+            "EXECUTE_LOCAL_SIMULATION",
+            "SUCCEEDED",
+        ),
+        (6, *audit, "VERIFYING"),
+        (
+            7,
+            "VERIFICATION_RUN",
+            "LOCAL_VERIFICATION_GATEWAY",
+            "VERIFY_LOCAL_SIMULATION",
+            "PASSED" if branch == "success" else "FAILED",
+        ),
+        (7, *audit, terminal),
+    ]
+    groups = []
+    for revision in range(8):
+        events = []
+        for sequence, descriptor in enumerate(descriptors, start=1):
+            if descriptor[0] == revision:
+                events.append(
+                    {
+                        "sequence": sequence,
+                        "occurred_at": "2026-08-31T00:00:00Z",
+                        "record_type": descriptor[1],
+                        "component": descriptor[2],
+                        "operation": descriptor[3],
+                        "outcome": descriptor[4],
+                    }
+                )
+        groups.append({"revision": revision, "events": events})
+    return {
+        "schema": "networkagent-local-lifecycle-projection/1.0",
+        "classification": "DERIVED_FROM_DURABLE_CANONICAL_RECORDS",
+        "read_only": True,
+        "distributed_trace": False,
+        "ordering": "REVISION_GROUPED_ATOMIC_PROJECTION",
+        "scenario": scenario,
+        "terminal_status": terminal,
+        "record_counts": {
+            "action_runs": 1,
+            "approval_decisions": 2,
+            "incident_audit_events": 8,
+            "incidents": 1,
+            "projected_events": 14,
+            "rca_reports": 1,
+            "remediation_actions": 1,
+            "verification_runs": 1,
+        },
+        "invariants": {
+            "bindings_exact": True,
+            "revision_contiguous": True,
+            "side_effects": False,
+            "single_execution_attempt": True,
+            "single_incident": True,
+        },
+        "revision_groups": groups,
+    }
+
+
 def _document(value: object) -> bytes:
     return json.dumps(value, separators=(",", ":"), sort_keys=True).encode() + b"\n"
 
@@ -144,6 +247,17 @@ class FakeRunner:
             (workspace / ".local-stack.json").unlink()
             workspace.rmdir()
             payload = {"ok": True, "command": "reset", "workspace_removed": True}
+        elif "demo-events" in arguments:
+            payload = {
+                "ok": True,
+                "command": "demo-events",
+                "action_mode": "disabled",
+                "workspace": {
+                    "workspace_id": "11111111-1111-4111-8111-111111111111",
+                    "initialized": True,
+                },
+                "result": _lifecycle_projection(branch),
+            }
         elif "demo-verify" in arguments:
             status = arguments[arguments.index("--expected-status") + 1]
             payload = {
@@ -318,6 +432,7 @@ def test_fake_full_sequence_is_fixed_bound_clean_and_hash_verified(
 
     local_calls = [call for call in runner.calls if call[0] == sys.executable]
     assert Path(local_calls[0][-1]).name == "doctor"
+    assert not any("demo-events" in call for call in local_calls)
     assert sum(call[-1] == "status" for call in local_calls) == 2
     assert [call[-2:] for call in local_calls[-2:]] == [
         ("reset", "--yes"),
@@ -352,6 +467,112 @@ def test_fake_full_sequence_is_fixed_bound_clean_and_hash_verified(
         and env["HOMEPATH"] == "\\Users\\safe"
         for env in runner.environments
     )
+
+
+def test_projection_hook_runs_after_both_exact_retries_and_before_cleanup(
+    tmp_path: Path,
+) -> None:
+    runner = FakeRunner()
+    captured: list[tuple[str, object]] = []
+
+    def hook(branch: str, projection: object) -> None:
+        assert runner.approval_calls == {"success": 2, "failure": 2}
+        assert not any(call[-2:] == ("reset", "--yes") for call in runner.calls)
+        captured.append((branch, projection))
+
+    payload = defense_demo._execute_demo(
+        process_runner=runner,
+        repository_root=tmp_path,
+        utc_now=lambda: datetime(2026, 8, 31, 1, 2, 3, tzinfo=UTC),
+        random_token=lambda: "c0ffee123456",
+        lifecycle_projection_hook=hook,
+    )
+
+    assert payload["ok"] is True
+    assert [item[0] for item in captured] == ["success", "failure"]
+    assert captured[0][1]["terminal_status"] == "RESOLVED"
+    assert captured[1][1]["terminal_status"] == "REOPENED"
+    local_calls = [call for call in runner.calls if call[0] == sys.executable]
+    projections = [call for call in local_calls if "demo-events" in call]
+    assert len(projections) == 2
+    assert [call[call.index("--expected-status") + 1] for call in projections] == [
+        "RESOLVED",
+        "REOPENED",
+    ]
+    assert [call[-2:] for call in local_calls[-2:]] == [
+        ("reset", "--yes"),
+        ("reset", "--yes"),
+    ]
+
+
+def test_one_projection_hook_failure_still_attempts_other_branch_and_cleanup(
+    tmp_path: Path,
+) -> None:
+    runner = FakeRunner()
+    branches: list[str] = []
+
+    def hook(branch: str, _projection: object) -> None:
+        branches.append(branch)
+        if branch == "success":
+            raise RuntimeError("private callback detail")
+
+    with pytest.raises(defense_demo.DefenseDemoError) as caught:
+        defense_demo._execute_demo(
+            process_runner=runner,
+            repository_root=tmp_path,
+            utc_now=lambda: datetime(2026, 8, 31, 1, 2, 3, tzinfo=UTC),
+            random_token=lambda: "c0ffee123456",
+            lifecycle_projection_hook=hook,
+        )
+
+    assert caught.value.code == "evidence_contract_failed"
+    assert branches == ["success", "failure"]
+    local_calls = [call for call in runner.calls if call[0] == sys.executable]
+    assert len([call for call in local_calls if "demo-events" in call]) == 2
+    assert [call[-2:] for call in local_calls[-2:]] == [
+        ("reset", "--yes"),
+        ("reset", "--yes"),
+    ]
+
+
+def test_one_projection_read_failure_still_reads_other_branch_and_cleans_both(
+    tmp_path: Path,
+) -> None:
+    class FailedProjection(FakeRunner):
+        def __call__(self, arguments, **kwargs):  # type: ignore[no-untyped-def]
+            completed = super().__call__(arguments, **kwargs)
+            if "demo-events" in arguments:
+                workspace = Path(arguments[arguments.index("--workspace") + 1])
+                if workspace.name == "success":
+                    return subprocess.CompletedProcess(
+                        arguments,
+                        2,
+                        b"",
+                        b'{"private":"detail"}\n',
+                    )
+            return completed
+
+    runner = FailedProjection()
+    branches: list[str] = []
+    with pytest.raises(defense_demo.DefenseDemoError) as caught:
+        defense_demo._execute_demo(
+            process_runner=runner,
+            repository_root=tmp_path,
+            utc_now=lambda: datetime(2026, 8, 31, 1, 2, 3, tzinfo=UTC),
+            random_token=lambda: "c0ffee123456",
+            lifecycle_projection_hook=lambda branch, _projection: branches.append(
+                branch
+            ),
+        )
+
+    assert caught.value.code == "command_failed"
+    assert branches == ["failure"]
+    local_calls = [call for call in runner.calls if call[0] == sys.executable]
+    assert len([call for call in local_calls if "demo-events" in call]) == 2
+    assert [call[-2:] for call in local_calls[-2:]] == [
+        ("reset", "--yes"),
+        ("reset", "--yes"),
+    ]
 
 
 @pytest.mark.parametrize("arguments", [(), ("--approve-local-simulation", "extra")])

@@ -28,6 +28,10 @@ from .governance import (
     SimulatedActionGateway,
 )
 from .incident_repository import DuckDbIncidentRepository
+from .lifecycle_projection import (
+    LifecycleProjectionError,
+    build_lifecycle_projection,
+)
 from .profile import LocalProfile
 from .rca import DeterministicRcaGateway
 from .rules import (
@@ -56,6 +60,7 @@ __all__ = [
     "GovernanceResult",
     "GovernanceStateError",
     "JsonRuleRepository",
+    "LifecycleProjectionError",
     "LOCAL_SIMULATION_ACTION_TYPE",
     "LocalApprovalGateway",
     "LocalProfileConfig",
@@ -68,6 +73,7 @@ __all__ = [
     "LocalVerificationGateway",
     "MarkdownDocumentRepository",
     "RcaRule",
+    "build_lifecycle_projection",
     "rule_content_sha256",
     "SimulatedActionGateway",
     "initialize_database",

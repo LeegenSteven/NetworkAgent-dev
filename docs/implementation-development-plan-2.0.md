@@ -54,6 +54,7 @@
 | P3a–P3d Cloud 代码与 Emulator | `DONE` | Spanner v2、事务型 Inbox/Outbox、Fault Ingress、只读 MCP、FGAC 制品和迁移逻辑已通过远程 Spanner Emulator Gate；不代表 Cloud Staging 已通过。 |
 | Local 模拟治理闭环 | `DONE` | 13,440 条 KPI、579 条安全 Trace、15 个候选；独立审批后可到 `RESOLVED`，验证失败到 `REOPENED`，无真实网络副作用。 |
 | Local Stack | `DONE` | `doctor/init/status/demo/serve/reset` 已具备工作区所有权、loopback、默认禁用动作、安全 reset 与提交响应丢失恢复。 |
+| S2-02 容器化治理恢复 | `DONE` | 精确绑定 RC 的远程真实 Docker 已覆盖 `RESOLVED`/`REOPENED` 两分支、Assurance 重启、原请求 exact replay、离线数据库核验和项目卷清理；真实网络副作用为 0。 |
 | BubbleRAN Data Lab | `IN PROGRESS` | 下载锁定、隐私投影、离线评估、immutable `ReplayPlan`、公开 `ReplayWirePayload`、loopback transport、单调 paced runner、caller-owned 本地持久 checkpoint 与 Assurance Canonical Fault 持久接收器已完成；每个 source event 独立映射 Incident，不做跨事件聚合，RCAEval 尚未完成。 |
 
 ### 3.2 当前发布证据
@@ -69,7 +70,9 @@
 - 当前远程 canonical wheel 为：`telco_domain-0.1.0` 32,547 bytes / SHA-256 `53f0b118041c5897d4e01813b777744263f849894f6c211cc67cb9df41fd104e`；`telco_lab-0.1.0` 74,425 bytes / `4c646e7ad618884284bf5f0b484b579c19dbcaccc8ef01571eccfc4ea197d900`；`telco_local-0.1.0` 66,728 bytes / `f86b66dbd9a157ca0ecbdb0fb1d63743f48fc96195a12629e01780f809dd7e3f`；`telco_assurance_agent-0.1.0` 56,893 bytes / `9f7d47ea0c45d2a01a60a5a726055a7368f3d2cf86d4d8a8ac1445bde08ce96d`。Domain/Lab/Local 摘要相对上一 RC 未变；Assurance 摘要随 HTTP hardening 更新。
 - 上一 RC 的 [Cloud CI run 33301104595](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104595) 仍是有效的 Cloud/Spanner Emulator 历史证据，但其 `headSha` 不是本节的新 RC，不能据此宣称新 RC 已完成 Cloud 回归，更不能替代 Cloud Staging IAM/OIDC/DLQ/Workload Identity 验收。
 - Sprint 2 S2-01 的受测 release candidate 为 `d0a020fb7a5d8a33cd136cd18917d21b7e067946`；[telco-container run 33311995755](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33311995755) 的 `headSha` 精确绑定该 SHA，[compose-policy job 99258612862](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33311995755/job/99258612862) 与 [build-inspect-smoke job 99258640065](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33311995755/job/99258640065) 均为 `success`。远程 Linux 政策门禁为 `76 passed, 0 skipped`；真实 Compose resolve/build/inspect 得到 runner 本地 image ID `sha256:0acef50a2ee7978ea67a8b37582a19698a21b1303451ce37a0a569d48fef6cff`（不是 registry digest），并完成 5 个应用层 / 2,570 个成员、9,148 个合并 rootfs 成员扫描；初始化为 13,440 条 performance / 579 条 trace / 0 条 incident 且 `external_access=false`。health、运行中隔离、共享 loopback smoke 和 probe step 均成功，但 probe step 无 stdout；reset 删除 state/artifacts/marker 且 `workspace_removed=true`，cleanup 成功。
-- 本次证据回填形成的文档提交晚于且不等于上述受测 RC。该 run 上传 artifact 数为 0，未发布 registry image，也未生成容器 SBOM、签名、attestation 或 provenance；本地 image ID 不能替代 registry digest，SHA-256 只能证明内容完整性而非发布者身份。Gate A、Gate B、S3、G4、hash-locked 离线安装、Trivy Critical/High、SPDX 与独立 secret/SAST/license policy 仍未完成。
+- Sprint 2 S2-02 的受测 release candidate 为 `d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4`；[telco-container run 33314782750](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750) 的 `headSha` 精确绑定该 SHA，[compose-policy job 99266075811](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750/job/99266075811) 与 [build-inspect-smoke job 99266104885](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750/job/99266104885) 均为 `success`，Linux 政策门禁为 `128 passed`。真实容器治理 JSON 中成功分支为 `RESOLVED`、故意验证失败分支为 `REOPENED`；两分支均为 `restart_observed=true`、`exact_replay=true`、`real_network_side_effects=false`，顶层 `projects_removed=true` 证明两个 Compose 项目均已清理。
+- 同一 RC 的 [Local CI run 33314782757](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757) 两个 job [99266075954](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/job/99266075954) / [99266075805](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/job/99266075805) 均为 `success`。两版 Python 各通过 Domain + Local `518 passed`、local-stack `29 passed, 2 skipped`、Local E2E `2 passed`；Python 3.12 发布 [VERIFIED RC artifact 9733117877](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/artifacts/9733117877)，archive digest 为 `sha256:3d557a52a80960add94c04b443c14f613892701c5b5b93dcfba4174fd78f3469`。
+- 本次证据回填形成的文档提交晚于且不等于上述受测 RC。S2-01 与 S2-02 的 `telco-container` run 均上传 0 个 artifact，未发布 registry image，也未生成容器 SBOM、签名、attestation 或 provenance；Local `VERIFIED RC` artifact 不是容器 registry artifact。runner 本地 image ID 不能替代 registry digest，SHA-256 只能证明内容完整性而非发布者身份。Gate A、Gate B、S3、G4、hash-locked 离线安装、Trivy Critical/High、SPDX 与独立 secret/SAST/license policy 仍未完成。
 
 ### 3.3 已知缺口
 
@@ -79,7 +82,8 @@
 - HTTP 首部/body deadline 是 ASGI event loop 上的协作式计时。Governance/Fault 仓储工作由专用 worker 隔离，但 legacy A2A SDK/store 的同步 DuckDB 调用仍可能阻塞该 loop；A2A 后台/流式任务生命周期也不受同步请求 admission lease 覆盖，因此不声明全局硬 wall-clock 隔离。
 - BubbleRAN 事件已进入 Canonical Incident 治理链路，但当前是每 source 独立 Incident，不做跨事件聚合；RCA 仅识别受控 `5G_SA` BubbleRAN UL BLER 签名，不得外推生产。
 - S2-01 已在精确绑定 RC `d0a020fb7a5d8a33cd136cd18917d21b7e067946` 的远程 Docker runner 上通过 Compose config、build/inspect、应用层与合并 rootfs 扫描、health、运行中隔离、共享 loopback smoke/probe、reset 和 cleanup，因此该工作包为 `DONE`；本机仍没有 Docker/actionlint，不能把远程结果改写为本机工具 PASS。
-- 当前 Sprint 1 RC 已发布 14 天保留的 wheel、manifest、CycloneDX SBOM、runtime inventory、内容扫描与 `pip-audit` 证据；S2-01 容器 workflow 没有发布/上传容器 artifact。容器依赖仍未 `--require-hashes`，Trivy Critical/High Gate、容器 SBOM、签名/attestation/provenance、完整成功/失败演示、重启恢复和完整发布报告仍未完成。
+- S2-02 已在精确绑定 RC `d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4` 的远程 Docker runner 上通过成功/失败治理分支、Assurance 重启、exact replay、离线核验和项目卷清理，因此该工作包为 `DONE`；其 Local 双 Python 矩阵与 Python 3.12 `VERIFIED RC` artifact 也已通过同一 RC。
+- 当前 Sprint 1/Local RC 已发布 wheel、manifest、CycloneDX SBOM、runtime inventory、内容扫描与 `pip-audit` 证据；S2-01/S2-02 容器 workflows 都没有发布/上传容器 artifact。容器依赖仍未 `--require-hashes`，Trivy Critical/High Gate、registry image/digest、容器 SBOM、签名/attestation/provenance 和完整发布报告仍未完成。
 - 跨组件结构化日志、指标、分布式追踪、本地 SLO、告警和完整 Runbook 尚未交付。
 - Cloud Staging IAM/OIDC、Pub/Sub DLQ、Workload Identity 及真实基础设施验收尚未进行。
 
@@ -131,11 +135,15 @@
 
 **当前 S2-01 工作包**：`DONE`（远程 Docker 行为验收已精确绑定 RC `d0a020fb7a5d8a33cd136cd18917d21b7e067946`；不代表 Gate B 完成）。
 
+**当前 S2-02 工作包**：`DONE`（成功/失败治理分支与重启后精确重放已精确绑定 RC `d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4`；不代表 Gate B 完成）。
+
 - 容器网络冻结为：`assurance`、`init`、`reset` 使用 `network_mode: none`；`probe`、`smoke` 使用 `network_mode: service:assurance` 共享同一网络命名空间中的 loopback。Compose 不发布或 expose 端口，不创建默认/自定义 bridge，也不通过服务名或反向代理绕过 loopback。
 - 运行时使用 digest 固定的 Python 3.12 Debian 基础镜像与 UID/GID `10001:10001`；根文件系统只读，`cap_drop: ALL`、`no-new-privileges`、有界 CPU/内存/PID/nofile 和 `noexec,nosuid,nodev` `/tmp` tmpfs。只有 Docker named workspace volume 可持久写；四类受控 LTE 输入只读 bind，并由镜像内 manifest 校验精确文件集合、字节数和 SHA-256。
 - 本地静态门禁为 `75 passed, 1 skipped`；唯一 skip 是 Windows symlink 条件测试。Black、flake8、YAML/JSON 解析和 `git diff --check` 均通过；本机未安装 Docker 与 actionlint，因此这些工具的结论不得写为本地 PASS。
 - 精确绑定受测 RC 的 [telco-container run 33311995755](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33311995755) 已全绿：远程 Linux 政策门禁 `76 passed, 0 skipped`，compose-policy job `99258612862` 和 build-inspect-smoke job `99258640065` 均成功；真实 Compose resolve、build/inspect、5 层 / 2,570 成员应用层扫描、9,148 成员合并 rootfs 扫描、初始化 `13440/579/0` 且 `external_access=false`、health/隔离/shared-loopback smoke 与 probe step 均通过。probe step 无 stdout；reset 删除 state/artifacts/marker 且 `workspace_removed=true`，随后 cleanup 成功。runner 本地 image ID 为 `sha256:0acef50a2ee7978ea67a8b37582a19698a21b1303451ce37a0a569d48fef6cff`，不是 registry digest。
-- 该 run 上传 artifact 数为 0，未发布 registry image，也没有容器 SBOM、签名、attestation 或 provenance。后续仍须完成 `--require-hashes` 依赖锁、Trivy Critical/High 策略、完整成功/失败治理演示与重启恢复；因此 S2/Workflow B 及统一计划 P7 保持 `IN PROGRESS`，Gate B、Gate A、S3 与 G4 均保持开放。
+- 精确绑定 S2-02 RC 的 [telco-container run 33314782750](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750) 已全绿：Linux 政策门禁 `128 passed`，compose-policy job `99266075811` 和 build-inspect-smoke job `99266104885` 均成功；真实治理 JSON 同时证明 `RESOLVED` 成功分支和 `REOPENED` 失败验证分支，且两者均观察到重启、原请求 exact replay、零真实网络副作用与项目卷清理。
+- 同一 RC 的 [Local CI run 33314782757](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757) 两个 job 均成功；两版 Python 各为 Domain + Local `518 passed`、local-stack `29 passed, 2 skipped`、Local E2E `2 passed`。Python 3.12 `VERIFIED RC` artifact 9733117877 的 archive digest 为 `sha256:3d557a52a80960add94c04b443c14f613892701c5b5b93dcfba4174fd78f3469`。
+- 两个容器 run 均上传 0 个 artifact，未发布 registry image，也没有容器 SBOM、签名、attestation 或 provenance。后续仍须完成 `--require-hashes` 依赖锁、Trivy Critical/High 策略、registry image/digest 与完整供应链报告；因此 S2/Workflow B 及统一计划 P7 保持 `IN PROGRESS`，Gate B、Gate A、S3 与 G4 均保持开放。
 
 ### C. Governance HTTP 服务
 
@@ -208,7 +216,7 @@
 |---|---|---|---|---|
 | S0 基线冻结 | 领域契约、现有 Gate、发布计数和边界盘点 | A、F | `DONE` | 基线与缺口写入本计划，Cloud/Local 证据分级明确。 |
 | S1 本地事件治理接入 | Governance HTTP + Loopback Replay Transport | C、D | `DONE` | Gate C、D、本地攻击性/E2E 与同一提交的远程 RC 均已通过。 |
-| S2 本地发布包 | 安全容器、Compose、一键演示 | B | `IN PROGRESS` | S2-01 远程 Docker 基线已通过并标记 `DONE`；一键完整成功/失败闭环、重启恢复与 Gate B 仍未通过。 |
+| S2 本地发布包 | 安全容器、Compose、一键演示 | B | `IN PROGRESS` | S2-01 安全容器基线与 S2-02 成功/失败治理、重启恢复均已通过精确绑定 RC 的远程 Docker 并标记 `DONE`；供应链要求与 Gate B 仍未通过。 |
 | S3 发布与供应链 | 远程 CI、SBOM、扫描、签名/证明 | A | `IN PROGRESS` | Gate A 通过并绑定提交和远程证据。 |
 | S4 可观测与运维 | OTel、指标、SLO、告警、Runbook、演练 | E | `NOT STARTED` | Gate E 通过并形成演练报告。 |
 | S5 Cloud 就绪 | IaC、权限矩阵、Staging 验收包 | F | `IN PROGRESS` | Gate F-local 通过，状态变为 `READY FOR STAGING`。 |
@@ -374,3 +382,4 @@
 | 2026-08-30 | 2.0 | RC `7cbff490ccb71befb42c7cd30204f7f88e3b2f38` 的 Assurance、Data Lab、Local 三个 workflows 共 9 个 job 全绿，且三个 run 的 `headSha` 均精确绑定该 SHA；三个 Python 3.12 job 发布 14 天 `VERIFIED RC` artifacts，archive/wheel 摘要、runtime inventory、SBOM 与零已知漏洞审计证据已回填。上一 RC 的 Cloud run 只保留为历史 Emulator 证据。 | S1-01..07、Workflow C/D、S1 与 Sprint 1=`DONE`；当前转入 Sprint 2 准备启动。P3e、S3、Cloud Staging 及其余全局缺口不受此状态变化影响。 |
 | 2026-08-30 | 2.0 | 启动 S2-01 安全容器候选：冻结 `none` + `service:assurance` 共享 loopback 网络模型、digest-pinned 多阶段镜像、non-root/只读根/capability 与资源限制、只读输入 manifest、named workspace volume、固定入口、Compose/镜像层守卫及 `telco-container` workflow。独立静态审计与 `56 passed, 1 skipped`、Black/flake8/YAML/JSON/diff 门禁通过；本机无 Docker/actionlint，远程 workflow 尚未运行。 | Workflow B、S2=`IN PROGRESS`；S2-01=`READY FOR REVIEW`；Gate B 仍未通过。`--require-hashes`、Trivy C/H、容器 SBOM、签名/attestation/provenance 和全部真实 Docker 行为证据保持开放。 |
 | 2026-08-30 | 2.0 | RC `d0a020fb7a5d8a33cd136cd18917d21b7e067946` 的 `telco-container` run 33311995755 全绿：远程 Linux `76 passed, 0 skipped`，compose-policy job 99258612862 与 build-inspect-smoke job 99258640065 成功；真实 Compose/build/inspect 得到 runner 本地 image ID `sha256:0acef50a2ee7978ea67a8b37582a19698a21b1303451ce37a0a569d48fef6cff`（非 registry digest），完成 5 层 / 2,570 成员应用层和 9,148 成员合并 rootfs 扫描、初始化 `13440/579/0`/无外部访问及 health/隔离/shared-loopback smoke/probe steps。probe 无 stdout；reset 删除 state/artifacts/marker 且 `workspace_removed=true`，cleanup 成功。最新本地门禁为 `75 passed, 1 skipped`；run 上传 0 artifacts，未发布 registry image 或容器 SBOM/签名/attestation/provenance。 | S2-01=`DONE`；S2/Workflow B/P7 仍为 `IN PROGRESS`，Gate B、Gate A、S3 与 G4 保持开放。 |
+| 2026-08-30 | 2.0 | RC `d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4` 的 `telco-container` run 33314782750 与 Local run 33314782757 全绿。容器两 job 为 99266075811/99266104885，Linux 政策门禁 `128 passed`；真实成功/失败治理 JSON 分别为 `RESOLVED`/`REOPENED`，且两者均 `restart_observed=true`、`exact_replay=true`、`real_network_side_effects=false`；顶层 `projects_removed=true` 证明两个 Compose 项目均已清理。Local 两 job 为 99266075954/99266075805，两版各通过 Domain + Local `518 passed`、local-stack `29 passed, 2 skipped`、Local E2E `2 passed`；Python 3.12 `VERIFIED RC` artifact 9733117877 archive digest 为 `3d557a52a80960add94c04b443c14f613892701c5b5b93dcfba4174fd78f3469`。容器 run 上传 0 artifacts。 | S2-02=`DONE`；S2/Workflow B/P7 仍为 `IN PROGRESS`，Gate B、Gate A、S3 与 G4 保持开放；registry image/digest、容器 SBOM、hash-lock、Trivy 与 signing/attestation/provenance 未完成。 |

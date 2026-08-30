@@ -147,13 +147,35 @@ smoke and probe steps; the probe step emitted no stdout. Reset removed state,
 artifacts, and marker with `workspace_removed=true`, followed by successful
 cleanup.
 
-S2-01 is **DONE**, but Workflow B/Sprint 2/P7 and Gate B remain `IN PROGRESS` /
-not passed. This workstation still has no Docker or actionlint, so no local
-result is claimed for those tools. The run uploaded 0 artifacts and published
-no registry image, container SBOM, signature, attestation, or provenance.
-Hash-locked `--require-hashes` installation, a Trivy Critical/High Gate, the
-complete success/failure governance demo, restart recovery, Gate A/S3/G4,
-cross-event aggregation, RCAEval, and Cloud Staging authorization remain open.
+S2-02 is also **DONE** for remote RC
+`d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4`. Its commit-bound
+[telco-container run 33314782750](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750)
+passed [compose-policy job 99266075811](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750/job/99266075811)
+and [build-inspect-smoke job 99266104885](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750/job/99266104885),
+including `128 passed` on Linux. The real container demonstration created two
+isolated projects: the success branch ended `RESOLVED`, the intentional failed
+verification branch ended `REOPENED`, and both reported
+`restart_observed=true`, `exact_replay=true`, and
+`real_network_side_effects=false`. The top-level `projects_removed=true`
+confirms both Compose projects were removed. The run uploaded 0 artifacts.
+
+The matching [Local CI run 33314782757](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757)
+also passed both [job 99266075954](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/job/99266075954)
+and [job 99266075805](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/job/99266075805).
+Each Python variant passed Domain + Local `518 passed`, local-stack
+`29 passed, 2 skipped`, and Local E2E `2 passed`. The Python 3.12 job published
+[VERIFIED RC artifact 9733117877](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/artifacts/9733117877)
+with archive digest
+`sha256:3d557a52a80960add94c04b443c14f613892701c5b5b93dcfba4174fd78f3469`;
+this is Local release evidence, not a container registry artifact.
+
+S2-01 and S2-02 are **DONE**, but Workflow B/Sprint 2/P7 remain `IN PROGRESS`
+and Gate B is not passed. This workstation still has no Docker or actionlint,
+so no local result is claimed for those tools. No registry image or digest,
+container SBOM, signature, attestation, or provenance was published.
+Hash-locked `--require-hashes` installation, a Trivy Critical/High Gate, Gate
+A/S3/G4, cross-event aggregation, RCAEval, and Cloud Staging authorization
+remain open.
 
 * [Implementation Development Plan 2.0](docs/implementation-development-plan-2.0.md)
 * [Living implementation plan](docs/unified-platform-implementation-plan.md)

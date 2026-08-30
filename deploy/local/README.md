@@ -68,9 +68,29 @@ command and not a real remediation action.
 
 ## Promotion status
 
-S2-01 is **DONE** based on its commit-bound remote Docker evidence. S2-02 is
-**READY FOR REVIEW** until the updated `telco-container` workflow proves both
-branches and restart recovery on a fresh Linux runner. This is still not Gate B
-complete. A `--require-hashes` dependency lock, Trivy vulnerability policy,
-generated container SBOM, and artifact signing/provenance are open
-supply-chain work and must be closed before container promotion.
+S2-01 and S2-02 are **DONE** based on commit-bound remote Docker evidence. For
+S2-02, RC `d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4` passed
+[telco-container run 33314782750](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750),
+including [compose-policy job 99266075811](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750/job/99266075811)
+and [build-inspect-smoke job 99266104885](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750/job/99266104885).
+The Linux policy suite reported `128 passed`. The real success and intentional
+verification-failure branches ended `RESOLVED` and `REOPENED`; both reported
+`restart_observed=true`, `exact_replay=true`, and
+`real_network_side_effects=false`. The top-level `projects_removed=true`
+confirms both Compose projects were removed. The container run uploaded 0
+artifacts.
+
+The same RC passed both jobs in
+[Local CI run 33314782757](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757):
+each Python variant reported Domain + Local `518 passed`, local-stack
+`29 passed, 2 skipped`, and Local E2E `2 passed`. Python 3.12 published
+[VERIFIED RC artifact 9733117877](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/artifacts/9733117877)
+with archive digest
+`sha256:3d557a52a80960add94c04b443c14f613892701c5b5b93dcfba4174fd78f3469`.
+That is Local release evidence, not a registry image or container artifact.
+
+This is still not Gate B complete. A `--require-hashes` dependency lock, Trivy
+Critical/High vulnerability policy, registry image/digest, generated container
+SBOM, and signing/attestation/provenance remain open supply-chain work. Sprint
+2, Workflow B, and P7 therefore remain `IN PROGRESS`; Gate B, Gate A, S3, and G4
+remain open.

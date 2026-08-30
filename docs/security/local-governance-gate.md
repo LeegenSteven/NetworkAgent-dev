@@ -9,6 +9,8 @@
 > Sprint 1 Governance HTTP + Loopback Replay: **DONE**
 > S2-01 secure container baseline: **DONE for RC `d0a020fb7a5d8a33cd136cd18917d21b7e067946`**
 > S2-01 `telco-container`: **REMOTE DOCKER PASS**
+> S2-02 container governance recovery: **DONE for RC `d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4`**
+> S2-02 container + Local CI: **REMOTE PASS**
 > Gate B overall: **NOT PASSED**
 > Cloud/production authorization: **NOT APPLICABLE**
 
@@ -94,11 +96,43 @@ they are not copied into image layers.
 The remote run closes the S2-01 Docker-resolution, build/inspect, content-scan,
 live-isolation, shared-loopback-step, reset, and cleanup checks. It uploaded 0
 artifacts and did not publish a registry image, container SBOM, signature,
-attestation, or provenance. Promotion under the wider Gate B remains open on a
-`--require-hashes` dependency lock, Trivy Critical/High policy, the complete
-success/failure governance demonstration, and restart recovery. S2-01 is
-`DONE`; Workflow B/S2/P7 remain `IN PROGRESS`, while Gate B, Gate A, S3, and
-G4 remain open.
+attestation, or provenance. At the S2-01 boundary, the complete success/failure
+governance demonstration and restart recovery were still open; S2-02 closes
+those two behavioral items below. S2-01 is `DONE`.
+
+## S2-02 container governance recovery review
+
+S2-02 has passed remote Docker and Local CI on exact RC
+`d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4` and is therefore `DONE`. The
+commit-bound [telco-container run 33314782750](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750)
+completed [compose-policy job 99266075811](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750/job/99266075811)
+and [build-inspect-smoke job 99266104885](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750/job/99266104885)
+successfully; the Linux policy suite reported `128 passed`.
+
+The real orchestrator created separate bounded Compose projects for success and
+intentional verification failure. Their machine-readable terminal states were
+`RESOLVED` and `REOPENED`. Both branches reported
+`restart_observed=true`, `exact_replay=true`, and
+`real_network_side_effects=false`, proving an Assurance restart, exact replay
+of the original prepare/decide/execute requests, and no real remediation side
+effect. The top-level `projects_removed=true` proves final removal of both
+project volumes. The
+container run uploaded 0 artifacts.
+
+The same RC's [Local CI run 33314782757](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757)
+also completed both [job 99266075954](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/job/99266075954)
+and [job 99266075805](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/job/99266075805)
+successfully. Each Python variant passed Domain + Local `518 passed`,
+local-stack `29 passed, 2 skipped`, and Local E2E `2 passed`. Python 3.12
+published [VERIFIED RC artifact 9733117877](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/artifacts/9733117877)
+with archive digest
+`sha256:3d557a52a80960add94c04b443c14f613892701c5b5b93dcfba4174fd78f3469`.
+This Local release artifact is not a container registry artifact.
+
+Gate B overall remains not passed. Workflow B/S2/P7 remain `IN PROGRESS`, and
+Gate B, Gate A, S3, and G4 remain open because `--require-hashes`, Trivy
+Critical/High policy, a registry image/digest, container SBOM, and
+signing/attestation/provenance are not complete.
 
 ## Reviewed flow
 
@@ -163,6 +197,8 @@ pinned BubbleRAN artifact
 | Paced replay resilience | PASS | The serial runner uses a finite monotonic clock, scheduled offsets/rate floor, total deadline, cancellation/uncertain-sequence evidence, and opt-in finite retries only for network/timeout failures. Checkpoints advance only on durable ACK. |
 | Persistent replay checkpoint | PASS | The opt-in caller-owned store exposes load/save/clear plus a persistent paced wrapper. It uses strict 4 KiB JSON, exact plan/window/event/payload binding, atomic replace, monotonic no-regression, and a non-blocking single-writer lock; corruption, cross-plan/old-window, links/path escape, UNC/device, non-fixed Windows drive, and API failure fail closed. |
 | Real TCP business E2E | PASS | The one-case flow reaches `RESOLVED`, `REOPENED`, `REJECTED`, and approval-expiry `FAILED`; completed-checkpoint restart delivers zero events before the separate settled exact-replay zero-write check. |
+| Containerized success/failure governance | PASS | RC `d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4` reaches `RESOLVED` and `REOPENED` in separate real Compose projects using only `LOCAL_SIMULATION`; both report `real_network_side_effects=false`. |
+| Container restart, exact replay, and cleanup | PASS | Both S2-02 branches report `restart_observed=true` and `exact_replay=true`; the top-level `projects_removed=true` confirms both projects were removed after offline database verification and marker-owned reset. |
 
 ## Open-data replay boundary
 
@@ -222,8 +258,8 @@ busy rather than wait; they are not a shared checkpoint service.
 
 ## Reproduction evidence
 
-The current focused local evidence was run with bytecode/cache writes disabled.
-Completed counts are recorded exactly:
+The Sprint 1 focused local evidence was run with bytecode/cache writes disabled.
+Completed counts are recorded exactly and retained as historical evidence:
 
 | Suite | Confirmed result |
 |---|---:|
@@ -253,7 +289,7 @@ candidates and stopped at `AWAITING_APPROVAL`; the second command copied the
 returned hash/revision and reached `RESOLVED`; confirmed reset removed only
 `state`, `artifacts`, and the marker, then removed the empty workspace.
 
-### Remote RC evidence
+### Sprint 1 remote RC evidence
 
 The tested release candidate is
 `7cbff490ccb71befb42c7cd30204f7f88e3b2f38`. Every run below completed with
@@ -282,6 +318,21 @@ complete S3 Gate remain open.
 The 76-test Assurance, 22-test local-stack, 3-test Local E2E, 33-test A2A
 contract, and 4-test A2A E2E results are the independent local evidence for the
 same HTTP admission/deadline implementation now covered by the remote RC.
+
+### S2-02 remote RC evidence
+
+The tested S2-02 release candidate is
+`d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4`. Both runs completed with
+`success`, and each run's `headSha` is exactly that value:
+
+* [Container CI run 33314782750](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750): jobs [99266075811](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750/job/99266075811) and [99266104885](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750/job/99266104885) passed; Linux policy `128 passed`; both real governance branches passed restart, exact replay, no-real-side-effect, offline verification, reset, and cleanup assertions. The run uploaded 0 artifacts.
+* [Local CI run 33314782757](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757): jobs [99266075954](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/job/99266075954) and [99266075805](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/job/99266075805) passed. Both Python variants recorded Domain + Local `518 passed`, local-stack `29 passed, 2 skipped`, and Local E2E `2 passed`.
+* [Local VERIFIED RC artifact 9733117877](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/artifacts/9733117877): Python 3.12 archive digest `sha256:3d557a52a80960add94c04b443c14f613892701c5b5b93dcfba4174fd78f3469`.
+
+This evidence update is later than and not equal to the tested S2-02 RC. The
+Local artifact does not supply a container registry image/digest or container
+SBOM, and neither run proves container signing, attestation, provenance,
+hash-locked installation, or a Trivy Critical/High Gate.
 
 ## Residual limitations
 

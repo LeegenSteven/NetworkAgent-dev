@@ -6,7 +6,20 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 
 WORKDIR /build
 
-RUN python -m pip install --no-cache-dir "setuptools==81.0.0" "wheel==0.45.1"
+RUN --mount=type=bind,source=deploy/local/build-requirements-py312-linux-amd64.lock,target=/build-requirements.lock,ro \
+    python -m pip install --no-cache-dir \
+        --require-hashes \
+        --only-binary=:all: \
+        --no-deps \
+        --requirement /build-requirements.lock
+
+RUN --mount=type=bind,source=deploy/local/runtime-requirements-py312-linux-amd64.lock,target=/runtime-requirements.lock,ro \
+    python -m pip download --no-cache-dir \
+        --require-hashes \
+        --only-binary=:all: \
+        --no-deps \
+        --requirement /runtime-requirements.lock \
+        --dest /runtime-wheels
 
 COPY packages/telco-domain/pyproject.toml packages/telco-domain/README.md /build/domain/
 COPY packages/telco-domain/src /build/domain/src
@@ -35,10 +48,18 @@ ENV HOME=/nonexistent \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-RUN --mount=type=bind,from=wheel-builder,source=/wheels,target=/wheels,ro \
-    --mount=type=bind,source=deploy/local/runtime-constraints.txt,target=/runtime-constraints.txt,ro \
+RUN --network=none \
+    --mount=type=bind,from=wheel-builder,source=/runtime-wheels,target=/runtime-wheels,ro \
+    --mount=type=bind,from=wheel-builder,source=/wheels,target=/wheels,ro \
+    --mount=type=bind,source=deploy/local/runtime-requirements-py312-linux-amd64.lock,target=/runtime-requirements.lock,ro \
     python -m pip install --no-cache-dir --no-compile \
-        --constraint /runtime-constraints.txt \
+        --no-index \
+        --find-links=/runtime-wheels \
+        --require-hashes \
+        --only-binary=:all: \
+        --no-deps \
+        --requirement /runtime-requirements.lock \
+    && python -m pip install --no-cache-dir --no-compile --no-index --no-deps \
         /wheels/*.whl \
     && python -m pip check \
     && python -c "import telco_assurance_agent, telco_domain, telco_lab, telco_local" \

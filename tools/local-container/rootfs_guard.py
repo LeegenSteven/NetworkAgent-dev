@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import stat
 import sys
 import tarfile
@@ -19,6 +20,8 @@ FORBIDDEN_ROOTFS_PATHS = {
     "wheels",
     "tmp/wheels",
     "root/.cache",
+    "usr/local/build",
+    "var/tmp/wheels",
 }
 DATA_ROOT = "opt/networkagent/data"
 ALLOWED_EMPTY_DATA_DIRECTORIES = {
@@ -38,6 +41,25 @@ RAW_INPUT_NAMES = {
     "retainability-uplink-rssi.json",
     "telco-lte-fields-guide.zh-CN.md",
 }
+TRANSIENT_LOCK_NAMES = {
+    "runtime-constraints.txt",
+    "build-requirements-py312-linux-amd64.lock",
+    "runtime-requirements-py312-linux-amd64.lock",
+}
+FIRST_PARTY_TESTS = re.compile(
+    r"(?:^|/)site-packages/(?:telco_domain|telco_local|telco_lab|"
+    r"telco_assurance_agent)/(?:test|tests)(?:/|$)",
+    re.IGNORECASE,
+)
+EMBEDDED_SBOM_SUFFIXES = (
+    ".spdx",
+    ".spdx.json",
+    ".cdx",
+    ".cdx.json",
+    ".cyclonedx",
+    ".cyclonedx.json",
+    ".bom.json",
+)
 
 
 class RootfsPolicyViolation(RuntimeError):
@@ -74,10 +96,24 @@ def _reject_member(member: tarfile.TarInfo) -> None:
         raise RootfsPolicyViolation(f"rootfs archive contains raw input {path.name}")
     # Base Python legitimately contains ensurepip's bundled wheel. Application
     # layers are scanned separately and reject every newly introduced wheel.
-    if path.name == "runtime-constraints.txt":
+    if path.name in TRANSIENT_LOCK_NAMES:
         raise RootfsPolicyViolation(
             f"rootfs archive contains transient build artifact {path.name}"
         )
+    if FIRST_PARTY_TESTS.search(path.as_posix()):
+        raise RootfsPolicyViolation("rootfs archive contains first-party tests")
+    if normalized.endswith(EMBEDDED_SBOM_SUFFIXES):
+        parts = tuple(part.lower() for part in path.parts)
+        pep770 = any(
+            part.endswith(".dist-info")
+            and index + 1 < len(parts)
+            and parts[index + 1] == "sboms"
+            for index, part in enumerate(parts)
+        )
+        if not pep770 or not member.isfile():
+            raise RootfsPolicyViolation(
+                "rootfs archive contains an untrusted embedded SBOM"
+            )
 
 
 def inspect_rootfs_archive(archive_path: Path) -> dict[str, int]:

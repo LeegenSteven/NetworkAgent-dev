@@ -42,6 +42,8 @@ def test_safe_merged_rootfs_is_accepted(tmp_path: Path) -> None:
         "usr/local/lib/python3.12/ensurepip/_bundled/pip-25.0.1-py3-none-any.whl",
         "opt/networkagent/bin/container_entrypoint.py",
         "usr/local/lib/python3.12/site-packages/telco_local/__init__.py",
+        "usr/local/lib/python3.12/site-packages/pydantic_core-2.46.4.dist-info/"
+        "sboms/pydantic-core.cyclonedx.json",
         "opt/networkagent/data/",
         "opt/networkagent/data/samples/",
         "opt/networkagent/data/samples/lte-demo/",
@@ -50,7 +52,17 @@ def test_safe_merged_rootfs_is_accepted(tmp_path: Path) -> None:
         "opt/networkagent/data/docs/",
         "opt/networkagent/data/docs/lte/",
     )
-    assert module.inspect_rootfs_archive(archive) == {"members": 11}
+    assert module.inspect_rootfs_archive(archive) == {"members": 12}
+
+
+def test_pinned_base_pip_build_module_directory_is_allowed(tmp_path: Path) -> None:
+    module = _load_module()
+    archive = tmp_path / "rootfs.tar"
+    _archive(
+        archive,
+        "usr/local/lib/python3.12/site-packages/pip/_internal/operations/build/",
+    )
+    assert module.inspect_rootfs_archive(archive) == {"members": 1}
 
 
 @pytest.mark.parametrize(
@@ -63,6 +75,12 @@ def test_safe_merged_rootfs_is_accepted(tmp_path: Path) -> None:
         "opt/networkagent/data/performance.csv",
         "opt/networkagent/data/unexpected/",
         "runtime-constraints.txt",
+        "build-requirements-py312-linux-amd64.lock",
+        "runtime-requirements-py312-linux-amd64.lock",
+        "usr/local/build/unreviewed.txt",
+        "var/tmp/wheels/unreviewed.zip",
+        "usr/local/lib/python3.12/site-packages/telco_local/Tests/test_db.py",
+        "usr/local/lib/python3.12/site-packages/pip/_vendor/bom.cdx.json",
     ],
 )
 def test_forbidden_runtime_content_is_rejected(tmp_path: Path, name: str) -> None:
@@ -90,6 +108,21 @@ def test_data_mount_skeleton_must_contain_real_directories(tmp_path: Path) -> No
         member.linkname = "/tmp"
         output.addfile(member)
     with pytest.raises(module.RootfsPolicyViolation, match="empty mount skeleton"):
+        module.inspect_rootfs_archive(archive)
+
+
+def test_pep770_sbom_must_be_a_regular_file(tmp_path: Path) -> None:
+    module = _load_module()
+    archive = tmp_path / "rootfs.tar"
+    with tarfile.open(archive, mode="w") as output:
+        member = tarfile.TarInfo(
+            "usr/local/lib/python3.12/site-packages/example-1.dist-info/"
+            "sboms/example.cdx.json"
+        )
+        member.type = tarfile.SYMTYPE
+        member.linkname = "/tmp/untrusted.cdx.json"
+        output.addfile(member)
+    with pytest.raises(module.RootfsPolicyViolation, match="embedded SBOM"):
         module.inspect_rootfs_archive(archive)
 
 

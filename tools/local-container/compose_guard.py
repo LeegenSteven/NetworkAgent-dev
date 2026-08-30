@@ -15,6 +15,13 @@ from typing import Mapping, Sequence
 
 EXPECTED_SERVICES = {"assurance", "init", "reset", "probe", "smoke"}
 EXPECTED_IMAGE = "networkagent-local:dev"
+EXPECTED_PLATFORM = "linux/amd64"
+EXPECTED_DOCKERFILE_SHA256 = (
+    "8502e3ddbeba450a26a4cae3d7bd33d806ce422a5f78558e64d855bebeee73a2"
+)
+EXPECTED_DOCKERIGNORE_SHA256 = (
+    "ed0b8ba014857ffcc2449c379fdb0ae2b030728ac345faa5674bf72910c41b20"
+)
 EXPECTED_NETWORK_MODES = {
     "assurance": "none",
     "init": "none",
@@ -116,6 +123,7 @@ ALLOWED_TOP_LEVEL_KEYS = {
 }
 ALLOWED_SERVICE_KEYS = {
     "image",
+    "platform",
     "pull_policy",
     "build",
     "command",
@@ -149,7 +157,7 @@ PINNED_BASE = (
     "0f5b26b9518d002b6173fd61daad821fa340635ebfec5bba471013f9ca114579"
 )
 EXPECTED_COMPOSE_SHA256 = (
-    "9e712375c67fc01efa081ecefa7874eb7d4783f58ea0a61a7fe9e0a19f6b08c9"
+    "279494f4845b7733d9cf4eb453b32e56b03342aec93968ba59736cf692f43f51"
 )
 MAX_COMPOSE_SOURCE_BYTES = 64 * 1024
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
@@ -200,6 +208,8 @@ def _validate_service_baseline(name: str, service: Mapping[str, object]) -> None
             raise PolicyViolation(f"service {name} forbids {key}")
     if service.get("network_mode") != EXPECTED_NETWORK_MODES[name]:
         raise PolicyViolation(f"service {name} network_mode is not isolated")
+    if service.get("platform") != EXPECTED_PLATFORM:
+        raise PolicyViolation(f"service {name} platform must be linux/amd64")
     if service.get("command") != EXPECTED_COMMANDS[name]:
         raise PolicyViolation(f"service {name} command is not closed")
     if service.get("user") != "10001:10001":
@@ -602,6 +612,16 @@ def validate_repository_artifacts(repository_root: Path) -> None:
     dockerignore = repository_root / "deploy" / "local" / "Dockerfile.dockerignore"
     manifest = repository_root / "deploy" / "local" / "input-manifest.json"
     validate_source_compose(compose)
+    _validate_source_policy_file(
+        dockerfile,
+        expected_sha256=EXPECTED_DOCKERFILE_SHA256,
+        label="Dockerfile",
+    )
+    _validate_source_policy_file(
+        dockerignore,
+        expected_sha256=EXPECTED_DOCKERIGNORE_SHA256,
+        label="Dockerfile.dockerignore",
+    )
     try:
         dockerfile_text = dockerfile.read_text(encoding="utf-8")
         ignore_text = dockerignore.read_text(encoding="utf-8")
@@ -627,11 +647,27 @@ def validate_repository_artifacts(repository_root: Path) -> None:
     }
     if runtime_copy_lines != expected_runtime_copies:
         raise PolicyViolation("Dockerfile runtime COPY allowlist is not exact")
+    build_lock_mount = (
+        "source=deploy/local/build-requirements-py312-linux-amd64.lock,"
+        "target=/build-requirements.lock,ro"
+    )
+    runtime_lock_mount = (
+        "source=deploy/local/runtime-requirements-py312-linux-amd64.lock,"
+        "target=/runtime-requirements.lock,ro"
+    )
     if (
-        "RUN --mount=type=bind,from=wheel-builder,source=/wheels,target=/wheels,ro"
+        build_lock_mount not in dockerfile_text
+        or dockerfile_text.count(runtime_lock_mount) != 2
+        or "RUN --network=none" not in runtime_text
+        or "--mount=type=bind,from=wheel-builder,source=/wheels,target=/wheels,ro"
         not in runtime_text
-        or "source=deploy/local/runtime-constraints.txt" not in runtime_text
+        or "--require-hashes" not in dockerfile_text
+        or "--only-binary=:all:" not in dockerfile_text
+        or "--no-index" not in runtime_text
+        or "--no-deps" not in runtime_text
         or "--no-compile" not in runtime_text
+        or "runtime-constraints.txt" in dockerfile_text
+        or "--constraint" in dockerfile_text
     ):
         raise PolicyViolation("Dockerfile transient build mounts are not exact")
     if "PYTHONDONTWRITEBYTECODE=1" not in runtime_text:
@@ -662,7 +698,39 @@ def validate_repository_artifacts(repository_root: Path) -> None:
     }
     if not required_ignores.issubset(actual_ignores):
         raise PolicyViolation("Dockerfile.dockerignore is incomplete")
+    expected_lock_includes = {
+        "!deploy/local/build-requirements-py312-linux-amd64.lock",
+        "!deploy/local/runtime-requirements-py312-linux-amd64.lock",
+    }
+    if not expected_lock_includes.issubset(actual_ignores) or any(
+        "runtime-constraints.txt" in line for line in actual_ignores
+    ):
+        raise PolicyViolation("Dockerfile.dockerignore lock allowlist is incomplete")
     validate_source_manifest(repository_root, manifest)
+
+
+def _validate_source_policy_file(
+    path: Path, *, expected_sha256: str, label: str
+) -> None:
+    try:
+        metadata = path.lstat()
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or path.is_symlink()
+            or not 0 < metadata.st_size <= 256 * 1024
+        ):
+            raise PolicyViolation(f"{label} source file is unsafe")
+        source = path.read_text(encoding="utf-8")
+    except PolicyViolation:
+        raise
+    except (OSError, UnicodeError):
+        raise PolicyViolation(f"{label} source file is unavailable") from None
+    normalized = source.replace("\r\n", "\n")
+    if "\r" in normalized or "\x00" in normalized:
+        raise PolicyViolation(f"{label} source encoding is invalid")
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    if digest != expected_sha256:
+        raise PolicyViolation(f"{label} policy digest does not match")
 
 
 def validate_source_compose(compose_path: Path) -> None:

@@ -17,7 +17,8 @@ MAX_APPLICATION_LAYERS = 16
 MAX_LAYER_MEMBERS = 250_000
 FIRST_PARTY_TESTS = re.compile(
     r"(?:^|/)site-packages/(?:telco_domain|telco_local|telco_lab|"
-    r"telco_assurance_agent)/(?:test|tests)(?:/|$)"
+    r"telco_assurance_agent)/(?:test|tests)(?:/|$)",
+    re.IGNORECASE,
 )
 RAW_INPUT_NAMES = {
     "performance.csv",
@@ -27,6 +28,20 @@ RAW_INPUT_NAMES = {
     "retainability-uplink-rssi.json",
     "telco-lte-fields-guide.zh-CN.md",
 }
+TRANSIENT_LOCK_NAMES = {
+    "runtime-constraints.txt",
+    "build-requirements-py312-linux-amd64.lock",
+    "runtime-requirements-py312-linux-amd64.lock",
+}
+EMBEDDED_SBOM_SUFFIXES = (
+    ".spdx",
+    ".spdx.json",
+    ".cdx",
+    ".cdx.json",
+    ".cyclonedx",
+    ".cyclonedx.json",
+    ".bom.json",
+)
 
 
 class LayerPolicyViolation(RuntimeError):
@@ -55,8 +70,11 @@ def _reject_member(name: str) -> None:
         raise LayerPolicyViolation(
             f"application layer contains build cache {path.name}"
         )
-    if "__pycache__" in {part.lower() for part in path.parts}:
+    lowered_parts = {part.lower() for part in path.parts}
+    if "__pycache__" in lowered_parts:
         raise LayerPolicyViolation("application layer contains Python bytecode cache")
+    if lowered_parts.intersection({"build", "wheels", ".cache"}):
+        raise LayerPolicyViolation("application layer contains a build/cache directory")
     if lowered in {
         "build",
         "wheels",
@@ -64,12 +82,24 @@ def _reject_member(name: str) -> None:
         "root/.cache",
     } or lowered.startswith(("build/", "wheels/", "tmp/wheels/", "root/.cache/")):
         raise LayerPolicyViolation("application layer contains a build/cache directory")
-    if path.name == "runtime-constraints.txt":
+    if path.name in TRANSIENT_LOCK_NAMES:
         raise LayerPolicyViolation(
             "application layer contains the transient constraints file"
         )
     if FIRST_PARTY_TESTS.search(normalized):
         raise LayerPolicyViolation("application layer contains first-party tests")
+    if lowered.endswith(EMBEDDED_SBOM_SUFFIXES):
+        parts = tuple(part.lower() for part in path.parts)
+        pep770 = any(
+            part.endswith(".dist-info")
+            and index + 1 < len(parts)
+            and parts[index + 1] == "sboms"
+            for index, part in enumerate(parts)
+        )
+        if not pep770:
+            raise LayerPolicyViolation(
+                "application layer contains an untrusted embedded SBOM"
+            )
 
 
 def inspect_archive(archive_path: Path, *, base_layer_count: int) -> dict[str, int]:

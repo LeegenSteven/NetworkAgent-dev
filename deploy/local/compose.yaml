@@ -3,6 +3,7 @@ name: networkagent-local
 services:
   assurance:
     image: networkagent-local:dev
+    platform: linux/amd64
     pull_policy: never
     user: "10001:10001"
     read_only: true
@@ -69,6 +70,7 @@ services:
 
   init:
     image: networkagent-local:dev
+    platform: linux/amd64
     pull_policy: never
     user: "10001:10001"
     read_only: true
@@ -124,6 +126,7 @@ services:
 
   reset:
     image: networkagent-local:dev
+    platform: linux/amd64
     pull_policy: never
     user: "10001:10001"
     read_only: true
@@ -155,6 +158,7 @@ services:
 
   probe:
     image: networkagent-local:dev
+    platform: linux/amd64
     pull_policy: never
     user: "10001:10001"
     read_only: true
@@ -184,6 +188,7 @@ services:
 
   smoke:
     image: networkagent-local:dev
+    platform: linux/amd64
     pull_policy: never
     user: "10001:10001"
     read_only: true

@@ -66,6 +66,23 @@ def test_only_application_layers_are_inspected(tmp_path: Path) -> None:
     }
 
 
+def test_pep770_package_sbom_is_allowed(tmp_path: Path) -> None:
+    module = _load_module()
+    archive = tmp_path / "image.tar"
+    _docker_archive(
+        archive,
+        base=_layer("usr/lib/python/base.py"),
+        application=_layer(
+            "usr/local/lib/python3.12/site-packages/pydantic_core-2.46.4.dist-info/"
+            "sboms/pydantic-core.cyclonedx.json"
+        ),
+    )
+    assert module.inspect_archive(archive, base_layer_count=1) == {
+        "application_layers": 1,
+        "members": 1,
+    }
+
+
 @pytest.mark.parametrize(
     "name",
     [
@@ -74,6 +91,12 @@ def test_only_application_layers_are_inspected(tmp_path: Path) -> None:
         "usr/local/lib/python3.12/site-packages/telco_local/tests/test_db.py",
         "usr/local/lib/python3.12/site-packages/telco_lab/__pycache__/cli.pyc",
         "runtime-constraints.txt",
+        "build-requirements-py312-linux-amd64.lock",
+        "runtime-requirements-py312-linux-amd64.lock",
+        "usr/local/build/unreviewed.txt",
+        "var/tmp/wheels/unreviewed.zip",
+        "usr/local/lib/python3.12/site-packages/telco_local/Tests/test_db.py",
+        "usr/local/lib/python3.12/site-packages/pip/_vendor/bom.cdx.json",
     ],
 )
 def test_application_layer_leakage_is_rejected(tmp_path: Path, name: str) -> None:

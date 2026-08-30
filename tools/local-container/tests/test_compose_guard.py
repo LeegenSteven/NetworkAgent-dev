@@ -45,6 +45,7 @@ def _service(
 ) -> dict[str, object]:
     return {
         "image": "networkagent-local:dev",
+        "platform": "linux/amd64",
         "pull_policy": "never",
         "command": [command],
         "network_mode": network_mode,
@@ -361,6 +362,18 @@ def test_docker_socket_mount_is_rejected() -> None:
         module.validate_compose_config(config)
 
 
+@pytest.mark.parametrize("platform", [None, "linux/arm64", "windows/amd64"])
+def test_non_linux_amd64_platform_is_rejected(platform: object) -> None:
+    module = _load_module()
+    config = _secure_config()
+    if platform is None:
+        config["services"]["assurance"].pop("platform")
+    else:
+        config["services"]["assurance"]["platform"] = platform
+    with pytest.raises(module.PolicyViolation, match="platform"):
+        module.validate_compose_config(config)
+
+
 def test_environment_and_secret_channels_are_rejected() -> None:
     module = _load_module()
     for key, value in (
@@ -453,6 +466,54 @@ def test_source_compose_policy_digest_rejects_drift(tmp_path: Path) -> None:
     candidate.write_text(changed, encoding="utf-8")
     with pytest.raises(module.PolicyViolation, match="policy digest"):
         module.validate_source_compose(candidate)
+
+
+@pytest.mark.parametrize(
+    ("source_name", "mutation", "expected_hash", "label"),
+    [
+        (
+            "Dockerfile",
+            lambda text: text.replace(
+                "RUN --network=none", "# RUN --network=none\nRUN --network=default", 1
+            ),
+            "EXPECTED_DOCKERFILE_SHA256",
+            "Dockerfile",
+        ),
+        (
+            "Dockerfile",
+            lambda text: text.replace(
+                "COPY --chown=10001:10001 tools/local-container/container_entrypoint.py",
+                "RUN --network=default echo unsafe\n\nCOPY --chown=10001:10001 tools/local-container/container_entrypoint.py",
+                1,
+            ),
+            "EXPECTED_DOCKERFILE_SHA256",
+            "Dockerfile",
+        ),
+        (
+            "Dockerfile.dockerignore",
+            lambda text: text + "\n!secrets/**\n",
+            "EXPECTED_DOCKERIGNORE_SHA256",
+            "Dockerfile.dockerignore",
+        ),
+    ],
+)
+def test_build_policy_source_digest_rejects_fail_open_drift(
+    tmp_path: Path,
+    source_name: str,
+    mutation,
+    expected_hash: str,
+    label: str,
+) -> None:
+    module = _load_module()
+    source = MODULE_PATH.parents[2] / "deploy" / "local" / source_name
+    candidate = tmp_path / source_name
+    candidate.write_text(mutation(source.read_text(encoding="utf-8")), encoding="utf-8")
+    with pytest.raises(module.PolicyViolation, match="policy digest"):
+        module._validate_source_policy_file(
+            candidate,
+            expected_sha256=getattr(module, expected_hash),
+            label=label,
+        )
 
 
 def test_unknown_service_is_rejected() -> None:

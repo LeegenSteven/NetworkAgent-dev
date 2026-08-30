@@ -32,7 +32,8 @@
 !deploy/
 !deploy/local/
 !deploy/local/input-manifest.json
-!deploy/local/runtime-constraints.txt
+!deploy/local/build-requirements-py312-linux-amd64.lock
+!deploy/local/runtime-requirements-py312-linux-amd64.lock
 
 # Explicit denials retained as policy evidence even though ** starts closed.
 .git

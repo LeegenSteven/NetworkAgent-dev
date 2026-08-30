@@ -20,6 +20,22 @@ python tools/local-stack/local_stack.py --workspace .local/networkagent-stack in
 python tools/local-stack/local_stack.py --workspace .local/networkagent-stack demo --confirm-incident
 ```
 
+For a defense-ready, one-command native demonstration that exercises both the
+successful and failed-verification branches, run:
+
+```text
+python tools/local-stack/run_defense_demo.py --approve-local-simulation
+```
+
+The command creates two isolated marker-owned workspaces under
+`.local/networkagent-defense`, verifies `RESOLVED/PASSED` and
+`REOPENED/FAILED`, repeats the exact approval request to prove idempotency,
+resets both workspaces, and writes an atomic JSON evidence report with its
+SHA-256. It never starts Docker, reads Cloud credentials, or performs a real
+network action. Evidence is commit-bound only when Git is available, the
+tracked tree remains clean, and the same commit is observed before and after
+the run.
+
 The demo stops at `AWAITING_APPROVAL`. A second command may enable
 `--action-mode simulate` and approve only the exact `action_hash` and Incident
 revision returned by that preview. The sole action is `LOCAL_SIMULATION`;

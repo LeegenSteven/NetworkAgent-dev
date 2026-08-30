@@ -17,6 +17,39 @@ On Linux or macOS, replace `.venv/Scripts/python.exe` with the Python 3.12/3.13
 interpreter for the project environment. `doctor` reports the core, governance,
 data, optional server, and loopback-port checks without creating the workspace.
 
+## One-command defense demonstration
+
+The following explicit command runs the complete native Local Profile evidence
+path without Docker, GCP credentials, a server, or an external network call:
+
+```powershell
+.venv/Scripts/python.exe tools/local-stack/run_defense_demo.py --approve-local-simulation
+```
+
+It performs one bounded doctor check and then creates two isolated workspaces
+under `.local/networkagent-defense`. Both branches initialize the fixed 13,440
+KPI rows and 579 safe Trace rows, confirm the same deterministic Incident,
+review the allowlisted `LOCAL_SIMULATION` preview, copy its exact action hash
+and revision, and verify the complete eight-event governance history. The
+success branch must finish at `RESOLVED/PASSED`; the intentional failed
+verification branch must finish at `REOPENED/FAILED`. Each branch repeats the
+original approval command and proves that terminal state and record counts do
+not change.
+
+Standard output is one bounded JSON document. The retained atomic report is
+named `defense-demo-report.json`; stdout gives its repository-relative path and
+SHA-256. Both marker-owned workspaces are reset even when an operation fails,
+while the report directory remains for review. `LOCAL_NATIVE_SIMULATION_EVIDENCE`
+means Git was available, the same commit was observed before and after the run,
+and the tracked tree stayed clean. Otherwise the honest classification is
+`LOCAL_WORKTREE_SIMULATION_EVIDENCE`.
+
+The only accepted argument is the explicit `--approve-local-simulation`
+confirmation. No workspace, URL, header, command, actor, Cloud, Docker, or real
+action input is accepted. The command does not cover rejection/expiry branches,
+container execution, real remediation, Cloud rehearsal, full G2/G4 closure, or
+final G5 acceptance.
+
 ## Safe governance demo
 
 Actions are disabled by default. This command confirms the deterministic sample

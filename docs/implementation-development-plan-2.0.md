@@ -54,6 +54,7 @@
 | P3a–P3d Cloud 代码与 Emulator | `DONE` | Spanner v2、事务型 Inbox/Outbox、Fault Ingress、只读 MCP、FGAC 制品和迁移逻辑已通过远程 Spanner Emulator Gate；不代表 Cloud Staging 已通过。 |
 | Local 模拟治理闭环 | `DONE` | 13,440 条 KPI、579 条安全 Trace、15 个候选；独立审批后可到 `RESOLVED`，验证失败到 `REOPENED`，无真实网络副作用。 |
 | Local Stack | `DONE` | `doctor/init/status/demo/serve/reset` 已具备工作区所有权、loopback、默认禁用动作、安全 reset 与提交响应丢失恢复。 |
+| S7-01 原生一键答辩闭环 | `READY FOR REVIEW` | 固定命令在两个隔离工作区完成 `RESOLVED/PASSED` 与 `REOPENED/FAILED`，精确重放原审批请求并验证记录不放大，最后安全 reset；当前仅有本地真实运行与测试证据，等待新提交的远程双 Python 验收。 |
 | S2-02 容器化治理恢复 | `DONE` | 精确绑定 RC 的远程真实 Docker 已覆盖 `RESOLVED`/`REOPENED` 两分支、Assurance 重启、原请求 exact replay、离线数据库核验和项目卷清理；真实网络副作用为 0。 |
 | BubbleRAN Data Lab | `IN PROGRESS` | 下载锁定、隐私投影、离线评估、immutable `ReplayPlan`、公开 `ReplayWirePayload`、loopback transport、单调 paced runner、caller-owned 本地持久 checkpoint 与 Assurance Canonical Fault 持久接收器已完成；每个 source event 独立映射 Incident，不做跨事件聚合，RCAEval 尚未完成。 |
 
@@ -85,6 +86,8 @@
 - S2-01 已在精确绑定 RC `d0a020fb7a5d8a33cd136cd18917d21b7e067946` 的远程 Docker runner 上通过 Compose config、build/inspect、应用层与合并 rootfs 扫描、health、运行中隔离、共享 loopback smoke/probe、reset 和 cleanup，因此该工作包为 `DONE`；本机仍没有 Docker/actionlint，不能把远程结果改写为本机工具 PASS。
 - S2-02 已在精确绑定 RC `d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4` 的远程 Docker runner 上通过成功/失败治理分支、Assurance 重启、exact replay、离线核验和项目卷清理，因此该工作包为 `DONE`；其 Local 双 Python 矩阵与 Python 3.12 `VERIFIED RC` artifact 也已通过同一 RC。
 - 当前 Sprint 1/Local RC 已发布 wheel、manifest、CycloneDX SBOM、runtime inventory、内容扫描与 `pip-audit` 证据；S2-03 已补齐 runner-local 容器 release manifest、Trivy 双报告与 CycloneDX SBOM artifact，但仍未发布 registry image/digest，未提供签名、attestation、provenance 或 Trivy DB OCI digest/signature，且 artifact 不能离线独立重验。
+- S2-04 已在相同 Trivy 0.74.0/数据库快照下完成四个候选镜像实扫；没有候选能同时满足当前 CPython 3.12/glibc/provenance 契约和完整 Critical/High `0/0`，因此按 `BLOCKED` 收口，G2/Gate B 继续开放。
+- S7-01 原生一键答辩脚本已在本地真实依赖环境中完成两分支运行；当前候选为 `READY FOR REVIEW`，还不能在新提交的远程 Python 3.12/3.13 CI 前标记 `DONE`，且不覆盖拒绝/过期、容器执行、真实动作、Cloud、G2/G4/G5。
 - 跨组件结构化日志、指标、分布式追踪、本地 SLO、告警和完整 Runbook 尚未交付。
 - Cloud Staging IAM/OIDC、Pub/Sub DLQ、Workload Identity 及真实基础设施验收尚未进行。
 
@@ -140,6 +143,8 @@
 
 **当前 S2-03 工作包**：`DONE`（Trivy 双报告、CycloneDX 1.7 与 runner-local release artifact 已精确绑定 RC `68b16ea528a85b743aa8c05044948bac195ee8ec`；不代表 Gate B 完成）。
 
+**当前 S2-04 工作包**：`BLOCKED`（同一 Trivy 0.74.0/数据库快照下，没有发现同时保持 CPython 3.12、glibc、公开可取得、包身份可追溯且完整 Critical/High 为 `0/0` 的可信基础镜像；不得以 `--ignore-unfixed`、漏洞白名单或删除包管理器 provenance 伪造关闭）。
+
 - 容器网络冻结为：`assurance`、`init`、`reset` 使用 `network_mode: none`；`probe`、`smoke` 使用 `network_mode: service:assurance` 共享同一网络命名空间中的 loopback。Compose 不发布或 expose 端口，不创建默认/自定义 bridge，也不通过服务名或反向代理绕过 loopback。
 - 运行时使用 digest 固定的 Python 3.12 Debian 基础镜像与 UID/GID `10001:10001`；根文件系统只读，`cap_drop: ALL`、`no-new-privileges`、有界 CPU/内存/PID/nofile 和 `noexec,nosuid,nodev` `/tmp` tmpfs。只有 Docker named workspace volume 可持久写；四类受控 LTE 输入只读 bind，并由镜像内 manifest 校验精确文件集合、字节数和 SHA-256。
 - 本地静态门禁为 `75 passed, 1 skipped`；唯一 skip 是 Windows symlink 条件测试。Black、flake8、YAML/JSON 解析和 `git diff --check` 均通过；本机未安装 Docker 与 actionlint，因此这些工具的结论不得写为本地 PASS。
@@ -147,6 +152,7 @@
 - 精确绑定 S2-02 RC 的 [telco-container run 33314782750](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750) 已全绿：Linux 政策门禁 `128 passed`，compose-policy job `99266075811` 和 build-inspect-smoke job `99266104885` 均成功；真实治理 JSON 同时证明 `RESOLVED` 成功分支和 `REOPENED` 失败验证分支，且两者均观察到重启、原请求 exact replay、零真实网络副作用与项目卷清理。
 - 同一 RC 的 [Local CI run 33314782757](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757) 两个 job 均成功；两版 Python 各为 Domain + Local `518 passed`、local-stack `29 passed, 2 skipped`、Local E2E `2 passed`。Python 3.12 `VERIFIED RC` artifact 9733117877 的 archive digest 为 `sha256:3d557a52a80960add94c04b443c14f613892701c5b5b93dcfba4174fd78f3469`。
 - 精确绑定 S2-03 RC 的 [telco-container run 33320667296](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296) 已全绿：compose-policy job `99281949020` 和 build-inspect-smoke job `99281979960` 均成功；14 天 [artifact 9734817516](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296/artifacts/9734817516) 分类为 `VERIFIED RUNNER-LOCAL EVIDENCE`，archive digest 为 `sha256:e35d8eb12484feeb474477bae0f3d937019f3ab19e9f8ccf1fd491b8a95f0394`。该 artifact 绑定 runner 本地 image/config digest `sha256:0e8caa8418d93e1f9654655b84331723e8223d9dc94e66274aed1ca3fa7d00bb`、Trivy 0.74.0 fixable Critical/High gate `0/0`、full diagnostic `5` Critical + `29` High 且全部 unfixed，以及 CycloneDX 1.7 SBOM `145` components。
+- [S2-04 基础镜像评估](security/s2-04-base-image-evaluation.md) 使用同一 Trivy 0.74.0 与冻结数据库实扫：当前 Bookworm 为 `5C+29H`；保持 CPython 3.12 ABI 的 Trixie 为 `3C+16H`（3 个 fixable、16 个 unfixed）；官方 Distroless Python 3/Debian 13 为 `0C+17H` 且解释器变为 Python 3.13；公开 Chainguard `latest` 虽为 `0/0`，但实际是 Python 3.14，超出现有所有一方包 `<3.14` 契约，且公开 `3.12`/`3.13` tag 不可取得。复制解释器或系统库但丢弃包身份只会形成扫描假阴性，因此 S2-04 按 `BLOCKED` 收口。
 - 当前仍未发布 registry image/digest，未提供签名、attestation、provenance 或 Trivy DB OCI digest/signature，且 runner-local artifact 未上传镜像、scanner binary 与数据库，因此不能离线独立重验。S2/Workflow B 及统一计划 P7 保持 `IN PROGRESS`，Gate B、G2、Gate A、S3 与 G4 均保持开放。
 
 ### C. Governance HTTP 服务
@@ -220,12 +226,20 @@
 |---|---|---|---|---|
 | S0 基线冻结 | 领域契约、现有 Gate、发布计数和边界盘点 | A、F | `DONE` | 基线与缺口写入本计划，Cloud/Local 证据分级明确。 |
 | S1 本地事件治理接入 | Governance HTTP + Loopback Replay Transport | C、D | `DONE` | Gate C、D、本地攻击性/E2E 与同一提交的远程 RC 均已通过。 |
-| S2 本地发布包 | 安全容器、Compose、一键演示 | B | `IN PROGRESS` | S2-01 安全容器基线、S2-02 成功/失败治理重启恢复，以及 S2-03 Trivy 双报告/runner-local release artifact 均已通过精确绑定 RC 的远程 Docker 并标记 `DONE`；供应链边界与 Gate B 仍未通过。 |
+| S2 本地发布包 | 安全容器、Compose、一键演示 | B | `IN PROGRESS` | S2-01 安全容器基线、S2-02 成功/失败治理重启恢复，以及 S2-03 Trivy 双报告/runner-local release artifact 均已通过精确绑定 RC 的远程 Docker 并标记 `DONE`；S2-04 因无满足完整 `C/H=0` 且保持当前运行时/provenance 契约的可信基础镜像而为 `BLOCKED`，供应链边界与 Gate B 仍未通过。 |
 | S3 发布与供应链 | 远程 CI、SBOM、扫描、签名/证明 | A | `IN PROGRESS` | Gate A 通过并绑定提交和远程证据。 |
 | S4 可观测与运维 | OTel、指标、SLO、告警、Runbook、演练 | E | `NOT STARTED` | Gate E 通过并形成演练报告。 |
 | S5 Cloud 就绪 | IaC、权限矩阵、Staging 验收包 | F | `IN PROGRESS` | Gate F-local 通过，状态变为 `READY FOR STAGING`。 |
 | S6 Cloud Staging | 真实 IAM/OIDC/DLQ/WI/Spanner/GKE | F | `WAITING FOR CLOUD` | 获得最小权限身份并通过真实 Cloud Gate。 |
-| S7 答辩发布 | 固化版本、证据包、演示脚本、限制声明 | A–F | `NOT STARTED` | Local Release Gate 通过；Cloud 能力按真实状态单列。 |
+| S7 答辩发布 | 固化版本、证据包、演示脚本、限制声明 | A–F | `IN PROGRESS` | S7-01 原生一键双分支脚本已完成本地真实运行并为 `READY FOR REVIEW`；仍需新提交远程矩阵、答辩证据包、可观测/Runbook 与最终限制声明。 |
+
+### 6.1 S7-01 原生一键答辩闭环
+
+**状态**：`READY FOR REVIEW`。
+
+固定入口为 `python tools/local-stack/run_defense_demo.py --approve-local-simulation`，不接受 workspace、URL、header、actor、Cloud、Docker 或任意命令参数。它在 `.local/networkagent-defense` 下创建两个随机、marker-owned 的隔离工作区，分别完成 `RESOLVED/PASSED` 与 `REOPENED/FAILED`；每条路径均验证 13,440 条 KPI、579 条安全 Trace、15 个候选、action hash/revision 双绑定、八事件审计链、一个 ActionRun/VerificationRun、`side_effects=false`，再原样重放首次审批命令并确认终态和记录不放大。最终两个工作区都必须由安全 reset 删除，原子 JSON 报告及 SHA-256 留在 run 目录。
+
+本地证据为脚本定向/真实集成 `18 passed`、local-stack 全套 `49 passed`，以及一次直接命令运行：两分支、精确重试和双清理均通过。当前工作区含本次未提交实现，因此直接运行诚实标记为 `LOCAL_WORKTREE_SIMULATION_EVIDENCE`；只有 Git 可用、前后 commit 相同且 tracked tree 始终干净时才标记 `LOCAL_NATIVE_SIMULATION_EVIDENCE`。S7-01 在新提交远程 Python 3.12/3.13 通过前不得标记 `DONE`；S7 总阶段也不因本工作包通过而关闭。
 
 ## 7. Sprint 1：Governance HTTP + Loopback Replay
 
@@ -388,3 +402,5 @@
 | 2026-08-30 | 2.0 | RC `d0a020fb7a5d8a33cd136cd18917d21b7e067946` 的 `telco-container` run 33311995755 全绿：远程 Linux `76 passed, 0 skipped`，compose-policy job 99258612862 与 build-inspect-smoke job 99258640065 成功；真实 Compose/build/inspect 得到 runner 本地 image ID `sha256:0acef50a2ee7978ea67a8b37582a19698a21b1303451ce37a0a569d48fef6cff`（非 registry digest），完成 5 层 / 2,570 成员应用层和 9,148 成员合并 rootfs 扫描、初始化 `13440/579/0`/无外部访问及 health/隔离/shared-loopback smoke/probe steps。probe 无 stdout；reset 删除 state/artifacts/marker 且 `workspace_removed=true`，cleanup 成功。最新本地门禁为 `75 passed, 1 skipped`；run 上传 0 artifacts，未发布 registry image 或容器 SBOM/签名/attestation/provenance。 | S2-01=`DONE`；S2/Workflow B/P7 仍为 `IN PROGRESS`，Gate B、Gate A、S3 与 G4 保持开放。 |
 | 2026-08-30 | 2.0 | RC `d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4` 的 `telco-container` run 33314782750 与 Local run 33314782757 全绿。容器两 job 为 99266075811/99266104885，Linux 政策门禁 `128 passed`；真实成功/失败治理 JSON 分别为 `RESOLVED`/`REOPENED`，且两者均 `restart_observed=true`、`exact_replay=true`、`real_network_side_effects=false`；顶层 `projects_removed=true` 证明两个 Compose 项目均已清理。Local 两 job 为 99266075954/99266075805，两版各通过 Domain + Local `518 passed`、local-stack `29 passed, 2 skipped`、Local E2E `2 passed`；Python 3.12 `VERIFIED RC` artifact 9733117877 archive digest 为 `3d557a52a80960add94c04b443c14f613892701c5b5b93dcfba4174fd78f3469`。容器 run 上传 0 artifacts。 | S2-02=`DONE`；S2/Workflow B/P7 仍为 `IN PROGRESS`，Gate B、Gate A、S3 与 G4 保持开放；registry image/digest、容器 SBOM、hash-lock、Trivy 与 signing/attestation/provenance 未完成。 |
 | 2026-08-30 | 2.0 | RC `68b16ea528a85b743aa8c05044948bac195ee8ec` 的 `telco-container` run 33320667296 全绿：compose-policy job 99281949020 与 build-inspect-smoke job 99281979960 成功；14 天 artifact 9734817516 分类 `VERIFIED RUNNER-LOCAL EVIDENCE`，archive digest 为 `sha256:e35d8eb12484feeb474477bae0f3d937019f3ab19e9f8ccf1fd491b8a95f0394`。该 artifact 绑定 runner-local image/config digest `sha256:0e8caa8418d93e1f9654655b84331723e8223d9dc94e66274aed1ca3fa7d00bb`、Trivy 0.74.0 fixable Critical/High gate `0/0`、full diagnostic `5` Critical + `29` High 且全部 unfixed，以及 CycloneDX 1.7 SBOM `145` components。 | S2-03=`DONE`；S2/Workflow B/P7 保持 `IN PROGRESS`，Gate B、G2、Gate A、S3 与 G4 保持开放；仍无 registry image/digest、签名/attestation/provenance、Trivy DB OCI digest/signature 与离线独立重验。 |
+| 2026-08-31 | 2.0 | 完成 S2-04 完整 Critical/High 关闭可行性评估：同一 Trivy 0.74.0/冻结数据库下，Bookworm=`5C+29H`、Trixie=`3C+16H`、Distroless Python 3/Debian 13=`0C+17H`；公开 Chainguard `latest` 的 `0/0` 对应 Python 3.14，不满足当前 `<3.14` 一方包与 CPython 3.12 锁定契约。拒绝 `--ignore-unfixed`、漏洞白名单和丢弃包 provenance 的扫描假清零。 | S2-04=`BLOCKED`；S2/Workflow B/P7 继续 `IN PROGRESS`，Gate B、G2、Gate A、S3、G4 均保持开放；后续只能以 provenance 可验证的 3.12 镜像或独立 Python/base migration 重新开启。 |
+| 2026-08-31 | 2.0 | 新增固定无 Docker 的 S7-01 原生一键答辩入口：同一命令在两个隔离工作区完成 `RESOLVED/PASSED` 与 `REOPENED/FAILED`，验证原审批请求精确重放、记录不放大、`side_effects=false` 与双安全 reset，并原子保留报告及 SHA-256。本地脚本定向/真实集成为 `18 passed`，local-stack 全套为 `49 passed`。 | S7-01=`READY FOR REVIEW`、S7=`IN PROGRESS`；等待新提交远程 Python 3.12/3.13 验收，不声明拒绝/过期、容器、真实动作、Cloud 或 G2/G4/G5 完成。 |

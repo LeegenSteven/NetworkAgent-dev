@@ -123,6 +123,155 @@ jobs:
               "REJECTION_OR_EXPIRY_BRANCHES",
           ]
           PY
+      - name: Exercise bounded local observability evidence
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python tools/local-stack/run_observability_demo.py --approve-local-simulation > release-evidence/local-observability-summary.json
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          observation = json.loads(
+              Path("release-evidence/local-observability-summary.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          assert observation["schema"] == "networkagent-local-observability/1.0"
+          assert observation["ok"] is True
+          assert observation["source"]["commit_bound"] is True
+          assert observation["source"]["commit_sha"] == os.environ["GITHUB_SHA"]
+          assert observation["run"]["status"] == "PASS"
+          assert observation["run"]["event_count"] == 22
+          assert observation["run"]["diagnostic_only"] is True
+          assert observation["run"]["error_class"] == "NONE"
+          assert observation["run"]["error_code"] is None
+          assert len(observation["events"]) == 22
+          expected_event_keys = {
+              "attempt",
+              "branch",
+              "duration_ms",
+              "error_class",
+              "outcome",
+              "sequence",
+              "stage",
+          }
+          expected_graph = [
+              ("source_revision", "none", 1),
+              ("source_cleanliness", "none", 1),
+              ("preflight", "none", 1),
+              ("workspace_init", "success", 1),
+              ("workspace_status", "success", 1),
+              ("governance_preview", "success", 1),
+              ("approval_execute", "success", 1),
+              ("terminal_verify", "success", 1),
+              ("approval_execute", "success", 2),
+              ("terminal_verify", "success", 2),
+              ("workspace_init", "failure", 1),
+              ("workspace_status", "failure", 1),
+              ("governance_preview", "failure", 1),
+              ("approval_execute", "failure", 1),
+              ("terminal_verify", "failure", 1),
+              ("approval_execute", "failure", 2),
+              ("terminal_verify", "failure", 2),
+              ("workspace_cleanup", "success", 1),
+              ("workspace_cleanup", "failure", 1),
+              ("source_revision", "none", 2),
+              ("source_cleanliness", "none", 2),
+              ("run_finalize", "none", 1),
+          ]
+          for sequence, item in enumerate(observation["events"], start=1):
+              assert set(item) == expected_event_keys
+              assert item["sequence"] == sequence
+              assert type(item["duration_ms"]) is int
+              assert item["duration_ms"] >= 0
+              assert item["outcome"] == "SUCCEEDED"
+              assert item["error_class"] == "NONE"
+          assert [
+              (item["stage"], item["branch"], item["attempt"])
+              for item in observation["events"]
+          ] == expected_graph
+          assert observation["business_outcomes"] == {
+              "cleanup": {"failure": True, "success": True},
+              "exact_retry": {"failure": True, "success": True},
+              "failure": {
+                  "closed_loop": False,
+                  "expected_business_result": True,
+                  "state": "REOPENED",
+                  "verification": "FAILED",
+              },
+              "success": {
+                  "closed_loop": True,
+                  "expected_business_result": True,
+                  "state": "RESOLVED",
+                  "verification": "PASSED",
+              },
+          }
+          assert len(observation["local_alerts"]) == 4
+          assert {item["name"] for item in observation["local_alerts"]} == {
+              "LOCAL_CLEANUP_FAILURE",
+              "LOCAL_CONTRACT_DRIFT",
+              "LOCAL_EXECUTION_FAILURE",
+              "LOCAL_RETRY_AMPLIFICATION",
+          }
+          assert all(
+              item["state"] == "OK" for item in observation["local_alerts"]
+          )
+          assert all(
+              item["owner"] and item["threshold"] and item["runbook_anchor"]
+              for item in observation["local_alerts"]
+          )
+          metrics = observation["metrics"]
+          allowed_label_keys = {"branch", "error_class", "outcome", "stage"}
+          assert metrics["high_cardinality_labels_present"] is False
+          assert set(metrics["label_keys"]) == allowed_label_keys
+          assert metrics["series"]
+          for series in metrics["series"]:
+              assert series["name"] == "networkagent_local_stage"
+              assert set(series["labels"]) == allowed_label_keys
+              assert not {
+                  "trace_id",
+                  "incident_id",
+                  "resource_id",
+                  "action_hash",
+                  "observation_id",
+                  "commit_sha",
+              }.intersection(series["labels"])
+              assert type(series["event_count"]) is int
+              assert type(series["duration_ms"]) is int
+          assert observation["correlation"]["observation_id"] == observation["run"]["observation_id"]
+          assert observation["correlation"]["source_commit"] == os.environ["GITHUB_SHA"]
+          assert observation["correlation"]["propagated_trace"] is False
+          assert len(observation["correlation"]["defense_report_sha256"]) == 64
+          assert observation["privacy"] == {
+              "absolute_paths_recorded": False,
+              "child_stderr_recorded": False,
+              "child_stdout_recorded": False,
+              "environment_recorded": False,
+              "high_cardinality_metric_labels": False,
+              "raw_arguments_recorded": False,
+              "status": "PASS",
+          }
+          assert observation["coverage"]["not_claimed"] == [
+              "OPEN_TELEMETRY_EXPORT",
+              "CROSS_HTTP_REPLAY_A2A_MCP_TRACE",
+              "PROMETHEUS_METRICS",
+              "EXTERNAL_ALERT_DELIVERY",
+              "SERVICE_LEVEL_OBJECTIVES",
+              "COLLECTOR_FAILURE_TOLERANCE",
+              "GATE_E_OR_G5_CLOSURE",
+              "CLOUD_OR_PRODUCTION_OBSERVABILITY",
+          ]
+          report_path = Path(observation["report"]["relative_path"])
+          report_bytes = report_path.read_bytes()
+          assert hashlib.sha256(report_bytes).hexdigest() == observation["report"]["sha256"]
+          persisted = json.loads(report_bytes)
+          assert persisted == {
+              key: value for key, value in observation.items() if key != "report"
+          }
+          PY
       - name: Build both wheels
         run: |
           python -m pip install "build>=1,<2"
@@ -213,6 +362,7 @@ jobs:
             --artifact-name "$RELEASE_ARTIFACT_NAME" \
             --artifact-retention-days 14 \
             --supplemental-evidence release-evidence/defense-demo-summary.json \
+            --supplemental-evidence release-evidence/local-observability-summary.json \
             --summary "$GITHUB_STEP_SUMMARY"
           python .github/scripts/release_evidence.py verify-manifest \
             --manifest release-evidence/release-manifest.json \
@@ -228,7 +378,8 @@ jobs:
             --python-version "${{ matrix.python-version }}" \
             --artifact-name "$RELEASE_ARTIFACT_NAME" \
             --artifact-retention-days 14 \
-            --supplemental-evidence release-evidence/defense-demo-summary.json
+            --supplemental-evidence release-evidence/defense-demo-summary.json \
+            --supplemental-evidence release-evidence/local-observability-summary.json
       - name: Upload release or diagnostic evidence
         id: release_artifact
         if: ${{ always() && matrix.python-version == '3.12' }}

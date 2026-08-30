@@ -11,6 +11,7 @@
 > S2-01 `telco-container`: **REMOTE DOCKER PASS**
 > S2-02 container governance recovery: **DONE for RC `d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4`**
 > S2-02 container + Local CI: **REMOTE PASS**
+> S2-03 container release evidence: **DONE for RC `68b16ea528a85b743aa8c05044948bac195ee8ec`**
 > Gate B overall: **NOT PASSED**
 > Cloud/production authorization: **NOT APPLICABLE**
 
@@ -130,9 +131,36 @@ with archive digest
 This Local release artifact is not a container registry artifact.
 
 Gate B overall remains not passed. Workflow B/S2/P7 remain `IN PROGRESS`, and
-Gate B, Gate A, S3, and G4 remain open because `--require-hashes`, Trivy
-Critical/High policy, a registry image/digest, container SBOM, and
-signing/attestation/provenance are not complete.
+Gate B, G2, Gate A, S3, and G4 remain open because there is still no registry
+image/digest, signing/attestation/provenance, or Trivy DB OCI
+digest/signature capture, and the uploaded runner-local artifact cannot be
+used for offline-independent re-verification.
+
+## S2-03 container release evidence review
+
+S2-03 has passed remote Docker evidence generation on exact RC
+`68b16ea528a85b743aa8c05044948bac195ee8ec` and is therefore `DONE`. The
+commit-bound [telco-container run 33320667296](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296)
+completed [compose-policy job 99281949020](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296/job/99281949020)
+and [build-inspect-smoke job 99281979960](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296/job/99281979960)
+successfully.
+
+The run published 14-day
+[artifact 9734817516](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296/artifacts/9734817516)
+named `telco-container-release-attempt-1`, with GitHub archive digest
+`sha256:e35d8eb12484feeb474477bae0f3d937019f3ab19e9f8ccf1fd491b8a95f0394`
+and classification `VERIFIED RUNNER-LOCAL EVIDENCE`. It binds runner-local
+image/config digest
+`sha256:0e8caa8418d93e1f9654655b84331723e8223d9dc94e66274aed1ca3fa7d00bb`,
+Trivy 0.74.0 fixable Critical/High gate `0/0`, a full diagnostic with `5`
+Critical + `29` High findings that are all unfixed, and a CycloneDX 1.7
+container SBOM with `145` components.
+
+This evidence closes the runner-local Trivy/SBOM release-manifest slice, but it
+does not publish a registry image/digest, does not provide signing,
+attestation, provenance, or Trivy DB OCI digest/signature capture, and does
+not supply an offline-independent re-verification bundle because the image,
+scanner binary, and database are not uploaded.
 
 ## Reviewed flow
 
@@ -319,7 +347,7 @@ The 76-test Assurance, 22-test local-stack, 3-test Local E2E, 33-test A2A
 contract, and 4-test A2A E2E results are the independent local evidence for the
 same HTTP admission/deadline implementation now covered by the remote RC.
 
-### S2-02 remote RC evidence
+### S2-02/S2-03 remote RC evidence
 
 The tested S2-02 release candidate is
 `d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4`. Both runs completed with
@@ -328,11 +356,14 @@ The tested S2-02 release candidate is
 * [Container CI run 33314782750](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750): jobs [99266075811](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750/job/99266075811) and [99266104885](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750/job/99266104885) passed; Linux policy `128 passed`; both real governance branches passed restart, exact replay, no-real-side-effect, offline verification, reset, and cleanup assertions. The run uploaded 0 artifacts.
 * [Local CI run 33314782757](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757): jobs [99266075954](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/job/99266075954) and [99266075805](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/job/99266075805) passed. Both Python variants recorded Domain + Local `518 passed`, local-stack `29 passed, 2 skipped`, and Local E2E `2 passed`.
 * [Local VERIFIED RC artifact 9733117877](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782757/artifacts/9733117877): Python 3.12 archive digest `sha256:3d557a52a80960add94c04b443c14f613892701c5b5b93dcfba4174fd78f3469`.
+* [Container CI run 33320667296](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296): jobs [99281949020](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296/job/99281949020) and [99281979960](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296/job/99281979960) passed. The run published [artifact 9734817516](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296/artifacts/9734817516), classified `VERIFIED RUNNER-LOCAL EVIDENCE`, with archive digest `sha256:e35d8eb12484feeb474477bae0f3d937019f3ab19e9f8ccf1fd491b8a95f0394`; it binds runner-local image/config digest `sha256:0e8caa8418d93e1f9654655b84331723e8223d9dc94e66274aed1ca3fa7d00bb`, Trivy 0.74.0 fixable Critical/High gate `0/0`, full diagnostic `5` Critical + `29` High (all unfixed), and CycloneDX 1.7 SBOM `145` components.
 
-This evidence update is later than and not equal to the tested S2-02 RC. The
-Local artifact does not supply a container registry image/digest or container
-SBOM, and neither run proves container signing, attestation, provenance,
-hash-locked installation, or a Trivy Critical/High Gate.
+This evidence update is later than and not equal to the tested S2-02/S2-03 RCs.
+The Local artifact and runner-local container artifact do not supply a
+published container registry image/digest. No run here proves signing,
+attestation, provenance, or Trivy DB OCI digest/signature capture, and the
+S2-03 artifact is not an offline-independent re-verification bundle because the
+image, scanner binary, and database are not uploaded.
 
 ## Residual limitations
 

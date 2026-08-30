@@ -169,13 +169,30 @@ with archive digest
 `sha256:3d557a52a80960add94c04b443c14f613892701c5b5b93dcfba4174fd78f3469`;
 this is Local release evidence, not a container registry artifact.
 
-S2-01 and S2-02 are **DONE**, but Workflow B/Sprint 2/P7 remain `IN PROGRESS`
-and Gate B is not passed. This workstation still has no Docker or actionlint,
-so no local result is claimed for those tools. No registry image or digest,
-container SBOM, signature, attestation, or provenance was published.
-Hash-locked `--require-hashes` installation, a Trivy Critical/High Gate, Gate
-A/S3/G4, cross-event aggregation, RCAEval, and Cloud Staging authorization
-remain open.
+S2-03 is also **DONE** for remote RC
+`68b16ea528a85b743aa8c05044948bac195ee8ec`. Its commit-bound
+[telco-container run 33320667296](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296)
+passed [compose-policy job 99281949020](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296/job/99281949020)
+and [build-inspect-smoke job 99281979960](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296/job/99281979960).
+The run published 14-day
+[artifact 9734817516](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296/artifacts/9734817516)
+named `telco-container-release-attempt-1`, with GitHub archive digest
+`sha256:e35d8eb12484feeb474477bae0f3d937019f3ab19e9f8ccf1fd491b8a95f0394`
+and classification `VERIFIED RUNNER-LOCAL EVIDENCE`. It binds runner-local
+image/config digest
+`sha256:0e8caa8418d93e1f9654655b84331723e8223d9dc94e66274aed1ca3fa7d00bb`,
+Trivy 0.74.0 fixable Critical/High gate `0/0`, a full diagnostic with `5`
+Critical + `29` High findings that are all unfixed, and a CycloneDX 1.7
+container SBOM with `145` components.
+
+S2-01, S2-02, and S2-03 are **DONE**, but Workflow B/Sprint 2/P7 remain
+`IN PROGRESS` and Gate B is not passed. This workstation still has no Docker or
+actionlint, so no local result is claimed for those tools. No registry image or
+digest was published, and there is still no signing, attestation, provenance,
+or Trivy DB OCI digest/signature capture. The uploaded runner-local artifact is
+not an offline-independent re-verification bundle because the image, scanner
+binary, and database are not uploaded. G2/Gate A/S3/G4, cross-event aggregation,
+RCAEval, and Cloud Staging authorization remain open.
 
 * [Implementation Development Plan 2.0](docs/implementation-development-plan-2.0.md)
 * [Living implementation plan](docs/unified-platform-implementation-plan.md)

@@ -1,7 +1,8 @@
 # Isolated Local container candidate
 
-This directory contains the S2-01 container baseline and the S2-02 simulated
-governance acceptance flow for the local assurance profile.
+This directory contains the S2-01 container baseline, the S2-02 simulated
+governance acceptance flow, and the S2-03 runner-local release-evidence flow
+for the local assurance profile.
 It is intentionally isolated: the server binds only to `127.0.0.1` inside a
 Docker `network_mode: none` namespace, and no service publishes or exposes a
 host port. The `probe` and `smoke` services join the assurance container's
@@ -68,8 +69,8 @@ command and not a real remediation action.
 
 ## Promotion status
 
-S2-01 and S2-02 are **DONE** based on commit-bound remote Docker evidence. For
-S2-02, RC `d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4` passed
+S2-01, S2-02, and S2-03 are **DONE** based on commit-bound remote Docker
+evidence. For S2-02, RC `d1ffc0e2334d0fda5ab62f47bdc28a1ae7f5ffe4` passed
 [telco-container run 33314782750](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750),
 including [compose-policy job 99266075811](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750/job/99266075811)
 and [build-inspect-smoke job 99266104885](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33314782750/job/99266104885).
@@ -89,8 +90,24 @@ with archive digest
 `sha256:3d557a52a80960add94c04b443c14f613892701c5b5b93dcfba4174fd78f3469`.
 That is Local release evidence, not a registry image or container artifact.
 
-This is still not Gate B complete. A `--require-hashes` dependency lock, Trivy
-Critical/High vulnerability policy, registry image/digest, generated container
-SBOM, and signing/attestation/provenance remain open supply-chain work. Sprint
-2, Workflow B, and P7 therefore remain `IN PROGRESS`; Gate B, Gate A, S3, and G4
-remain open.
+For S2-03, RC `68b16ea528a85b743aa8c05044948bac195ee8ec` passed
+[telco-container run 33320667296](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296),
+including [compose-policy job 99281949020](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296/job/99281949020)
+and [build-inspect-smoke job 99281979960](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296/job/99281979960).
+The run published 14-day
+[artifact 9734817516](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33320667296/artifacts/9734817516)
+named `telco-container-release-attempt-1`, archive digest
+`sha256:e35d8eb12484feeb474477bae0f3d937019f3ab19e9f8ccf1fd491b8a95f0394`,
+and classification `VERIFIED RUNNER-LOCAL EVIDENCE`. It binds runner-local
+image/config digest
+`sha256:0e8caa8418d93e1f9654655b84331723e8223d9dc94e66274aed1ca3fa7d00bb`,
+Trivy 0.74.0 fixable Critical/High gate `0/0`, a full diagnostic with `5`
+Critical + `29` High findings that are all unfixed, and a CycloneDX 1.7
+container SBOM with `145` components.
+
+This is still not Gate B complete. No registry image/digest was published, and
+there is still no signing, attestation, provenance, or Trivy DB OCI
+digest/signature capture. The uploaded runner-local artifact is not an
+offline-independent re-verification bundle because the image, scanner binary,
+and database are not uploaded. Sprint 2, Workflow B, and P7 therefore remain
+`IN PROGRESS`; Gate B, G2, Gate A, S3, and G4 remain open.

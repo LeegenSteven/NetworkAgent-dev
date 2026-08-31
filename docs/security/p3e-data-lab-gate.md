@@ -1,8 +1,8 @@
 # P3e 本地开放数据实验室 Gate
 
-> 日期：2026-08-30
+> 日期：2026-08-31
 > 范围：第三方开放数据的 catalog、下载、缓存、解包、脱敏、适配、离线评估与本地回放
-> 当前结论：**IN PROGRESS（BubbleRAN 下载、适配、离线评估、公开 Replay wire、paced loopback transport、caller-owned 持久 checkpoint、durable Canonical Fault 业务回放与真实 TCP 持久重启治理 E2E Gate 已通过；跨事件聚合、RCAEval 及发布终验待完成）**
+> 当前结论：**IN PROGRESS（BubbleRAN 下载、适配、离线评估、公开 Replay wire、paced loopback transport、caller-owned 持久 checkpoint、durable Canonical Fault 业务回放、真实 TCP 持久重启治理 E2E 与 S7-03 独立代码生成 fixture 答辩入口已通过；完整上游答辩、跨事件聚合、RCAEval 及发布终验待完成）**
 
 ## 1. 发布边界
 
@@ -118,6 +118,18 @@
 - [Local artifact 9728983176](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104520/artifacts/9728983176) 与 [Assurance artifact 9729018617](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104511/artifacts/9729018617) 也为 `VERIFIED RC`。三份 artifact 的运行、GitHub metadata 和 manifest 三层均绑定受测 SHA/run ID；下载后的 ZIP digest、逐文件字节数/SHA、runtime inventory、wheel scan、CycloneDX 1.4 与 `pip-audit==2.10.1` 交叉验证 0 错误、0 已知漏洞。
 - 本段证据回填提交晚于且不等于受测 RC；artifact 于 2026-09-13 到期。SHA-256 证明完整性而非发布者身份，签名/attestation、hash-locked 离线安装、SPDX、独立 secret/SAST/license policy 与完整发布终验仍开放。远程矩阵不关闭跨事件聚合或 RCAEval，P3e 继续保持 `IN PROGRESS`。
 
+### 8.1 S7-03 独立 fixture 答辩 Gate
+
+- 唯一入口 `python tools/local-stack/run_bubbleran_defense_demo.py --offline --approve-local-simulation` 使用 4 条 `CODE_GENERATED_SCHEMA_FIXTURE` 记录。它只证明冻结 schema 与垂直治理链路，不包含、不下载也不冒充完整 BubbleRAN 上游 benchmark。
+- 真实 loopback TCP 创建 4 个独立 Incident/SourceAssociation；持久 checkpoint 首次为 `4/4/4`，重新打开完成态 store 后为 `0/0/0`。绕过 checkpoint 再投递 4 条 settled event 后，Incident/Audit/SourceAssociation/Idempotency delta 全为 0，且四个 Incident 完整对象深等。
+- 四个固定终态逐支为 `RESOLVED/PASSED`、`REOPENED/FAILED`、`REJECTED/NOT_RUN` 与审批过期 `FAILED/NOT_RUN`。ActionRun/VerificationRun 总计 `2/2`；动作固定 `LOCAL_SIMULATION`，`side_effects=false`。
+- 受测 RC 为 `46318cbf84b65c3060358dffb49b829479803308`。[Assurance run 33366606140](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606140) jobs 99408450337/99408450434/99408450435/99408450555、[Local run 33366606118](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606118) jobs 99408450116/99408450386、[Container run 33366606112](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606112) jobs 99408450317/99408503334 全部成功：8/8 jobs、122 个 success steps，11 个条件 skips 符合设计。
+- 唯一证据载体是 Python 3.12 Assurance [VERIFIED RC artifact 9748618894](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606140/artifacts/9748618894)，名称 `telco-assurance-release-py3.12-attempt-1`，248,105 bytes，archive SHA-256 `975a60d326eb97ea2557ae237bbff9dd957b327cdc04c2d117ef8cb58f262f14`。独立下载确认 13 文件精确闭包（12 payload + manifest）、manifest `PASS` / `failures=[]`，且无 CSV、DuckDB、JSONL 或 checkpoint。
+- `local-bubbleran-defense-summary.json` 为 2,374 bytes / SHA-256 `161354c5715b8a46730debcf7dd37658158d1ec338b469aa24f2bb2f3ddbc855`；移除 stdout-only `report` envelope 后重建持久报告为 2,225 bytes / SHA-256 `4a07a35b7c5ca2e2f256351dc45bfdd7c5eac069b15f78d672f1eafa9c2aff42`。summary/report 不含禁用 ID、路径、原始记录或 source location 字段。
+- [独立 fixture 答辩运行手册](../runbooks/local-bubbleran-defense-demo.md) 冻结 6–8 分钟流程、字段 allowlist、稳定失败、身份绑定清理、artifact 复核和十项 `not_claimed`。文档提交晚于且不等于受测 RC。
+
+该 Gate 只把 S7-03 窄切片标为 `DONE`，并确认 P3e-5 的独立 fixture 答辩入口已完成；P3e-5/P3e 仍为 `IN PROGRESS`。RCAEval、第二路径、跨事件/episode 聚合、完整上游 BubbleRAN 流程、容量/生产准确率和发布终验仍开放。S4/Workflow E/P7/S7 保持 `IN PROGRESS`；Gate E/G5/G2/G4 保持开放；S2-04 为 `BLOCKED`；P6 统一 UI 为 `NOT STARTED`。
+
 ## 9. 退出标准
 
 P3e 第一版只有同时满足下列条件才可标记 `DONE`：
@@ -136,7 +148,7 @@ P3e 第一版只有同时满足下列条件才可标记 `DONE`：
 - loopback HTTP transport、paced runner、有限 transient retry、caller-owned 持久 checkpoint、Canonical Fault/Incident 业务接收器与真实 TCP 治理 E2E 已实现。checkpoint 仍只是非签名 continuation claim；store 为非阻塞单 writer，response loss 恢复依赖 receiver 幂等，不能作为共享数据库或认证 ACK。
 - checkpoint 路径在 Windows 拒绝 UNC/device 并只接受 `DRIVE_FIXED`；POSIX mount topology 与恶意同用户 ancestor rename/swap TOCTOU 仍属于本机文件系统信任边界。
 - 当前 receiver 为每 source event 独立 Incident，尚无 episode/跨事件聚合。受控 UL BLER 阈值只用于 BubbleRAN 本地测试 provenance，不是生产 RCA。
-- BubbleRAN 当前使用全量基线和代码生成的极小 CI fixture；远程 RC artifact/SBOM/`pip-audit` 已验收，但独立答辩脚本、延迟/峰值内存预算、签名/attestation、离线 hash-lock 与完整发布证据仍待完成。
+- BubbleRAN 当前使用全量基线和代码生成的极小 CI fixture；远程 RC artifact/SBOM/`pip-audit` 与 S7-03 独立代码生成 fixture 答辩入口已验收，但完整上游答辩、延迟/峰值内存预算、签名/attestation、离线 hash-lock 与完整发布证据仍待完成。
 - 本 Gate 不包含真实 Engineer/MCP/GitOps/Operator 动作或任何 Cloud Staging 验收。
 - NIST、RANalyzer、TelecomTS 的适配优先级将在前两个适配器通过 Gate 后确定。
 - 公司对 CC BY-SA 派生数据演示/再分发的合规要求需要在对外交付前确认。

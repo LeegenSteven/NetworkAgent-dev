@@ -36,6 +36,55 @@ network action. Evidence is commit-bound only when Git is available, the
 tracked tree remains clean, and the same commit is observed before and after
 the run.
 
+For the S7-03 four-branch BubbleRAN fixture defense demonstration, run the
+single fixed offline command:
+
+```text
+python tools/local-stack/run_bubbleran_defense_demo.py --offline --approve-local-simulation
+```
+
+This entry point generates four schema-valid records in code; it does not
+download, bundle, or claim to reproduce the complete upstream BubbleRAN
+benchmark. The records cross real loopback TCP into four independent Canonical
+Incidents. A persistent checkpoint must report `4/4/4` selected/attempted/
+delivered on its first use and `0/0/0` after reopening. The four governance
+branches finish at `RESOLVED/PASSED`, `REOPENED/FAILED`, `REJECTED/NOT_RUN`, and
+approval-expired `FAILED/NOT_RUN`. There are exactly two ActionRuns and two
+VerificationRuns; the action is `LOCAL_SIMULATION` and `side_effects=false`.
+Bypassing the settled checkpoint deliberately redelivers all four events while
+Incident, Audit, SourceAssociation, and idempotency counts remain unchanged and
+the four Incidents remain deeply equal.
+
+S7-03 is `DONE` only for this narrow fixture-based defense entry point on RC
+`46318cbf84b65c3060358dffb49b829479803308`. Its [Assurance run
+33366606140](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606140)
+(jobs 99408450337/99408450434/99408450435/99408450555), [Local run
+33366606118](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606118)
+(jobs 99408450116/99408450386), and [Container run
+33366606112](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606112)
+(jobs 99408450317/99408503334) passed 8/8 jobs, with 122 successful steps and
+11 expected conditional skips. Only Python 3.12 Assurance published the
+[VERIFIED RC artifact
+9748618894](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606140/artifacts/9748618894),
+`telco-assurance-release-py3.12-attempt-1`: 248,105 bytes, archive digest
+`sha256:975a60d326eb97ea2557ae237bbff9dd957b327cdc04c2d117ef8cb58f262f14`.
+Independent download confirmed an exact 13-entry closure (12 payloads plus the
+manifest), manifest `PASS` with `failures=[]`, and no CSV, DuckDB, JSONL, or
+checkpoint. The summary is 2,374 bytes / SHA-256
+`161354c5715b8a46730debcf7dd37658158d1ec338b469aa24f2bb2f3ddbc855`;
+its reconstructed report is 2,225 bytes / SHA-256
+`4a07a35b7c5ca2e2f256351dc45bfdd7c5eac069b15f78d672f1eafa9c2aff42`.
+
+See the [Local BubbleRAN four-branch defense
+runbook](docs/runbooks/local-bubbleran-defense-demo.md) for the 6–8 minute
+presentation, fields, failures, cleanup, independent artifact audit, privacy
+rules, and ten exact non-claims. P3e-5 now has an independent fixture defense
+entry point, but P3e-5 and P3e remain `IN PROGRESS`: RCAEval, the second data
+path, cross-event aggregation, and complete upstream validation are unfinished.
+S4, Workflow E, P7, and S7 remain `IN PROGRESS`; Gate E/G5/G2/G4 remain open,
+S2-04 remains `BLOCKED`, and P6 unified UI remains `NOT STARTED`. This
+documentation update is later than and not equal to the tested RC.
+
 For a bounded, privacy-minimized observation of the same defense path, run:
 
 ```text

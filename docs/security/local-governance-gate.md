@@ -18,6 +18,7 @@
 > S4-03 fixed-window acceptance SLO evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
 > S4-04 Local DuckDB cold backup recovery evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
 > S4-05 Local single-process runtime trace evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
+> S7-03 Local BubbleRAN four-branch fixture defense: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
 > Workflow E / Gate E / G5: **NOT PASSED BY THIS GATE**
 > Gate B overall: **NOT PASSED**
 > Cloud/production authorization: **NOT APPLICABLE**
@@ -111,6 +112,16 @@ Raw JSONL remains Local-only and is not uploaded. This is not OTel/Prometheus,
 distributed/cross-process/multi-event correlation, MCP propagation, external
 alerting, Cloud/production observability, or Gate E/G5 closure. It is assessed
 separately and does not expand this Governance Gate.
+
+The separate S7-03 wrapper exercises the four governance terminal branches from
+four code-generated BubbleRAN-schema records over the real loopback path. The
+fixture is explicitly not the complete upstream benchmark. It proves four
+independent cases, persistent-checkpoint `4/4/4 -> 0/0/0`, two ActionRuns and
+two VerificationRuns, `LOCAL_SIMULATION` with `side_effects=false`, and zero
+business-record delta after four checkpoint-bypassing settled redeliveries. It
+does not provide cross-event aggregation, RCAEval, production accuracy, real
+remediation, Cloud deployment, a unified dashboard, or Gate E/G5 closure. It is
+assessed separately and does not expand this Governance Gate.
 
 ## S2-01 container review
 
@@ -328,6 +339,61 @@ open, and S2-04 remains `BLOCKED`. Like S4-01 through S4-04, this S4-05 note is
 assessed separately and does not add a PASS row to the Governance Gate below.
 This documentation update is later than and not equal to the tested RC.
 
+## S7-03 BubbleRAN fixture defense evidence
+
+S7-03 is `DONE` only for the fixed four-branch local defense entry point on RC
+`46318cbf84b65c3060358dffb49b829479803308`. The only command is
+`python tools/local-stack/run_bubbleran_defense_demo.py --offline --approve-local-simulation`.
+Its four inputs are marked `CODE_GENERATED_SCHEMA_FIXTURE`; no upstream
+BubbleRAN bytes are downloaded or bundled, and no complete-upstream claim is
+made.
+
+The fixed proof requires four independent Canonical cases and four source
+associations. The first persistent checkpoint run reports selected/attempted/
+delivered `4/4/4`; reopening the completed store reports `0/0/0`. The terminal
+branches are, in order, approved-pass `RESOLVED/PASSED`, approved-fail
+`REOPENED/FAILED`, `REJECTED/NOT_RUN`, and approval-expired `FAILED/NOT_RUN`.
+There are exactly two ActionRuns and two VerificationRuns. Every action has type
+`LOCAL_SIMULATION` and `side_effects=false`. A final checkpoint-bypassing replay
+delivers all four settled events again while Incident, Audit, SourceAssociation,
+and Idempotency deltas remain zero and all four Incident objects remain deeply
+equal.
+
+The exact RC's [Assurance run
+33366606140](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606140)
+passed jobs 99408450337/99408450434/99408450435/99408450555; [Local run
+33366606118](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606118)
+passed jobs 99408450116/99408450386; and [Container run
+33366606112](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606112)
+passed jobs 99408450317/99408503334. The three workflows therefore passed all
+8 jobs and 122 successful steps; 11 conditional matrix/release steps were
+skipped as designed.
+
+The sole S7-03 carrier is the Python 3.12 Assurance [VERIFIED RC artifact
+9748618894](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606140/artifacts/9748618894),
+named `telco-assurance-release-py3.12-attempt-1`: 248,105 bytes with archive
+SHA-256
+`975a60d326eb97ea2557ae237bbff9dd957b327cdc04c2d117ef8cb58f262f14`.
+Independent download confirmed an exact 13-entry closure (12 payloads plus the
+manifest), manifest `PASS` with `failures=[]`, and no CSV, DuckDB, JSONL, or
+checkpoint. The BubbleRAN summary is 2,374 bytes / SHA-256
+`161354c5715b8a46730debcf7dd37658158d1ec338b469aa24f2bb2f3ddbc855`;
+removing its stdout-only report envelope reconstructs the 2,225-byte report /
+SHA-256 `4a07a35b7c5ca2e2f256351dc45bfdd7c5eac069b15f78d672f1eafa9c2aff42`.
+Both summary and report omit the frozen forbidden identifiers, paths, source
+locations, and raw records.
+
+The [Local BubbleRAN four-branch defense
+runbook](../runbooks/local-bubbleran-defense-demo.md) records the fixed 6–8
+minute presentation, field checks, safe failure/cleanup behavior, independent
+artifact audit, and ten non-claims. P3e-5 has gained this independent fixture
+defense entry but P3e-5/P3e remain `IN PROGRESS`: RCAEval, the second path,
+cross-event aggregation, and complete upstream validation remain unfinished.
+S4/Workflow E/P7/S7 remain `IN PROGRESS`; Gate E/G5/G2/G4 remain open, S2-04
+remains `BLOCKED`, and P6 unified UI remains `NOT STARTED`. This documentation
+update is later than and not equal to the tested RC, and this section adds no
+new PASS row to the Governance Gate below.
+
 ## Reviewed flow
 
 ```text
@@ -544,6 +610,10 @@ image, scanner binary, and database are not uploaded.
   concurrent/multi-event correlation, MCP propagation, external alert delivery,
   sink guarantee, or Cloud/production monitoring. A2A Analyze persists
   `assurance_a2a_tasks`, so the full database is not read-only.
+* S7-03 uses four code-generated schema fixture records, not the complete
+  BubbleRAN upstream benchmark. It does not supply RCAEval, a second data path,
+  cross-event/episode aggregation, production accuracy, real remediation,
+  Cloud/GCP deployment, a unified dashboard, or P3e/S7/Gate E/G5 closure.
 * The deterministic verification outcome is test input, not an observation from
   a real Tester/Operations service.
 * `serve` exposes the existing Assurance detect/confirm/analyze interface; it

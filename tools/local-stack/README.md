@@ -71,6 +71,65 @@ progress because its broader security, release, operability, Cloud, and real
 action boundaries are still open. S2-04 also remains blocked; this local
 evidence does not close the complete container Critical/High gate.
 
+## One-command BubbleRAN four-branch defense evidence
+
+Run the S7-03 wrapper from the repository root with both frozen confirmations:
+
+```powershell
+.venv/Scripts/python.exe tools/local-stack/run_bubbleran_defense_demo.py --offline --approve-local-simulation
+```
+
+No other argument is accepted. The input is four records generated in code
+against the reviewed BubbleRAN schema (`CODE_GENERATED_SCHEMA_FIXTURE`), not a
+copy or complete execution of the upstream dataset. The wrapper starts the real
+loopback Replay/Assurance TCP path, creates four independent Canonical cases,
+and verifies a persistent checkpoint at `4/4/4` selected/attempted/delivered
+followed by `0/0/0` after reopening. The four fixed branches are approved-pass
+`RESOLVED/PASSED`, approved-fail `REOPENED/FAILED`, `REJECTED/NOT_RUN`, and
+approval-expired `FAILED/NOT_RUN`. Exactly two ActionRuns and two
+VerificationRuns are allowed; every action is `LOCAL_SIMULATION` with
+`side_effects=false`.
+
+The final check bypasses the settled checkpoint and redelivers four events.
+Incident, Audit, SourceAssociation, and idempotency deltas must all remain zero,
+and the four Incident objects must remain deeply equal. A successful invocation
+removes its identity-bound temporary work tree and retains only
+`local-bubbleran-defense-report.json`. The report and release summary omit raw
+records, domain/event identifiers, source/absolute locations, and other frozen
+forbidden keys.
+
+S7-03 is `DONE` only for this narrow entry point on RC
+`46318cbf84b65c3060358dffb49b829479803308`. [Assurance run
+33366606140](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606140)
+passed jobs 99408450337/99408450434/99408450435/99408450555; [Local run
+33366606118](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606118)
+passed jobs 99408450116/99408450386; [Container run
+33366606112](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606112)
+passed jobs 99408450317/99408503334. Across the three workflows, all 8 jobs and
+122 steps succeeded; 11 conditional release/matrix steps were skipped as
+designed.
+
+The sole S7-03 evidence carrier is Python 3.12 Assurance [VERIFIED RC artifact
+9748618894](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606140/artifacts/9748618894),
+named `telco-assurance-release-py3.12-attempt-1`: 248,105 bytes, archive digest
+`sha256:975a60d326eb97ea2557ae237bbff9dd957b327cdc04c2d117ef8cb58f262f14`.
+Independent download found exactly 13 non-link regular entries (12 payloads plus
+the manifest), manifest `PASS` with `failures=[]`, and no CSV, DuckDB, JSONL, or
+checkpoint. `local-bubbleran-defense-summary.json` is 2,374 bytes / SHA-256
+`161354c5715b8a46730debcf7dd37658158d1ec338b469aa24f2bb2f3ddbc855`;
+removing its stdout-only `report` envelope reconstructs the 2,225-byte report /
+SHA-256 `4a07a35b7c5ca2e2f256351dc45bfdd7c5eac069b15f78d672f1eafa9c2aff42`.
+
+Follow the [Local BubbleRAN four-branch defense
+runbook](../../docs/runbooks/local-bubbleran-defense-demo.md) for the 6–8 minute
+sequence, field allowlist, stable failures, identity-aware cleanup, independent
+artifact reconstruction, and all ten `not_claimed` values. P3e-5 now has its
+independent fixture defense entry, but P3e-5/P3e remain `IN PROGRESS` pending
+RCAEval, the second path, cross-event aggregation, and complete upstream
+validation. S4/Workflow E/P7/S7 remain `IN PROGRESS`; Gate E/G5/G2/G4 remain
+open, S2-04 remains `BLOCKED`, and P6 unified UI remains `NOT STARTED`. This
+documentation update is later than and not equal to the tested RC.
+
 ## One-command local observability evidence
 
 The following fixed wrapper reruns the same native defense demonstration and

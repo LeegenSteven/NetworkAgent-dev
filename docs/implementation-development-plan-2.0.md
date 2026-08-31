@@ -4,7 +4,7 @@
 > 计划版本：2.0
 > 建立日期：2026-08-30
 > 最近更新：2026-08-31
-> 当前执行阶段：S4 — 可观测与运维（`IN PROGRESS`；S4-01、S4-02、S4-03、S4-04、S4-05 窄切片 `DONE`，S2-04 仍为 `BLOCKED`）
+> 当前执行阶段：S4 — 可观测与运维（`IN PROGRESS`；S4-01、S4-02、S4-03、S4-04、S4-05 与 S7-03 窄切片 `DONE`，S2-04 仍为 `BLOCKED`）
 > 适用仓库：`NetworkAgent-dev`
 > 关系说明：本计划承接《统一智能运维平台实施计划》，作为下一轮发布工程和开发验收的执行基线；历史阶段结论仍以原 Gate 文档和远程 CI 证据为准。
 
@@ -56,13 +56,14 @@
 | Local Stack | `DONE` | `doctor/init/status/demo/serve/reset` 已具备工作区所有权、loopback、默认禁用动作、安全 reset 与提交响应丢失恢复。 |
 | S7-01 原生一键答辩闭环 | `DONE` | RC `c08d634c9c3deb628df5f98d4f60dd1675cd5706` 的远程 Python 3.12/3.13 Local jobs 均运行固定命令并核对 `commit_bound=true`、`commit_sha=GITHUB_SHA`、`RESOLVED/PASSED`、`REOPENED/FAILED` 与双安全清理。 |
 | S7-02 运行手册与证据包 | `DONE` | RC `79feeee6771749bbdd1ce7ce44b77193a1db544f` 的远程双 Python 演示、release boundary、同 SHA Lab/Assurance 回归及独立下载闭包均通过；VERIFIED RC artifact 9736785325 将 `defense-demo-summary.json` 作为 manifest-verified supplemental evidence。 |
+| S7-03 BubbleRAN 四分支 fixture 答辩入口 | `DONE` | RC `46318cbf84b65c3060358dffb49b829479803308` 的 Assurance/Local/Container 8/8 jobs 全绿；固定命令用 4 条 `CODE_GENERATED_SCHEMA_FIXTURE` 经真实 loopback、checkpoint `4/4/4 -> 0/0/0`、四终态与 settled bypass 四业务类零 delta。Assurance VERIFIED RC artifact 9748618894 已通过 13 文件闭包与报告重建复核。该窄切片不代表完整上游 BubbleRAN、RCAEval、跨事件聚合、P3e/S7 总体或 Gate E/G5 关闭。 |
 | S4-01 本地答辩可观测证据 | `DONE` | RC `cb4a4e7191f67aa71ef980668352d55001e23142` 的远程双 Python Local jobs 均核对 22 个有界阶段事件、诊断时序、低基数报告内指标、四项报告内告警、隐私边界和双分支业务结果；Python 3.12 VERIFIED RC artifact 9737683310 的两个 supplemental evidence 均经 manifest 与独立下载闭包复核。该窄切片不关闭 S4、Workflow E、Gate E 或 G5。 |
 | S4-02 Canonical 生命周期安全投影 | `DONE` | RC `69643e8a6f79b1264d60e5517eeb9a24035c8e7d` 的远程双 Python Local jobs 均核对双分支各 8 个 revision group / 14 个 allowlisted 事件、只读性、精确绑定、exact retry、双清理和零副作用；Python 3.12 VERIFIED RC artifact 9739212391 的第三个 supplemental evidence 已经 manifest 与独立下载闭包复核。该窄切片不关闭 S4、Workflow E、P7、S7、Gate E/G5 或 G2/G4。 |
 | S4-03 固定三窗口 Local acceptance SLI/SLO 证据 | `DONE` | RC `faa11ff7a165cd5eae6cf3f0fa1a030c9472f46c` 的远程双 Python Local jobs 各执行一个全新三窗口组；五项整数 ppm SLI 均达到 1,000,000 ppm、零错误预算，evaluation 为 `OK` 且无 breach。Python 3.12 VERIFIED RC artifact 9740377450 的第四个 supplemental evidence 已经 manifest 与独立下载闭包复核。该窄切片不是时间型可用性、延迟或长期统计可靠性 SLO，也不关闭 S4/Workflow E/P7/S7、Gate E/G5 或 G2/G4。 |
 | S4-04 Local DuckDB 冷备恢复证据 | `DONE` | RC `54551feb43be60c3b9bdd5eab076cdb7c0aba61a` 的双 Python Local jobs 均验证 stopped-writer、两文件 checkpointed cold backup、manifest/逻辑指纹、损坏副本拒绝且 fresh database 零改、首次恢复 `changed=true`、精确重试 `changed=false`、生命周期等价及身份绑定清理；Python 3.12 VERIFIED RC artifact 9744736851 的第五个 supplemental evidence 已通过 14 文件 manifest 与独立下载闭包复核。该窄切片不声明在线/异地/加密签名/跨版本/多副本/Cloud/生产恢复、RPO/RTO、断电耐久，也不关闭 S4/Workflow E/P7/S7、Gate E/G5 或 G2/G4。 |
 | S4-05 Local 单进程运行时 Trace 贯通证据 | `DONE` | corrective RC `2e59d7ca88cc550e315d63e80339909ef619cd2c` 的 Assurance/Local/Container 三个 workflows 全绿；固定命令把一个 BubbleRAN 事件经真实 loopback Replay、durable DuckDB readback 与 A2A Analyze 串成 6 事件/4 组件/6 bindings。Analyze 只改变 `assurance_a2a_tasks`，Canonical domain 与其余 9 表不变，治理四类记录 `0 -> 0`；Assurance VERIFIED RC artifact 9747354240 已通过 12 文件闭包与报告重建复核，raw JSONL 未上传。该窄切片不是 OTel/Prometheus、distributed/cross-process/multi-event、MCP、外部告警、Cloud/生产或 full-database read-only 证据，也不关闭 S4/Workflow E/P7/S7、Gate E/G5 或 G2/G4。 |
 | S2-02 容器化治理恢复 | `DONE` | 精确绑定 RC 的远程真实 Docker 已覆盖 `RESOLVED`/`REOPENED` 两分支、Assurance 重启、原请求 exact replay、离线数据库核验和项目卷清理；真实网络副作用为 0。 |
-| BubbleRAN Data Lab | `IN PROGRESS` | 下载锁定、隐私投影、离线评估、immutable `ReplayPlan`、公开 `ReplayWirePayload`、loopback transport、单调 paced runner、caller-owned 本地持久 checkpoint 与 Assurance Canonical Fault 持久接收器已完成；每个 source event 独立映射 Incident，不做跨事件聚合，RCAEval 尚未完成。 |
+| BubbleRAN Data Lab | `IN PROGRESS` | 下载锁定、隐私投影、离线评估、immutable `ReplayPlan`、公开 `ReplayWirePayload`、loopback transport、单调 paced runner、caller-owned 本地持久 checkpoint、Assurance Canonical Fault 持久接收器与独立代码生成 fixture 答辩入口已完成；P3e-5/P3e 仍因完整上游答辩、跨事件聚合、RCAEval 第二路径与发布终验未完成而保持进行中。 |
 
 ### 3.2 当前发布证据
 
@@ -86,6 +87,10 @@
 - 同一 RC 的 [Data Lab run 33327786237](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33327786237) jobs 99300888644/99300888752/99300888782 全绿，适用矩阵为 `220 passed, 3 skipped`；[Assurance run 33327786211](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33327786211) jobs 99300888597/99300888619/99300888628/99300888662 全绿，两个主 job 各为 `854 passed, 3 skipped`，Supervisor 为 `57 passed`。
 - Local Python 3.12 job 发布保留 14 天的 [VERIFIED RC artifact 9736785325](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33327786238/artifacts/9736785325)，名称 `telco-local-release-py3.12-attempt-1`，104,109 bytes，archive digest `sha256:b4b6f6ab762695a367169d54078ab1f6d2ec64c4ef3c21c132190421ed31cff3`，到期时间 `2026-09-13T18:24:17Z`。独立下载得到 10 个文件：release manifest 精确记录其余 9 个，闭包无额外、缺失或摘要漂移；`release-evidence/defense-demo-summary.json` 为 3,379 bytes / SHA-256 `ae0b412a42d9430a35117dd9e8987662c7359cc95ea72a076fa2f869bcaa51ef`，其中 `report.sha256` 为 `a91676e52789d5c520d3cb3e2e8b0a47d19d7801f5bebbb51f3f10ffa613bc5f`。独立复核确认双终态、exact retry、双 cleanup 与 source binding 全部匹配冻结契约。
 - 本次 S7-02 证据文档提交晚于且不等于受测 RC `79feeee6771749bbdd1ce7ce44b77193a1db544f`；远程结论只绑定上述 RC、runs、jobs 和 artifact，不能把文档提交本身写成受测源码。
+- S7-03 的唯一受测 release candidate 为 `46318cbf84b65c3060358dffb49b829479803308`。[Assurance run 33366606140](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606140) jobs [99408450337](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606140/job/99408450337) / [99408450434](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606140/job/99408450434) / [99408450435](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606140/job/99408450435) / [99408450555](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606140/job/99408450555)、[Local run 33366606118](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606118) jobs [99408450116](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606118/job/99408450116) / [99408450386](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606118/job/99408450386)，以及 [Container run 33366606112](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606112) jobs [99408450317](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606112/job/99408450317) / [99408503334](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606112/job/99408503334) 全绿；合计 8/8 jobs、122 个 success steps，11 个条件 steps 按设计跳过。
+- 固定命令使用 4 条 `CODE_GENERATED_SCHEMA_FIXTURE` 而非上游原始字节：首次持久 checkpoint 为 `4/4/4`，重开完成态 store 为 `0/0/0`；四分支逐支为 `RESOLVED/PASSED`、`REOPENED/FAILED`、`REJECTED/NOT_RUN`、审批过期 `FAILED/NOT_RUN`，ActionRun/VerificationRun 总计 `2/2`，动作固定 `LOCAL_SIMULATION` 且 `side_effects=false`。绕过 checkpoint 重送 4 条 settled event 后，Incident/Audit/SourceAssociation/Idempotency delta 均为 0，四个 Incident 完整对象深等。
+- 唯一 S7-03 制品载体为 Python 3.12 Assurance [VERIFIED RC artifact 9748618894](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606140/artifacts/9748618894)，名称 `telco-assurance-release-py3.12-attempt-1`，248,105 bytes，archive digest `sha256:975a60d326eb97ea2557ae237bbff9dd957b327cdc04c2d117ef8cb58f262f14`。独立下载得到 13 个非链接普通文件：12 条 payload 加 manifest 自身，闭包精确、manifest `PASS` / `failures=[]`；制品无 CSV/DuckDB/JSONL/checkpoint。`local-bubbleran-defense-summary.json` 为 2,374 bytes / SHA-256 `161354c5715b8a46730debcf7dd37658158d1ec338b469aa24f2bb2f3ddbc855`，移除 stdout-only `report` envelope 后重建持久报告为 2,225 bytes / SHA-256 `4a07a35b7c5ca2e2f256351dc45bfdd7c5eac069b15f78d672f1eafa9c2aff42`；summary/report 无禁用 ID、路径或原始记录字段。
+- 本次 S7-03 证据文档提交晚于且不等于受测 RC；远程结论只绑定上述 SHA、三个 runs、八个 jobs 和 Assurance artifact。该结果只关闭 S7-03 窄切片，不关闭 P3e-5/P3e、S4/Workflow E/P7/S7、Gate E/G5/G2/G4，也不改变 S2-04 `BLOCKED` 或 P6 `NOT STARTED`。
 - S4-01 的受测 release candidate 为 `cb4a4e7191f67aa71ef980668352d55001e23142`。[Local run 33330915665](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33330915665) 的 Python 3.12/3.13 jobs [99309192438](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33330915665/job/99309192438) / [99309192337](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33330915665/job/99309192337) 均为 `success`：两版各通过 Domain + Local `518 passed`、local-stack `66 passed, 2 skipped`、Local E2E `2 passed`；Python 3.12 release boundary 另为 `18 tests passed`，Python 3.13 不发布重复 artifact。两版均运行固定可观测包装器，核对 22 个有界阶段事件、双终态、exact retry、双 cleanup、四项报告内告警为 `OK`、低基数 labels、隐私字段和 `propagated_trace=false`。
 - 同一 Local run 的 Python 3.12 job 发布 [VERIFIED RC artifact 9737683310](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33330915665/artifacts/9737683310)，名称 `telco-local-release-py3.12-attempt-1`，106,309 bytes，archive digest `sha256:5b26c3ccaff8e57c10c4bb3375ebbad8156d151e26158b1123639e3423006eca`，到期时间 `2026-09-13T19:33:25Z`。独立下载得到 11 个文件：manifest 精确记录其余 10 个，闭包无额外、缺失或摘要漂移；`defense-demo-summary.json` 为 3,379 bytes / SHA-256 `14f04bf556f03fd7c22edf0272240dba566610466546362442abdab3dd06a9b7`，`local-observability-summary.json` 为 9,178 bytes / SHA-256 `2741c3a25983056a73ea0bcd6ea99ffc14bf83dbd6209e4a9811b93c0a98df49`。
 - 本 RC 仅由 Local workflow 的路径规则触发；Data Lab 与 Assurance workflows 没有在 `cb4a4e7191f67aa71ef980668352d55001e23142` 上运行。既有 Lab/Assurance 全绿记录仍是各自历史 RC 证据，不得写成 S4-01 同 SHA 回归。本次 S4-01 证据回填提交也晚于且不等于该受测 RC。
@@ -119,6 +124,7 @@
 - S2-04 已在相同 Trivy 0.74.0/数据库快照下完成四个候选镜像实扫；没有候选能同时满足当前 CPython 3.12/glibc/provenance 契约和完整 Critical/High `0/0`，因此按 `BLOCKED` 收口，G2/Gate B 继续开放。
 - S7-01 原生一键答辩脚本已由精确绑定 RC `c08d634c9c3deb628df5f98d4f60dd1675cd5706` 的远程 Python 3.12/3.13 jobs 验收，因此为 `DONE`；其范围仍不覆盖拒绝/过期、容器执行、真实动作、Cloud、G2/G4/G5。
 - S7-02 已由精确绑定 RC `79feeee6771749bbdd1ce7ce44b77193a1db544f` 的双 Python Local jobs、同 SHA Lab/Assurance 回归、manifest verify 与独立下载闭包验收，因此为 `DONE`；S7-01 历史 artifact 9736486858 仍明确不含演示 JSON。
+- S7-03 已由精确绑定 RC `46318cbf84b65c3060358dffb49b829479803308` 的 Assurance/Local/Container 8/8 jobs 与 Assurance artifact 9748618894 独立闭包验收，因此仅“4 条代码生成 fixture 的 BubbleRAN 四分支本地答辩入口”窄切片为 `DONE`。该入口不是完整上游 benchmark、RCAEval、第二数据路径或跨事件聚合证据；P3e-5/P3e 与 S7 总体保持 `IN PROGRESS`。
 - S4-01 已交付本地答辩进程内的有界阶段事件、诊断性单次时序快照、低基数报告内指标聚合、四项报告内固定告警求值和窄运行手册。跨 HTTP/Replay/A2A/MCP/Repository 的结构化日志与分布式追踪、OpenTelemetry export/Collector、Prometheus、外部告警投递、运行态时间型可用性/延迟型/长期统计可靠性 SLI/SLO、Collector 故障容忍和完整故障演练仍未交付；579 条安全 Trace rows 是输入数据记录，不是 OpenTelemetry span。
 - S4-02 已交付从完整持久 Canonical 记录派生的只读、revision-grouped 双终态生命周期投影与第三个 release supplemental evidence；每分支 8 组/14 事件，投影隐去 domain/workspace 标识与哈希、路径、correlation 和原始业务内容。它明确 `distributed_trace=false`，不能替代运行时结构化日志、OpenTelemetry/Prometheus、跨组件追踪、SLO、外部告警或 Cloud 生产证据。
 - S4-03 已交付一个严格固定的三窗口 Local acceptance sample、五项整数 ppm SLI、零错误预算、报告内 breach 求值和第四个 release supplemental evidence。它不提供时间型可用性、延迟、长期统计可靠性或 Cloud/production SLO，不提供 runtime structured logs、OpenTelemetry/Prometheus 或外部告警；新 `OK` 报告是新鲜评估，不是自动恢复。
@@ -266,7 +272,7 @@
 | S4 可观测与运维 | OTel、指标、SLO、告警、Runbook、演练 | E | `IN PROGRESS` | S4-01 本地答辩可观测证据、S4-02 Canonical 生命周期安全投影、S4-03 固定三窗口 Local acceptance SLI/SLO、S4-04 Local DuckDB 冷备恢复与 S4-05 Local 单进程运行时 Trace 窄切片已完成；仍须交付跨进程/分布式 trace、OTel/Collector、Prometheus、运行态时间型可用性/延迟型/长期统计可靠性 SLI/SLO、外部告警、MCP 传播、在线/异地/加密签名/多副本/Cloud/生产恢复及完整故障演练，并通过 Gate E。 |
 | S5 Cloud 就绪 | IaC、权限矩阵、Staging 验收包 | F | `IN PROGRESS` | Gate F-local 通过，状态变为 `READY FOR STAGING`。 |
 | S6 Cloud Staging | 真实 IAM/OIDC/DLQ/WI/Spanner/GKE | F | `WAITING FOR CLOUD` | 获得最小权限身份并通过真实 Cloud Gate。 |
-| S7 答辩发布 | 固化版本、证据包、演示脚本、限制声明 | A–F | `IN PROGRESS` | S7-01、S7-02 与支持答辩的 S4-01、S4-02、S4-03、S4-04、S4-05 窄切片均已标记 `DONE`；完整 S4/Workflow E、最终阶段限制声明及 G2/G4/G5 等适用 Gate 仍未通过。 |
+| S7 答辩发布 | 固化版本、证据包、演示脚本、限制声明 | A–F | `IN PROGRESS` | S7-01、S7-02、S7-03 与支持答辩的 S4-01、S4-02、S4-03、S4-04、S4-05 窄切片均已标记 `DONE`；S7-03 只覆盖代码生成 fixture 四分支入口。完整 S4/Workflow E、P3e/RCAEval/第二路径、最终阶段限制声明及 G2/G4/G5 等适用 Gate 仍未通过。 |
 
 ### 6.1 S7-01 原生一键答辩闭环
 
@@ -290,7 +296,21 @@ Python 3.12 [VERIFIED RC artifact 9736785325](https://github.com/LeegenSteven/Ne
 
 S7-01 历史 [Local artifact 9736486858](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33326721937/artifacts/9736486858) 仍保留，但不含演示 JSON，不能替代当前 S7-02 VERIFIED RC。本次证据文档提交晚于且不等于受测 RC；S7 总体继续 `IN PROGRESS`，S2-04 继续 `BLOCKED`，G2/G4/G5、S4、Cloud、真实动作和生产结论均保持开放。
 
-### 6.3 S4-01 本地答辩可观测证据
+### 6.3 S7-03 BubbleRAN 四分支 fixture 答辩入口
+
+**状态**：`DONE`（仅限本节定义的窄切片）。
+
+唯一入口为 `python tools/local-stack/run_bubbleran_defense_demo.py --offline --approve-local-simulation`，不接受 workspace、URL、上游数据路径、任意命令、Cloud、Docker 或真实动作参数。4 条输入精确标记为 `CODE_GENERATED_SCHEMA_FIXTURE`：它们由代码按冻结 BubbleRAN schema 生成，不下载或捆绑上游字节，也不得称为完整上游 benchmark。真实 loopback TCP 为每条记录建立独立 Incident/SourceAssociation；caller-owned 持久 checkpoint 首次为 `selected/attempted/delivered=4/4/4`，重开完成态 store 后为 `0/0/0`。
+
+四条治理终态按固定顺序为 `RESOLVED/PASSED`、`REOPENED/FAILED`、`REJECTED/NOT_RUN` 和审批过期 `FAILED/NOT_RUN`。ActionRun/VerificationRun 总计 `2/2`，动作类型固定 `LOCAL_SIMULATION` 且 `side_effects=false`。治理完成后绕过 checkpoint 重送 4 条 settled event，Incident/Audit/SourceAssociation/Idempotency 四业务类 delta 全为 0，四个 Incident 完整对象深等。成功运行只留下隐私最小化原子报告；失败时仅清理由身份捕获且未变化的对象，未知/raced residue 保留人工复核。
+
+受测 RC `46318cbf84b65c3060358dffb49b829479803308` 的 Assurance run 33366606140（jobs 99408450337/99408450434/99408450435/99408450555）、Local run 33366606118（jobs 99408450116/99408450386）与 Container run 33366606112（jobs 99408450317/99408503334）全部成功：8/8 jobs、122 个 success steps，11 个条件 skips 按设计发生。
+
+唯一制品载体为 Python 3.12 Assurance [VERIFIED RC artifact 9748618894](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606140/artifacts/9748618894)，名称 `telco-assurance-release-py3.12-attempt-1`，248,105 bytes，archive digest `sha256:975a60d326eb97ea2557ae237bbff9dd957b327cdc04c2d117ef8cb58f262f14`。独立下载确认 13 文件精确闭包（12 payload + manifest）、manifest `PASS` / `failures=[]`，无 CSV/DuckDB/JSONL/checkpoint；summary 为 2,374 bytes / SHA-256 `161354c5715b8a46730debcf7dd37658158d1ec338b469aa24f2bb2f3ddbc855`，重建报告为 2,225 bytes / SHA-256 `4a07a35b7c5ca2e2f256351dc45bfdd7c5eac069b15f78d672f1eafa9c2aff42`，两者均无禁用 ID、路径或原始记录字段。
+
+[S7-03 运行手册](runbooks/local-bubbleran-defense-demo.md) 冻结了 6–8 分钟讲解、字段、失败、清理、独立制品复核和十项 `not_claimed`。P3e-5 已获得独立 fixture 答辩入口，但 P3e-5/P3e 仍为 `IN PROGRESS`；RCAEval、第二路径、跨事件/episode 聚合、完整上游答辩与发布终验未完成。S4/Workflow E/P7/S7 继续 `IN PROGRESS`，Gate E/G5/G2/G4 保持开放，S2-04 继续 `BLOCKED`，P6 统一 UI 保持 `NOT STARTED`。本证据文档提交晚于且不等于受测 RC。
+
+### 6.4 S4-01 本地答辩可观测证据
 
 **状态**：`DONE`（仅限本节定义的窄切片）。
 
@@ -304,7 +324,7 @@ Python 3.12 [VERIFIED RC artifact 9737683310](https://github.com/LeegenSteven/Ne
 
 [Local 可观测答辩运行手册](runbooks/local-observability-demo.md) 冻结了第三方复核、报告核验和四项本地告警处置步骤。本切片不提供 OpenTelemetry export/Collector、跨 HTTP/Replay/A2A/MCP trace、Prometheus、外部告警投递、SLI/SLO 或 Collector 故障容忍，因而不关闭 S4、Workflow E、Gate E、G5 或 S7；S2-04 继续 `BLOCKED`，G2/G4、Cloud、真实动作和生产结论继续开放。本证据回填提交晚于且不等于受测 RC。
 
-### 6.4 S4-02 Canonical 生命周期安全投影
+### 6.5 S4-02 Canonical 生命周期安全投影
 
 **状态**：`DONE`（仅限本节定义的窄切片）。
 
@@ -316,7 +336,7 @@ Python 3.12 [VERIFIED RC artifact 9739212391](https://github.com/LeegenSteven/Ne
 
 [Local Canonical 生命周期投影运行手册](runbooks/local-lifecycle-projection.md) 冻结了字段 allowlist、14 节点图、报告与 release artifact 复核方法和限制。S4-02 不交付运行时结构化日志、OpenTelemetry/Collector、Prometheus、分布式 trace、SLI/SLO 或外部告警，也不关闭 S4、Workflow E、P7、S7、Gate E/G5 或 G2/G4；S2-04 继续 `BLOCKED`。本证据回填提交晚于且不等于受测 RC。
 
-### 6.5 S4-03 固定三窗口 Local acceptance SLI/SLO 证据
+### 6.6 S4-03 固定三窗口 Local acceptance SLI/SLO 证据
 
 **状态**：`DONE`（仅限本节定义的窄切片）。
 
@@ -328,7 +348,7 @@ Python 3.12 [VERIFIED RC artifact 9740377450](https://github.com/LeegenSteven/Ne
 
 [Local 固定窗口 acceptance SLO 运行手册](runbooks/local-slo-evidence.md) 冻结了第三方报告重建、breach/error 分类、清理和新鲜评估恢复规则。该结果只是固定三窗口 Local acceptance sample，不是时间型可用性、延迟或长期统计可靠性 SLO，不提供运行时结构化日志、OpenTelemetry/Collector、Prometheus、分布式 trace、外部告警、自动恢复、备份/恢复或 Cloud/生产证据。S4/Workflow E/P7/S7 继续 `IN PROGRESS`，Gate E/G5/G2/G4 保持开放，S2-04 继续 `BLOCKED`；本证据回填提交晚于且不等于受测 RC。
 
-### 6.6 S4-04 Local DuckDB 冷备恢复证据
+### 6.7 S4-04 Local DuckDB 冷备恢复证据
 
 **状态**：`DONE`（仅限本节定义的窄切片）。
 
@@ -342,7 +362,7 @@ Python 3.12 [VERIFIED RC artifact 9744736851](https://github.com/LeegenSteven/Ne
 
 [Local 冷备恢复运行手册](runbooks/local-backup-restore.md) 冻结了 stopped-writer 前提、底层命令、两文件/manifest/逻辑核验、损坏拒绝、幂等、生命周期、身份与 race 清理、错误分类、报告重建、隐私和全部限制。该结果不是 online backup、production HA、multi-replica failover、RPO/RTO、power-loss durability、encrypted/signed、off-host/remote、cross-version、Cloud/Spanner 或 production recovery，也不自动清理未知身份/raced residue。S4/Workflow E/P7/S7 继续 `IN PROGRESS`，Gate E/G5/G2/G4 保持开放，S2-04 继续 `BLOCKED`；本证据回填提交晚于且不等于受测 RC。
 
-### 6.7 S4-05 Local 单进程运行时 Trace 贯通证据
+### 6.8 S4-05 Local 单进程运行时 Trace 贯通证据
 
 **状态**：`DONE`（仅限本节定义的窄切片）。
 
@@ -526,3 +546,4 @@ Python 3.12 [VERIFIED RC artifact 9747354240](https://github.com/LeegenSteven/Ne
 | 2026-08-31 | 2.0 | RC `faa11ff7a165cd5eae6cf3f0fa1a030c9472f46c` 的 [Local run 33340008133](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33340008133) 仅触发 Local workflow，总耗时 11m40s；双 Python jobs 99333812338/99333812397 均成功，分别耗时 10m51s / 11m36s，固定三窗口 step 为 2m38s / 2m51s。两版各验证 3 个全新窗口、66 个阶段事件和 `66/66`、`6/6`、`6/6`、`6/6`、`3/3` 五项 SLI，observed/objective 均为 1,000,000 ppm、budget 0、状态 `OK`，evaluation `OK`/无 breach、privacy `PASS`。Python 3.12 VERIFIED RC artifact 9740377450 保留 14 天，为 117,046 bytes、archive digest `sha256:11207c784de25ec1d6d956bb8b47274663100455a6924ccf95213c839c848536`；独立下载 13 文件闭包匹配 12 条 manifest 记录加 manifest，`local-slo-summary.json` 为 3,271 bytes / SHA-256 `ae181eaffe6da11c5dd0cdea07dcfcba3a400daaf6ed44352b1e573faa5f489b`，重建报告为 3,136 bytes / SHA-256 `2538629be3133920e76f2de9e0fa0ff9575853095538c266efc6e544d02c5c64`，12 项 `not_claimed` 均匹配。 | S4-03 窄切片=`DONE`；S4/Workflow E/P7/S7=`IN PROGRESS`，Gate E/G5/G2/G4 保持开放，S2-04=`BLOCKED`；不声明时间型/延迟/长期统计可靠性 SLO、OTel/Prometheus、外部告警、备份恢复或 Cloud/生产完成；本证据文档提交晚于且不等于受测 RC。 |
 | 2026-08-31 | 2.0 | RC `54551feb43be60c3b9bdd5eab076cdb7c0aba61a` 的 [Local run 33353994792](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33353994792) 总耗时 13m04s，双 Python jobs 99372557281/99372557192 均成功；每版 Domain + Local `576 passed`、local-stack `224 passed, 3 skipped`、Local E2E `2 passed`，固定 backup/recovery step 为 37s / 31s。stopped-writer 两文件 cold backup、manifest/逻辑指纹、损坏副本拒绝且 fresh 零改、restore `true`/retry `false`、生命周期等价和身份绑定清理均通过。同 SHA [Container run 33353994784](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33353994784) 两 jobs 全绿。Python 3.12 VERIFIED RC artifact 9744736851 为 118,251 bytes、archive digest `sha256:5ca975e95cd86befb77ca977a3acc2aa57122a0148202b945a3a5c50a3153fe1`；独立下载 14 文件闭包匹配 13 条 manifest 记录加 manifest，backup summary 为 1,951 bytes / SHA-256 `f44187fece9d33b71b520521df188c6043cfdfe4e67618c71b96b5703828e7bb`，重建报告为 1,804 bytes / SHA-256 `f6698b0846571a6af3a9cca7edd57f20e1204154fc09dbec3630e86fca784a96`。 | S4-04 窄切片=`DONE`；S4/Workflow E/P7/S7=`IN PROGRESS`，Gate E/G5/G2/G4 保持开放，S2-04=`BLOCKED`；不声明在线/生产 HA、多副本、RPO/RTO、断电、加密签名、异地、跨版本、Cloud/Spanner 或生产恢复；本证据文档提交晚于且不等于受测 RC。 |
 | 2026-08-31 | 2.0 | 首个 feature commit `b0bcb8fa39c2971e2dd1c1910cde69d68cc97edc` 的 Local run 33362166565 在收集错置的 Assurance trace tests 时失败，未作为成功 RC。corrective RC `2e59d7ca88cc550e315d63e80339909ef619cd2c` 将测试迁回 Assurance profile；Assurance run 33362806092 四 jobs、Local run 33362806180 双 jobs、Container run 33362806104 双 jobs 全绿。固定命令验证真实 loopback Replay -> durable readback -> A2A Analyze 的 6 events/4 components/6 bindings；仅 `assurance_a2a_tasks` 改变，其余 9 表与 Canonical domain 不变，治理四类 `0 -> 0`。Assurance VERIFIED RC artifact 9747354240 为 246,678 bytes、archive digest `sha256:f772dcae631cdde59483eaef6a28d1caee0b0b357d8eb5eb069e863747991fa4`；独立下载 12 文件闭包匹配 11 条 manifest 记录加 manifest，无 raw JSONL，重建报告为 1,651 bytes / SHA-256 `5932b0454c7d095b7864f7c50cd0e2a48a05e288dbb74fd83a1773aedcaea5e8`。 | S4-05 窄切片=`DONE`；S4/Workflow E/P7/S7=`IN PROGRESS`，Gate E/G5/G2/G4 保持开放，S2-04=`BLOCKED`；不声明 OTel/Prometheus、distributed/cross-process/multi-event、MCP、external alert、Cloud/production、sink guarantee 或 full-database read-only；本证据文档提交晚于且不等于受测 RC。 |
+| 2026-08-31 | 2.0 | RC `46318cbf84b65c3060358dffb49b829479803308` 的 Assurance run 33366606140、Local run 33366606118 与 Container run 33366606112 共 8/8 jobs、122 success steps 全绿，11 条条件 skips 符合设计。固定命令以 4 条 `CODE_GENERATED_SCHEMA_FIXTURE` 验证真实 loopback、checkpoint `4/4/4 -> 0/0/0`、四终态、Action/Verification `2/2`、`LOCAL_SIMULATION` / `side_effects=false`，以及绕 checkpoint 重送 4 条后四业务类 delta 0 和 Incident 深等。唯一载体 Assurance artifact 9748618894 为 248,105 bytes、archive SHA-256 `975a60d326eb97ea2557ae237bbff9dd957b327cdc04c2d117ef8cb58f262f14`；独立下载 13 文件闭包、manifest `PASS`/`failures=[]`，无 CSV/DuckDB/JSONL/checkpoint，summary/重建报告分别为 2,374/2,225 bytes。 | S7-03 窄切片=`DONE`，P3e-5 独立 fixture 答辩入口完成；P3e-5/P3e、S4/Workflow E/P7/S7=`IN PROGRESS`，Gate E/G5/G2/G4 开放，S2-04=`BLOCKED`，P6=`NOT STARTED`。不声明完整上游、RCAEval、第二路径、跨事件聚合或生产完成；本证据文档提交晚于且不等于受测 RC。 |

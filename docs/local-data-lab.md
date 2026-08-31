@@ -1,6 +1,6 @@
 # P3e 本地开放数据实验室设计
 
-> 状态：**IN PROGRESS（BubbleRAN 下载/适配/评估、ReplayPlan、公开 wire、paced loopback transport、caller-owned 持久 checkpoint、Canonical Fault 持久接收、本地治理 E2E 与 RC 制品证据已完成；跨事件聚合与 RCAEval 待开发）**
+> 状态：**IN PROGRESS（BubbleRAN 下载/适配/评估、ReplayPlan、公开 wire、paced loopback transport、caller-owned 持久 checkpoint、Canonical Fault 持久接收、本地治理 E2E、RC 制品证据与独立代码生成 fixture 答辩入口已完成；完整上游答辩、跨事件聚合与 RCAEval 待开发）**
 > 日期：2026-08-30
 > 适用范围：Local Profile 的外部开放数据获取、脱敏、适配、离线评估和受限回放
 > 安全 Gate：[P3e Data Lab Gate](security/p3e-data-lab-gate.md)
@@ -80,7 +80,7 @@ telco-lab --workspace .local/telco-lab run bubbleran-persistent-interference --a
 telco-lab --workspace .local/telco-lab evaluate bubbleran-persistent-interference --overlap-threshold 0.1
 ```
 
-工作区由调用方显式指定，推荐 `.local/telco-lab`。只有 `fetch` 与 `run` 允许触发下载；`catalog`、`verify` 和 `evaluate` 不隐式联网。命令输出是单行 JSON，只包含数据集/资源 ID、内容摘要、计数、指标和固定错误码，不输出本机路径、来源 URL/query、被拒绝原始行或敏感值。Python 已提供受限 `ReplayPlan`、公开 `ReplayWirePayload`、立即 loopback transport、单调 paced runner，以及显式 workspace/checkpoint 目录的 caller-owned 持久 store/wrapper；默认零重试，只有显式的有限策略可重试 network/timeout 瞬时失败。Assurance 已提供 durable-before-202 的 Canonical Fault 业务接收器。replay CLI 尚未发布，该路径不能触发真实动作。
+工作区由调用方显式指定，推荐 `.local/telco-lab`。只有 `fetch` 与 `run` 允许触发下载；`catalog`、`verify` 和 `evaluate` 不隐式联网。命令输出是单行 JSON，只包含数据集/资源 ID、内容摘要、计数、指标和固定错误码，不输出本机路径、来源 URL/query、被拒绝原始行或敏感值。Python 已提供受限 `ReplayPlan`、公开 `ReplayWirePayload`、立即 loopback transport、单调 paced runner，以及显式 workspace/checkpoint 目录的 caller-owned 持久 store/wrapper；默认零重试，只有显式的有限策略可重试 network/timeout 瞬时失败。Assurance 已提供 durable-before-202 的 Canonical Fault 业务接收器。通用 replay CLI 尚未发布；S7-03 只新增参数冻结的代码生成 fixture 答辩 wrapper，不接受上游数据路径或任意 replay 配置，也不能触发真实动作。
 
 ## 5. 仓库与缓存布局
 
@@ -216,7 +216,7 @@ Canonical Dataset + Provenance Manifest
 | P3e-2 | 安全解析、精确 schema 投影、通用隐私扫描与隔离流程 | IN PROGRESS（BubbleRAN CSV/JSON 精确 schema 已完成；通用扫描/quarantine、归档与其他格式未启用） |
 | P3e-3 | BubbleRAN 与 RCAEval 两个最小适配器及 Canonical fixture | IN PROGRESS（BubbleRAN 已完成；RCAEval 待开发） |
 | P3e-4 | Detector/RCA 离线评估器、机器可读报告和基线阈值 | IN PROGRESS（BubbleRAN episode/duration 评估已完成；RCA 待开发） |
-| P3e-5 | loopback 限定回放、重复/乱序/中断场景和答辩演示 | IN PROGRESS（BubbleRAN 公开 wire、paced transport、caller-owned 持久 checkpoint、durable receiver、真实 TCP 治理 E2E 与远程 RC artifact/SBOM/`pip-audit` 已验收；独立答辩脚本待完成） |
+| P3e-5 | loopback 限定回放、重复/乱序/中断场景和答辩演示 | IN PROGRESS（BubbleRAN 公开 wire、paced transport、caller-owned 持久 checkpoint、durable receiver、真实 TCP 治理 E2E、远程 RC artifact/SBOM/`pip-audit` 与 S7-03 独立代码生成 fixture 答辩入口已验收；完整上游 BubbleRAN 答辩、完整重复/乱序/中断矩阵与第二数据路径仍待完成） |
 | P3e-6 | 其余三套白名单适配器、容量基准和发布归属材料 | NOT STARTED |
 
 第一版退出标准以 BubbleRAN + RCAEval 两条互补路径为最低范围；其余白名单数据集可在接口和 Gate 稳定后逐步接入。任何切片只有在 [P3e Data Lab Gate](security/p3e-data-lab-gate.md) 对应证据完成后才能标为 `DONE`。
@@ -239,7 +239,20 @@ Canonical Dataset + Provenance Manifest
 - 远程受测 RC 为 `6ba631929c312bbff27ef0ad4a9136d2cb390ae1`；[Data Lab CI run 33301104518](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104518) 的 Python 3.12/3.13 当前边界与 Python 3.12 + Pydantic 2.5.3 下均为 `220 passed, 3 skipped`；[Assurance CI run 33301104511](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104511)、[Local CI run 33301104520](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104520) 和额外 [Cloud CI run 33301104595](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104595) 也全部 `success` 且 `headSha` 相同；Cloud run 不构成 Staging 证据；
 - [Data Lab artifact 9728965310](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104518/artifacts/9728965310) 为 14 天 `VERIFIED RC` artifact：`telco_lab-0.1.0` 为 74,425 bytes、SHA-256=`4c646e7ad618884284bf5f0b484b579c19dbcaccc8ef01571eccfc4ea197d900`；manifest SHA-256=`9c2f4e2c5a9d35cb900a94b64f3ef6b2f604ceb34910a4638f926791f0b9d63d`；CycloneDX 1.4 SBOM SHA-256=`bfe4d7233ee1efeba99d89ebb2fd1140529f5fa7c2b6e62a4721f9c610810105`；
 - 同一 RC 的 [Local artifact 9728983176](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104520/artifacts/9728983176) 与 [Assurance artifact 9729018617](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33301104511/artifacts/9729018617) 也被分类为 `VERIFIED RC`。三份 artifact 下载后二次重算均与 manifest 的字节数/SHA-256 一致；runtime inventory、wheel 内容扫描、CycloneDX 1.4 与 `pip-audit==2.10.1` 全部 PASS，已知漏洞为 0；
-- 本次证据回填提交晚于且不等于受测 RC，artifact 于 2026-09-13 到期。摘要只证明完整性，不提供发布者身份；签名/attestation、hash-locked 离线安装、SPDX、独立 secret/SAST/license policy 与完整 S3 Gate 仍未完成。P3e 仍因跨事件聚合、RCAEval、独立答辩与完整发布终验未完成而保持 `IN PROGRESS`。
+- 本次证据回填提交晚于且不等于受测 RC，artifact 于 2026-09-13 到期。摘要只证明完整性，不提供发布者身份；签名/attestation、hash-locked 离线安装、SPDX、独立 secret/SAST/license policy 与完整 S3 Gate 仍未完成。P3e 仍因跨事件聚合、RCAEval、完整上游答辩与完整发布终验未完成而保持 `IN PROGRESS`。
+
+### 10.3 S7-03 独立 fixture 答辩入口证据（2026-08-31）
+
+- 唯一命令为 `python tools/local-stack/run_bubbleran_defense_demo.py --offline --approve-local-simulation`。输入精确标记为 `CODE_GENERATED_SCHEMA_FIXTURE`：4 条记录由代码按冻结 schema 生成，不下载、不捆绑且不冒充 BubbleRAN 完整上游 benchmark。
+- 4 条记录通过真实 loopback TCP，各自形成一个 Canonical Incident 与 SourceAssociation。caller-owned 持久 checkpoint 首次为 `selected/attempted/delivered=4/4/4`，重新打开完成态 store 后为 `0/0/0`。
+- 四个独立分支依次得到 `RESOLVED/PASSED`、`REOPENED/FAILED`、`REJECTED/NOT_RUN`、审批过期 `FAILED/NOT_RUN`；总计 ActionRun/VerificationRun 为 `2/2`，动作固定 `LOCAL_SIMULATION` 且 `side_effects=false`。
+- 治理完成后绕过 checkpoint 重送 4 条事件，Incident/Audit/SourceAssociation/Idempotency 四类记录 delta 均为 0，且四个 Incident 完整对象深等；这证明 settled exact replay 零业务放大，不是跨事件聚合。
+- 受测 RC `46318cbf84b65c3060358dffb49b829479803308` 的 [Assurance run 33366606140](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606140)、[Local run 33366606118](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606118) 与 [Container run 33366606112](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606112) 共 8/8 jobs、122 个 success steps 全绿，11 个条件 steps 按设计跳过。
+- 唯一 S7-03 载体为 Python 3.12 Assurance [VERIFIED RC artifact 9748618894](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33366606140/artifacts/9748618894)：248,105 bytes，archive SHA-256 `975a60d326eb97ea2557ae237bbff9dd957b327cdc04c2d117ef8cb58f262f14`。独立下载确认 13 文件精确闭包（12 payload + manifest）、manifest `PASS` / `failures=[]`，且无 CSV、DuckDB、JSONL 或 checkpoint。
+- summary 为 2,374 bytes / SHA-256 `161354c5715b8a46730debcf7dd37658158d1ec338b469aa24f2bb2f3ddbc855`；移除 stdout-only `report` envelope 后重建报告为 2,225 bytes / SHA-256 `4a07a35b7c5ca2e2f256351dc45bfdd7c5eac069b15f78d672f1eafa9c2aff42`。summary/report 无禁用 ID、路径或原始记录字段。
+- [S7-03 运行手册](runbooks/local-bubbleran-defense-demo.md) 冻结 6–8 分钟讲解、字段、失败、身份绑定清理、独立制品复核和十项 `not_claimed`。本次文档提交晚于且不等于受测 RC。
+
+S7-03 窄切片为 `DONE`，表示 P3e-5 已有独立 fixture 答辩入口；P3e-5 与 P3e 总体仍为 `IN PROGRESS`。RCAEval、第二数据路径、跨事件/episode 聚合、完整上游 BubbleRAN 答辩与完整发布终验尚未完成。S4/Workflow E/P7/S7 仍为 `IN PROGRESS`，Gate E/G5/G2/G4 仍开放，S2-04 为 `BLOCKED`，P6 统一 UI 为 `NOT STARTED`。
 
 ## 11. 与 Cloud Staging 的边界
 

@@ -24,6 +24,8 @@ on:
       - "tests/e2e/lab/**"
       - "tests/e2e/a2a/**"
       - "tools/local-stack/run_runtime_trace_demo.py"
+      - "tools/local-stack/run_bubbleran_defense_demo.py"
+      - "tools/local-stack/tests/test_run_bubbleran_defense_demo.py"
       - "docs/implementation-development-plan-2.0.md"
       - ".github/scripts/release_evidence.py"
       - ".github/scripts/test_release_evidence.py"
@@ -51,6 +53,8 @@ on:
       - "tests/e2e/lab/**"
       - "tests/e2e/a2a/**"
       - "tools/local-stack/run_runtime_trace_demo.py"
+      - "tools/local-stack/run_bubbleran_defense_demo.py"
+      - "tools/local-stack/tests/test_run_bubbleran_defense_demo.py"
       - "docs/implementation-development-plan-2.0.md"
       - ".github/scripts/release_evidence.py"
       - ".github/scripts/test_release_evidence.py"
@@ -180,6 +184,7 @@ jobs:
           python -m pytest networkagents/assurance/tests -q
           python -m pytest tests/contracts/a2a -q
           python -m pytest tests/e2e/a2a -q
+          python tools/local-stack/tests/test_run_bubbleran_defense_demo.py
       - name: Build all Local-profile wheels
         run: |
           python -m pip install "build>=1,<2"
@@ -344,6 +349,174 @@ jobs:
           assert not list(Path("release-evidence").rglob("*.jsonl"))
           assert not list(Path("release-evidence").rglob("*.duckdb"))
           PY
+      - name: Exercise fixed BubbleRAN vertical defense evidence
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          defense_summary="$RUNNER_TEMP/local-bubbleran-defense-summary.json"
+          python tools/local-stack/run_bubbleran_defense_demo.py --offline --approve-local-simulation > "$defense_summary"
+          python - "$defense_summary" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          summary = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          assert summary["schema"] == (
+              "networkagent-local-bubbleran-defense-evidence/1.0"
+          )
+          assert summary["classification"] == (
+              "LOCAL_BUBBLERAN_VERTICAL_DEFENSE_EVIDENCE"
+          )
+          assert summary["ok"] is True
+          assert summary["fixture"] == {
+              "origin": "CODE_GENERATED_SCHEMA_FIXTURE",
+              "record_count": 4,
+          }
+          assert summary["proof"]["canonical_cases"] == {
+              "count": 4,
+              "independent": True,
+              "source_associations": 4,
+          }
+          assert summary["proof"]["checkpoint"]["first"] == {
+              "attempted": 4,
+              "delivered": 4,
+              "selected": 4,
+          }
+          assert summary["proof"]["checkpoint"]["reopened"] == {
+              "attempted": 0,
+              "delivered": 0,
+              "selected": 0,
+          }
+          assert summary["proof"]["checkpoint"]["settled"] is True
+          assert summary["proof"]["governance"]["action_runs"] == 2
+          assert summary["proof"]["governance"]["verification_runs"] == 2
+          assert summary["proof"]["governance"]["action_contract"] == {
+              "side_effects": False,
+              "type": "LOCAL_SIMULATION",
+          }
+          assert summary["proof"]["settled_bypass"] == {
+              "business_record_delta": {
+                  "audit": 0,
+                  "cases": 0,
+                  "idempotency": 0,
+                  "source_associations": 0,
+              },
+              "delivered": 4,
+          }
+          PY
+      - name: Stage and verify bounded BubbleRAN defense summary
+        if: matrix.python-version == '3.12'
+        run: |
+          mkdir -p release-evidence
+          cp "$RUNNER_TEMP/local-bubbleran-defense-summary.json" release-evidence/local-bubbleran-defense-summary.json
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import stat
+          from pathlib import Path
+
+          summary_path = Path("release-evidence/local-bubbleran-defense-summary.json")
+          summary = json.loads(summary_path.read_text(encoding="utf-8"))
+          assert summary["source"]["commit_bound"] is True
+          assert summary["source"]["binding_stable"] is True
+          assert summary["source"]["tracked_clean"] is True
+          assert summary["source"]["commit_sha"] == os.environ["GITHUB_SHA"]
+          assert summary["release"] == {
+              "eligible": True,
+              "source_state": "COMMIT_BOUND",
+          }
+          assert summary["scope"] == {
+              "action_mode": "DISABLED",
+              "data": "CODE_GENERATED_SCHEMA_FIXTURE",
+              "execution": "LOCAL_SINGLE_PROCESS",
+              "network": "REAL_LOOPBACK_TCP",
+              "offline": True,
+              "scenario": "FIXED_BUBBLERAN_FOUR_RECORD_GOVERNANCE",
+          }
+          assert summary["privacy"] == {
+              "absolute_locations_recorded": False,
+              "raw_records_recorded": False,
+              "sensitive_identifiers_recorded": False,
+              "source_locations_recorded": False,
+              "status": "PASS",
+          }
+          assert summary["coverage"]["not_claimed"] == [
+              "COMPLETE_UPSTREAM_BENCHMARK",
+              "RCA_EVAL_MULTI_SOURCE",
+              "CROSS_EVENT_AGGREGATION",
+              "PRODUCTION_ACCURACY",
+              "REAL_NETWORK_REMEDIATION",
+              "CLOUD_OR_GCP_DEPLOYMENT",
+              "OPEN_TELEMETRY_OR_DISTRIBUTED_TRACE",
+              "UNIFIED_DASHBOARD",
+              "GATE_E_OR_G5_CLOSURE",
+              "P3E_OR_S7_OVERALL_CLOSURE",
+          ]
+          forbidden_keys = {
+              "body",
+              "event_id",
+              "events",
+              "ground_truth",
+              "incident_id",
+              "label",
+              "labels",
+              "path",
+              "ran_ue_id",
+              "raw",
+              "row",
+              "rows",
+              "source_event_id",
+              "source_url",
+              "trace_id",
+              "ue",
+              "ue_id",
+          }
+          def nested_keys(value):
+              if isinstance(value, dict):
+                  return set(value).union(*(nested_keys(item) for item in value.values()))
+              if isinstance(value, list):
+                  return set().union(*(nested_keys(item) for item in value))
+              return set()
+          assert nested_keys(summary).isdisjoint(forbidden_keys)
+          run_root = Path(".local/networkagent-bubbleran-defense")
+          candidates = [item for item in run_root.iterdir() if item.is_dir()]
+          assert len(candidates) == 1
+          run_directory = candidates[0]
+          children = tuple(run_directory.iterdir())
+          assert {child.name for child in children} == {
+              "local-bubbleran-defense-report.json",
+          }
+          assert all(
+              not child.is_symlink()
+              and stat.S_ISREG(os.lstat(child).st_mode)
+              and os.lstat(child).st_nlink == 1
+              for child in children
+          )
+          report_bytes = (run_directory / "local-bubbleran-defense-report.json").read_bytes()
+          reconstructed = (
+              json.dumps(
+                  {key: value for key, value in summary.items() if key != "report"},
+                  allow_nan=False,
+                  ensure_ascii=False,
+                  separators=(",", ":"),
+                  sort_keys=True,
+              ).encode("utf-8")
+              + b"\n"
+          )
+          assert report_bytes == reconstructed
+          assert len(report_bytes) == summary["report"]["bytes"]
+          assert hashlib.sha256(report_bytes).hexdigest() == summary["report"]["sha256"]
+          persisted = json.loads(report_bytes)
+          assert persisted == {
+              key: value for key, value in summary.items() if key != "report"
+          }
+          assert nested_keys(persisted).isdisjoint(forbidden_keys)
+          assert not list(Path("release-evidence").rglob("*.csv"))
+          assert not list(Path("release-evidence").rglob("*.duckdb"))
+          assert not list(Path("release-evidence").rglob("*.jsonl"))
+          assert not list(Path("release-evidence").rglob("*checkpoint*"))
+          PY
       - name: Generate release evidence and audit runtime dependencies
         id: release_evidence
         if: matrix.python-version == '3.12'
@@ -430,6 +603,7 @@ jobs:
             --artifact-name "$RELEASE_ARTIFACT_NAME" \
             --artifact-retention-days 14 \
             --supplemental-evidence release-evidence/local-runtime-trace-summary.json \
+            --supplemental-evidence release-evidence/local-bubbleran-defense-summary.json \
             --summary "$GITHUB_STEP_SUMMARY"
           python .github/scripts/release_evidence.py verify-manifest \
             --manifest release-evidence/release-manifest.json \
@@ -449,7 +623,8 @@ jobs:
             --python-version "${{ matrix.python-version }}" \
             --artifact-name "$RELEASE_ARTIFACT_NAME" \
             --artifact-retention-days 14 \
-            --supplemental-evidence release-evidence/local-runtime-trace-summary.json
+            --supplemental-evidence release-evidence/local-runtime-trace-summary.json \
+            --supplemental-evidence release-evidence/local-bubbleran-defense-summary.json
       - name: Upload release or diagnostic evidence
         id: release_artifact
         if: ${{ always() && matrix.python-version == '3.12' }}

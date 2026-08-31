@@ -220,3 +220,74 @@ def test_fixed_three_window_slo_runs_in_both_jobs_and_enters_312_closure() -> No
         "CLOUD_OR_PRODUCTION_SLO",
     ):
         assert f'"{boundary}"' in slo_step
+
+
+def test_cold_backup_recovery_runs_in_both_jobs_and_enters_312_closure() -> None:
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    command = (
+        "python tools/local-stack/run_backup_restore_demo.py "
+        "--approve-local-simulation > "
+        "release-evidence/local-backup-recovery-summary.json"
+    )
+    supplemental = (
+        "--supplemental-evidence " "release-evidence/local-backup-recovery-summary.json"
+    )
+
+    assert command in workflow
+    assert workflow.count(command) == 1
+    assert workflow.count(supplemental) == 2
+    assert 'recovery["schema"] == "networkagent-local-backup-recovery/1.0"' in workflow
+    assert (
+        'recovery["classification"] == "LOCAL_COLD_BACKUP_RECOVERY_EVIDENCE"'
+        in workflow
+    )
+    assert 'recovery["source"]["commit_bound"] is True' in workflow
+    assert 'recovery["source"]["commit_sha"] == os.environ["GITHUB_SHA"]' in workflow
+    assert 'assert_exact(recovery["scope"], {' in workflow
+    assert 'assert_exact(recovery["coverage"], {' in workflow
+    assert 'assert_exact(recovery["proof"], {' in workflow
+    assert 'assert_exact(recovery["privacy"], {' in workflow
+    assert (
+        'recovery["report"]["filename"] == "local-backup-recovery-report.json"'
+        in workflow
+    )
+    assert "assert json.loads(report_bytes) == persisted_body" in workflow
+    assert 'Path(".local/networkagent-defense").glob(' in workflow
+    assert 'assert child_names == {"local-backup-recovery-report.json"}' in workflow
+    assert 'assert not list(Path("release-evidence").rglob("*.duckdb"))' in workflow
+    assert (
+        'assert not list(Path("release-evidence").rglob("backup-manifest.json"))'
+        in workflow
+    )
+    assert 'assert ".local" not in upload_paths' in workflow
+    backup_step = workflow.split(
+        "- name: Exercise fixed Local cold-backup recovery evidence", 1
+    )[1].split("- name: Build both wheels", 1)[0]
+    for boundary in (
+        "ONLINE_BACKUP",
+        "PRODUCTION_HA",
+        "MULTI_REPLICA_FAILOVER",
+        "RPO_OR_RTO_SLO",
+        "POWER_LOSS_DURABILITY",
+        "ENCRYPTED_OR_SIGNED_BACKUP",
+        "OFF_HOST_OR_REMOTE_BACKUP",
+        "CROSS_VERSION_MIGRATION",
+        "CLOUD_OR_SPANNER_BACKUP",
+        "GATE_E_OR_G5_CLOSURE",
+        "CLOUD_OR_PRODUCTION_RECOVERY",
+        "IDENTITY_UNKNOWN_OR_RACED_RESIDUE_AUTO_CLEANUP",
+    ):
+        assert f'"{boundary}"' in backup_step
+
+    supplemental_lines = [
+        line.strip()
+        for line in workflow.splitlines()
+        if line.strip().startswith("--supplemental-evidence")
+    ]
+    assert len(supplemental_lines) == 10
+    assert supplemental_lines[4].endswith(
+        "release-evidence/local-backup-recovery-summary.json " + "\\"
+    )
+    assert supplemental_lines[9].endswith(
+        "release-evidence/local-backup-recovery-summary.json"
+    )

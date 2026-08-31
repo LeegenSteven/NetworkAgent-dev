@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
+import uuid
 from io import StringIO
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -197,6 +200,959 @@ def invoke_real(tmp_path: Path, *args: str) -> tuple[int, object | None, object 
     success = json.loads(stdout.getvalue()) if stdout.getvalue() else None
     error = json.loads(stderr.getvalue()) if stderr.getvalue() else None
     return code, success, error
+
+
+def invoke_real_workspace(
+    workspace: Path, *args: str
+) -> tuple[int, object | None, object | None]:
+    stdout = StringIO()
+    stderr = StringIO()
+    code = local_stack.main(
+        ["--workspace", str(workspace), *args],
+        stdout=stdout,
+        stderr=stderr,
+    )
+    success = json.loads(stdout.getvalue()) if stdout.getvalue() else None
+    error = json.loads(stderr.getvalue()) if stderr.getvalue() else None
+    return code, success, error
+
+
+def prepare_maintenance_workspace(tmp_path: Path) -> Path:
+    duckdb = pytest.importorskip("duckdb")
+    root = tmp_path / "stack"
+    workspace = local_stack.Workspace(root)
+    workspace_id, created, _ = workspace.prepare_init()
+    assert created is True
+    connection = duckdb.connect(str(workspace.database_path))
+    try:
+        connection.execute(
+            "CREATE TABLE local_schema_metadata(key VARCHAR PRIMARY KEY, value VARCHAR)"
+        )
+        connection.execute(
+            "INSERT INTO local_schema_metadata VALUES ('schema_version', '1.1')"
+        )
+        connection.execute(
+            "CREATE TABLE assurance_schema_metadata("
+            "key VARCHAR PRIMARY KEY, value VARCHAR)"
+        )
+        connection.execute(
+            "INSERT INTO assurance_schema_metadata VALUES ('schema_version', '1.1')"
+        )
+        connection.execute("CREATE SEQUENCE record_ids START 1")
+        connection.execute(
+            "CREATE TABLE records("
+            "id INTEGER PRIMARY KEY DEFAULT nextval('record_ids'), "
+            "value VARCHAR NOT NULL CHECK (length(value) <= 32))"
+        )
+        connection.execute("INSERT INTO records(value) VALUES ('one'), ('two')")
+        connection.execute("CREATE UNIQUE INDEX records_value_idx ON records(value)")
+        connection.execute("CREATE VIEW record_values AS SELECT value FROM records")
+        connection.execute("CREATE MACRO local_increment(value) AS value + 1")
+        connection.execute("CHECKPOINT")
+    finally:
+        connection.close()
+    workspace.commit_marker(workspace_id)
+    return root
+
+
+def manifest_sha256(backup: Path) -> str:
+    return hashlib.sha256(
+        (backup / local_stack.BACKUP_MANIFEST_NAME).read_bytes()
+    ).hexdigest()
+
+
+def local_ownership_sha256(backup: Path) -> str:
+    directory = os.lstat(backup)
+    database = os.lstat(backup / local_stack.BACKUP_DATABASE_NAME)
+    manifest = os.lstat(backup / local_stack.BACKUP_MANIFEST_NAME)
+    entries = [
+        ["directory", directory.st_dev, directory.st_ino],
+        [local_stack.BACKUP_DATABASE_NAME, database.st_dev, database.st_ino],
+        [local_stack.BACKUP_MANIFEST_NAME, manifest.st_dev, manifest.st_ino],
+    ]
+    encoded = json.dumps(
+        entries,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("ascii")
+    return hashlib.sha256(
+        local_stack._LOCAL_BACKUP_OWNERSHIP_DOMAIN + encoded
+    ).hexdigest()
+
+
+def test_real_cold_backup_restore_is_exact_atomic_and_idempotent(
+    tmp_path: Path,
+) -> None:
+    duckdb = pytest.importorskip("duckdb")
+    workspace = prepare_maintenance_workspace(tmp_path)
+    backup = tmp_path / "cold'backup"
+
+    code, payload, error = invoke_real_workspace(
+        workspace, "backup", "--destination", str(backup)
+    )
+    assert (code, error) == (0, None)
+    assert set(payload) == {"command", "ok", "result"}
+    result = payload["result"]
+    assert set(result) == {
+        "catalog",
+        "changed",
+        "checkpointed",
+        "database",
+        "local_ownership_sha256",
+        "logical_equivalence",
+        "manifest",
+        "row_count",
+        "schema",
+        "tables",
+    }
+    assert result["changed"] is True
+    assert result["schema"] == local_stack.BACKUP_SCHEMA_VERSION
+    assert {entry.name for entry in backup.iterdir()} == {
+        local_stack.BACKUP_DATABASE_NAME,
+        local_stack.BACKUP_MANIFEST_NAME,
+    }
+    manifest_raw = (backup / local_stack.BACKUP_MANIFEST_NAME).read_bytes()
+    manifest = json.loads(manifest_raw)
+    assert manifest_raw == local_stack._canonical_json_bytes(manifest)
+    assert result["manifest"]["sha256"] == hashlib.sha256(manifest_raw).hexdigest()
+    assert result["local_ownership_sha256"] == local_ownership_sha256(backup)
+    assert local_stack._is_sha256(result["local_ownership_sha256"])
+    assert result["checkpointed"] is True
+    assert result["logical_equivalence"] is True
+    assert result["tables"] == sorted(
+        result["tables"], key=lambda item: (item["schema"], item["name"])
+    )
+    assert str(tmp_path) not in json.dumps(payload)
+
+    connection = duckdb.connect(str(workspace / "state" / "networkagent.duckdb"))
+    try:
+        connection.execute("INSERT INTO records(value) VALUES ('lost-after-backup')")
+        connection.execute("CHECKPOINT")
+    finally:
+        connection.close()
+
+    digest = result["manifest"]["sha256"]
+    first_code, first, first_error = invoke_real_workspace(
+        workspace,
+        "restore",
+        "--source",
+        str(backup),
+        "--expected-manifest-sha256",
+        digest,
+        "--yes",
+    )
+    retry_code, retry, retry_error = invoke_real_workspace(
+        workspace,
+        "restore",
+        "--source",
+        str(backup),
+        "--expected-manifest-sha256",
+        digest,
+        "--yes",
+    )
+    assert (first_code, first_error, first["result"]["changed"]) == (0, None, True)
+    assert (retry_code, retry_error, retry["result"]["changed"]) == (0, None, False)
+    assert {
+        key: value for key, value in first["result"].items() if key != "changed"
+    } == {key: value for key, value in retry["result"].items() if key != "changed"}
+    connection = duckdb.connect(
+        str(workspace / "state" / "networkagent.duckdb"), read_only=True
+    )
+    try:
+        assert connection.execute(
+            "SELECT value FROM records ORDER BY id"
+        ).fetchall() == [
+            ("one",),
+            ("two",),
+        ]
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "database_flip",
+        "database_truncate",
+        "database_append",
+        "manifest_duplicate_key",
+        "manifest_unknown_field",
+        "manifest_wrong_bytes",
+        "manifest_wrong_hash",
+        "manifest_wrong_schema",
+        "manifest_wrong_version",
+    ),
+)
+def test_restore_rejects_corrupt_backup_without_replacing_workspace(
+    tmp_path: Path, mutation: str
+) -> None:
+    workspace = prepare_maintenance_workspace(tmp_path)
+    valid = tmp_path / "valid"
+    code, payload, error = invoke_real_workspace(
+        workspace, "backup", "--destination", str(valid)
+    )
+    assert (code, error) == (0, None)
+    corrupt = tmp_path / f"corrupt-{mutation}"
+    shutil.copytree(valid, corrupt)
+    database_path = corrupt / local_stack.BACKUP_DATABASE_NAME
+    manifest_path = corrupt / local_stack.BACKUP_MANIFEST_NAME
+    expected = manifest_sha256(corrupt)
+
+    if mutation.startswith("database_"):
+        data = database_path.read_bytes()
+        if mutation == "database_flip":
+            changed = bytearray(data)
+            changed[len(changed) // 2] ^= 0x01
+            database_path.write_bytes(changed)
+        elif mutation == "database_truncate":
+            database_path.write_bytes(data[:-1])
+        else:
+            database_path.write_bytes(data + b"x")
+    elif mutation == "manifest_duplicate_key":
+        raw = manifest_path.read_bytes()
+        manifest_path.write_bytes(b'{"schema":"duplicate",' + raw[1:])
+        expected = manifest_sha256(corrupt)
+    else:
+        manifest = json.loads(manifest_path.read_bytes())
+        if mutation == "manifest_unknown_field":
+            manifest["unknown"] = True
+        elif mutation == "manifest_wrong_bytes":
+            manifest["database"]["bytes"] += 1
+        elif mutation == "manifest_wrong_hash":
+            manifest["database"]["sha256"] = "0" * 64
+        elif mutation == "manifest_wrong_schema":
+            manifest["schema"] = "networkagent-local-cold-backup/2.0"
+        else:
+            manifest["duckdb"]["library_version"] = "v0.0.0"
+        manifest_path.write_bytes(local_stack._canonical_json_bytes(manifest))
+        expected = manifest_sha256(corrupt)
+
+    current = workspace / "state" / "networkagent.duckdb"
+    before = current.read_bytes()
+    rejected_code, rejected, rejected_error = invoke_real_workspace(
+        workspace,
+        "restore",
+        "--source",
+        str(corrupt),
+        "--expected-manifest-sha256",
+        expected,
+        "--yes",
+    )
+    assert (rejected_code, rejected) == (2, None)
+    assert rejected_error["error"]["code"] == "backup_invalid"
+    assert current.read_bytes() == before
+    assert str(tmp_path) not in json.dumps(rejected_error)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "extra_file",
+        "missing_database",
+        "missing_manifest",
+        "database_hardlink",
+        "manifest_hardlink",
+        "database_symlink",
+        "manifest_symlink",
+        "oversized_database",
+    ),
+)
+def test_restore_requires_exact_two_single_link_bounded_files(
+    tmp_path: Path, mutation: str
+) -> None:
+    workspace = prepare_maintenance_workspace(tmp_path)
+    valid = tmp_path / "valid"
+    assert (
+        invoke_real_workspace(workspace, "backup", "--destination", str(valid))[0] == 0
+    )
+    candidate = tmp_path / f"candidate-{mutation}"
+    shutil.copytree(valid, candidate)
+    expected = manifest_sha256(candidate)
+    if mutation == "extra_file":
+        (candidate / "extra.txt").write_text("must reject", encoding="utf-8")
+    elif mutation == "missing_database":
+        (candidate / local_stack.BACKUP_DATABASE_NAME).unlink()
+    elif mutation == "missing_manifest":
+        (candidate / local_stack.BACKUP_MANIFEST_NAME).unlink()
+    elif mutation in {"database_hardlink", "manifest_hardlink"}:
+        name = (
+            local_stack.BACKUP_DATABASE_NAME
+            if mutation == "database_hardlink"
+            else local_stack.BACKUP_MANIFEST_NAME
+        )
+        target = candidate / name
+        target.unlink()
+        try:
+            os.link(valid / name, target)
+        except OSError:
+            pytest.skip("hard links are unavailable")
+    elif mutation in {"database_symlink", "manifest_symlink"}:
+        name = (
+            local_stack.BACKUP_DATABASE_NAME
+            if mutation == "database_symlink"
+            else local_stack.BACKUP_MANIFEST_NAME
+        )
+        target = candidate / name
+        target.unlink()
+        try:
+            target.symlink_to(valid / name)
+        except OSError:
+            pytest.skip("file symlink creation is unavailable")
+    else:
+        with (candidate / local_stack.BACKUP_DATABASE_NAME).open("r+b") as handle:
+            handle.truncate(local_stack._BACKUP_MAX_DATABASE_BYTES + 1)
+
+    current = workspace / "state" / local_stack.BACKUP_DATABASE_NAME
+    before = current.read_bytes()
+    code, payload, error = invoke_real_workspace(
+        workspace,
+        "restore",
+        "--source",
+        str(candidate),
+        "--expected-manifest-sha256",
+        expected,
+        "--yes",
+    )
+    assert (code, payload) == (2, None)
+    expected_code = (
+        "backup_too_large" if mutation == "oversized_database" else "backup_invalid"
+    )
+    assert error["error"]["code"] == expected_code
+    assert current.read_bytes() == before
+
+
+def test_restore_confirmation_and_manifest_binding_fail_without_writes(
+    tmp_path: Path,
+) -> None:
+    workspace = prepare_maintenance_workspace(tmp_path)
+    backup = tmp_path / "backup"
+    assert (
+        invoke_real_workspace(workspace, "backup", "--destination", str(backup))[0] == 0
+    )
+    database = workspace / "state" / local_stack.BACKUP_DATABASE_NAME
+    before = database.read_bytes()
+    digest = manifest_sha256(backup)
+
+    missing_code, missing, missing_error = invoke_real_workspace(
+        workspace,
+        "restore",
+        "--source",
+        str(backup),
+        "--expected-manifest-sha256",
+        digest,
+    )
+    mismatch_code, mismatch, mismatch_error = invoke_real_workspace(
+        workspace,
+        "restore",
+        "--source",
+        str(backup),
+        "--expected-manifest-sha256",
+        "0" * 64,
+        "--yes",
+    )
+    assert (missing_code, missing) == (1, None)
+    assert missing_error["error"]["code"] == "restore_confirmation_required"
+    assert (mismatch_code, mismatch) == (2, None)
+    assert mismatch_error["error"]["code"] == "manifest_mismatch"
+    assert database.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "failure_stage",
+    ("early_stat", "post_mkdir_validation", "catalog", "manifest", "publish"),
+)
+def test_backup_interruption_never_publishes_or_leaves_owned_staging(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_stage: str,
+) -> None:
+    workspace = prepare_maintenance_workspace(tmp_path)
+    destination = tmp_path / f"backup-{failure_stage}"
+    if failure_stage == "early_stat":
+        original_stat = local_stack.Path.stat
+
+        def fail_first_staging_stat(path: Path, *args, **kwargs):
+            if path.name.startswith(".networkagent-backup-"):
+                raise OSError("injected early stat failure")
+            return original_stat(path, *args, **kwargs)
+
+        monkeypatch.setattr(local_stack.Path, "stat", fail_first_staging_stat)
+    elif failure_stage == "post_mkdir_validation":
+        original_require_directory_identity = local_stack._require_directory_identity
+        identity_calls = 0
+
+        def fail_first_identity_check(*args, **kwargs):
+            nonlocal identity_calls
+            identity_calls += 1
+            if identity_calls == 1:
+                raise local_stack.SafeCliError("unsafe_workspace")
+            return original_require_directory_identity(*args, **kwargs)
+
+        monkeypatch.setattr(
+            local_stack,
+            "_require_directory_identity",
+            fail_first_identity_check,
+        )
+    elif failure_stage == "catalog":
+        original = local_stack._database_metadata
+        calls = 0
+
+        def fail_after_copy(connection):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise local_stack.SafeCliError("backup_failed")
+            return original(connection)
+
+        monkeypatch.setattr(local_stack, "_database_metadata", fail_after_copy)
+    elif failure_stage == "manifest":
+        monkeypatch.setattr(
+            local_stack,
+            "_write_new_file",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                local_stack.SafeCliError("backup_failed")
+            ),
+        )
+    else:
+        monkeypatch.setattr(
+            local_stack,
+            "_publish_directory_no_replace",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                local_stack.SafeCliError("backup_failed")
+            ),
+        )
+    code, payload, error = invoke_real_workspace(
+        workspace, "backup", "--destination", str(destination)
+    )
+    assert (code, payload) == (2, None)
+    assert error["error"]["code"] in {"backup_failed", "unsafe_workspace"}
+    assert not destination.exists()
+    residual = list(tmp_path.glob(".networkagent-backup-*.partial"))
+    if failure_stage == "early_stat":
+        # Identity acquisition failed; preserve the unknown empty directory.
+        assert len(residual) == 1
+        assert not list(residual[0].iterdir())
+    else:
+        assert not residual
+
+
+def test_backup_refuses_existing_and_racing_destination_without_deleting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = prepare_maintenance_workspace(tmp_path)
+    existing = tmp_path / "existing"
+    existing.mkdir()
+    sentinel = existing / "keep.txt"
+    sentinel.write_text("user-owned", encoding="utf-8")
+    code, payload, error = invoke_real_workspace(
+        workspace, "backup", "--destination", str(existing)
+    )
+    assert (code, payload) == (2, None)
+    assert error["error"]["code"] == "backup_exists"
+    assert sentinel.read_text(encoding="utf-8") == "user-owned"
+
+    racing = tmp_path / "racing"
+    original_publish = local_stack._publish_directory_no_replace
+
+    def create_race(source: Path, destination: Path) -> None:
+        destination.mkdir()
+        (destination / "keep.txt").write_text("racer", encoding="utf-8")
+        original_publish(source, destination)
+
+    monkeypatch.setattr(local_stack, "_publish_directory_no_replace", create_race)
+    race_code, race_payload, race_error = invoke_real_workspace(
+        workspace, "backup", "--destination", str(racing)
+    )
+    assert (race_code, race_payload) == (2, None)
+    assert race_error["error"]["code"] == "backup_exists"
+    assert (racing / "keep.txt").read_text(encoding="utf-8") == "racer"
+    assert not list(tmp_path.glob(".networkagent-backup-*.partial"))
+
+
+def test_backup_never_deletes_a_preexisting_staging_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = prepare_maintenance_workspace(tmp_path)
+    fixed = uuid.UUID("12345678-1234-5678-1234-567812345678")
+    monkeypatch.setattr(local_stack.uuid, "uuid4", lambda: fixed)
+    staging = tmp_path / f".networkagent-backup-{fixed.hex}.partial"
+    staging.mkdir()
+    sentinel = staging / "keep.txt"
+    sentinel.write_text("user-owned", encoding="utf-8")
+    code, payload, error = invoke_real_workspace(
+        workspace, "backup", "--destination", str(tmp_path / "backup")
+    )
+    assert (code, payload) == (2, None)
+    assert error["error"]["code"] == "backup_failed"
+    assert sentinel.read_text(encoding="utf-8") == "user-owned"
+
+
+def test_backup_cleanup_anomaly_fails_closed_and_never_publishes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = prepare_maintenance_workspace(tmp_path)
+    destination = tmp_path / "backup"
+
+    def inject_unknown_staging_entry(path: Path, *_args, **_kwargs) -> None:
+        (path.parent / "unexpected-entry").write_text("injected", encoding="utf-8")
+        raise local_stack.SafeCliError("backup_failed")
+
+    monkeypatch.setattr(local_stack, "_write_new_file", inject_unknown_staging_entry)
+    code, payload, error = invoke_real_workspace(
+        workspace, "backup", "--destination", str(destination)
+    )
+    assert (code, payload) == (2, None)
+    assert error["error"]["code"] == "backup_failed"
+    assert not destination.exists()
+    residual = list(tmp_path.glob(".networkagent-backup-*.partial"))
+    assert len(residual) == 1
+    assert {entry.name for entry in residual[0].iterdir()} == {
+        local_stack.BACKUP_DATABASE_NAME,
+        "unexpected-entry",
+    }
+
+
+def test_backup_cleanup_preserves_replaced_known_child(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = prepare_maintenance_workspace(tmp_path)
+    destination = tmp_path / "backup"
+    replacement = b"same-name replacement"
+
+    def replace_database_before_failure(path: Path, *_args, **_kwargs) -> None:
+        database = path.parent / local_stack.BACKUP_DATABASE_NAME
+        database.unlink()
+        database.write_bytes(replacement)
+        raise local_stack.SafeCliError("backup_failed")
+
+    monkeypatch.setattr(local_stack, "_write_new_file", replace_database_before_failure)
+    code, payload, error = invoke_real_workspace(
+        workspace, "backup", "--destination", str(destination)
+    )
+    assert (code, payload) == (2, None)
+    assert error["error"]["code"] == "backup_failed"
+    assert not destination.exists()
+    residual = list(tmp_path.glob(".networkagent-backup-*.partial"))
+    assert len(residual) == 1
+    assert (residual[0] / local_stack.BACKUP_DATABASE_NAME).read_bytes() == replacement
+
+
+def test_backup_post_publish_validation_failure_preserves_durable_backup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = prepare_maintenance_workspace(tmp_path)
+    destination = tmp_path / "backup"
+    original = local_stack._require_directory_identity
+
+    def fail_only_after_publish(path: Path, expected, *, invalid_code: str) -> None:
+        if path == destination and destination.exists():
+            raise local_stack.SafeCliError("backup_failed")
+        original(path, expected, invalid_code=invalid_code)
+
+    monkeypatch.setattr(
+        local_stack, "_require_directory_identity", fail_only_after_publish
+    )
+    code, payload, error = invoke_real_workspace(
+        workspace, "backup", "--destination", str(destination)
+    )
+    assert (code, payload) == (2, None)
+    assert error["error"]["code"] == "backup_failed"
+    assert {entry.name for entry in destination.iterdir()} == {
+        local_stack.BACKUP_DATABASE_NAME,
+        local_stack.BACKUP_MANIFEST_NAME,
+    }
+    assert not list(tmp_path.glob(".networkagent-backup-*.partial"))
+    retry_code, retry_payload, retry_error = invoke_real_workspace(
+        workspace, "backup", "--destination", str(destination)
+    )
+    assert (retry_code, retry_payload) == (2, None)
+    assert retry_error["error"]["code"] == "backup_exists"
+
+
+def test_local_ownership_identity_rejects_non_strict_or_invalid_integers() -> None:
+    for identity in ((False, 1), (0, True), (-1, 1), (0, 0)):
+        with pytest.raises(local_stack.SafeCliError) as captured:
+            local_stack._strict_local_identity(identity, invalid_code="backup_failed")
+        assert captured.value.code == "backup_failed"
+
+
+def test_backup_ownership_binding_rejects_exact_content_child_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = prepare_maintenance_workspace(tmp_path)
+    destination = tmp_path / "backup"
+    original = local_stack._local_backup_ownership_sha256
+    replaced_manifest_identity: tuple[int, int] | None = None
+    original_manifest_digest: str | None = None
+
+    def replace_manifest_before_binding(directory: Path, **kwargs) -> str:
+        nonlocal original_manifest_digest, replaced_manifest_identity
+        manifest = directory / local_stack.BACKUP_MANIFEST_NAME
+        original_payload = manifest.read_bytes()
+        original_manifest_digest = hashlib.sha256(original_payload).hexdigest()
+        manifest.unlink()
+        manifest.write_bytes(original_payload)
+        metadata = os.lstat(manifest)
+        replaced_manifest_identity = (metadata.st_dev, metadata.st_ino)
+        return original(directory, **kwargs)
+
+    monkeypatch.setattr(
+        local_stack,
+        "_local_backup_ownership_sha256",
+        replace_manifest_before_binding,
+    )
+    code, payload, error = invoke_real_workspace(
+        workspace, "backup", "--destination", str(destination)
+    )
+    assert (code, payload) == (2, None)
+    assert error["error"]["code"] == "backup_failed"
+    assert replaced_manifest_identity is not None
+    assert {entry.name for entry in destination.iterdir()} == {
+        local_stack.BACKUP_DATABASE_NAME,
+        local_stack.BACKUP_MANIFEST_NAME,
+    }
+    assert manifest_sha256(destination) == original_manifest_digest
+    assert not list(tmp_path.glob(".networkagent-backup-*.partial"))
+
+
+def test_restore_rejects_linked_backup_directory_without_following_it(
+    tmp_path: Path,
+) -> None:
+    workspace = prepare_maintenance_workspace(tmp_path)
+    valid = tmp_path / "valid"
+    assert (
+        invoke_real_workspace(workspace, "backup", "--destination", str(valid))[0] == 0
+    )
+    linked = tmp_path / "linked"
+    try:
+        linked.symlink_to(valid, target_is_directory=True)
+    except OSError:
+        pytest.skip("directory symlink creation is unavailable")
+    database = workspace / "state" / local_stack.BACKUP_DATABASE_NAME
+    before = database.read_bytes()
+    code, payload, error = invoke_real_workspace(
+        workspace,
+        "restore",
+        "--source",
+        str(linked),
+        "--expected-manifest-sha256",
+        manifest_sha256(valid),
+        "--yes",
+    )
+    assert (code, payload) == (2, None)
+    assert error["error"]["code"] == "backup_invalid"
+    assert database.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "failure_stage", ("copy", "stage_verify", "pre_replace", "response_loss")
+)
+def test_restore_interruption_is_atomic_and_response_loss_retry_is_idempotent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_stage: str,
+) -> None:
+    duckdb = pytest.importorskip("duckdb")
+    workspace = prepare_maintenance_workspace(tmp_path)
+    backup = tmp_path / "backup"
+    assert (
+        invoke_real_workspace(workspace, "backup", "--destination", str(backup))[0] == 0
+    )
+    database = workspace / "state" / local_stack.BACKUP_DATABASE_NAME
+    connection = duckdb.connect(str(database))
+    try:
+        connection.execute("INSERT INTO records(value) VALUES ('current-only')")
+        connection.execute("CHECKPOINT")
+    finally:
+        connection.close()
+    before = database.read_bytes()
+    arguments = (
+        "restore",
+        "--source",
+        str(backup),
+        "--expected-manifest-sha256",
+        manifest_sha256(backup),
+        "--yes",
+    )
+
+    with monkeypatch.context() as scoped:
+        if failure_stage == "copy":
+            scoped.setattr(
+                local_stack,
+                "_copy_database_to_restore_temp",
+                lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                    local_stack.SafeCliError("restore_failed")
+                ),
+            )
+        elif failure_stage == "stage_verify":
+            original_metadata = local_stack._database_metadata
+            calls = 0
+
+            def fail_temp_verify(connection):
+                nonlocal calls
+                calls += 1
+                if calls == 3:
+                    raise local_stack.SafeCliError("backup_invalid")
+                return original_metadata(connection)
+
+            scoped.setattr(local_stack, "_database_metadata", fail_temp_verify)
+        elif failure_stage == "pre_replace":
+            original_replace = local_stack.os.replace
+
+            def fail_restore_replace(source: object, destination: object) -> None:
+                if Path(source).name == local_stack._RESTORE_TEMP_NAME:
+                    raise OSError("injected replacement failure")
+                original_replace(source, destination)
+
+            scoped.setattr(local_stack.os, "replace", fail_restore_replace)
+        else:
+            scoped.setattr(
+                local_stack,
+                "_restore_public_summary",
+                lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                    RuntimeError("injected response loss")
+                ),
+            )
+        code, payload, error = invoke_real_workspace(workspace, *arguments)
+
+    assert (code, payload) == (2, None)
+    if failure_stage == "response_loss":
+        assert error["error"]["code"] == "runtime_failed"
+        assert database.read_bytes() != before
+        retry_code, retry, retry_error = invoke_real_workspace(workspace, *arguments)
+        assert (retry_code, retry_error) == (0, None)
+        assert retry["result"]["changed"] is False
+    else:
+        assert error["error"]["code"] in {"backup_invalid", "restore_failed"}
+        assert database.read_bytes() == before
+    assert not (workspace / "state" / local_stack._RESTORE_TEMP_NAME).exists()
+
+
+def test_restore_cleanup_preserves_replaced_temp_and_current_database(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    duckdb = pytest.importorskip("duckdb")
+    workspace = prepare_maintenance_workspace(tmp_path)
+    backup = tmp_path / "backup"
+    assert (
+        invoke_real_workspace(workspace, "backup", "--destination", str(backup))[0] == 0
+    )
+    database = workspace / "state" / local_stack.BACKUP_DATABASE_NAME
+    connection = duckdb.connect(str(database))
+    try:
+        connection.execute("INSERT INTO records(value) VALUES ('current-only')")
+        connection.execute("CHECKPOINT")
+    finally:
+        connection.close()
+    before = database.read_bytes()
+    restore_temp = workspace / "state" / local_stack._RESTORE_TEMP_NAME
+    replacement = b"unknown same-name restore temp"
+    original_replace = local_stack.os.replace
+
+    def replace_temp_then_fail(source: object, destination: object) -> None:
+        if Path(source).name == local_stack._RESTORE_TEMP_NAME:
+            Path(source).unlink()
+            Path(source).write_bytes(replacement)
+            raise OSError("injected replacement race")
+        original_replace(source, destination)
+
+    monkeypatch.setattr(local_stack.os, "replace", replace_temp_then_fail)
+    code, payload, error = invoke_real_workspace(
+        workspace,
+        "restore",
+        "--source",
+        str(backup),
+        "--expected-manifest-sha256",
+        manifest_sha256(backup),
+        "--yes",
+    )
+    assert (code, payload) == (2, None)
+    assert error["error"]["code"] == "unsafe_workspace"
+    assert database.read_bytes() == before
+    assert restore_temp.read_bytes() == replacement
+
+
+def test_restore_preserves_unknown_preexisting_fixed_temp(tmp_path: Path) -> None:
+    duckdb = pytest.importorskip("duckdb")
+    workspace = prepare_maintenance_workspace(tmp_path)
+    backup = tmp_path / "backup"
+    assert (
+        invoke_real_workspace(workspace, "backup", "--destination", str(backup))[0] == 0
+    )
+    database = workspace / "state" / local_stack.BACKUP_DATABASE_NAME
+    connection = duckdb.connect(str(database))
+    try:
+        connection.execute("INSERT INTO records(value) VALUES ('current-only')")
+        connection.execute("CHECKPOINT")
+    finally:
+        connection.close()
+    before = database.read_bytes()
+    restore_temp = workspace / "state" / local_stack._RESTORE_TEMP_NAME
+    restore_temp.write_bytes(b"unknown prior invocation")
+    code, payload, error = invoke_real_workspace(
+        workspace,
+        "restore",
+        "--source",
+        str(backup),
+        "--expected-manifest-sha256",
+        manifest_sha256(backup),
+        "--yes",
+    )
+    assert (code, payload) == (2, None)
+    assert error["error"]["code"] == "restore_failed"
+    assert database.read_bytes() == before
+    assert restore_temp.read_bytes() == b"unknown prior invocation"
+
+
+def test_real_other_process_duckdb_lock_fails_closed_without_path_leak(
+    tmp_path: Path,
+) -> None:
+    workspace = prepare_maintenance_workspace(tmp_path)
+    valid_backup = tmp_path / "valid-backup"
+    assert (
+        invoke_real_workspace(workspace, "backup", "--destination", str(valid_backup))[
+            0
+        ]
+        == 0
+    )
+    database = workspace / "state" / local_stack.BACKUP_DATABASE_NAME
+    before = database.read_bytes()
+    script = (
+        "import duckdb,sys,time;"
+        "c=duckdb.connect(sys.argv[1]);"
+        "c.execute('BEGIN TRANSACTION');"
+        "c.execute(\"INSERT INTO records(value) VALUES ('locked')\");"
+        "print('READY',flush=True);time.sleep(20)"
+    )
+    process = subprocess.Popen(
+        [sys.executable, "-c", script, str(database)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert process.stdout is not None
+        assert process.stdout.readline().strip() == "READY"
+        invocations = (
+            ("backup", "--destination", str(tmp_path / "blocked-backup")),
+            (
+                "restore",
+                "--source",
+                str(valid_backup),
+                "--expected-manifest-sha256",
+                manifest_sha256(valid_backup),
+                "--yes",
+            ),
+        )
+        for arguments in invocations:
+            code, payload, error = invoke_real_workspace(workspace, *arguments)
+            assert (code, payload) == (2, None)
+            assert error["error"]["code"] == "workspace_busy"
+            assert str(tmp_path) not in json.dumps(error)
+    finally:
+        process.terminate()
+        process.communicate(timeout=10)
+    assert database.read_bytes() == before
+
+
+def test_backup_rejects_unsafe_database_sidecars_without_following_them(
+    tmp_path: Path,
+) -> None:
+    workspace = prepare_maintenance_workspace(tmp_path)
+    database = workspace / "state" / local_stack.BACKUP_DATABASE_NAME
+    outside = tmp_path / "outside.txt"
+    outside.write_text("preserve", encoding="utf-8")
+    wal = Path(f"{database}.wal")
+    try:
+        wal.symlink_to(outside)
+    except OSError:
+        pytest.skip("symlink creation is unavailable")
+    code, payload, error = invoke_real_workspace(
+        workspace, "backup", "--destination", str(tmp_path / "backup")
+    )
+    assert (code, payload) == (2, None)
+    assert error["error"]["code"] == "unsafe_workspace"
+    assert outside.read_text(encoding="utf-8") == "preserve"
+
+
+def test_backup_rejects_hardlinked_live_database(tmp_path: Path) -> None:
+    workspace = prepare_maintenance_workspace(tmp_path)
+    database = workspace / "state" / local_stack.BACKUP_DATABASE_NAME
+    alias = tmp_path / "database-alias"
+    try:
+        os.link(database, alias)
+    except OSError:
+        pytest.skip("hard links are unavailable")
+    code, payload, error = invoke_real_workspace(
+        workspace, "backup", "--destination", str(tmp_path / "backup")
+    )
+    assert (code, payload) == (2, None)
+    assert error["error"]["code"] == "unsafe_workspace"
+    assert alias.is_file()
+
+
+def test_restore_rejects_hardlinked_workspace_marker_without_writes(
+    tmp_path: Path,
+) -> None:
+    workspace = prepare_maintenance_workspace(tmp_path)
+    backup = tmp_path / "backup"
+    assert (
+        invoke_real_workspace(workspace, "backup", "--destination", str(backup))[0] == 0
+    )
+    marker = workspace / local_stack.MARKER_NAME
+    alias = tmp_path / "marker-alias"
+    try:
+        os.link(marker, alias)
+    except OSError:
+        pytest.skip("hard links are unavailable")
+    database = workspace / "state" / local_stack.BACKUP_DATABASE_NAME
+    before = database.read_bytes()
+    code, payload, error = invoke_real_workspace(
+        workspace,
+        "restore",
+        "--source",
+        str(backup),
+        "--expected-manifest-sha256",
+        manifest_sha256(backup),
+        "--yes",
+    )
+    assert (code, payload) == (2, None)
+    assert error["error"]["code"] == "workspace_not_owned"
+    assert database.read_bytes() == before
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows junction regression")
+def test_restore_rejects_backup_directory_junction(tmp_path: Path) -> None:
+    workspace = prepare_maintenance_workspace(tmp_path)
+    valid = tmp_path / "valid"
+    assert (
+        invoke_real_workspace(workspace, "backup", "--destination", str(valid))[0] == 0
+    )
+    junction = tmp_path / "junction"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(junction), str(valid)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if created.returncode != 0:
+        pytest.skip("junction creation is unavailable")
+    try:
+        code, payload, error = invoke_real_workspace(
+            workspace,
+            "restore",
+            "--source",
+            str(junction),
+            "--expected-manifest-sha256",
+            manifest_sha256(valid),
+            "--yes",
+        )
+        assert (code, payload) == (2, None)
+        assert error["error"]["code"] == "backup_invalid"
+    finally:
+        if getattr(junction, "is_junction", lambda: False)():
+            os.rmdir(junction)
 
 
 def test_workspace_is_required_and_errors_do_not_echo_paths(tmp_path: Path) -> None:

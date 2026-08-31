@@ -11,18 +11,21 @@ from __future__ import annotations
 import argparse
 import asyncio
 import ctypes
+import errno
 import hashlib
 import importlib
 import json
 import os
 import shutil
 import socket
+import stat
 import sys
 import uuid
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any, Iterator, TextIO
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -30,6 +33,19 @@ STACK_SCHEMA_VERSION = "1.0"
 MARKER_NAME = ".local-stack.json"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8085
+BACKUP_SCHEMA_VERSION = "networkagent-local-cold-backup/1.0"
+BACKUP_DATABASE_NAME = "networkagent.duckdb"
+BACKUP_MANIFEST_NAME = "backup-manifest.json"
+_BACKUP_MAX_DATABASE_BYTES = 128 * 1024 * 1024
+_BACKUP_MAX_MANIFEST_BYTES = 16 * 1024
+_BACKUP_MAX_SCHEMAS = 4
+_BACKUP_MAX_TABLES = 64
+_BACKUP_MAX_VIEWS = 16
+_BACKUP_MAX_ROWS = 100_000
+_BACKUP_MAX_CATALOG_RECORDS = 1024
+_MAINTENANCE_LOCK_NAME = ".backup-restore.lock"
+_RESTORE_TEMP_NAME = ".networkagent.duckdb.restore.tmp"
+_LOCAL_BACKUP_OWNERSHIP_DOMAIN = b"networkagent-local-backup-ownership/1\0"
 _PACKAGE_SOURCES = (
     REPOSITORY_ROOT / "packages" / "telco-domain" / "src",
     REPOSITORY_ROOT / "packages" / "telco-local" / "src",
@@ -68,6 +84,10 @@ _ERROR_MESSAGES = {
     "approval_requires_incident": "action approval requires incident confirmation",
     "approval_requires_prior_preview": "action approval requires a prior preview command",
     "approval_reason_required": "action approval requires a non-empty reason",
+    "backup_exists": "the selected backup destination already exists",
+    "backup_failed": "the cold backup failed safely",
+    "backup_invalid": "the selected cold backup is invalid",
+    "backup_too_large": "the selected cold backup exceeds the local size budget",
     "dependencies_missing": "required local runtime dependencies are unavailable",
     "demo_seed_requires_fresh_workspace": (
         "container demo seeding requires a fresh incident store"
@@ -78,14 +98,18 @@ _ERROR_MESSAGES = {
     "lifecycle_projection_failed": (
         "local lifecycle projection did not match the fixed contract"
     ),
+    "manifest_mismatch": "the supplied backup manifest hash does not match",
     "no_candidates": "the sample data produced no incident candidates",
     "not_awaiting_approval": "the incident has no approvable simulated action",
     "port_unavailable": "the selected loopback port is unavailable",
     "runtime_failed": "the local operation failed safely",
+    "restore_confirmation_required": "restore requires explicit confirmation",
+    "restore_failed": "the cold restore failed safely",
     "server_dependencies_missing": "optional Assurance server dependencies are unavailable",
     "unsafe_workspace": "the selected workspace is not safe for local-stack operations",
     "workspace_not_initialized": "the selected workspace is not initialized",
     "workspace_not_owned": "the selected directory is not owned by local-stack",
+    "workspace_busy": "the local workspace is busy",
 }
 
 
@@ -119,6 +143,14 @@ def _is_link_like(path: Path) -> bool:
     try:
         if path.is_symlink():
             return True
+        if os.name == "nt":
+            try:
+                attributes = path.lstat().st_file_attributes
+            except FileNotFoundError:
+                return False
+            reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+            if attributes & reparse_flag:
+                return True
         is_junction = getattr(path, "is_junction", None)
         return bool(is_junction()) if callable(is_junction) else False
     except OSError:
@@ -181,6 +213,1316 @@ def _validate_workspace_path(path: Path) -> Path:
     return resolved
 
 
+def _canonical_json_bytes(value: object) -> bytes:
+    try:
+        rendered = json.dumps(
+            value,
+            allow_nan=False,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    except (TypeError, ValueError):
+        raise SafeCliError("backup_failed") from None
+    return (rendered + "\n").encode("utf-8")
+
+
+def _is_sha256(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _safe_file_stat(path: Path, *, invalid_code: str) -> os.stat_result:
+    try:
+        if _is_link_like(path):
+            raise SafeCliError(invalid_code)
+        metadata = path.stat(follow_symlinks=False)
+    except SafeCliError:
+        raise
+    except OSError:
+        raise SafeCliError(invalid_code) from None
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+        raise SafeCliError(invalid_code)
+    return metadata
+
+
+def _file_identity(metadata: os.stat_result) -> tuple[int, int]:
+    return metadata.st_dev, metadata.st_ino
+
+
+def _require_file_identity(
+    path: Path, expected: tuple[int, int], *, invalid_code: str
+) -> os.stat_result:
+    metadata = _safe_file_stat(path, invalid_code=invalid_code)
+    if _file_identity(metadata) != expected:
+        raise SafeCliError(invalid_code)
+    return metadata
+
+
+def _unlink_file_identity(
+    path: Path,
+    expected: tuple[int, int],
+    *,
+    invalid_code: str,
+    failure_code: str,
+) -> None:
+    _require_file_identity(path, expected, invalid_code=invalid_code)
+    try:
+        path.unlink()
+    except OSError:
+        raise SafeCliError(failure_code) from None
+
+
+def _capture_partial_child(
+    path: Path,
+    expected_children: dict[str, tuple[int, int]],
+    *,
+    invalid_code: str,
+) -> None:
+    metadata = _safe_file_stat(path, invalid_code=invalid_code)
+    identity = _file_identity(metadata)
+    previous = expected_children.get(path.name)
+    if previous is not None and previous != identity:
+        raise SafeCliError(invalid_code)
+    expected_children[path.name] = identity
+
+
+def _directory_identity(path: Path, *, invalid_code: str) -> tuple[int, int]:
+    try:
+        if _is_link_like(path):
+            raise SafeCliError(invalid_code)
+        metadata = path.stat(follow_symlinks=False)
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise SafeCliError(invalid_code)
+        if not _same_path(path.resolve(strict=True), path):
+            raise SafeCliError(invalid_code)
+    except SafeCliError:
+        raise
+    except OSError:
+        raise SafeCliError(invalid_code) from None
+    return metadata.st_dev, metadata.st_ino
+
+
+def _require_directory_identity(
+    path: Path, expected: tuple[int, int], *, invalid_code: str
+) -> None:
+    if _directory_identity(path, invalid_code=invalid_code) != expected:
+        raise SafeCliError(invalid_code)
+
+
+def _same_file_snapshot(left: os.stat_result, right: os.stat_result) -> bool:
+    return (
+        left.st_dev,
+        left.st_ino,
+        left.st_size,
+        left.st_mtime_ns,
+        left.st_nlink,
+    ) == (
+        right.st_dev,
+        right.st_ino,
+        right.st_size,
+        right.st_mtime_ns,
+        right.st_nlink,
+    )
+
+
+def _bounded_file_sha256(
+    path: Path,
+    *,
+    maximum_bytes: int,
+    invalid_code: str,
+    too_large_code: str,
+) -> tuple[int, str]:
+    before = _safe_file_stat(path, invalid_code=invalid_code)
+    if before.st_size > maximum_bytes:
+        raise SafeCliError(too_large_code)
+    digest = hashlib.sha256()
+    consumed = 0
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+            or not _same_file_snapshot(before, opened)
+        ):
+            os.close(descriptor)
+            raise SafeCliError(invalid_code)
+        with os.fdopen(descriptor, "rb") as handle:
+            while True:
+                chunk = handle.read(min(1024 * 1024, maximum_bytes + 1 - consumed))
+                if not chunk:
+                    break
+                consumed += len(chunk)
+                if consumed > maximum_bytes:
+                    raise SafeCliError(too_large_code)
+                digest.update(chunk)
+            opened_after = os.fstat(handle.fileno())
+    except SafeCliError:
+        raise
+    except OSError:
+        raise SafeCliError(invalid_code) from None
+    after = _safe_file_stat(path, invalid_code=invalid_code)
+    if (
+        consumed != before.st_size
+        or not _same_file_snapshot(before, opened_after)
+        or not _same_file_snapshot(before, after)
+    ):
+        raise SafeCliError(invalid_code)
+    return consumed, digest.hexdigest()
+
+
+def _bounded_file_bytes(
+    path: Path,
+    *,
+    maximum_bytes: int,
+    invalid_code: str,
+    too_large_code: str,
+) -> tuple[bytes, str]:
+    before = _safe_file_stat(path, invalid_code=invalid_code)
+    if before.st_size > maximum_bytes:
+        raise SafeCliError(too_large_code)
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+            or not _same_file_snapshot(before, opened)
+        ):
+            os.close(descriptor)
+            raise SafeCliError(invalid_code)
+        with os.fdopen(descriptor, "rb") as handle:
+            payload = handle.read(maximum_bytes + 1)
+            opened_after = os.fstat(handle.fileno())
+    except SafeCliError:
+        raise
+    except OSError:
+        raise SafeCliError(invalid_code) from None
+    if len(payload) > maximum_bytes:
+        raise SafeCliError(too_large_code)
+    after = _safe_file_stat(path, invalid_code=invalid_code)
+    if (
+        len(payload) != before.st_size
+        or not _same_file_snapshot(before, opened_after)
+        or not _same_file_snapshot(before, after)
+    ):
+        raise SafeCliError(invalid_code)
+    return payload, hashlib.sha256(payload).hexdigest()
+
+
+def _absolute_without_links(path: Path, *, invalid_code: str) -> Path:
+    _reject_non_local_path(path)
+    supplied = Path(path).expanduser()
+    _reject_non_local_path(supplied)
+    try:
+        absolute = Path(os.path.abspath(os.fspath(supplied)))
+    except (OSError, TypeError, ValueError):
+        raise SafeCliError(invalid_code) from None
+    _reject_non_local_path(absolute)
+
+    # ``resolve`` detects any symlink/junction/reparse ancestor, while the
+    # explicit walk also catches a link-like final component that does not
+    # currently resolve to a live target.
+    current = absolute
+    while True:
+        if current.exists() or _is_link_like(current):
+            if _is_link_like(current):
+                raise SafeCliError(invalid_code)
+        if current == current.parent:
+            break
+        current = current.parent
+    try:
+        resolved = absolute.resolve(strict=False)
+    except OSError:
+        raise SafeCliError(invalid_code) from None
+    if not _same_path(absolute, resolved):
+        raise SafeCliError(invalid_code)
+    return resolved
+
+
+def _validate_backup_directory_path(
+    path: Path,
+    *,
+    workspace: "Workspace",
+    must_exist: bool,
+) -> Path:
+    invalid_code = "backup_invalid" if must_exist else "unsafe_workspace"
+    resolved = _absolute_without_links(path, invalid_code=invalid_code)
+    anchor = Path(resolved.anchor).resolve(strict=False)
+    home = Path.home().resolve(strict=False)
+    if any(
+        _same_path(resolved, boundary)
+        for boundary in {anchor, home, REPOSITORY_ROOT, *REPOSITORY_ROOT.parents}
+    ):
+        raise SafeCliError(invalid_code)
+    if _is_relative_to(resolved, workspace.root) or _is_relative_to(
+        workspace.root, resolved
+    ):
+        raise SafeCliError(invalid_code)
+
+    if must_exist:
+        try:
+            if _is_link_like(resolved) or not resolved.is_dir():
+                raise SafeCliError("backup_invalid")
+            if not _same_path(resolved.resolve(strict=True), resolved):
+                raise SafeCliError("backup_invalid")
+        except SafeCliError:
+            raise
+        except OSError:
+            raise SafeCliError("backup_invalid") from None
+        return resolved
+
+    if resolved.exists():
+        raise SafeCliError("backup_exists")
+    if _is_link_like(resolved):
+        raise SafeCliError("unsafe_workspace")
+    parent = resolved.parent
+    try:
+        if _is_link_like(parent) or not parent.is_dir():
+            raise SafeCliError("unsafe_workspace")
+        if not _same_path(parent.resolve(strict=True), parent):
+            raise SafeCliError("unsafe_workspace")
+    except SafeCliError:
+        raise
+    except OSError:
+        raise SafeCliError("unsafe_workspace") from None
+    return resolved
+
+
+def _quote_sql_identifier(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
+
+
+def _quote_sql_string(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _safe_catalog_identifier(value: object) -> str:
+    if not isinstance(value, str) or not (1 <= len(value) <= 64):
+        raise SafeCliError("backup_failed")
+    if not value.isascii() or not (value[0].isalpha() or value[0] == "_"):
+        raise SafeCliError("backup_failed")
+    if not all(character.isalnum() or character == "_" for character in value):
+        raise SafeCliError("backup_failed")
+    return value
+
+
+def _schema_version(
+    connection: object, table_name: str, *, required: bool
+) -> str | None:
+    safe_table = _safe_catalog_identifier(table_name)
+    exists = connection.execute(
+        "SELECT 1 FROM information_schema.tables "
+        "WHERE table_schema = 'main' AND table_name = ? AND table_type = 'BASE TABLE'",
+        [safe_table],
+    ).fetchone()
+    if exists is None:
+        if required:
+            raise SafeCliError("backup_failed")
+        return None
+    row = connection.execute(
+        f"SELECT value FROM {_quote_sql_identifier(safe_table)} "
+        "WHERE key = 'schema_version'"
+    ).fetchone()
+    if row is None or not isinstance(row[0], str) or not (1 <= len(row[0]) <= 32):
+        raise SafeCliError("backup_failed")
+    return row[0]
+
+
+def _catalog_summary(connection: object) -> dict[str, object]:
+    records = connection.execute(
+        "SELECT table_schema, table_name, table_type "
+        "FROM information_schema.tables "
+        "WHERE table_schema NOT IN ('information_schema', 'pg_catalog') "
+        "ORDER BY table_schema, table_name LIMIT ?",
+        [_BACKUP_MAX_TABLES + _BACKUP_MAX_VIEWS + 1],
+    ).fetchall()
+    if len(records) > _BACKUP_MAX_TABLES + _BACKUP_MAX_VIEWS:
+        raise SafeCliError("backup_too_large")
+    schemas: set[str] = set()
+    tables: list[dict[str, object]] = []
+    view_count = 0
+    for raw_schema, raw_name, raw_type in records:
+        schema = _safe_catalog_identifier(raw_schema)
+        name = _safe_catalog_identifier(raw_name)
+        if raw_type == "VIEW":
+            view_count += 1
+            if view_count > _BACKUP_MAX_VIEWS:
+                raise SafeCliError("backup_too_large")
+            continue
+        if raw_type != "BASE TABLE":
+            raise SafeCliError("backup_failed")
+        schemas.add(schema)
+        row = connection.execute(
+            "SELECT COUNT(*) FROM "
+            f"{_quote_sql_identifier(schema)}.{_quote_sql_identifier(name)}"
+        ).fetchone()
+        if row is None or not isinstance(row[0], int) or row[0] < 0:
+            raise SafeCliError("backup_failed")
+        tables.append({"schema": schema, "name": name, "rows": row[0]})
+        if len(tables) > _BACKUP_MAX_TABLES:
+            raise SafeCliError("backup_too_large")
+        if sum(int(table["rows"]) for table in tables) > _BACKUP_MAX_ROWS:
+            raise SafeCliError("backup_too_large")
+    if not tables:
+        raise SafeCliError("backup_failed")
+    if len(schemas) > _BACKUP_MAX_SCHEMAS:
+        raise SafeCliError("backup_too_large")
+    return {
+        "catalog": {
+            "schema_count": len(schemas),
+            "table_count": len(tables),
+            "view_count": view_count,
+        },
+        "tables": tables,
+        "row_count": sum(int(table["rows"]) for table in tables),
+    }
+
+
+def _fingerprint_value(digest: object, value: object) -> None:
+    type_name = type(value).__name__.encode("ascii", errors="backslashreplace")
+    if value is None:
+        rendered = b""
+    elif isinstance(value, bytes):
+        rendered = value
+    elif isinstance(value, str):
+        rendered = value.encode("utf-8", errors="strict")
+    elif isinstance(value, float):
+        rendered = value.hex().encode("ascii")
+    elif isinstance(value, (bool, int)):
+        rendered = str(value).encode("ascii")
+    elif isinstance(value, datetime):
+        rendered = value.isoformat().encode("ascii")
+    elif isinstance(value, (list, tuple)):
+        nested = hashlib.sha256()
+        for item in value:
+            _fingerprint_value(nested, item)
+        rendered = nested.digest()
+    elif isinstance(value, dict):
+        nested = hashlib.sha256()
+        for key in sorted(value, key=lambda item: repr(item)):
+            _fingerprint_value(nested, key)
+            _fingerprint_value(nested, value[key])
+        rendered = nested.digest()
+    else:
+        # Decimal, date, time and UUID values returned by DuckDB all have
+        # deterministic string forms within the exact DuckDB version bound in
+        # the manifest.  No rendered value is persisted or emitted.
+        rendered = str(value).encode("utf-8", errors="strict")
+    digest.update(len(type_name).to_bytes(2, "big"))
+    digest.update(type_name)
+    digest.update(len(rendered).to_bytes(8, "big"))
+    digest.update(rendered)
+
+
+def _logical_catalog_sha256(
+    connection: object, tables: Sequence[Mapping[str, object]]
+) -> str:
+    digest = hashlib.sha256(b"networkagent-local-logical-catalog-v1\0")
+    metadata_queries = (
+        (
+            "columns",
+            "SELECT table_schema, table_name, column_name, ordinal_position, "
+            "column_default, is_nullable, data_type, character_maximum_length, "
+            "numeric_precision, numeric_scale, datetime_precision, is_identity, "
+            "identity_generation, generation_expression "
+            "FROM information_schema.columns "
+            "WHERE table_schema NOT IN ('information_schema', 'pg_catalog') "
+            "ORDER BY table_schema, table_name, ordinal_position",
+        ),
+        (
+            "table_constraints",
+            "SELECT constraint_schema, constraint_name, table_schema, table_name, "
+            "constraint_type, is_deferrable, initially_deferred, enforced, "
+            "nulls_distinct FROM information_schema.table_constraints "
+            "WHERE table_schema NOT IN ('information_schema', 'pg_catalog') "
+            "ORDER BY table_schema, table_name, constraint_name",
+        ),
+        (
+            "key_column_usage",
+            "SELECT constraint_schema, constraint_name, table_schema, table_name, "
+            "column_name, ordinal_position, position_in_unique_constraint "
+            "FROM information_schema.key_column_usage "
+            "WHERE table_schema NOT IN ('information_schema', 'pg_catalog') "
+            "ORDER BY table_schema, table_name, constraint_name, ordinal_position",
+        ),
+        (
+            "referential_constraints",
+            "SELECT constraint_schema, constraint_name, unique_constraint_schema, "
+            "unique_constraint_name, match_option, update_rule, delete_rule "
+            "FROM information_schema.referential_constraints "
+            "ORDER BY constraint_schema, constraint_name",
+        ),
+        (
+            "check_constraints",
+            "SELECT constraint_schema, constraint_name, check_clause "
+            "FROM information_schema.check_constraints "
+            "ORDER BY constraint_schema, constraint_name",
+        ),
+        (
+            "indexes",
+            "SELECT schema_name, index_name, table_name, is_unique, is_primary, "
+            "expressions, sql FROM duckdb_indexes() "
+            "WHERE database_name = current_database() "
+            "ORDER BY schema_name, table_name, index_name",
+        ),
+        (
+            "sequences",
+            "SELECT schema_name, sequence_name, start_value, min_value, max_value, "
+            "increment_by, cycle, last_value, sql FROM duckdb_sequences() "
+            "WHERE database_name = current_database() "
+            "ORDER BY schema_name, sequence_name",
+        ),
+        (
+            "views",
+            "SELECT schema_name, view_name, column_count, sql, is_bound "
+            "FROM duckdb_views() WHERE database_name = current_database() "
+            "AND internal = false ORDER BY schema_name, view_name",
+        ),
+        (
+            "macros",
+            "SELECT schema_name, function_name, function_type, return_type, "
+            "parameters, parameter_types, varargs, macro_definition, "
+            "has_side_effects FROM duckdb_functions() "
+            "WHERE database_name = current_database() AND internal = false "
+            "ORDER BY schema_name, function_name, function_type",
+        ),
+    )
+    for label, query in metadata_queries:
+        _fingerprint_value(digest, label)
+        rows = connection.execute(
+            f"{query} LIMIT {_BACKUP_MAX_CATALOG_RECORDS + 1}"
+        ).fetchall()
+        if len(rows) > _BACKUP_MAX_CATALOG_RECORDS:
+            raise SafeCliError("backup_too_large")
+        for row in rows:
+            _fingerprint_value(digest, row)
+
+    for table in tables:
+        schema = _safe_catalog_identifier(table["schema"])
+        name = _safe_catalog_identifier(table["name"])
+        _fingerprint_value(digest, (schema, name))
+        cursor = connection.execute(
+            "SELECT * FROM "
+            f"{_quote_sql_identifier(schema)}.{_quote_sql_identifier(name)} "
+            "ORDER BY ALL"
+        )
+        while True:
+            rows = cursor.fetchmany(1024)
+            if not rows:
+                break
+            for row in rows:
+                _fingerprint_value(digest, row)
+    return digest.hexdigest()
+
+
+def _database_metadata(connection: object) -> dict[str, object]:
+    summary = _catalog_summary(connection)
+    local_schema = _schema_version(connection, "local_schema_metadata", required=True)
+    assurance_schema = _schema_version(
+        connection, "assurance_schema_metadata", required=False
+    )
+    version = connection.execute("PRAGMA version").fetchone()
+    storage = connection.execute(
+        "SELECT current_setting('storage_compatibility_version')"
+    ).fetchone()
+    if (
+        version is None
+        or not isinstance(version[0], str)
+        or not (1 <= len(version[0]) <= 64)
+        or storage is None
+        or not isinstance(storage[0], str)
+        or not (1 <= len(storage[0]) <= 64)
+    ):
+        raise SafeCliError("backup_failed")
+    return {
+        **summary,
+        "logical_sha256": _logical_catalog_sha256(connection, summary["tables"]),
+        "schemas": {"local": local_schema, "assurance": assurance_schema},
+        "duckdb": {
+            "library_version": version[0],
+            "storage_version": storage[0],
+        },
+    }
+
+
+def _looks_like_lock_error(error: BaseException) -> bool:
+    rendered = str(error).lower()
+    return "lock" in rendered or any(
+        marker in rendered
+        for marker in (
+            "another process",
+            "conflicting lock",
+            "could not set lock",
+            "database is locked",
+            "file is already open",
+            "file handle conflict",
+            "cannot open file",
+            "being used by another process",
+        )
+    )
+
+
+def _validate_database_sidecars(
+    database_path: Path, *, invalid_code: str, allow_wal: bool
+) -> None:
+    wal_path = Path(f"{database_path}.wal")
+    if wal_path.exists() or _is_link_like(wal_path):
+        _safe_file_stat(wal_path, invalid_code=invalid_code)
+        if not allow_wal:
+            raise SafeCliError(invalid_code)
+    temp_path = Path(f"{database_path}.tmp")
+    if temp_path.exists() or _is_link_like(temp_path):
+        # All maintenance connections disable spilling.  A pre-existing temp
+        # sidecar is therefore never required and is not traversed or removed.
+        raise SafeCliError(invalid_code)
+
+
+def _duckdb_connect(
+    duckdb_module: object,
+    database_path: Path,
+    *,
+    read_only: bool,
+    allow_attach: bool = False,
+) -> object:
+    config = {
+        "autoinstall_known_extensions": "false",
+        "autoload_known_extensions": "false",
+        "enable_external_access": "true" if allow_attach else "false",
+        "max_temp_directory_size": "0B",
+    }
+    return duckdb_module.connect(str(database_path), read_only=read_only, config=config)
+
+
+@contextmanager
+def _maintenance_lock(workspace: "Workspace") -> Iterator[None]:
+    workspace.marker()
+    workspace._validate_owned_directory(workspace.state_dir)
+    lock_path = workspace.state_dir / _MAINTENANCE_LOCK_NAME
+    if lock_path.exists() or _is_link_like(lock_path):
+        _safe_file_stat(lock_path, invalid_code="unsafe_workspace")
+    flags = (
+        os.O_RDWR
+        | os.O_CREAT
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_NOINHERIT", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        descriptor = os.open(lock_path, flags, 0o600)
+        handle = os.fdopen(descriptor, "r+b")
+    except OSError:
+        raise SafeCliError("workspace_busy") from None
+    acquired = False
+    try:
+        metadata = os.fstat(handle.fileno())
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            raise SafeCliError("unsafe_workspace")
+        path_metadata = _safe_file_stat(lock_path, invalid_code="unsafe_workspace")
+        if (metadata.st_dev, metadata.st_ino) != (
+            path_metadata.st_dev,
+            path_metadata.st_ino,
+        ):
+            raise SafeCliError("unsafe_workspace")
+        if metadata.st_size == 0:
+            handle.write(b"0")
+            handle.flush()
+            os.fsync(handle.fileno())
+        handle.seek(0)
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            acquired = True
+        except (OSError, ImportError):
+            raise SafeCliError("workspace_busy") from None
+        yield
+    finally:
+        if acquired:
+            try:
+                handle.seek(0)
+                if os.name == "nt":
+                    import msvcrt
+
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            except (OSError, ImportError):
+                pass
+        handle.close()
+
+
+def _fsync_directory(path: Path) -> None:
+    if os.name == "nt":
+        return
+    try:
+        descriptor = os.open(path, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    except OSError:
+        pass
+    finally:
+        os.close(descriptor)
+
+
+def _publish_directory_no_replace(source: Path, destination: Path) -> None:
+    """Atomically publish a directory while refusing an existing target."""
+
+    if os.name == "nt":
+        try:
+            os.rename(source, destination)
+            return
+        except FileExistsError:
+            raise SafeCliError("backup_exists") from None
+        except OSError as error:
+            if getattr(error, "winerror", None) in {80, 183}:
+                raise SafeCliError("backup_exists") from None
+            raise SafeCliError("backup_failed") from None
+
+    encoded_source = os.fsencode(source)
+    encoded_destination = os.fsencode(destination)
+    library = ctypes.CDLL(None, use_errno=True)
+    renameat2 = getattr(library, "renameat2", None)
+    if renameat2 is not None:
+        renameat2.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        renameat2.restype = ctypes.c_int
+        result = renameat2(
+            -100,
+            encoded_source,
+            -100,
+            encoded_destination,
+            1,
+        )
+    else:
+        renamex_np = getattr(library, "renamex_np", None)
+        if renamex_np is None:
+            raise SafeCliError("backup_failed")
+        renamex_np.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+        renamex_np.restype = ctypes.c_int
+        result = renamex_np(encoded_source, encoded_destination, 0x00000004)
+    if result == 0:
+        return
+    error_number = ctypes.get_errno()
+    if error_number in {errno.EEXIST, errno.ENOTEMPTY}:
+        raise SafeCliError("backup_exists")
+    raise SafeCliError("backup_failed")
+
+
+def _require_exact_keys(
+    value: object, keys: set[str], *, invalid_code: str
+) -> dict[str, object]:
+    if not isinstance(value, dict) or set(value) != keys:
+        raise SafeCliError(invalid_code)
+    return value
+
+
+def _validate_manifest(value: object) -> dict[str, object]:
+    manifest = _require_exact_keys(
+        value,
+        {
+            "backup_id",
+            "catalog",
+            "created_at",
+            "database",
+            "duckdb",
+            "schema",
+            "schemas",
+            "source",
+        },
+        invalid_code="backup_invalid",
+    )
+    if manifest["schema"] != BACKUP_SCHEMA_VERSION:
+        raise SafeCliError("backup_invalid")
+    try:
+        parsed_id = uuid.UUID(str(manifest["backup_id"]))
+    except (ValueError, TypeError, AttributeError):
+        raise SafeCliError("backup_invalid") from None
+    if str(parsed_id) != manifest["backup_id"]:
+        raise SafeCliError("backup_invalid")
+    created_at = manifest["created_at"]
+    if not isinstance(created_at, str):
+        raise SafeCliError("backup_invalid")
+    try:
+        parsed_time = datetime.strptime(created_at, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=UTC
+        )
+    except ValueError:
+        raise SafeCliError("backup_invalid") from None
+    if parsed_time.strftime("%Y-%m-%dT%H:%M:%SZ") != created_at:
+        raise SafeCliError("backup_invalid")
+
+    source = _require_exact_keys(
+        manifest["source"], {"workspace_marker_sha256"}, invalid_code="backup_invalid"
+    )
+    if not _is_sha256(source["workspace_marker_sha256"]):
+        raise SafeCliError("backup_invalid")
+    schemas = _require_exact_keys(
+        manifest["schemas"], {"assurance", "local"}, invalid_code="backup_invalid"
+    )
+    if not isinstance(schemas["local"], str) or not (1 <= len(schemas["local"]) <= 32):
+        raise SafeCliError("backup_invalid")
+    if schemas["assurance"] is not None and (
+        not isinstance(schemas["assurance"], str)
+        or not (1 <= len(schemas["assurance"]) <= 32)
+    ):
+        raise SafeCliError("backup_invalid")
+    duckdb_metadata = _require_exact_keys(
+        manifest["duckdb"],
+        {"library_version", "storage_version"},
+        invalid_code="backup_invalid",
+    )
+    if not all(
+        isinstance(duckdb_metadata[field], str)
+        and 1 <= len(duckdb_metadata[field]) <= 64
+        for field in ("library_version", "storage_version")
+    ):
+        raise SafeCliError("backup_invalid")
+    database = _require_exact_keys(
+        manifest["database"],
+        {"bytes", "checkpointed", "filename", "sha256"},
+        invalid_code="backup_invalid",
+    )
+    if database["filename"] != BACKUP_DATABASE_NAME:
+        raise SafeCliError("backup_invalid")
+    if type(database["bytes"]) is not int or not (
+        1 <= database["bytes"] <= _BACKUP_MAX_DATABASE_BYTES
+    ):
+        raise SafeCliError("backup_invalid")
+    if not _is_sha256(database["sha256"]) or database["checkpointed"] is not True:
+        raise SafeCliError("backup_invalid")
+
+    catalog = _require_exact_keys(
+        manifest["catalog"],
+        {
+            "logical_equivalence",
+            "logical_sha256",
+            "row_count",
+            "schema_count",
+            "table_count",
+            "tables",
+            "view_count",
+        },
+        invalid_code="backup_invalid",
+    )
+    if catalog["logical_equivalence"] is not True:
+        raise SafeCliError("backup_invalid")
+    if not _is_sha256(catalog["logical_sha256"]):
+        raise SafeCliError("backup_invalid")
+    for field in ("row_count", "schema_count", "table_count", "view_count"):
+        if type(catalog[field]) is not int or catalog[field] < 0:
+            raise SafeCliError("backup_invalid")
+    if (
+        catalog["row_count"] > _BACKUP_MAX_ROWS
+        or catalog["schema_count"] > _BACKUP_MAX_SCHEMAS
+        or catalog["table_count"] > _BACKUP_MAX_TABLES
+        or catalog["view_count"] > _BACKUP_MAX_VIEWS
+    ):
+        raise SafeCliError("backup_too_large")
+    raw_tables = catalog["tables"]
+    if (
+        not isinstance(raw_tables, list)
+        or not raw_tables
+        or len(raw_tables) > _BACKUP_MAX_TABLES
+    ):
+        raise SafeCliError("backup_invalid")
+    tables: list[dict[str, object]] = []
+    for raw_table in raw_tables:
+        table = _require_exact_keys(
+            raw_table, {"name", "rows", "schema"}, invalid_code="backup_invalid"
+        )
+        try:
+            schema = _safe_catalog_identifier(table["schema"])
+            name = _safe_catalog_identifier(table["name"])
+        except SafeCliError:
+            raise SafeCliError("backup_invalid") from None
+        if type(table["rows"]) is not int or table["rows"] < 0:
+            raise SafeCliError("backup_invalid")
+        tables.append({"schema": schema, "name": name, "rows": table["rows"]})
+    if tables != sorted(
+        tables, key=lambda item: (str(item["schema"]), str(item["name"]))
+    ):
+        raise SafeCliError("backup_invalid")
+    if len({(table["schema"], table["name"]) for table in tables}) != len(tables):
+        raise SafeCliError("backup_invalid")
+    if catalog["table_count"] != len(tables):
+        raise SafeCliError("backup_invalid")
+    if catalog["schema_count"] != len({str(table["schema"]) for table in tables}):
+        # The Local profile currently has no view-only schemas.  Requiring
+        # this exact relation keeps the compact manifest independently
+        # checkable without trusting unlisted catalog objects.
+        raise SafeCliError("backup_invalid")
+    if catalog["row_count"] != sum(int(table["rows"]) for table in tables):
+        raise SafeCliError("backup_invalid")
+    return manifest
+
+
+def _strict_local_identity(
+    identity: tuple[int, int], *, invalid_code: str
+) -> list[int]:
+    device, inode = identity
+    if type(device) is not int or type(inode) is not int or device < 0 or inode <= 0:
+        raise SafeCliError(invalid_code)
+    return [device, inode]
+
+
+def _local_backup_ownership_sha256(
+    directory: Path,
+    *,
+    expected_directory: tuple[int, int],
+    expected_children: Mapping[str, tuple[int, int]],
+) -> str:
+    """Bind outer-process cleanup to this exact local published tree.
+
+    The digest is process-local cleanup metadata, not portable backup evidence.
+    It deliberately contains no path or raw filesystem identity in public JSON.
+    """
+
+    expected_names = {BACKUP_DATABASE_NAME, BACKUP_MANIFEST_NAME}
+    if set(expected_children) != expected_names:
+        raise SafeCliError("backup_failed")
+    _strict_local_identity(expected_directory, invalid_code="backup_failed")
+    _exact_backup_entries(directory, invalid_code="backup_failed")
+    actual_directory = _directory_identity(directory, invalid_code="backup_failed")
+    if actual_directory != expected_directory:
+        raise SafeCliError("backup_failed")
+    entries: list[list[object]] = [
+        [
+            "directory",
+            *_strict_local_identity(actual_directory, invalid_code="backup_failed"),
+        ]
+    ]
+    for name in (BACKUP_DATABASE_NAME, BACKUP_MANIFEST_NAME):
+        expected = expected_children[name]
+        _strict_local_identity(expected, invalid_code="backup_failed")
+        metadata = _require_file_identity(
+            directory / name, expected, invalid_code="backup_failed"
+        )
+        entries.append(
+            [
+                name,
+                *_strict_local_identity(
+                    _file_identity(metadata), invalid_code="backup_failed"
+                ),
+            ]
+        )
+
+    # Recheck the exact closure and identities immediately before constructing
+    # the response so an outer wrapper never adopts a same-content replacement.
+    _exact_backup_entries(directory, invalid_code="backup_failed")
+    _require_directory_identity(
+        directory, expected_directory, invalid_code="backup_failed"
+    )
+    for name in (BACKUP_DATABASE_NAME, BACKUP_MANIFEST_NAME):
+        _require_file_identity(
+            directory / name,
+            expected_children[name],
+            invalid_code="backup_failed",
+        )
+    encoded = json.dumps(
+        entries,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("ascii")
+    return hashlib.sha256(_LOCAL_BACKUP_OWNERSHIP_DOMAIN + encoded).hexdigest()
+
+
+def _backup_public_summary(
+    manifest: Mapping[str, object],
+    *,
+    manifest_bytes: int,
+    manifest_sha256: str,
+    local_ownership_sha256: str,
+    changed: bool,
+) -> dict[str, object]:
+    database = manifest["database"]
+    catalog = manifest["catalog"]
+    assert isinstance(database, Mapping)
+    assert isinstance(catalog, Mapping)
+    if not _is_sha256(local_ownership_sha256):
+        raise SafeCliError("backup_failed")
+    return {
+        "schema": BACKUP_SCHEMA_VERSION,
+        "changed": changed,
+        "manifest": {
+            "filename": BACKUP_MANIFEST_NAME,
+            "bytes": manifest_bytes,
+            "sha256": manifest_sha256,
+        },
+        "database": {
+            "filename": BACKUP_DATABASE_NAME,
+            "bytes": database["bytes"],
+            "sha256": database["sha256"],
+        },
+        "catalog": {
+            "schema_count": catalog["schema_count"],
+            "table_count": catalog["table_count"],
+            "view_count": catalog["view_count"],
+        },
+        "tables": catalog["tables"],
+        "row_count": catalog["row_count"],
+        "checkpointed": True,
+        "logical_equivalence": True,
+        "local_ownership_sha256": local_ownership_sha256,
+    }
+
+
+def _restore_public_summary(
+    manifest: Mapping[str, object],
+    *,
+    manifest_sha256: str,
+    changed: bool,
+) -> dict[str, object]:
+    database = manifest["database"]
+    catalog = manifest["catalog"]
+    assert isinstance(database, Mapping)
+    assert isinstance(catalog, Mapping)
+    return {
+        "schema": BACKUP_SCHEMA_VERSION,
+        "changed": changed,
+        "manifest_sha256": manifest_sha256,
+        "database_sha256": database["sha256"],
+        "catalog": {
+            "schema_count": catalog["schema_count"],
+            "table_count": catalog["table_count"],
+            "view_count": catalog["view_count"],
+        },
+        "tables": catalog["tables"],
+        "row_count": catalog["row_count"],
+        "verified": True,
+    }
+
+
+def _exact_backup_entries(directory: Path, *, invalid_code: str) -> None:
+    try:
+        names = {entry.name for entry in directory.iterdir()}
+    except OSError:
+        raise SafeCliError(invalid_code) from None
+    if names != {BACKUP_DATABASE_NAME, BACKUP_MANIFEST_NAME}:
+        raise SafeCliError(invalid_code)
+
+
+def _reject_duplicate_json_pairs(
+    pairs: list[tuple[str, object]],
+) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON member")
+        result[key] = value
+    return result
+
+
+def _load_and_verify_backup(
+    directory: Path,
+) -> tuple[dict[str, object], int, str]:
+    _exact_backup_entries(directory, invalid_code="backup_invalid")
+    manifest_path = directory / BACKUP_MANIFEST_NAME
+    database_path = directory / BACKUP_DATABASE_NAME
+    manifest_raw, manifest_sha256 = _bounded_file_bytes(
+        manifest_path,
+        maximum_bytes=_BACKUP_MAX_MANIFEST_BYTES,
+        invalid_code="backup_invalid",
+        too_large_code="backup_too_large",
+    )
+    if not manifest_raw:
+        raise SafeCliError("backup_invalid")
+    try:
+        decoded = manifest_raw.decode("utf-8", errors="strict")
+        manifest_value = json.loads(
+            decoded, object_pairs_hook=_reject_duplicate_json_pairs
+        )
+    except (UnicodeError, json.JSONDecodeError, ValueError):
+        raise SafeCliError("backup_invalid") from None
+    manifest = _validate_manifest(manifest_value)
+    try:
+        canonical = _canonical_json_bytes(manifest)
+    except SafeCliError:
+        raise SafeCliError("backup_invalid") from None
+    if manifest_raw != canonical:
+        raise SafeCliError("backup_invalid")
+
+    database = manifest["database"]
+    assert isinstance(database, Mapping)
+    database_bytes, database_sha256 = _bounded_file_sha256(
+        database_path,
+        maximum_bytes=_BACKUP_MAX_DATABASE_BYTES,
+        invalid_code="backup_invalid",
+        too_large_code="backup_too_large",
+    )
+    if database_bytes != database["bytes"] or database_sha256 != database["sha256"]:
+        raise SafeCliError("backup_invalid")
+
+    database_snapshot = _safe_file_stat(database_path, invalid_code="backup_invalid")
+    _validate_database_sidecars(
+        database_path, invalid_code="backup_invalid", allow_wal=False
+    )
+    try:
+        import duckdb
+
+        connection = _duckdb_connect(duckdb, database_path, read_only=True)
+        try:
+            actual = _database_metadata(connection)
+        finally:
+            connection.close()
+    except SafeCliError:
+        raise SafeCliError("backup_invalid") from None
+    except Exception:
+        raise SafeCliError("backup_invalid") from None
+    database_after = _safe_file_stat(database_path, invalid_code="backup_invalid")
+    if not _same_file_snapshot(database_snapshot, database_after):
+        raise SafeCliError("backup_invalid")
+    catalog = manifest["catalog"]
+    assert isinstance(catalog, Mapping)
+    if (
+        actual["catalog"]
+        != {
+            "schema_count": catalog["schema_count"],
+            "table_count": catalog["table_count"],
+            "view_count": catalog["view_count"],
+        }
+        or actual["tables"] != catalog["tables"]
+        or actual["row_count"] != catalog["row_count"]
+        or actual["schemas"] != manifest["schemas"]
+        or actual["duckdb"] != manifest["duckdb"]
+        or actual["logical_sha256"] != catalog["logical_sha256"]
+    ):
+        raise SafeCliError("backup_invalid")
+    _exact_backup_entries(directory, invalid_code="backup_invalid")
+    return manifest, len(manifest_raw), manifest_sha256
+
+
+def _cleanup_partial_backup(
+    directory: Path,
+    *,
+    expected_identity: tuple[int, int],
+    expected_children: Mapping[str, tuple[int, int]],
+) -> None:
+    if not directory.exists() and not _is_link_like(directory):
+        return
+    try:
+        if _is_link_like(directory) or not directory.is_dir():
+            raise SafeCliError("unsafe_workspace")
+        metadata = directory.stat(follow_symlinks=False)
+        if (metadata.st_dev, metadata.st_ino) != expected_identity:
+            raise SafeCliError("backup_failed")
+        names = {entry.name for entry in directory.iterdir()}
+    except SafeCliError:
+        raise
+    except OSError:
+        raise SafeCliError("backup_failed") from None
+    if not names.issubset(set(expected_children)):
+        raise SafeCliError("backup_failed")
+    # Validate every child before deleting any child.  A same-name replacement
+    # is preserved and turns cleanup into a safe failure.
+    for name in sorted(names):
+        _require_file_identity(
+            directory / name,
+            expected_children[name],
+            invalid_code="backup_failed",
+        )
+    _require_directory_identity(
+        directory, expected_identity, invalid_code="backup_failed"
+    )
+    for name in sorted(names):
+        _unlink_file_identity(
+            directory / name,
+            expected_children[name],
+            invalid_code="backup_failed",
+            failure_code="backup_failed",
+        )
+    _require_directory_identity(
+        directory, expected_identity, invalid_code="backup_failed"
+    )
+    try:
+        directory.rmdir()
+    except OSError:
+        raise SafeCliError("backup_failed") from None
+
+
+def _write_new_file(
+    path: Path, payload: bytes, *, failure_code: str
+) -> tuple[int, int]:
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_NOINHERIT", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    created_identity: tuple[int, int] | None = None
+    try:
+        descriptor = os.open(path, flags, 0o600)
+        with os.fdopen(descriptor, "wb") as handle:
+            metadata = os.fstat(handle.fileno())
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                raise SafeCliError(failure_code)
+            created_identity = _file_identity(metadata)
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+            if os.name != "nt":
+                os.fchmod(handle.fileno(), 0o600)
+            if _file_identity(os.fstat(handle.fileno())) != created_identity:
+                raise SafeCliError(failure_code)
+        _require_file_identity(path, created_identity, invalid_code=failure_code)
+        return created_identity
+    except BaseException as error:
+        if created_identity is not None and (path.exists() or _is_link_like(path)):
+            try:
+                _unlink_file_identity(
+                    path,
+                    created_identity,
+                    invalid_code=failure_code,
+                    failure_code=failure_code,
+                )
+            except SafeCliError:
+                raise SafeCliError(failure_code) from None
+        if isinstance(error, SafeCliError):
+            raise
+        raise SafeCliError(failure_code) from None
+
+
+def _copy_database_to_restore_temp(
+    source: Path,
+    target: Path,
+    *,
+    expected_bytes: int,
+    expected_sha256: str,
+) -> tuple[int, int]:
+    source_before = _safe_file_stat(source, invalid_code="backup_invalid")
+    if source_before.st_size != expected_bytes:
+        raise SafeCliError("backup_invalid")
+    if target.exists() or _is_link_like(target):
+        # A fixed-name temp from another invocation has no current-operation
+        # identity.  Preserve it and fail closed instead of deleting it.
+        _safe_file_stat(target, invalid_code="unsafe_workspace")
+        raise SafeCliError("restore_failed")
+
+    source_flags = (
+        os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    )
+    target_flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_NOINHERIT", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    digest = hashlib.sha256()
+    copied = 0
+    target_identity: tuple[int, int] | None = None
+    try:
+        source_descriptor = os.open(source, source_flags)
+        opened_source = os.fstat(source_descriptor)
+        if not _same_file_snapshot(source_before, opened_source):
+            os.close(source_descriptor)
+            raise SafeCliError("backup_invalid")
+        try:
+            target_descriptor = os.open(target, target_flags, 0o600)
+        except OSError:
+            os.close(source_descriptor)
+            raise
+        with os.fdopen(source_descriptor, "rb") as source_handle, os.fdopen(
+            target_descriptor, "wb"
+        ) as target_handle:
+            target_metadata = os.fstat(target_handle.fileno())
+            if (
+                not stat.S_ISREG(target_metadata.st_mode)
+                or target_metadata.st_nlink != 1
+            ):
+                raise SafeCliError("restore_failed")
+            target_identity = _file_identity(target_metadata)
+            while True:
+                chunk = source_handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                copied += len(chunk)
+                if copied > _BACKUP_MAX_DATABASE_BYTES:
+                    raise SafeCliError("backup_too_large")
+                digest.update(chunk)
+                target_handle.write(chunk)
+            target_handle.flush()
+            os.fsync(target_handle.fileno())
+            if os.name != "nt":
+                os.fchmod(target_handle.fileno(), 0o600)
+            if _file_identity(os.fstat(target_handle.fileno())) != target_identity:
+                raise SafeCliError("restore_failed")
+            opened_source_after = os.fstat(source_handle.fileno())
+    except BaseException as error:
+        if target_identity is not None and (target.exists() or _is_link_like(target)):
+            try:
+                _unlink_file_identity(
+                    target,
+                    target_identity,
+                    invalid_code="restore_failed",
+                    failure_code="restore_failed",
+                )
+            except SafeCliError:
+                raise SafeCliError("restore_failed") from None
+        if isinstance(error, SafeCliError):
+            raise
+        raise SafeCliError("restore_failed") from None
+    try:
+        source_after = _safe_file_stat(source, invalid_code="backup_invalid")
+        if (
+            copied != expected_bytes
+            or digest.hexdigest() != expected_sha256
+            or not _same_file_snapshot(source_before, opened_source_after)
+            or not _same_file_snapshot(source_before, source_after)
+        ):
+            raise SafeCliError("backup_invalid")
+        target_bytes, target_sha256 = _bounded_file_sha256(
+            target,
+            maximum_bytes=_BACKUP_MAX_DATABASE_BYTES,
+            invalid_code="restore_failed",
+            too_large_code="backup_too_large",
+        )
+        if target_bytes != expected_bytes or target_sha256 != expected_sha256:
+            raise SafeCliError("restore_failed")
+        if target_identity is None:
+            raise SafeCliError("restore_failed")
+        _require_file_identity(target, target_identity, invalid_code="restore_failed")
+        return target_identity
+    except BaseException as error:
+        if target_identity is not None and (target.exists() or _is_link_like(target)):
+            try:
+                _unlink_file_identity(
+                    target,
+                    target_identity,
+                    invalid_code="restore_failed",
+                    failure_code="restore_failed",
+                )
+            except SafeCliError:
+                raise SafeCliError("restore_failed") from None
+        if isinstance(error, SafeCliError):
+            raise
+        raise SafeCliError("restore_failed") from None
+
+
 class Workspace:
     """One explicitly selected, marker-owned local workspace."""
 
@@ -226,21 +1568,49 @@ class Workspace:
         if not self.marker_path.is_file() or _is_link_like(self.marker_path):
             raise SafeCliError("workspace_not_initialized", exit_code=1)
         try:
-            value = json.loads(self.marker_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError):
+            marker_raw, _ = _bounded_file_bytes(
+                self.marker_path,
+                maximum_bytes=_BACKUP_MAX_MANIFEST_BYTES,
+                invalid_code="workspace_not_owned",
+                too_large_code="workspace_not_owned",
+            )
+            value = json.loads(
+                marker_raw.decode("utf-8", errors="strict"),
+                object_pairs_hook=_reject_duplicate_json_pairs,
+            )
+        except (
+            OSError,
+            UnicodeError,
+            json.JSONDecodeError,
+            ValueError,
+        ):
             raise SafeCliError("workspace_not_owned") from None
         if (
             not isinstance(value, dict)
+            or set(value) != {"kind", "owned_entries", "schema_version", "workspace_id"}
             or value.get("kind") != "networkagent-local-stack"
         ):
             raise SafeCliError("workspace_not_owned")
         if value.get("schema_version") != STACK_SCHEMA_VERSION:
             raise SafeCliError("workspace_not_owned")
         workspace_id = value.get("workspace_id")
+        if value.get("owned_entries") != ["state", "artifacts", MARKER_NAME]:
+            raise SafeCliError("workspace_not_owned")
         try:
             uuid.UUID(str(workspace_id))
         except (ValueError, TypeError, AttributeError):
             raise SafeCliError("workspace_not_owned") from None
+        canonical_marker = (
+            json.dumps(
+                value,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8")
+        if marker_raw != canonical_marker:
+            raise SafeCliError("workspace_not_owned")
         for target in (self.state_dir, self.artifacts_dir):
             if target.exists() or _is_link_like(target):
                 self._validate_owned_directory(target)
@@ -1102,6 +2472,555 @@ class LocalStackRuntime:
         except Exception:
             raise SafeCliError("runtime_failed") from None
 
+    def backup(self, *, destination: Path) -> dict[str, object]:
+        """Create one offline DuckDB COPY backup and publish it atomically."""
+
+        self.workspace.marker()
+        destination = _validate_backup_directory_path(
+            destination, workspace=self.workspace, must_exist=False
+        )
+        staging = destination.parent / (
+            f".networkagent-backup-{uuid.uuid4().hex}.partial"
+        )
+        try:
+            import duckdb
+        except Exception:
+            raise SafeCliError("dependencies_missing") from None
+
+        with _maintenance_lock(self.workspace):
+            # Recheck the externally selected path after acquiring the only
+            # cooperative maintenance writer lock.
+            destination = _validate_backup_directory_path(
+                destination, workspace=self.workspace, must_exist=False
+            )
+            parent_identity = _directory_identity(
+                destination.parent, invalid_code="unsafe_workspace"
+            )
+            database_path = self.workspace.database_path
+            if not database_path.exists() and not _is_link_like(database_path):
+                raise SafeCliError("workspace_not_initialized", exit_code=1)
+            source_metadata = _safe_file_stat(
+                database_path, invalid_code="unsafe_workspace"
+            )
+            _validate_database_sidecars(
+                database_path,
+                invalid_code="unsafe_workspace",
+                allow_wal=True,
+            )
+            if source_metadata.st_size > _BACKUP_MAX_DATABASE_BYTES:
+                raise SafeCliError("backup_too_large")
+            try:
+                free_bytes = shutil.disk_usage(destination.parent).free
+            except OSError:
+                raise SafeCliError("backup_failed") from None
+            if free_bytes < _BACKUP_MAX_DATABASE_BYTES + _BACKUP_MAX_MANIFEST_BYTES:
+                raise SafeCliError("backup_too_large")
+
+            staging_identity: tuple[int, int] | None = None
+            staging_children: dict[str, tuple[int, int]] = {}
+            staging_created = False
+            try:
+                staging.mkdir(mode=0o700)
+                staging_created = True
+                staging_metadata = staging.stat(follow_symlinks=False)
+                if not stat.S_ISDIR(staging_metadata.st_mode):
+                    raise SafeCliError("backup_failed")
+                staging_identity = (staging_metadata.st_dev, staging_metadata.st_ino)
+            except BaseException as error:
+                if staging_created:
+                    try:
+                        if staging_identity is not None:
+                            _cleanup_partial_backup(
+                                staging,
+                                expected_identity=staging_identity,
+                                expected_children=staging_children,
+                            )
+                    except (OSError, SafeCliError):
+                        raise SafeCliError("backup_failed") from None
+                if isinstance(error, SafeCliError):
+                    raise
+                raise SafeCliError("backup_failed") from None
+
+            connection = None
+            published = False
+            try:
+                if os.name != "nt":
+                    os.chmod(staging, 0o700, follow_symlinks=False)
+                if _is_link_like(staging):
+                    raise SafeCliError("backup_failed")
+                _require_directory_identity(
+                    destination.parent,
+                    parent_identity,
+                    invalid_code="unsafe_workspace",
+                )
+                connection = _duckdb_connect(
+                    duckdb,
+                    database_path,
+                    read_only=False,
+                    allow_attach=True,
+                )
+                connection.execute("CHECKPOINT")
+                source_database = connection.execute(
+                    "SELECT current_database()"
+                ).fetchone()
+                if (
+                    source_database is None
+                    or not isinstance(source_database[0], str)
+                    or not source_database[0]
+                ):
+                    raise SafeCliError("backup_failed")
+                copied_database = staging / BACKUP_DATABASE_NAME
+                connection.execute(
+                    "ATTACH "
+                    f"{_quote_sql_string(str(copied_database))} "
+                    "AS networkagent_backup"
+                )
+                if copied_database.exists() or _is_link_like(copied_database):
+                    _capture_partial_child(
+                        copied_database,
+                        staging_children,
+                        invalid_code="backup_failed",
+                    )
+                connection.execute("SET enable_external_access = false")
+                source = _database_metadata(connection)
+                connection.execute(
+                    "COPY FROM DATABASE "
+                    f"{_quote_sql_identifier(source_database[0])} "
+                    "TO networkagent_backup"
+                )
+                _capture_partial_child(
+                    copied_database,
+                    staging_children,
+                    invalid_code="backup_failed",
+                )
+                copied_wal = Path(f"{copied_database}.wal")
+                if copied_wal.exists() or _is_link_like(copied_wal):
+                    _capture_partial_child(
+                        copied_wal,
+                        staging_children,
+                        invalid_code="backup_failed",
+                    )
+                connection.execute("CHECKPOINT networkagent_backup")
+                _capture_partial_child(
+                    copied_database,
+                    staging_children,
+                    invalid_code="backup_failed",
+                )
+                if copied_wal.exists() or _is_link_like(copied_wal):
+                    _capture_partial_child(
+                        copied_wal,
+                        staging_children,
+                        invalid_code="backup_failed",
+                    )
+                connection.execute("DETACH networkagent_backup")
+                connection.close()
+                connection = None
+                _validate_database_sidecars(
+                    database_path,
+                    invalid_code="workspace_busy",
+                    allow_wal=False,
+                )
+                if os.name != "nt":
+                    os.chmod(copied_database, 0o600, follow_symlinks=False)
+
+                _validate_database_sidecars(
+                    copied_database,
+                    invalid_code="backup_failed",
+                    allow_wal=False,
+                )
+                copied_connection = _duckdb_connect(
+                    duckdb, copied_database, read_only=True
+                )
+                try:
+                    copied = _database_metadata(copied_connection)
+                finally:
+                    copied_connection.close()
+                if copied != source:
+                    raise SafeCliError("backup_failed")
+
+                database_bytes, database_sha256 = _bounded_file_sha256(
+                    copied_database,
+                    maximum_bytes=_BACKUP_MAX_DATABASE_BYTES,
+                    invalid_code="backup_failed",
+                    too_large_code="backup_too_large",
+                )
+                _, marker_sha256 = _bounded_file_sha256(
+                    self.workspace.marker_path,
+                    maximum_bytes=_BACKUP_MAX_MANIFEST_BYTES,
+                    invalid_code="unsafe_workspace",
+                    too_large_code="unsafe_workspace",
+                )
+                manifest = {
+                    "schema": BACKUP_SCHEMA_VERSION,
+                    "backup_id": str(uuid.uuid4()),
+                    "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "source": {"workspace_marker_sha256": marker_sha256},
+                    "schemas": source["schemas"],
+                    "duckdb": source["duckdb"],
+                    "database": {
+                        "filename": BACKUP_DATABASE_NAME,
+                        "bytes": database_bytes,
+                        "sha256": database_sha256,
+                        "checkpointed": True,
+                    },
+                    "catalog": {
+                        **source["catalog"],
+                        "tables": source["tables"],
+                        "row_count": source["row_count"],
+                        "logical_sha256": source["logical_sha256"],
+                        "logical_equivalence": True,
+                    },
+                }
+                manifest_payload = _canonical_json_bytes(manifest)
+                if len(manifest_payload) > _BACKUP_MAX_MANIFEST_BYTES:
+                    raise SafeCliError("backup_too_large")
+                _require_directory_identity(
+                    destination.parent,
+                    parent_identity,
+                    invalid_code="unsafe_workspace",
+                )
+                _require_directory_identity(
+                    staging,
+                    staging_identity,
+                    invalid_code="backup_failed",
+                )
+                staging_children[BACKUP_MANIFEST_NAME] = _write_new_file(
+                    staging / BACKUP_MANIFEST_NAME,
+                    manifest_payload,
+                    failure_code="backup_failed",
+                )
+                _require_file_identity(
+                    copied_database,
+                    staging_children[BACKUP_DATABASE_NAME],
+                    invalid_code="backup_failed",
+                )
+                _fsync_directory(staging)
+                try:
+                    checked, manifest_bytes, manifest_sha256 = _load_and_verify_backup(
+                        staging
+                    )
+                except SafeCliError as error:
+                    if error.code == "backup_too_large":
+                        raise
+                    raise SafeCliError("backup_failed") from None
+
+                _validate_backup_directory_path(
+                    destination, workspace=self.workspace, must_exist=False
+                )
+                _require_directory_identity(
+                    destination.parent,
+                    parent_identity,
+                    invalid_code="unsafe_workspace",
+                )
+                _require_directory_identity(
+                    staging,
+                    staging_identity,
+                    invalid_code="backup_failed",
+                )
+                for name in (BACKUP_DATABASE_NAME, BACKUP_MANIFEST_NAME):
+                    _require_file_identity(
+                        staging / name,
+                        staging_children[name],
+                        invalid_code="backup_failed",
+                    )
+                _publish_directory_no_replace(staging, destination)
+                published = True
+                _require_directory_identity(
+                    destination.parent,
+                    parent_identity,
+                    invalid_code="unsafe_workspace",
+                )
+                _require_directory_identity(
+                    destination,
+                    staging_identity,
+                    invalid_code="backup_failed",
+                )
+                for name in (BACKUP_DATABASE_NAME, BACKUP_MANIFEST_NAME):
+                    _require_file_identity(
+                        destination / name,
+                        staging_children[name],
+                        invalid_code="backup_failed",
+                    )
+                _fsync_directory(destination.parent)
+                local_ownership_sha256 = _local_backup_ownership_sha256(
+                    destination,
+                    expected_directory=staging_identity,
+                    expected_children={
+                        name: staging_children[name]
+                        for name in (BACKUP_DATABASE_NAME, BACKUP_MANIFEST_NAME)
+                    },
+                )
+                return _backup_public_summary(
+                    checked,
+                    manifest_bytes=manifest_bytes,
+                    manifest_sha256=manifest_sha256,
+                    local_ownership_sha256=local_ownership_sha256,
+                    changed=True,
+                )
+            except SafeCliError:
+                raise
+            except BaseException as error:
+                if _looks_like_lock_error(error):
+                    raise SafeCliError("workspace_busy") from None
+                raise SafeCliError("backup_failed") from None
+            finally:
+                if connection is not None:
+                    try:
+                        connection.close()
+                    except Exception:
+                        pass
+                if not published and staging_identity is not None:
+                    _cleanup_partial_backup(
+                        staging,
+                        expected_identity=staging_identity,
+                        expected_children=staging_children,
+                    )
+
+    def restore(
+        self,
+        *,
+        source: Path,
+        expected_manifest_sha256: str,
+    ) -> dict[str, object]:
+        """Verify and atomically restore one exact cold-backup database."""
+
+        if not _is_sha256(expected_manifest_sha256):
+            raise SafeCliError("invalid_arguments")
+        self.workspace.marker()
+        source = _validate_backup_directory_path(
+            source, workspace=self.workspace, must_exist=True
+        )
+        source_identity = _directory_identity(source, invalid_code="backup_invalid")
+        manifest, _, manifest_sha256 = _load_and_verify_backup(source)
+        _require_directory_identity(
+            source, source_identity, invalid_code="backup_invalid"
+        )
+        if manifest_sha256 != expected_manifest_sha256:
+            raise SafeCliError("manifest_mismatch")
+        database = manifest["database"]
+        assert isinstance(database, Mapping)
+        expected_bytes = int(database["bytes"])
+        expected_database_sha256 = str(database["sha256"])
+        source_database = source / BACKUP_DATABASE_NAME
+
+        try:
+            import duckdb
+        except Exception:
+            raise SafeCliError("dependencies_missing") from None
+
+        with _maintenance_lock(self.workspace):
+            # A second full validation closes the verify/use gap for ordinary
+            # local races before any workspace state can be replaced.
+            repeated_manifest, _, repeated_sha256 = _load_and_verify_backup(source)
+            _require_directory_identity(
+                source, source_identity, invalid_code="backup_invalid"
+            )
+            if (
+                repeated_sha256 != expected_manifest_sha256
+                or repeated_manifest != manifest
+            ):
+                raise SafeCliError("backup_invalid")
+            state_dir = self.workspace.state_dir
+            self.workspace._validate_owned_directory(state_dir)
+            state_identity = _directory_identity(
+                state_dir, invalid_code="unsafe_workspace"
+            )
+            database_path = self.workspace.database_path
+            restore_temp = state_dir / _RESTORE_TEMP_NAME
+
+            current_exists = database_path.exists() or _is_link_like(database_path)
+            current_database_identity: tuple[int, int] | None = None
+            checkpoint_succeeded = False
+            if current_exists:
+                _safe_file_stat(database_path, invalid_code="unsafe_workspace")
+                _validate_database_sidecars(
+                    database_path,
+                    invalid_code="unsafe_workspace",
+                    allow_wal=True,
+                )
+                current_connection = None
+                try:
+                    current_connection = _duckdb_connect(
+                        duckdb, database_path, read_only=False
+                    )
+                    current_connection.execute("CHECKPOINT")
+                    checkpoint_succeeded = True
+                except Exception as error:
+                    if _looks_like_lock_error(error):
+                        raise SafeCliError("workspace_busy") from None
+                    # A corrupt current database may be replaced by an already
+                    # verified backup, but a WAL that cannot be checkpointed
+                    # must never be discarded.
+                    wal_path = Path(f"{database_path}.wal")
+                    if wal_path.exists() or _is_link_like(wal_path):
+                        raise SafeCliError("restore_failed") from None
+                finally:
+                    if current_connection is not None:
+                        try:
+                            current_connection.close()
+                        except Exception:
+                            pass
+                wal_path = Path(f"{database_path}.wal")
+                if checkpoint_succeeded and (
+                    wal_path.exists() or _is_link_like(wal_path)
+                ):
+                    raise SafeCliError("workspace_busy")
+
+            if database_path.exists():
+                current = _safe_file_stat(
+                    database_path, invalid_code="unsafe_workspace"
+                )
+                current_database_identity = _file_identity(current)
+                if current.st_size == expected_bytes:
+                    _, current_sha256 = _bounded_file_sha256(
+                        database_path,
+                        maximum_bytes=_BACKUP_MAX_DATABASE_BYTES,
+                        invalid_code="restore_failed",
+                        too_large_code="backup_too_large",
+                    )
+                    if current_sha256 == expected_database_sha256:
+                        return _restore_public_summary(
+                            manifest,
+                            manifest_sha256=manifest_sha256,
+                            changed=False,
+                        )
+
+            try:
+                free_bytes = shutil.disk_usage(state_dir).free
+            except OSError:
+                raise SafeCliError("restore_failed") from None
+            if free_bytes < expected_bytes + 1024 * 1024:
+                raise SafeCliError("restore_failed")
+            restore_temp_identity: tuple[int, int] | None = None
+            try:
+                _require_directory_identity(
+                    source, source_identity, invalid_code="backup_invalid"
+                )
+                _exact_backup_entries(source, invalid_code="backup_invalid")
+                _, final_manifest_sha256 = _bounded_file_bytes(
+                    source / BACKUP_MANIFEST_NAME,
+                    maximum_bytes=_BACKUP_MAX_MANIFEST_BYTES,
+                    invalid_code="backup_invalid",
+                    too_large_code="backup_too_large",
+                )
+                if final_manifest_sha256 != expected_manifest_sha256:
+                    raise SafeCliError("backup_invalid")
+                _require_directory_identity(
+                    state_dir, state_identity, invalid_code="unsafe_workspace"
+                )
+                restore_temp_identity = _copy_database_to_restore_temp(
+                    source_database,
+                    restore_temp,
+                    expected_bytes=expected_bytes,
+                    expected_sha256=expected_database_sha256,
+                )
+                _validate_database_sidecars(
+                    restore_temp,
+                    invalid_code="restore_failed",
+                    allow_wal=False,
+                )
+                temporary_connection = _duckdb_connect(
+                    duckdb, restore_temp, read_only=True
+                )
+                try:
+                    temporary = _database_metadata(temporary_connection)
+                finally:
+                    temporary_connection.close()
+                catalog = manifest["catalog"]
+                assert isinstance(catalog, Mapping)
+                if (
+                    temporary["catalog"]
+                    != {
+                        "schema_count": catalog["schema_count"],
+                        "table_count": catalog["table_count"],
+                        "view_count": catalog["view_count"],
+                    }
+                    or temporary["tables"] != catalog["tables"]
+                    or temporary["row_count"] != catalog["row_count"]
+                    or temporary["schemas"] != manifest["schemas"]
+                    or temporary["duckdb"] != manifest["duckdb"]
+                    or temporary["logical_sha256"] != catalog["logical_sha256"]
+                ):
+                    raise SafeCliError("backup_invalid")
+                _require_directory_identity(
+                    source, source_identity, invalid_code="backup_invalid"
+                )
+                _exact_backup_entries(source, invalid_code="backup_invalid")
+                _, final_manifest_sha256 = _bounded_file_bytes(
+                    source / BACKUP_MANIFEST_NAME,
+                    maximum_bytes=_BACKUP_MAX_MANIFEST_BYTES,
+                    invalid_code="backup_invalid",
+                    too_large_code="backup_too_large",
+                )
+                if final_manifest_sha256 != expected_manifest_sha256:
+                    raise SafeCliError("backup_invalid")
+                final_temp_bytes, final_temp_sha256 = _bounded_file_sha256(
+                    restore_temp,
+                    maximum_bytes=_BACKUP_MAX_DATABASE_BYTES,
+                    invalid_code="restore_failed",
+                    too_large_code="backup_too_large",
+                )
+                if (
+                    final_temp_bytes != expected_bytes
+                    or final_temp_sha256 != expected_database_sha256
+                ):
+                    raise SafeCliError("restore_failed")
+                _require_directory_identity(
+                    state_dir, state_identity, invalid_code="unsafe_workspace"
+                )
+                if database_path.exists() or _is_link_like(database_path):
+                    if current_database_identity is None:
+                        raise SafeCliError("unsafe_workspace")
+                    _require_file_identity(
+                        database_path,
+                        current_database_identity,
+                        invalid_code="unsafe_workspace",
+                    )
+                elif current_database_identity is not None:
+                    raise SafeCliError("unsafe_workspace")
+                if restore_temp_identity is None:
+                    raise SafeCliError("restore_failed")
+                _require_file_identity(
+                    restore_temp,
+                    restore_temp_identity,
+                    invalid_code="restore_failed",
+                )
+                try:
+                    os.replace(restore_temp, database_path)
+                except OSError as error:
+                    if _looks_like_lock_error(error):
+                        raise SafeCliError("workspace_busy") from None
+                    raise SafeCliError("restore_failed") from None
+                _fsync_directory(state_dir)
+            finally:
+                if restore_temp.exists() or _is_link_like(restore_temp):
+                    if restore_temp_identity is None:
+                        _safe_file_stat(restore_temp, invalid_code="unsafe_workspace")
+                        raise SafeCliError("restore_failed")
+                    _unlink_file_identity(
+                        restore_temp,
+                        restore_temp_identity,
+                        invalid_code="unsafe_workspace",
+                        failure_code="restore_failed",
+                    )
+
+            restored_bytes, restored_sha256 = _bounded_file_sha256(
+                database_path,
+                maximum_bytes=_BACKUP_MAX_DATABASE_BYTES,
+                invalid_code="restore_failed",
+                too_large_code="backup_too_large",
+            )
+            if (
+                restored_bytes != expected_bytes
+                or restored_sha256 != expected_database_sha256
+            ):
+                raise SafeCliError("restore_failed")
+            return _restore_public_summary(
+                manifest,
+                manifest_sha256=manifest_sha256,
+                changed=True,
+            )
+
     def serve(self, *, port: int) -> None:
         if not _port_available(port):
             raise SafeCliError("port_unavailable")
@@ -1196,6 +3115,16 @@ def _parser() -> argparse.ArgumentParser:
     commands.add_parser(
         "serve", help="run the optional loopback A2A service in foreground"
     )
+    backup = commands.add_parser(
+        "backup", help="create one verified cold backup in a new directory"
+    )
+    backup.add_argument("--destination", type=Path, required=True)
+    restore = commands.add_parser(
+        "restore", help="verify and atomically restore one cold backup"
+    )
+    restore.add_argument("--source", type=Path, required=True)
+    restore.add_argument("--expected-manifest-sha256", required=True)
+    restore.add_argument("--yes", action="store_true")
     reset = commands.add_parser("reset", help="reset only marker-owned local state")
     reset.add_argument("--yes", action="store_true")
     return parser
@@ -1369,6 +3298,33 @@ def main(
             # This is intentionally foreground-only; no PID files or orphaned
             # background processes are created by local-stack.
             runtime.serve(port=arguments.port)
+            return 0
+        if arguments.command == "backup":
+            if arguments.action_mode != "disabled":
+                raise SafeCliError("actions_disabled")
+            result = runtime.backup(destination=arguments.destination)
+            _assert_project_safe(result)
+            _write_json(
+                output,
+                {"ok": True, "command": "backup", "result": result},
+            )
+            return 0
+        if arguments.command == "restore":
+            if arguments.action_mode != "disabled":
+                raise SafeCliError("actions_disabled")
+            if not arguments.yes:
+                raise SafeCliError("restore_confirmation_required", exit_code=1)
+            if not _is_sha256(arguments.expected_manifest_sha256):
+                raise SafeCliError("invalid_arguments")
+            result = runtime.restore(
+                source=arguments.source,
+                expected_manifest_sha256=arguments.expected_manifest_sha256,
+            )
+            _assert_project_safe(result)
+            _write_json(
+                output,
+                {"ok": True, "command": "restore", "result": result},
+            )
             return 0
         if arguments.command == "reset":
             marker = workspace.marker()

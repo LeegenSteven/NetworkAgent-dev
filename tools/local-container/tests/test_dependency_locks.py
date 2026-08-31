@@ -135,6 +135,11 @@ EXPECTED_RUNTIME_WHEELS = {
         "protobuf-7.36.0-cp310-abi3-manylinux2014_x86_64.whl",
         "70f5ec8eb0da81a44360c0dc0beac99a0d78071d21956a7076bae8bd2051841b",
     ),
+    "pyarrow": (
+        "25.0.0",
+        "pyarrow-25.0.0-cp312-cp312-manylinux_2_28_x86_64.whl",
+        "5d1dbf24e151042f2fa3c129563f65d66674128868496fb008c4272b16bdf778",
+    ),
     "pyasn1": (
         "0.6.4",
         "pyasn1-0.6.4-py3-none-any.whl",
@@ -285,7 +290,15 @@ def test_runtime_lock_covers_all_and_only_first_party_runtime_dependencies() -> 
             match = _DIRECT_NAME.match(requirement)
             assert match is not None
             build_backends.add(_canonical_name(match.group(1)))
-    assert direct == {"a2a-sdk", "duckdb", "pydantic", "pytz", "starlette", "uvicorn"}
+    assert direct == {
+        "a2a-sdk",
+        "duckdb",
+        "pyarrow",
+        "pydantic",
+        "pytz",
+        "starlette",
+        "uvicorn",
+    }
     assert direct < set(EXPECTED_RUNTIME_WHEELS)
     assert build_backends == {"setuptools"}
     assert build_backends < set(EXPECTED_BUILD_WHEELS)

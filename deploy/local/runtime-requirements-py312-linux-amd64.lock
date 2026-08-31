@@ -2,7 +2,8 @@
 # amd64 (Debian Bookworm / manylinux-compatible glibc).
 #
 # Every entry identifies the single target wheel and pins its SHA-256 from the
-# official PyPI release metadata (verified 2026-08-30).  py3-none-any and
+# official PyPI release metadata (existing entries verified 2026-08-30;
+# PyArrow verified 2026-08-31).  py3-none-any and
 # py2.py3-none-any wheels are intentional pure-Python artifacts; cp310/cp311
 # abi3 wheels are compatible with CPython 3.12.  No source distribution is
 # permitted.
@@ -70,6 +71,9 @@ proto-plus==1.28.4 \
 # wheel: protobuf-7.36.0-cp310-abi3-manylinux2014_x86_64.whl
 protobuf==7.36.0 \
     --hash=sha256:70f5ec8eb0da81a44360c0dc0beac99a0d78071d21956a7076bae8bd2051841b
+# wheel: pyarrow-25.0.0-cp312-cp312-manylinux_2_28_x86_64.whl
+pyarrow==25.0.0 \
+    --hash=sha256:5d1dbf24e151042f2fa3c129563f65d66674128868496fb008c4272b16bdf778
 # wheel: pyasn1-0.6.4-py3-none-any.whl
 pyasn1==0.6.4 \
     --hash=sha256:deda9277cfd454080ec40b207fb6df82206a3a2688735233cdcd8d3d565f088b

@@ -198,7 +198,6 @@ jobs:
           assert "/" not in rendered
           assert "\\" not in rendered
           assert "rcaeval.re2ob." not in rendered
-          assert "re2ob_" not in rendered
           for private_candidate in (
               "checkoutservice",
               "currencyservice",

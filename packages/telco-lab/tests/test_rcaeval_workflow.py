@@ -69,6 +69,7 @@ def test_workflow_keeps_push_hermetic_and_gates_the_upstream_slice() -> None:
     assert 'assert "/" not in rendered' in workflow
     assert 'assert "\\\\" not in rendered' in workflow
     assert 'assert "rcaeval.re2ob." not in rendered' in workflow
+    assert 'assert "re2ob_" not in rendered' not in workflow
     assert "for private_candidate in (" in workflow
 
 

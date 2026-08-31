@@ -2,6 +2,12 @@ name: telco-lab
 
 on:
   workflow_dispatch:
+    inputs:
+      run_rcaeval_upstream:
+        description: Run the pinned 53 MB RCAEval upstream slice on Python 3.12
+        required: true
+        default: false
+        type: boolean
   push:
     paths:
       - "packages/telco-domain/**"
@@ -35,7 +41,7 @@ permissions:
 jobs:
   local-data-lab:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       SOURCE_DATE_EPOCH: "946684800"
     strategy:
@@ -58,14 +64,192 @@ jobs:
       - name: Install the domain and lab packages
         run: |
           python -m pip install "pydantic==2.13.4"
+          python -m pip install --only-binary=:all: "pyarrow==25.0.0"
           python -m pip install -e "packages/telco-domain[test]"
           python -m pip install -e "packages/telco-lab[test]"
           python -c "from importlib.metadata import version; assert version('pydantic') == '2.13.4'"
+          python -c "from importlib.metadata import version; assert version('pyarrow') == '25.0.0'"
+          python - <<'PY'
+          from importlib.metadata import metadata
+
+          pyarrow_metadata = metadata("pyarrow")
+          assert pyarrow_metadata.get("License-Expression") == "Apache-2.0"
+          PY
       - name: Run hermetic lab, replay, and E2E tests without downloads
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
-          python -m pytest packages/telco-lab/tests tests/e2e/lab -q -p no:cacheprovider
+          python -m pytest packages/telco-lab/tests -q -p no:cacheprovider
+          python -m pytest tests/e2e/lab -q -p no:cacheprovider
+      - name: Run the explicitly approved pinned RCAEval upstream slice
+        if: github.event_name == 'workflow_dispatch' && inputs.run_rcaeval_upstream && matrix.python-version == '3.12'
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          test "$(git rev-parse --verify HEAD)" = "$GITHUB_SHA"
+          git diff --quiet
+          git diff --cached --quiet
+          rcaeval_workspace="$RUNNER_TEMP/rcaeval-upstream-workspace"
+          rcaeval_run="$RUNNER_TEMP/rcaeval-upstream-run.json"
+          rcaeval_offline="$RUNNER_TEMP/rcaeval-upstream-offline.json"
+          telco-lab --workspace "$rcaeval_workspace" run rcaeval-re2ob-multisource-rca --accept-license MIT > "$rcaeval_run"
+          telco-lab --workspace "$rcaeval_workspace" evaluate rcaeval-re2ob-multisource-rca > "$rcaeval_offline"
+          test "$(git rev-parse --verify HEAD)" = "$GITHUB_SHA"
+          git diff --quiet
+          git diff --cached --quiet
+          mkdir -p release-evidence
+          python - "$rcaeval_run" "$rcaeval_offline" <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          run_payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          offline_payload = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          assert run_payload["ok"] is offline_payload["ok"] is True
+          assert run_payload["mode"] == "fetch-and-evaluate"
+          assert offline_payload["mode"] == "offline-cache"
+          assert run_payload["result"] == offline_payload["result"]
+          result = run_payload["result"]
+          assert result["pipeline_id"] == "rcaeval-re2ob-multisource-rca"
+          assert result["classification"] == "PINNED_UPSTREAM_RCAEVAL_RE2OB_SLICE"
+          assert result["dataset"] == {
+              "artifact_count": 16,
+              "artifact_closure_sha256": (
+                  "c99ced28f1cb56464820a9570ead783de753c31ad36f5d7d29de594115101fb1"
+              ),
+              "catalog_id": "networkagent-open-data",
+              "catalog_version": "1.1.0",
+              "dataset_id": "rcaeval-re2ob-evaluation-slice",
+              "dataset_version": "afeacb11bcc94dadfd1c8f483ee4377b2b8b614e",
+              "license": {
+                  "attribution": "RCAEval dataset contributors",
+                  "evidence_sha256": (
+                      "c2990bbe2e040a8d2f55fdd47c4f47f02223d8ea098e5d6e8851585a64956a0f"
+                  ),
+                  "id": "MIT",
+              },
+              "sample_count": 5,
+              "total_bytes": 53433532,
+          }
+          protocol = result["protocol"]
+          assert protocol["answer_blind_ranking"] is True
+          assert protocol["commitment_created_before_answer_reveal"] is True
+          assert protocol["post_reveal_commitment_validation"] == "PASS"
+          assert protocol["ranking_reused_after_reveal"] is True
+          assert protocol["sealed_ranking_count"] == 5
+          assert protocol["ranking_algorithm"] == (
+              "networkagent-multisource-shift-v1"
+          )
+          assert protocol["externally_timestamped"] is False
+          assert re.fullmatch(
+              r"[0-9a-f]{64}", protocol["batch_commitment_sha256"]
+          )
+          expected_not_claimed = [
+              "COMPLETE_UPSTREAM_RCAEVAL_BENCHMARK",
+              "FULL_RCAEVAL_DATASET_COVERAGE",
+              "UPSTREAM_RCAEVAL_IMPLEMENTATION_PARITY",
+              "INDEPENDENT_EVIDENCE_LABEL_ANNOTATIONS",
+              "MALICIOUS_IN_PROCESS_RANKER_ISOLATION",
+              "PRODUCTION_RCA_ACCURACY",
+              "CROSS_DATASET_GENERALIZATION",
+              "STATISTICAL_SIGNIFICANCE_OR_GENERALIZATION",
+              "CAUSAL_IDENTIFICATION",
+              "LIVE_NETWORK_REMEDIATION",
+              "ONLINE_OR_STREAMING_EVALUATION",
+              "EXTERNALLY_TIMESTAMPED_COMMITMENT",
+              "CLOUD_OR_GCP_DEPLOYMENT",
+              "OPEN_TELEMETRY_OR_DISTRIBUTED_TRACE",
+              "UNIFIED_DASHBOARD",
+              "GATE_E_OR_G5_CLOSURE",
+              "P3E_OR_S7_OVERALL_CLOSURE",
+          ]
+          assert result["not_claimed"] == expected_not_claimed
+          assert result["privacy"]["status"] == "PASS"
+          assert run_payload["execution"]["runtime"]["pyarrow"] == "25.0.0"
+          assert offline_payload["execution"]["runtime"]["pyarrow"] == "25.0.0"
+          forbidden_keys = {
+              "candidate_id",
+              "case",
+              "case_id",
+              "evidence_id",
+              "evidence_ids",
+              "lock_id",
+              "path",
+              "raw",
+              "resource_id",
+              "seal",
+              "source_url",
+          }
+          def nested_keys(value):
+              if isinstance(value, dict):
+                  return set(value).union(*(nested_keys(item) for item in value.values()))
+              if isinstance(value, list):
+                  return set().union(*(nested_keys(item) for item in value))
+              return set()
+          assert nested_keys(result).isdisjoint(forbidden_keys)
+          rendered = json.dumps(result, allow_nan=False, sort_keys=True).lower()
+          assert "rcaslot-" not in rendered
+          assert "rcaevidence-" not in rendered
+          assert "lablock-" not in rendered
+          assert "https://" not in rendered
+          assert "http://" not in rendered
+          assert "/" not in rendered
+          assert "\\" not in rendered
+          assert "rcaeval.re2ob." not in rendered
+          assert "re2ob_" not in rendered
+          for private_candidate in (
+              "checkoutservice",
+              "currencyservice",
+              "emailservice",
+              "productcatalogservice",
+              "recommendationservice",
+          ):
+              assert private_candidate not in rendered
+          assert os.environ["RUNNER_TEMP"].lower() not in rendered
+          summary = {
+              "classification": "PINNED_UPSTREAM_RCAEVAL_RE2OB_SLICE",
+              "ok": True,
+              "result": result,
+              "schema": "networkagent-rcaeval-upstream-summary/1.0",
+              "source": {
+                  "commit_bound": True,
+                  "commit_sha": os.environ["GITHUB_SHA"],
+                  "tracked_clean": True,
+              },
+          }
+          summary_path = Path("release-evidence/rcaeval-upstream-summary.json")
+          summary_path.write_text(
+              json.dumps(
+                  summary,
+                  allow_nan=False,
+                  ensure_ascii=False,
+                  separators=(",", ":"),
+                  sort_keys=True,
+              ) + "\n",
+              encoding="utf-8",
+          )
+          persisted = json.loads(summary_path.read_text(encoding="utf-8"))
+          assert persisted == summary
+          reconstructed = (
+              json.dumps(
+                  persisted,
+                  allow_nan=False,
+                  ensure_ascii=False,
+                  separators=(",", ":"),
+                  sort_keys=True,
+              ).encode("utf-8")
+              + b"\n"
+          )
+          assert summary_path.read_bytes() == reconstructed
+          assert persisted["result"]["not_claimed"] == expected_not_claimed
+          assert persisted["source"] == {
+              "commit_bound": True,
+              "commit_sha": os.environ["GITHUB_SHA"],
+              "tracked_clean": True,
+          }
+          PY
       - name: Verify replay planning and loopback transport public exports
         run: |
           python - <<'PY'
@@ -137,18 +321,42 @@ jobs:
       - name: Prove the lab wheel contains no upstream dataset bytes
         run: |
           python - <<'PY'
+          from email.parser import Parser
           from pathlib import Path
           from zipfile import ZipFile
+
+          from packaging.requirements import Requirement
 
           wheels = tuple(Path("dist/lab").glob("*.whl"))
           assert len(wheels) == 1
           assert wheels[0].stat().st_size < 2 * 1024 * 1024
           prohibited_suffixes = {
-              ".csv", ".jsonl", ".parquet", ".pcap", ".pcapng",
-              ".zip", ".tar", ".gz", ".xz", ".7z",
+              ".7z", ".arrow", ".csv", ".feather", ".gz", ".ipc",
+              ".jsonl", ".orc", ".parquet", ".pcap", ".pcapng",
+              ".tar", ".xz", ".zip",
           }
           with ZipFile(wheels[0]) as archive:
               names = tuple(archive.namelist())
+              metadata_names = tuple(
+                  name for name in names if name.endswith(".dist-info/METADATA")
+              )
+              assert len(metadata_names) == 1
+              metadata = Parser().parsestr(
+                  archive.read(metadata_names[0]).decode("utf-8")
+              )
+          requirements = tuple(
+              Requirement(value)
+              for value in metadata.get_all("Requires-Dist", ())
+          )
+          pyarrow_requirements = tuple(
+              requirement
+              for requirement in requirements
+              if requirement.name == "pyarrow"
+          )
+          assert len(pyarrow_requirements) == 1
+          requirement = pyarrow_requirements[0]
+          assert requirement.name == "pyarrow"
+          assert str(requirement.specifier) == "<26,>=21"
           for name in names:
               lowered = name.casefold()
               assert "/tests/" not in lowered
@@ -242,12 +450,27 @@ jobs:
             "wheel>=0.45,<1"
           release_env="$RUNNER_TEMP/telco-lab-release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           python -m pip install \
+            --only-binary=:all: \
             --ignore-installed \
             --target "$release_env" \
             "pydantic==2.13.4" \
+            "pyarrow==25.0.0" \
             dist/domain/telco_domain-*.whl \
             dist/lab/telco_lab-*.whl
           mkdir -p release-evidence
+          python - <<'PY'
+          from pathlib import Path
+
+          assert not list(Path("release-evidence").rglob("*.parquet"))
+          assert not list(Path("release-evidence").rglob("*.arrow"))
+          assert not list(Path("release-evidence").rglob("*.feather"))
+          assert not list(Path("release-evidence").rglob("*.ipc"))
+          assert not list(Path("release-evidence").rglob("*.orc"))
+          PY
+          rcaeval_supplemental=()
+          if [ -f release-evidence/rcaeval-upstream-summary.json ]; then
+            rcaeval_supplemental=(--supplemental-evidence release-evidence/rcaeval-upstream-summary.json)
+          fi
           python .github/scripts/release_evidence.py inventory \
             --environment-path "$release_env" \
             --first-party "telco-domain" \
@@ -289,6 +512,39 @@ jobs:
           finalize_status=$?
           if [ "$finalize_status" -ne 0 ]; then sbom_status=2; fi
           set -e
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          inventory_path = Path("release-evidence/runtime-inventory.json")
+          inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+          pyarrow_packages = [
+              item
+              for item in inventory["packages"]
+              if item["normalized_name"] == "pyarrow"
+          ]
+          assert len(pyarrow_packages) == 1
+          pyarrow_package = pyarrow_packages[0]
+          assert pyarrow_package["normalized_name"] == "pyarrow"
+          assert pyarrow_package["scope"] == "runtime"
+          assert pyarrow_package["version"] == "25.0.0"
+          assert pyarrow_package["license_expression"] == "Apache-2.0"
+
+          sbom_path = Path("release-evidence/sbom.cdx.json")
+          sbom = json.loads(sbom_path.read_text(encoding="utf-8"))
+          components = {
+              item["name"].replace("_", "-").lower(): item
+              for item in sbom["components"]
+          }
+          pyarrow = components["pyarrow"]
+          telco_lab = components["telco-lab"]
+          assert pyarrow["version"] == "25.0.0"
+          dependencies = {
+              item["ref"]: item for item in sbom["dependencies"]
+          }
+          telco_lab_dependency = dependencies[telco_lab["bom-ref"]]
+          assert pyarrow["bom-ref"] in telco_lab_dependency["dependsOn"]
+          PY
           python .github/scripts/release_evidence.py manifest \
             --wheel-root dist \
             --evidence-root release-evidence \
@@ -306,6 +562,7 @@ jobs:
             --python-version "${{ matrix.python-version }}" \
             --artifact-name "$RELEASE_ARTIFACT_NAME" \
             --artifact-retention-days 14 \
+            "${rcaeval_supplemental[@]}" \
             --summary "$GITHUB_STEP_SUMMARY"
           python .github/scripts/release_evidence.py verify-manifest \
             --manifest release-evidence/release-manifest.json \
@@ -320,18 +577,31 @@ jobs:
             --expected-pip-audit-version "2.10.1" \
             --python-version "${{ matrix.python-version }}" \
             --artifact-name "$RELEASE_ARTIFACT_NAME" \
-            --artifact-retention-days 14
+            --artifact-retention-days 14 \
+            "${rcaeval_supplemental[@]}"
+      - name: Select fixed release or diagnostic upload paths
+        id: release_upload_paths
+        if: ${{ always() && matrix.python-version == '3.12' }}
+        env:
+          EVIDENCE_OUTCOME: ${{ steps.release_evidence.outcome }}
+        run: |
+          {
+            echo "paths<<EOF"
+            if [ "$EVIDENCE_OUTCOME" = "success" ] && python -c "import json; from pathlib import Path; raise SystemExit(0 if json.loads(Path('release-evidence/release-manifest.json').read_text())['status'] == 'PASS' else 1)"; then
+              echo "dist/domain/*.whl"
+              echo "dist/lab/*.whl"
+            fi
+            echo "release-evidence/*.json"
+            echo "release-evidence/*.txt"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
       - name: Upload release or diagnostic evidence
         id: release_artifact
         if: ${{ always() && matrix.python-version == '3.12' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: telco-lab-release-py3.12-attempt-${{ github.run_attempt }}
-          path: |
-            dist/domain/*.whl
-            dist/lab/*.whl
-            release-evidence/*.json
-            release-evidence/*.txt
+          path: ${{ steps.release_upload_paths.outputs.paths }}
           if-no-files-found: error
           retention-days: 14
       - name: Summarize uploaded artifact
@@ -371,13 +641,27 @@ jobs:
       - name: Install the declared minimum Pydantic boundary
         run: |
           python -m pip install "pydantic==2.5.3"
+          python -m pip install --only-binary=:all: "pyarrow==21.0.0"
           python -m pip install -e "packages/telco-domain[test]"
           python -m pip install -e "packages/telco-lab[test]"
           python -c "from importlib.metadata import version; assert version('pydantic') == '2.5.3'"
+          python -c "from importlib.metadata import version; assert version('pyarrow') == '21.0.0'"
+          python - <<'PY'
+          from importlib.metadata import metadata
+
+          pyarrow_metadata = metadata("pyarrow")
+          assert pyarrow_metadata.get("License-Expression") is None
+          assert pyarrow_metadata.get("License") == "Apache Software License"
+          assert (
+              "License :: OSI Approved :: Apache Software License"
+              in pyarrow_metadata.get_all("Classifier", ())
+          )
+          PY
       - name: Run the complete hermetic Lab and Replay suite
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
-          python -m pytest packages/telco-lab/tests tests/e2e/lab -q -p no:cacheprovider
+          python -m pytest packages/telco-lab/tests -q -p no:cacheprovider
+          python -m pytest tests/e2e/lab -q -p no:cacheprovider
       - name: Verify minimum-boundary dependency consistency
         run: python -m pip check

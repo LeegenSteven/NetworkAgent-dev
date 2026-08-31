@@ -12,6 +12,7 @@ license-files = ["THIRD_PARTY_DATA.md"]
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "pydantic>=2.5,<3",
+    "pyarrow>=21,<26",
     "telco-domain>=0.1,<0.2",
 ]
 

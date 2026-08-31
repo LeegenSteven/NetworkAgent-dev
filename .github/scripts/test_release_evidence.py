@@ -66,6 +66,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         name: str = "demo",
         version: str = "1.0.0",
         *,
+        requires_dist: tuple[str, ...] = (),
         extra_members: dict[str, bytes] | None = None,
         root: Path | None = None,
     ) -> Path:
@@ -73,10 +74,14 @@ class ReleaseEvidenceTests(unittest.TestCase):
         wheel_root.mkdir(parents=True, exist_ok=True)
         normalized = name.replace("-", "_")
         path = wheel_root / f"{normalized}-{version}-py3-none-any.whl"
+        requirement_headers = "".join(
+            f"Requires-Dist: {requirement}\n" for requirement in requires_dist
+        )
         members = {
             f"{normalized}/__init__.py": b"__version__ = '1.0.0'\n",
             f"{normalized}-{version}.dist-info/METADATA": (
                 f"Metadata-Version: 2.4\nName: {name}\nVersion: {version}\n"
+                f"{requirement_headers}"
             ).encode(),
             f"{normalized}-{version}.dist-info/WHEEL": (
                 b"Wheel-Version: 1.0\nGenerator: self-test\n"
@@ -127,7 +132,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                     },
                     first_party,
                 ],
-                "dependencies": [{"ref": first_party["bom-ref"]}],
+                "dependencies": [{"ref": first_party["bom-ref"], "dependsOn": []}],
             },
         )
         release_evidence._write_json(
@@ -217,6 +222,83 @@ class ReleaseEvidenceTests(unittest.TestCase):
             artifact_name=args.artifact_name,
             artifact_retention_days=args.artifact_retention_days,
             supplemental_evidence=getattr(args, "supplemental_evidence", []),
+        )
+
+    def _sbom_finalization_case(
+        self,
+        label: str,
+        *,
+        first_party: tuple[tuple[str, str, tuple[str, ...]], ...],
+        runtime: tuple[tuple[str, str], ...],
+    ) -> argparse.Namespace:
+        root = self.root / label
+        root.mkdir()
+        for name, version, requirements in first_party:
+            self._wheel(
+                name,
+                version,
+                requires_dist=requirements,
+                root=root,
+            )
+
+        environment = root / "runtime"
+        for name, version in (
+            *((name, version) for name, version, _ in first_party),
+            *runtime,
+        ):
+            metadata = environment / f"{name.replace('-', '_')}-{version}.dist-info"
+            metadata.mkdir(parents=True)
+            (metadata / "METADATA").write_text(
+                f"Metadata-Version: 2.4\nName: {name}\nVersion: {version}\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+
+        evidence = root / "release-evidence"
+        inventory = evidence / "runtime-inventory.json"
+        requirements = evidence / "runtime-requirements.txt"
+        self.assertEqual(
+            release_evidence.build_runtime_inventory(
+                argparse.Namespace(
+                    environment_path=environment,
+                    first_party=[name for name, _, _ in first_party],
+                    output=inventory,
+                    requirements_output=requirements,
+                )
+            ),
+            0,
+        )
+        raw_sbom = evidence / "pip-audit-sbom.cdx.json"
+        release_evidence._write_json(
+            raw_sbom,
+            {
+                "bomFormat": "CycloneDX",
+                "specVersion": release_evidence.CYCLONEDX_SPEC_VERSION,
+                "version": 1,
+                "components": [
+                    {
+                        "bom-ref": f"BomRef.{name}",
+                        "type": "library",
+                        "name": name,
+                        "version": version,
+                    }
+                    for name, version in runtime
+                ],
+                "dependencies": [
+                    {"ref": f"BomRef.{name}", "dependsOn": []} for name, _ in runtime
+                ],
+            },
+        )
+        return argparse.Namespace(
+            input=raw_sbom,
+            output=evidence / "sbom.cdx.json",
+            wheel_root=root / "dist",
+            expected_wheel=[
+                f"{name.replace('-', '_')}-{version}-*.whl"
+                for name, version, _ in first_party
+            ],
+            runtime_inventory=inventory,
+            runtime_requirements=requirements,
         )
 
     def test_positive_manifest_and_verification_pass(self) -> None:
@@ -395,6 +477,316 @@ class ReleaseEvidenceTests(unittest.TestCase):
             if item["ref"] == "pkg:pypi/third-party@2.0.0"
         )
         self.assertEqual(runtime_dependency["dependsOn"], [])
+
+    def test_first_party_dependency_edges_cover_runtime_and_wheels(self) -> None:
+        runtime_versions = (
+            ("a2a-sdk", "0.3.11"),
+            ("duckdb", "1.5.0"),
+            ("pydantic", "2.13.4"),
+            ("pyarrow", "25.0.0"),
+            ("pytz", "2026.3.post1"),
+            ("starlette", "0.49.0"),
+            ("uvicorn", "0.35.0"),
+        )
+        expected_first_party = (
+            "telco-domain",
+            "telco-lab",
+            "telco-local",
+            "telco-assurance-agent",
+            "no-dependencies",
+        )
+        expected_runtime = dict(runtime_versions)
+        args = self._sbom_finalization_case(
+            "first-party-edges",
+            first_party=(
+                (
+                    "telco-domain",
+                    "0.1.0",
+                    (
+                        'Pydantic>=2.5,<3; python_version >= "3" '
+                        'and python_version < "4"',
+                    ),
+                ),
+                (
+                    "telco-lab",
+                    "0.1.0",
+                    (
+                        "telco_domain>=0.1,<0.2",
+                        "pydantic>=2.5,<3",
+                        "pyarrow[dataset]>=21,<26",
+                        'not-installed>=1; python_version < "1"',
+                        'pytest>=7; extra == "test"',
+                    ),
+                ),
+                (
+                    "telco-local",
+                    "0.1.0",
+                    (
+                        "duckdb>=1.5,<2",
+                        "pydantic>=2.5,<3",
+                        "pytz>=2024.1,<2027",
+                        "telco-domain>=0.1,<0.2",
+                    ),
+                ),
+                (
+                    "telco-assurance-agent",
+                    "0.1.0",
+                    (
+                        "a2a-sdk[http-server]==0.3.11",
+                        "duckdb>=1.5,<2",
+                        "pydantic>=2.11,<3",
+                        "starlette>=0.41,<2",
+                        "telco-domain>=0.1,<0.2",
+                        "telco-lab>=0.1,<0.2",
+                        "telco-local>=0.1,<0.2",
+                        "uvicorn==0.35.0",
+                    ),
+                ),
+                ("no-dependencies", "1.0.0", ()),
+            ),
+            runtime=runtime_versions,
+        )
+
+        self.assertEqual(release_evidence.finalize_sbom(args), 0)
+        payload = json.loads(args.output.read_text(encoding="utf-8"))
+        components = {
+            release_evidence._normalize_distribution(item["name"]): item
+            for item in payload["components"]
+        }
+        dependencies = {item["ref"]: item for item in payload["dependencies"]}
+
+        domain_ref = components["telco-domain"]["bom-ref"]
+        lab_ref = components["telco-lab"]["bom-ref"]
+        local_ref = components["telco-local"]["bom-ref"]
+        assurance_ref = components["telco-assurance-agent"]["bom-ref"]
+        no_dependencies_ref = components["no-dependencies"]["bom-ref"]
+        a2a_ref = components["a2a-sdk"]["bom-ref"]
+        duckdb_ref = components["duckdb"]["bom-ref"]
+        pydantic_ref = components["pydantic"]["bom-ref"]
+        pyarrow_ref = components["pyarrow"]["bom-ref"]
+        pytz_ref = components["pytz"]["bom-ref"]
+        starlette_ref = components["starlette"]["bom-ref"]
+        uvicorn_ref = components["uvicorn"]["bom-ref"]
+        self.assertEqual(dependencies[domain_ref]["dependsOn"], [pydantic_ref])
+        self.assertEqual(
+            dependencies[lab_ref]["dependsOn"],
+            sorted((domain_ref, pydantic_ref, pyarrow_ref)),
+        )
+        self.assertEqual(
+            dependencies[local_ref]["dependsOn"],
+            sorted((duckdb_ref, domain_ref, pydantic_ref, pytz_ref)),
+        )
+        self.assertEqual(
+            dependencies[assurance_ref]["dependsOn"],
+            sorted(
+                (
+                    a2a_ref,
+                    duckdb_ref,
+                    domain_ref,
+                    lab_ref,
+                    local_ref,
+                    pydantic_ref,
+                    starlette_ref,
+                    uvicorn_ref,
+                )
+            ),
+        )
+        self.assertEqual(dependencies[no_dependencies_ref]["dependsOn"], [])
+        for dependency in dependencies.values():
+            self.assertEqual(
+                dependency.get("dependsOn", []),
+                sorted(set(dependency.get("dependsOn", []))),
+            )
+
+        summary = release_evidence._sbom_summary(
+            args.output,
+            0,
+            expected_first_party,
+            release_evidence._wheel_paths(args.wheel_root),
+            expected_runtime,
+        )
+        self.assertEqual(summary["status"], "PASS")
+
+        dependencies[lab_ref]["dependsOn"] = [pyarrow_ref]
+        release_evidence._write_json(args.output, payload)
+        tampered = release_evidence._sbom_summary(
+            args.output,
+            0,
+            expected_first_party,
+            release_evidence._wheel_paths(args.wheel_root),
+            expected_runtime,
+        )
+        self.assertEqual(tampered["status"], "FAIL")
+        self.assertIn(
+            "first_party_dependency_edges",
+            tampered["first_party_component_errors"],
+        )
+
+        dependencies[lab_ref]["dependsOn"] = sorted(
+            (domain_ref, pydantic_ref, pyarrow_ref)
+        )
+        dependencies[no_dependencies_ref].pop("dependsOn")
+        release_evidence._write_json(args.output, payload)
+        missing_empty_edge = release_evidence._sbom_summary(
+            args.output,
+            0,
+            expected_first_party,
+            release_evidence._wheel_paths(args.wheel_root),
+            expected_runtime,
+        )
+        self.assertEqual(missing_empty_edge["status"], "FAIL")
+        self.assertIn(
+            "first_party_dependency_edges",
+            missing_empty_edge["first_party_component_errors"],
+        )
+
+    def test_first_party_dependency_requirements_fail_closed(self) -> None:
+        pep440_cases = {
+            "post": ("2026.3.post1", ">=2024.1,<2027"),
+            "pre": ("1.0rc1", "==1.0rc1"),
+            "dev": ("1.0.dev1", "==1.0.dev1"),
+            "local": ("1.0+vendor.1", "==1.0"),
+        }
+        for label, (version, specifier) in pep440_cases.items():
+            with self.subTest(pep440=label):
+                self.assertTrue(
+                    release_evidence._version_satisfies(
+                        version,
+                        release_evidence._parse_specifiers(specifier),
+                    )
+                )
+        pep440_ordering_cases = (
+            ("1.0.dev1", "<1.0.dev2", True),
+            ("1.0rc1", "<1.0.post1", False),
+            ("1.0.dev1", "<1.0.post1", False),
+            ("1.0rc1", ">=1.0rc1,<1.0.post1", False),
+            ("1.0.dev1", ">=1.0.dev1,<1.0.post1", False),
+            ("1.0", "<1.0.post1", True),
+            ("1.0rc1", "<1.0", False),
+            ("1.0.dev1", "<1.0", False),
+            ("1.0", ">1.0rc1", True),
+            ("1.0.post1", ">1.0rc1", False),
+            ("1.0.post1", ">1.0", False),
+        )
+        for version, specifier, expected in pep440_ordering_cases:
+            with self.subTest(version=version, specifier=specifier):
+                self.assertEqual(
+                    release_evidence._version_satisfies(
+                        version,
+                        release_evidence._parse_specifiers(specifier),
+                    ),
+                    expected,
+                )
+        self.assertFalse(
+            release_evidence._version_satisfies(
+                "2.0a1",
+                release_evidence._parse_specifiers(">=1,<3"),
+            )
+        )
+        self.assertTrue(
+            release_evidence._version_satisfies(
+                "2.0a1",
+                release_evidence._parse_specifiers(">=2.0a1,<3"),
+            )
+        )
+        self.assertTrue(
+            release_evidence._version_satisfies(
+                "1.0+abc",
+                release_evidence._parse_specifiers("===1.0+ABC"),
+            )
+        )
+        self.assertTrue(
+            release_evidence._version_satisfies(
+                "1.0RC1",
+                release_evidence._parse_specifiers("===1.0rc1"),
+            )
+        )
+        self.assertTrue(release_evidence._evaluate_marker('"Value" === "value"'))
+        self.assertTrue(
+            release_evidence._version_satisfies(
+                "1",
+                release_evidence._parse_specifiers("==1.0.*"),
+            )
+        )
+        self.assertFalse(
+            release_evidence._version_satisfies(
+                "1",
+                release_evidence._parse_specifiers("!=1.0.*"),
+            )
+        )
+        self.assertTrue(
+            release_evidence._version_satisfies(
+                "1",
+                release_evidence._parse_specifiers("~=1.0.0"),
+            )
+        )
+        with self.assertRaises(ValueError):
+            release_evidence._version_satisfies(
+                "1.0..post1",
+                release_evidence._parse_specifiers(">=1"),
+            )
+        cases = {
+            "duplicate": ("third-party>=2", "Third_Party<3"),
+            "malformed": ("third-party=>2",),
+            "unknown": ("not-installed>=1",),
+            "version-mismatch": ("third-party>=3",),
+            "direct-url": ("third-party @ https://example.invalid/archive.whl",),
+            "self": ("demo>=1",),
+            "unknown-marker": ('third-party>=2; unknown_name == "value"',),
+            "duplicate-extra": ("third-party[feature,FEATURE]>=2",),
+            "marker-comment": ('not-installed>=1; python_version < "1" # comment',),
+            "marker-implicit-string": (
+                'not-installed>=1; python_version == "3" "junk"',
+            ),
+            "marker-string-prefix": ('not-installed>=1; python_version == r"3"',),
+            "marker-invalid-compatible": ('not-installed>=1; python_version ~= "4"',),
+            "wildcard-mismatch": ("third-party!=2.0.*",),
+        }
+        for label, requirements in cases.items():
+            with self.subTest(label=label):
+                args = self._sbom_finalization_case(
+                    f"requirement-{label}",
+                    first_party=(("demo", "1.0.0", requirements),),
+                    runtime=(("third-party", "2.0.0"),),
+                )
+                with self.assertRaises(ValueError):
+                    release_evidence.finalize_sbom(args)
+
+    def test_wheel_metadata_parser_defects_fail_closed(self) -> None:
+        args = self._sbom_finalization_case(
+            "metadata-defect",
+            first_party=(("demo", "1.0.0", ()),),
+            runtime=(("third-party", "2.0.0"),),
+        )
+        malformed_metadata = (
+            b"Metadata-Version: 2.4\n"
+            b"Name: demo\n"
+            b"Version: 1.0.0\n"
+            b"malformed header without a colon\n"
+            b"Requires-Dist: not-installed>=1\n"
+        )
+        wheel = self._wheel(
+            root=args.wheel_root.parent,
+            extra_members={
+                "demo-1.0.0.dist-info/METADATA": malformed_metadata,
+            },
+        )
+        with self.assertRaisesRegex(ValueError, "MissingHeaderBodySeparatorDefect"):
+            release_evidence._wheel_component(wheel)
+        with self.assertRaisesRegex(ValueError, "MissingHeaderBodySeparatorDefect"):
+            release_evidence.finalize_sbom(args)
+
+    def test_first_party_dependency_cycle_fails_closed(self) -> None:
+        args = self._sbom_finalization_case(
+            "first-party-cycle",
+            first_party=(
+                ("first", "1.0.0", ("second>=1",)),
+                ("second", "1.0.0", ("first>=1",)),
+            ),
+            runtime=(("third-party", "2.0.0"),),
+        )
+        with self.assertRaises(ValueError):
+            release_evidence.finalize_sbom(args)
 
     def test_missing_multiple_and_unexpected_wheels_fail(self) -> None:
         _, args = self._fixture()
@@ -638,30 +1030,33 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 self.assertIn("sbom_generation_failed", payload["failures"])
 
     def test_prohibited_wheel_content_fails(self) -> None:
-        bad_root = self.root / "bad-dist"
-        bad_root.mkdir()
-        bad = self._wheel(extra_members={"demo/raw.csv": b"secret,data\n"})
-        bad.replace(bad_root / bad.name)
-        output = self.root / "bad-scan.json"
-        status = release_evidence.scan_wheels(
-            argparse.Namespace(
-                wheel_root=bad_root,
-                output=output,
-                max_wheel_bytes=release_evidence.DEFAULT_MAX_WHEEL_BYTES,
-                max_uncompressed_bytes=(
-                    release_evidence.DEFAULT_MAX_UNCOMPRESSED_BYTES
-                ),
-            )
-        )
-        self.assertEqual(status, 1)
-        payload = json.loads(output.read_text(encoding="utf-8"))
-        self.assertEqual(payload["status"], "FAIL")
-        rules = {
-            violation["rule"]
-            for record in payload["wheels"]
-            for violation in record["violations"]
-        }
-        self.assertIn("forbidden_file_type", rules)
+        for suffix in (".csv", ".arrow", ".feather", ".ipc", ".orc"):
+            with self.subTest(suffix=suffix):
+                case_root = self.root / f"forbidden-{suffix[1:]}"
+                self._wheel(
+                    root=case_root,
+                    extra_members={f"demo/raw{suffix}": b"embedded dataset\n"},
+                )
+                output = case_root / "bad-scan.json"
+                status = release_evidence.scan_wheels(
+                    argparse.Namespace(
+                        wheel_root=case_root / "dist",
+                        output=output,
+                        max_wheel_bytes=release_evidence.DEFAULT_MAX_WHEEL_BYTES,
+                        max_uncompressed_bytes=(
+                            release_evidence.DEFAULT_MAX_UNCOMPRESSED_BYTES
+                        ),
+                    )
+                )
+                self.assertEqual(status, 1)
+                payload = json.loads(output.read_text(encoding="utf-8"))
+                self.assertEqual(payload["status"], "FAIL")
+                rules = {
+                    violation["rule"]
+                    for record in payload["wheels"]
+                    for violation in record["violations"]
+                }
+                self.assertIn("forbidden_file_type", rules)
 
     def test_large_unscanned_member_and_forged_scan_report_fail(self) -> None:
         large_root = self.root / "large-dist"

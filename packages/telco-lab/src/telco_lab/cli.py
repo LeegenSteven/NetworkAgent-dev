@@ -9,9 +9,10 @@ import sys
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TextIO
+from typing import TextIO
 
 import pydantic
+import pyarrow
 from telco_domain import SCHEMA_VERSION as TELCO_DOMAIN_SCHEMA_VERSION
 
 from .catalog import CatalogProvider, PackageCatalogProvider
@@ -19,8 +20,11 @@ from .downloader import SecureDownloader
 from .errors import LabError
 from .pipeline import (
     BUBBLERAN_PIPELINE_ID,
+    RCAEVAL_PIPELINE_ID,
     evaluate_cached_bubbleran,
+    evaluate_cached_rcaeval,
     fetch_and_evaluate_bubbleran,
+    fetch_and_evaluate_rcaeval,
 )
 from .workspace import TelcoLab
 from .version import PACKAGE_VERSION
@@ -33,7 +37,9 @@ class _HelpRequested(Exception):
 
 
 class _JsonHelpAction(argparse.Action):
-    def __init__(self, option_strings, dest=argparse.SUPPRESS, **kwargs):  # noqa: ANN001
+    def __init__(
+        self, option_strings, dest=argparse.SUPPRESS, **kwargs
+    ):  # noqa: ANN001
         super().__init__(
             option_strings=option_strings,
             dest=dest,
@@ -71,7 +77,7 @@ CommandInstaller = Callable[[argparse._SubParsersAction], None]
 
 
 def _parser(*, extensions: Sequence[CommandInstaller] = ()) -> argparse.ArgumentParser:
-    """Build the parser; extensions can install future prepare/evaluate/demo commands."""
+    """Build the parser with optional future command extensions."""
 
     parser = _SafeArgumentParser(
         prog="telco-lab",
@@ -81,7 +87,9 @@ def _parser(*, extensions: Sequence[CommandInstaller] = ()) -> argparse.Argument
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("catalog", help="list the audited package catalog offline")
 
-    fetch = commands.add_parser("fetch", help="download one explicitly selected resource")
+    fetch = commands.add_parser(
+        "fetch", help="download one explicitly selected resource"
+    )
     fetch.add_argument("resource_id")
     fetch.add_argument("--accept-license", required=True)
 
@@ -92,16 +100,17 @@ def _parser(*, extensions: Sequence[CommandInstaller] = ()) -> argparse.Argument
         "evaluate",
         help="evaluate an already verified dataset without network access",
     )
-    evaluate.add_argument("pipeline_id", choices=(BUBBLERAN_PIPELINE_ID,))
-    evaluate.add_argument("--overlap-threshold", type=float, default=0.1)
+    pipeline_ids = (BUBBLERAN_PIPELINE_ID, RCAEVAL_PIPELINE_ID)
+    evaluate.add_argument("pipeline_id", choices=pipeline_ids)
+    evaluate.add_argument("--overlap-threshold", type=float)
 
     run = commands.add_parser(
         "run",
         help="fetch a pinned dataset and run its reproducible local evaluation",
     )
-    run.add_argument("pipeline_id", choices=(BUBBLERAN_PIPELINE_ID,))
+    run.add_argument("pipeline_id", choices=pipeline_ids)
     run.add_argument("--accept-license", required=True)
-    run.add_argument("--overlap-threshold", type=float, default=0.1)
+    run.add_argument("--overlap-threshold", type=float)
     for install in extensions:
         install(commands)
     return parser
@@ -157,6 +166,7 @@ def _execution_payload() -> dict[str, object]:
         "runtime": {
             "python": platform.python_version(),
             "pydantic": pydantic.__version__,
+            "pyarrow": pyarrow.__version__,
             "telco_domain_schema": TELCO_DOMAIN_SCHEMA_VERSION,
         },
     }
@@ -203,12 +213,21 @@ def _dispatch(
                     for item in report.artifacts
                 ],
             },
-        }, 0 if report.valid else 1
+        }, (0 if report.valid else 1)
     if arguments.command == "evaluate":
-        result = evaluate_cached_bubbleran(
-            lab,
-            overlap_threshold=arguments.overlap_threshold,
-        )
+        if arguments.pipeline_id == RCAEVAL_PIPELINE_ID:
+            if arguments.overlap_threshold is not None:
+                raise LabError("invalid_arguments")
+            result = evaluate_cached_rcaeval(lab)
+        else:
+            result = evaluate_cached_bubbleran(
+                lab,
+                overlap_threshold=(
+                    0.1
+                    if arguments.overlap_threshold is None
+                    else arguments.overlap_threshold
+                ),
+            )
         return {
             "ok": True,
             "mode": "offline-cache",
@@ -216,11 +235,23 @@ def _dispatch(
             "result": result.summary(),
         }, 0
     if arguments.command == "run":
-        result = fetch_and_evaluate_bubbleran(
-            lab,
-            accepted_license=arguments.accept_license,
-            overlap_threshold=arguments.overlap_threshold,
-        )
+        if arguments.pipeline_id == RCAEVAL_PIPELINE_ID:
+            if arguments.overlap_threshold is not None:
+                raise LabError("invalid_arguments")
+            result = fetch_and_evaluate_rcaeval(
+                lab,
+                accepted_license=arguments.accept_license,
+            )
+        else:
+            result = fetch_and_evaluate_bubbleran(
+                lab,
+                accepted_license=arguments.accept_license,
+                overlap_threshold=(
+                    0.1
+                    if arguments.overlap_threshold is None
+                    else arguments.overlap_threshold
+                ),
+            )
         return {
             "ok": True,
             "mode": "fetch-and-evaluate",

@@ -20,7 +20,7 @@ import sys
 from datetime import datetime, timezone
 from email.parser import Parser
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable
+from typing import Any, Iterable, NamedTuple
 from urllib.parse import quote
 from zipfile import BadZipFile, ZipFile, ZipInfo
 
@@ -43,6 +43,50 @@ _EVIDENCE_FILENAMES = {
     "wheel-content-scan.json",
 }
 _SAFE_SUPPLEMENTAL_BASENAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+_REQUIREMENT_NAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?")
+_PEP440_VERSION = re.compile(
+    r"v?(?:(?P<epoch>[0-9]+)!)?"
+    r"(?P<release>[0-9]+(?:\.[0-9]+)*)"
+    r"(?:[-_.]?(?P<pre_label>a|b|c|rc|alpha|beta|pre|preview)"
+    r"[-_.]?(?P<pre_number>[0-9]+)?)?"
+    r"(?:(?:-(?P<post_number1>[0-9]+))|"
+    r"(?:[-_.]?(?P<post_label>post|rev|r)"
+    r"[-_.]?(?P<post_number2>[0-9]+)?))?"
+    r"(?P<dev>[-_.]?dev[-_.]?(?P<dev_number>[0-9]+)?)?"
+    r"(?:\+(?P<local>[a-z0-9]+(?:[-_.][a-z0-9]+)*))?",
+    re.IGNORECASE,
+)
+_SPECIFIER = re.compile(r"(===|~=|==|!=|<=|>=|<|>)[ \t]*([^,\s]+)")
+_MARKER_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_MARKER_VARIABLES = {
+    "extra",
+    "implementation_name",
+    "implementation_version",
+    "os_name",
+    "platform_machine",
+    "platform_python_implementation",
+    "platform_release",
+    "platform_system",
+    "platform_version",
+    "python_full_version",
+    "python_version",
+    "sys_platform",
+}
+_VERSION_MARKER_VARIABLES = {
+    "implementation_version",
+    "python_full_version",
+    "python_version",
+}
+
+
+class _Pep440Version(NamedTuple):
+    epoch: int
+    release: tuple[int, ...]
+    pre: tuple[int, int] | None
+    post: int | None
+    dev: int | None
+    local: tuple[tuple[int, int | str], ...] | None
+
 
 _FORBIDDEN_PARTS = {
     ".git",
@@ -57,13 +101,17 @@ _FORBIDDEN_PARTS = {
 }
 _FORBIDDEN_SUFFIXES = {
     ".7z",
+    ".arrow",
     ".csv",
     ".db",
     ".duckdb",
     ".env",
+    ".feather",
     ".gz",
+    ".ipc",
     ".jsonl",
     ".key",
+    ".orc",
     ".parquet",
     ".pcap",
     ".pcapng",
@@ -282,6 +330,543 @@ def _metadata_value(metadata: Any, key: str) -> str | None:
     return stripped or None
 
 
+def _pep440_version(value: str) -> _Pep440Version:
+    if not isinstance(value, str) or not value or len(value) > 512:
+        raise ValueError(f"unsupported PEP 440 version: {value!r}")
+    match = _PEP440_VERSION.fullmatch(value)
+    if match is None:
+        raise ValueError(f"unsupported PEP 440 version: {value!r}")
+    pre_label = match.group("pre_label")
+    pre = None
+    if pre_label is not None:
+        pre_phase = {
+            "a": 0,
+            "alpha": 0,
+            "b": 1,
+            "beta": 1,
+            "c": 2,
+            "pre": 2,
+            "preview": 2,
+            "rc": 2,
+        }[pre_label.lower()]
+        pre = (pre_phase, int(match.group("pre_number") or 0))
+    post = None
+    if match.group("post_number1") is not None:
+        post = int(match.group("post_number1"))
+    elif match.group("post_label") is not None:
+        post = int(match.group("post_number2") or 0)
+    dev = int(match.group("dev_number") or 0) if match.group("dev") else None
+    local_value = match.group("local")
+    local = None
+    if local_value is not None:
+        local = tuple(
+            (1, int(segment)) if segment.isdigit() else (0, segment.lower())
+            for segment in re.split(r"[-_.]", local_value)
+        )
+    return _Pep440Version(
+        epoch=int(match.group("epoch") or 0),
+        release=tuple(int(item) for item in match.group("release").split(".")),
+        pre=pre,
+        post=post,
+        dev=dev,
+        local=local,
+    )
+
+
+def _version_key(
+    version: _Pep440Version,
+    release_width: int,
+    *,
+    include_local: bool,
+) -> tuple[Any, ...]:
+    release = version.release + (0,) * (release_width - len(version.release))
+    if version.pre is None:
+        pre = (
+            (-1, 0, 0)
+            if version.post is None and version.dev is not None
+            else (1, 0, 0)
+        )
+    else:
+        pre = (0, *version.pre)
+    post = (-1, 0) if version.post is None else (0, version.post)
+    dev = (0, 0) if version.dev is None else (-1, version.dev)
+    local = (
+        (0, version.local) if include_local and version.local is not None else (-1, ())
+    )
+    return version.epoch, release, pre, post, dev, local
+
+
+def _compare_versions(
+    left: _Pep440Version,
+    right: _Pep440Version,
+    *,
+    include_local: bool = False,
+) -> int:
+    width = max(len(left.release), len(right.release))
+    left_key = _version_key(left, width, include_local=include_local)
+    right_key = _version_key(right, width, include_local=include_local)
+    return (left_key > right_key) - (left_key < right_key)
+
+
+def _same_release(left: _Pep440Version, right: _Pep440Version) -> bool:
+    width = max(len(left.release), len(right.release))
+    return left.epoch == right.epoch and left.release + (0,) * (
+        width - len(left.release)
+    ) == right.release + (0,) * (width - len(right.release))
+
+
+def _parse_specifiers(value: str) -> tuple[tuple[str, str], ...]:
+    if not value:
+        return ()
+    if value.startswith("(") or value.endswith(")"):
+        if not (value.startswith("(") and value.endswith(")")):
+            raise ValueError("requirement specifier parentheses are malformed")
+        value = value[1:-1].strip()
+    if not value or "(" in value or ")" in value:
+        raise ValueError("requirement specifier is malformed")
+    parsed: list[tuple[str, str]] = []
+    for raw_specifier in value.split(","):
+        specifier = raw_specifier.strip()
+        match = _SPECIFIER.fullmatch(specifier)
+        if match is None:
+            raise ValueError(f"unsupported requirement specifier: {specifier!r}")
+        operator, version = match.groups()
+        if operator == "===" and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+!-]*", version):
+            parsed.append((operator, version))
+            continue
+        wildcard = version.endswith(".*")
+        if wildcard:
+            if operator not in {"==", "!="}:
+                raise ValueError("wildcard is unsupported for this specifier")
+            parsed_version = _pep440_version(version[:-2])
+            if any(
+                item is not None
+                for item in (
+                    parsed_version.pre,
+                    parsed_version.post,
+                    parsed_version.dev,
+                    parsed_version.local,
+                )
+            ):
+                raise ValueError("wildcard requires a plain release version")
+        else:
+            parsed_version = _pep440_version(version)
+            if operator == "~=" and (
+                len(parsed_version.release) < 2 or parsed_version.local is not None
+            ):
+                raise ValueError("compatible release is malformed")
+            if operator in {"<", "<=", ">", ">="} and parsed_version.local is not None:
+                raise ValueError("ordered specifier must not contain a local version")
+        parsed.append((operator, version))
+    return tuple(parsed)
+
+
+def _specifiers_allow_prereleases(
+    specifiers: tuple[tuple[str, str], ...],
+) -> bool:
+    for operator, required in specifiers:
+        if operator == "!=" or required.endswith(".*"):
+            continue
+        try:
+            parsed_required = _pep440_version(required)
+        except ValueError:
+            continue
+        if parsed_required.pre is not None or parsed_required.dev is not None:
+            return True
+    return False
+
+
+def _version_satisfies(
+    version: str,
+    specifiers: tuple[tuple[str, str], ...],
+    *,
+    prereleases: bool | None = None,
+) -> bool:
+    parsed_version = _pep440_version(version)
+    if parsed_version.pre is not None or parsed_version.dev is not None:
+        allow_prereleases = (
+            _specifiers_allow_prereleases(specifiers)
+            if prereleases is None
+            else prereleases
+        )
+        if not allow_prereleases:
+            return False
+    if not specifiers:
+        return True
+    for operator, required in specifiers:
+        if operator == "===":
+            satisfied = version.casefold() == required.casefold()
+        elif required.endswith(".*"):
+            parsed_required = _pep440_version(required[:-2])
+            normalized_release = parsed_version.release + (0,) * max(
+                0,
+                len(parsed_required.release) - len(parsed_version.release),
+            )
+            satisfied = (
+                parsed_version.epoch == parsed_required.epoch
+                and normalized_release[: len(parsed_required.release)]
+                == parsed_required.release
+            )
+            if operator == "!=":
+                satisfied = not satisfied
+        elif operator == "~=":
+            parsed_required = _pep440_version(required)
+            if len(parsed_required.release) < 2 or parsed_required.local is not None:
+                raise ValueError("compatible release is malformed")
+            compatible_prefix = parsed_required.release[:-1]
+            normalized_release = parsed_version.release + (0,) * max(
+                0,
+                len(compatible_prefix) - len(parsed_version.release),
+            )
+            satisfied = (
+                _compare_versions(parsed_version, parsed_required) >= 0
+                and parsed_version.epoch == parsed_required.epoch
+                and normalized_release[: len(compatible_prefix)] == compatible_prefix
+            )
+        else:
+            parsed_required = _pep440_version(required)
+            comparison = _compare_versions(
+                parsed_version,
+                parsed_required,
+                include_local=(
+                    operator in {"==", "!="} and parsed_required.local is not None
+                ),
+            )
+            if (
+                operator == "<"
+                and parsed_required.pre is None
+                and parsed_required.dev is None
+            ):
+                upper_bound = parsed_required._replace(dev=0, local=None)
+                satisfied = _compare_versions(parsed_version, upper_bound) < 0
+                if (
+                    satisfied
+                    and (
+                        parsed_version.pre is not None or parsed_version.dev is not None
+                    )
+                    and _same_release(parsed_version, parsed_required)
+                ):
+                    satisfied = False
+            elif operator == ">" and parsed_required.dev is not None:
+                lower_bound = parsed_required._replace(
+                    dev=parsed_required.dev + 1,
+                    local=None,
+                )
+                satisfied = _compare_versions(parsed_version, lower_bound) >= 0
+            elif operator == ">" and parsed_required.post is not None:
+                lower_bound = parsed_required._replace(
+                    post=parsed_required.post + 1,
+                    dev=0,
+                    local=None,
+                )
+                satisfied = _compare_versions(parsed_version, lower_bound) >= 0
+            elif operator == ">":
+                satisfied = comparison > 0 and not (
+                    _same_release(parsed_version, parsed_required)
+                    and parsed_version.pre == parsed_required.pre
+                    and parsed_version.post is not None
+                )
+            else:
+                satisfied = {
+                    "==": comparison == 0,
+                    "!=": comparison != 0,
+                    "<": comparison < 0,
+                    "<=": comparison <= 0,
+                    ">=": comparison >= 0,
+                }[operator]
+            if (
+                operator == ">"
+                and satisfied
+                and _same_release(parsed_version, parsed_required)
+                and (
+                    (parsed_required.post is None and parsed_version.post is not None)
+                    or parsed_version.local is not None
+                )
+            ):
+                satisfied = False
+        if not satisfied:
+            return False
+    return True
+
+
+def _marker_environment() -> dict[str, str]:
+    implementation = sys.implementation.version
+    implementation_version = (
+        f"{implementation.major}.{implementation.minor}.{implementation.micro}"
+    )
+    if implementation.releaselevel != "final":
+        suffix = {"alpha": "a", "beta": "b", "candidate": "rc"}.get(
+            implementation.releaselevel
+        )
+        if suffix is None:
+            raise ValueError("unsupported Python implementation release level")
+        implementation_version += f"{suffix}{implementation.serial}"
+    return {
+        "extra": "",
+        "implementation_name": sys.implementation.name,
+        "implementation_version": implementation_version,
+        "os_name": os.name,
+        "platform_machine": platform.machine(),
+        "platform_python_implementation": platform.python_implementation(),
+        "platform_release": platform.release(),
+        "platform_system": platform.system(),
+        "platform_version": platform.version(),
+        "python_full_version": platform.python_version(),
+        "python_version": f"{sys.version_info.major}.{sys.version_info.minor}",
+        "sys_platform": sys.platform,
+    }
+
+
+def _tokenize_marker(value: str) -> tuple[tuple[str, str], ...]:
+    tokens: list[tuple[str, str]] = []
+    index = 0
+    operators = ("===", "~=", "==", "!=", "<=", ">=", "<", ">")
+    while index < len(value):
+        character = value[index]
+        if character in " \t":
+            index += 1
+            continue
+        if character in "()":
+            tokens.append(("parenthesis", character))
+            index += 1
+            continue
+        if character in {'"', "'"}:
+            delimiter = character
+            end = index + 1
+            while end < len(value) and value[end] != delimiter:
+                literal_character = value[end]
+                if literal_character == "\\" or not (
+                    literal_character == "\t" or " " <= literal_character <= "~"
+                ):
+                    raise ValueError("requirement marker string is malformed")
+                end += 1
+            if end == len(value):
+                raise ValueError("requirement marker string is unterminated")
+            literal = value[index + 1 : end]
+            if len(literal) > 512:
+                raise ValueError("requirement marker string is too large")
+            tokens.append(("string", literal))
+            index = end + 1
+            continue
+        operator = next(
+            (
+                candidate
+                for candidate in operators
+                if value.startswith(candidate, index)
+            ),
+            None,
+        )
+        if operator is not None:
+            tokens.append(("operator", operator))
+            index += len(operator)
+            continue
+        identifier_match = _MARKER_IDENTIFIER.match(value, index)
+        if identifier_match is None:
+            raise ValueError("requirement marker contains unsupported syntax")
+        identifier = identifier_match.group(0)
+        if identifier in _MARKER_VARIABLES:
+            tokens.append(("variable", identifier))
+        elif identifier in {"and", "or", "in", "not"}:
+            tokens.append(("keyword", identifier))
+        else:
+            raise ValueError(f"unknown requirement marker variable: {identifier}")
+        index = identifier_match.end()
+    if not tokens or len(tokens) > 256:
+        raise ValueError("requirement marker is empty or too complex")
+    return tuple(tokens)
+
+
+def _evaluate_marker(value: str) -> bool:
+    if not value or len(value) > 2048:
+        raise ValueError("requirement marker is empty or too large")
+    tokens = _tokenize_marker(value)
+    environment = _marker_environment()
+    position = 0
+
+    def accept(kind: str, token_value: str | None = None) -> bool:
+        nonlocal position
+        if position == len(tokens) or tokens[position][0] != kind:
+            return False
+        if token_value is not None and tokens[position][1] != token_value:
+            return False
+        position += 1
+        return True
+
+    def operand() -> tuple[str, str | None]:
+        nonlocal position
+        if position == len(tokens):
+            raise ValueError("requirement marker operand is missing")
+        kind, token_value = tokens[position]
+        if kind == "string":
+            position += 1
+            return token_value, None
+        if kind == "variable":
+            position += 1
+            return environment[token_value], token_value
+        raise ValueError("requirement marker operand is unsupported")
+
+    def compare_values(
+        left: str,
+        left_name: str | None,
+        operator: str,
+        right: str,
+        right_name: str | None,
+    ) -> bool:
+        if operator == "in":
+            return left in right
+        if operator == "not in":
+            return left not in right
+        if operator == "===":
+            return left.casefold() == right.casefold()
+        if operator == "~=":
+            if (
+                left_name not in _VERSION_MARKER_VARIABLES
+                and right_name not in _VERSION_MARKER_VARIABLES
+            ):
+                raise ValueError("compatible marker requires a version variable")
+            return _version_satisfies(
+                left,
+                _parse_specifiers(f"{operator}{right}"),
+                prereleases=True,
+            )
+        version_comparison = (
+            left_name in _VERSION_MARKER_VARIABLES
+            or right_name in _VERSION_MARKER_VARIABLES
+        )
+        if not version_comparison:
+            try:
+                _pep440_version(left)
+                _pep440_version(right.removesuffix(".*"))
+            except ValueError:
+                pass
+            else:
+                version_comparison = True
+        if version_comparison:
+            return _version_satisfies(
+                left,
+                _parse_specifiers(f"{operator}{right}"),
+                prereleases=True,
+            )
+        comparison = (left > right) - (left < right)
+        return {
+            "==": comparison == 0,
+            "!=": comparison != 0,
+            "<": comparison < 0,
+            "<=": comparison <= 0,
+            ">": comparison > 0,
+            ">=": comparison >= 0,
+        }[operator]
+
+    def comparison() -> bool:
+        nonlocal position
+        left, left_name = operand()
+        if position == len(tokens):
+            raise ValueError("requirement marker operator is missing")
+        if tokens[position][0] == "operator":
+            operator = tokens[position][1]
+            position += 1
+        elif accept("keyword", "in"):
+            operator = "in"
+        elif accept("keyword", "not"):
+            if not accept("keyword", "in"):
+                raise ValueError("unsupported requirement marker operator")
+            operator = "not in"
+        else:
+            raise ValueError("unsupported requirement marker operator")
+        right, right_name = operand()
+        return compare_values(left, left_name, operator, right, right_name)
+
+    def atom() -> bool:
+        if accept("parenthesis", "("):
+            result = disjunction()
+            if not accept("parenthesis", ")"):
+                raise ValueError("requirement marker parenthesis is unmatched")
+            return result
+        return comparison()
+
+    def conjunction() -> bool:
+        result = atom()
+        while accept("keyword", "and"):
+            next_result = atom()
+            result = result and next_result
+        return result
+
+    def disjunction() -> bool:
+        result = conjunction()
+        while accept("keyword", "or"):
+            next_result = conjunction()
+            result = result or next_result
+        return result
+
+    result = disjunction()
+    if position != len(tokens):
+        raise ValueError("requirement marker contains trailing syntax")
+    return result
+
+
+def _split_requirement_marker(value: str) -> tuple[str, str | None]:
+    if not isinstance(value, str) or not value.strip() or len(value) > 4096:
+        raise ValueError("Requires-Dist entry is empty or too large")
+    quote_character: str | None = None
+    escaped = False
+    separators: list[int] = []
+    for index, character in enumerate(value):
+        if quote_character is not None:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote_character:
+                quote_character = None
+        elif character in {'"', "'"}:
+            quote_character = character
+        elif character == ";":
+            separators.append(index)
+    if quote_character is not None or escaped or len(separators) > 1:
+        raise ValueError("Requires-Dist marker separator is malformed")
+    if not separators:
+        return value.strip(), None
+    requirement = value[: separators[0]].strip()
+    marker = value[separators[0] + 1 :].strip()
+    if not requirement or not marker:
+        raise ValueError("Requires-Dist entry or marker is empty")
+    return requirement, marker
+
+
+def _parse_requirement(
+    value: str,
+) -> tuple[str, tuple[tuple[str, str], ...], bool]:
+    requirement, marker = _split_requirement_marker(value)
+    name_match = _REQUIREMENT_NAME.match(requirement)
+    if name_match is None:
+        raise ValueError("Requires-Dist name is malformed")
+    name = name_match.group(0)
+    remainder = requirement[name_match.end() :].strip()
+    if remainder.startswith("["):
+        closing = remainder.find("]")
+        if (
+            closing < 0
+            or "[" in remainder[1:closing]
+            or "]" in remainder[closing + 1 :]
+        ):
+            raise ValueError("Requires-Dist extras are malformed")
+        raw_extras = remainder[1:closing]
+        extras = tuple(item.strip() for item in raw_extras.split(","))
+        if not extras or any(
+            not item or _REQUIREMENT_NAME.fullmatch(item) is None for item in extras
+        ):
+            raise ValueError("Requires-Dist extras are malformed")
+        normalized_extras = tuple(_normalize_distribution(item) for item in extras)
+        if len(normalized_extras) != len(set(normalized_extras)):
+            raise ValueError("Requires-Dist extras contain duplicates")
+        remainder = remainder[closing + 1 :].strip()
+    if "@" in remainder:
+        raise ValueError("direct URL requirements are unsupported")
+    specifiers = _parse_specifiers(remainder)
+    active = True if marker is None else _evaluate_marker(marker)
+    return _normalize_distribution(name), specifiers, active
+
+
 def build_runtime_inventory(args: argparse.Namespace) -> int:
     environment_path = args.environment_path.resolve()
     if environment_path.is_symlink() or not environment_path.is_dir():
@@ -355,7 +940,7 @@ def build_runtime_inventory(args: argparse.Namespace) -> int:
     return 0
 
 
-def _wheel_component(wheel: Path) -> dict[str, object]:
+def _wheel_metadata(wheel: Path) -> Any:
     with ZipFile(wheel) as archive:
         metadata_members = [
             name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
@@ -365,6 +950,24 @@ def _wheel_component(wheel: Path) -> dict[str, object]:
         metadata = Parser().parsestr(
             archive.read(metadata_members[0]).decode("utf-8", errors="strict")
         )
+    if metadata.defects:
+        defects = ",".join(sorted(type(defect).__name__ for defect in metadata.defects))
+        raise ValueError(f"wheel metadata parser defects: {wheel}: {defects}")
+    return metadata
+
+
+def _wheel_requires_dist(wheel: Path) -> tuple[str, ...]:
+    metadata = _wheel_metadata(wheel)
+    values = metadata.get_all("Requires-Dist", ())
+    if not isinstance(values, (list, tuple)) or any(
+        not isinstance(value, str) or not value.strip() for value in values
+    ):
+        raise ValueError(f"wheel has invalid Requires-Dist metadata: {wheel}")
+    return tuple(value.strip() for value in values)
+
+
+def _wheel_component(wheel: Path) -> dict[str, object]:
+    metadata = _wheel_metadata(wheel)
     name = _metadata_value(metadata, "Name")
     version = _metadata_value(metadata, "Version")
     if name is None or version is None:
@@ -399,6 +1002,100 @@ def _first_party_versions(wheels: Iterable[Path]) -> dict[str, str]:
     if not versions:
         raise ValueError("first-party wheel set is empty")
     return versions
+
+
+def _component_identity_lookup(
+    components: Iterable[dict[str, Any]],
+) -> dict[str, tuple[str, str]]:
+    lookup: dict[str, tuple[str, str]] = {}
+    for component in components:
+        name = component.get("name")
+        version = component.get("version")
+        bom_ref = component.get("bom-ref")
+        if (
+            not isinstance(name, str)
+            or not name.strip()
+            or not isinstance(version, str)
+            or not version.strip()
+            or not isinstance(bom_ref, str)
+            or not bom_ref.strip()
+        ):
+            raise ValueError("CycloneDX component identity is invalid")
+        normalized = _normalize_distribution(name)
+        if normalized in lookup:
+            raise ValueError(f"duplicate CycloneDX component: {normalized}")
+        lookup[normalized] = (version, bom_ref)
+    return lookup
+
+
+def _reject_first_party_dependency_cycles(
+    edges: dict[str, tuple[str, ...]],
+) -> None:
+    state: dict[str, int] = {}
+
+    def visit(component_ref: str) -> None:
+        status = state.get(component_ref, 0)
+        if status == 1:
+            raise ValueError("first-party dependency cycle is unsupported")
+        if status == 2:
+            return
+        state[component_ref] = 1
+        for dependency_ref in edges[component_ref]:
+            if dependency_ref in edges:
+                visit(dependency_ref)
+        state[component_ref] = 2
+
+    for component_ref in sorted(edges):
+        visit(component_ref)
+
+
+def _first_party_dependency_edges(
+    wheels: Iterable[Path],
+    component_lookup: dict[str, tuple[str, str]],
+) -> dict[str, tuple[str, ...]]:
+    edges: dict[str, tuple[str, ...]] = {}
+    for wheel in wheels:
+        component = _wheel_component(wheel)
+        owner_name = _normalize_distribution(str(component["name"]))
+        owner_ref = str(component["bom-ref"])
+        if component_lookup.get(owner_name) != (
+            str(component["version"]),
+            owner_ref,
+        ):
+            raise ValueError(f"first-party wheel component is missing: {owner_name}")
+        active_names: set[str] = set()
+        dependency_refs: list[str] = []
+        for raw_requirement in _wheel_requires_dist(wheel):
+            dependency_name, specifiers, active = _parse_requirement(raw_requirement)
+            if not active:
+                continue
+            if dependency_name in active_names:
+                raise ValueError(
+                    f"duplicate active Requires-Dist entry: {dependency_name}"
+                )
+            active_names.add(dependency_name)
+            if dependency_name == owner_name:
+                raise ValueError("first-party wheel must not depend on itself")
+            target = component_lookup.get(dependency_name)
+            if target is None:
+                raise ValueError(
+                    f"Requires-Dist component is missing: {dependency_name}"
+                )
+            target_version, target_ref = target
+            if not _version_satisfies(target_version, specifiers):
+                raise ValueError(
+                    "Requires-Dist version is not satisfied: "
+                    f"{dependency_name}=={target_version}"
+                )
+            dependency_refs.append(target_ref)
+        ordered_refs = tuple(sorted(dependency_refs))
+        if len(ordered_refs) != len(set(ordered_refs)):
+            raise ValueError("first-party dependency refs contain duplicates")
+        if owner_ref in edges:
+            raise ValueError("duplicate first-party dependency node")
+        edges[owner_ref] = ordered_refs
+    _reject_first_party_dependency_cycles(edges)
+    return edges
 
 
 def finalize_sbom(args: argparse.Namespace) -> int:
@@ -494,7 +1191,16 @@ def finalize_sbom(args: argparse.Namespace) -> int:
             )
         existing_names.add(normalized)
         components.append(component)
-        dependencies.append({"ref": component["bom-ref"]})
+    component_lookup = _component_identity_lookup(components)
+    first_party_edges = _first_party_dependency_edges(wheels, component_lookup)
+    for component in first_party:
+        component_ref = str(component["bom-ref"])
+        dependencies.append(
+            {
+                "ref": component_ref,
+                "dependsOn": list(first_party_edges[component_ref]),
+            }
+        )
 
     source = _source_metadata()
     metadata = payload.setdefault("metadata", {})
@@ -725,6 +1431,7 @@ def _sbom_summary(
     wheels: Iterable[Path],
     expected_runtime_dependencies: dict[str, str],
 ) -> dict[str, object]:
+    wheels = tuple(wheels)
     payload = _load_json(path)
     if payload.get("bomFormat") != "CycloneDX":
         raise ValueError("SBOM is not CycloneDX JSON")
@@ -774,6 +1481,7 @@ def _sbom_summary(
         normalized = _normalize_distribution(name)
         components_by_name.setdefault(normalized, []).append(component)
     dependency_refs: list[str] = []
+    dependencies_by_ref: dict[str, dict[str, Any]] = {}
     for dependency in dependencies:
         if not isinstance(dependency, dict):
             schema_errors.append("dependency_invalid")
@@ -783,6 +1491,8 @@ def _sbom_summary(
             schema_errors.append("dependency_invalid")
             continue
         dependency_refs.append(ref)
+        if ref not in dependencies_by_ref:
+            dependencies_by_ref[ref] = dependency
         if ref not in component_refs:
             schema_errors.append("dependency_ref_unknown")
         depends_on = dependency.get("dependsOn", [])
@@ -827,6 +1537,28 @@ def _sbom_summary(
             wheel_hash_mismatches.append(wheel.name)
         if dependency_refs.count(str(expected["bom-ref"])) != 1:
             first_party_component_errors.append("first_party_dependency_ref")
+    try:
+        component_lookup = _component_identity_lookup(
+            component for component in components if isinstance(component, dict)
+        )
+        expected_first_party_edges = _first_party_dependency_edges(
+            wheels,
+            component_lookup,
+        )
+        for component_ref, expected_depends_on in expected_first_party_edges.items():
+            dependency = dependencies_by_ref.get(component_ref)
+            actual_depends_on = (
+                dependency.get("dependsOn", []) if dependency is not None else None
+            )
+            if (
+                dependency is None
+                or "dependsOn" not in dependency
+                or not isinstance(actual_depends_on, list)
+                or tuple(actual_depends_on) != expected_depends_on
+            ):
+                first_party_component_errors.append("first_party_dependency_edges")
+    except ValueError:
+        first_party_component_errors.append("first_party_dependency_edges")
     runtime_components: dict[str, str] = {}
     runtime_component_errors: list[str] = []
     for normalized, candidates in components_by_name.items():

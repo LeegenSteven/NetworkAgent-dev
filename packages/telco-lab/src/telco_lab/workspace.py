@@ -5,12 +5,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 import tempfile
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from itertools import islice
 from pathlib import Path
-from typing import Iterator, Literal
+from typing import BinaryIO, Iterable, Iterator, Literal
 
 from pydantic import ValidationError
 
@@ -33,14 +35,13 @@ LOCK_FILENAME = "telco-lab.lock.json"
 _OPERATION_LOCK_FILENAME = ".telco-lab.operation.lock"
 _ARTIFACT_DIRECTORY = "artifacts"
 _MAX_LOCK_BYTES = 1024 * 1024
+_MAX_VERIFIED_ARTIFACTS = 256
 
 
 def _is_link_like(path: Path) -> bool:
     try:
         junction_check = getattr(path, "is_junction", None)
-        return path.is_symlink() or bool(
-            callable(junction_check) and junction_check()
-        )
+        return path.is_symlink() or bool(callable(junction_check) and junction_check())
     except OSError:
         return True
 
@@ -53,6 +54,120 @@ class ArtifactRecord:
     size_bytes: int
     local_path: Path
     cached: bool
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedArtifactStream:
+    """A verified, read-only artifact handle owned by its enclosing context."""
+
+    resource_id: str
+    dataset_id: str
+    dataset_version: str
+    sha256: str
+    size_bytes: int
+    media_type: str
+    adapter: str
+    _stream: BinaryIO = field(repr=False, compare=False)
+
+    @property
+    def closed(self) -> bool:
+        try:
+            value = self._stream.closed
+            if type(value) is bool:
+                return value
+        except Exception:
+            pass
+        raise LabError("artifact_unverified") from None
+
+    def read(self, size: int = -1) -> bytes:
+        try:
+            return self._stream.read(size)
+        except Exception:
+            pass
+        raise LabError("artifact_unverified") from None
+
+    def readinto(self, buffer) -> int | None:
+        try:
+            return self._stream.readinto(buffer)
+        except Exception:
+            pass
+        raise LabError("artifact_unverified") from None
+
+    def seek(self, offset: int, whence: int = os.SEEK_SET) -> int:
+        try:
+            return self._stream.seek(offset, whence)
+        except Exception:
+            pass
+        raise LabError("artifact_unverified") from None
+
+    def tell(self) -> int:
+        try:
+            return self._stream.tell()
+        except Exception:
+            pass
+        raise LabError("artifact_unverified") from None
+
+    def readable(self) -> bool:
+        try:
+            return not self.closed
+        except Exception:
+            pass
+        raise LabError("artifact_unverified") from None
+
+    def seekable(self) -> bool:
+        try:
+            return not self.closed
+        except Exception:
+            pass
+        raise LabError("artifact_unverified") from None
+
+    def writable(self) -> bool:
+        return False
+
+    def _close(self) -> None:
+        self._stream.close()
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class _HeldArtifact:
+    path: Path
+    identity: tuple[int, int]
+    stream: VerifiedArtifactStream
+
+
+def _file_identity(metadata: os.stat_result) -> tuple[int, int]:
+    return (metadata.st_dev, metadata.st_ino)
+
+
+def _require_regular_single_link(
+    metadata: os.stat_result, *, expected_size: int
+) -> None:
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_nlink != 1
+        or metadata.st_size != expected_size
+    ):
+        raise LabError("artifact_unverified")
+
+
+def _stream_sha256(stream: BinaryIO, *, expected_size: int) -> str:
+    try:
+        stream.seek(0, os.SEEK_SET)
+        digest = hashlib.sha256()
+        size = 0
+        while block := stream.read(256 * 1024):
+            if not isinstance(block, bytes):
+                raise LabError("artifact_unverified")
+            size += len(block)
+            digest.update(block)
+        stream.seek(0, os.SEEK_SET)
+        if size != expected_size:
+            raise LabError("artifact_unverified")
+        return digest.hexdigest()
+    except LabError:
+        raise
+    except (OSError, TypeError, ValueError) as exc:
+        raise LabError("artifact_unverified") from exc
 
 
 VerificationStatus = Literal[
@@ -211,13 +326,16 @@ class TelcoLab:
     def _write_lock(self, lock: WorkspaceLock) -> None:
         temporary: Path | None = None
         try:
-            serialized = json.dumps(
-                lock.model_dump(mode="json"),
-                ensure_ascii=False,
-                allow_nan=False,
-                separators=(",", ":"),
-                sort_keys=True,
-            ).encode("utf-8") + b"\n"
+            serialized = (
+                json.dumps(
+                    lock.model_dump(mode="json"),
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8")
+                + b"\n"
+            )
             if len(serialized) > _MAX_LOCK_BYTES:
                 raise LabError("lock_invalid")
             handle = tempfile.NamedTemporaryFile(
@@ -262,10 +380,18 @@ class TelcoLab:
 
             old_artifacts = list(existing.artifacts) if existing is not None else []
             old = next(
-                (item for item in old_artifacts if item.resource_id == resource.resource_id),
+                (
+                    item
+                    for item in old_artifacts
+                    if item.resource_id == resource.resource_id
+                ),
                 None,
             )
-            if receipt.cached and old is not None and self._locked_matches_resource(old, resource):
+            if (
+                receipt.cached
+                and old is not None
+                and self._locked_matches_resource(old, resource)
+            ):
                 locked = old
             else:
                 locked = LockedArtifact(
@@ -290,7 +416,9 @@ class TelcoLab:
                     fetched_at=datetime.now(UTC),
                 )
             artifacts = [
-                item for item in old_artifacts if item.resource_id != resource.resource_id
+                item
+                for item in old_artifacts
+                if item.resource_id != resource.resource_id
             ]
             artifacts.append(locked)
             locked_artifacts = tuple(
@@ -330,19 +458,263 @@ class TelcoLab:
             and locked.size_bytes == resource.size_bytes
             and locked.media_type == resource.media_type
             and locked.adapter == resource.adapter
-            and locked.catalog_resource_sha256
-            == catalog_resource_sha256(resource)
+            and locked.catalog_resource_sha256 == catalog_resource_sha256(resource)
             and locked.source_url_sha256 == source_url_sha256(resource.source_url)
             and locked.allowed_hosts == resource.allowed_hosts
             and locked.license_id == resource.license.id
             and locked.license_name == resource.license.name
             and locked.license_url == resource.license.url
             and locked.license_evidence_url == resource.license.evidence_url
-            and locked.license_evidence_sha256
-            == resource.license.evidence_sha256
+            and locked.license_evidence_sha256 == resource.license.evidence_sha256
             and locked.license_attribution == resource.license.attribution
             and locked.license_reviewed_at == resource.license.reviewed_at
         )
+
+    @staticmethod
+    def _normalize_resource_ids(resource_ids: Iterable[str]) -> tuple[str, ...]:
+        try:
+            if isinstance(resource_ids, (str, bytes)):
+                raise LabError("artifact_unverified")
+            normalized = tuple(islice(iter(resource_ids), _MAX_VERIFIED_ARTIFACTS + 1))
+        except LabError:
+            raise
+        except Exception as exc:
+            raise LabError("artifact_unverified") from exc
+        if (
+            not normalized
+            or len(normalized) > _MAX_VERIFIED_ARTIFACTS
+            or any(type(resource_id) is not str for resource_id in normalized)
+            or len(normalized) != len(set(normalized))
+        ):
+            raise LabError("artifact_unverified")
+        return normalized
+
+    def _validated_artifact_closure(
+        self,
+        catalog,
+        lock: WorkspaceLock,
+        resource_ids: tuple[str, ...],
+    ) -> tuple[tuple[CatalogResource, LockedArtifact], ...]:
+        if (
+            lock.catalog_id != catalog.catalog_id
+            or lock.catalog_version != catalog.catalog_version
+        ):
+            raise LabError("artifact_unverified")
+
+        resources: list[CatalogResource] = []
+        for resource_id in resource_ids:
+            resource = catalog.resource(resource_id)
+            if resource is None:
+                raise LabError("artifact_unverified")
+            resources.append(resource)
+
+        selected_datasets = {
+            (resource.dataset_id, resource.dataset_version) for resource in resources
+        }
+        catalog_closure = {
+            resource.resource_id
+            for resource in catalog.resources
+            if (resource.dataset_id, resource.dataset_version) in selected_datasets
+        }
+        requested = set(resource_ids)
+        locked_by_id = {item.resource_id: item for item in lock.artifacts}
+        if requested != catalog_closure or requested != set(locked_by_id):
+            raise LabError("artifact_unverified")
+
+        validated: list[tuple[CatalogResource, LockedArtifact]] = []
+        for resource in resources:
+            locked = locked_by_id[resource.resource_id]
+            if not self._locked_matches_resource(locked, resource):
+                raise LabError("artifact_unverified")
+            validated.append((resource, locked))
+        return tuple(validated)
+
+    @staticmethod
+    def _verify_held_artifact(held: _HeldArtifact) -> None:
+        try:
+            before_path = os.lstat(held.path)
+            if _is_link_like(held.path):
+                raise LabError("artifact_unverified")
+            before_handle = os.fstat(held.stream._stream.fileno())
+            _require_regular_single_link(
+                before_path, expected_size=held.stream.size_bytes
+            )
+            _require_regular_single_link(
+                before_handle, expected_size=held.stream.size_bytes
+            )
+            if (
+                _file_identity(before_path) != held.identity
+                or _file_identity(before_handle) != held.identity
+            ):
+                raise LabError("artifact_unverified")
+
+            digest = _stream_sha256(
+                held.stream._stream,
+                expected_size=held.stream.size_bytes,
+            )
+            after_handle = os.fstat(held.stream._stream.fileno())
+            after_path = os.lstat(held.path)
+            if _is_link_like(held.path):
+                raise LabError("artifact_unverified")
+            _require_regular_single_link(
+                after_handle, expected_size=held.stream.size_bytes
+            )
+            _require_regular_single_link(
+                after_path, expected_size=held.stream.size_bytes
+            )
+            if (
+                digest != held.stream.sha256
+                or _file_identity(after_handle) != held.identity
+                or _file_identity(after_path) != held.identity
+            ):
+                raise LabError("artifact_unverified")
+        except LabError:
+            raise
+        except (OSError, TypeError, ValueError) as exc:
+            raise LabError("artifact_unverified") from exc
+
+    def _open_verified_artifact(
+        self, resource: CatalogResource, locked: LockedArtifact
+    ) -> _HeldArtifact:
+        path = self._artifact_path(resource)
+        descriptor: int | None = None
+        public_stream: VerifiedArtifactStream | None = None
+        verified = False
+        try:
+            before = os.lstat(path)
+            if _is_link_like(path):
+                raise LabError("artifact_unverified")
+            _require_regular_single_link(before, expected_size=locked.size_bytes)
+
+            flags = (
+                os.O_RDONLY
+                | getattr(os, "O_BINARY", 0)
+                | getattr(os, "O_CLOEXEC", 0)
+                | getattr(os, "O_NOFOLLOW", 0)
+            )
+            descriptor = os.open(path, flags)
+            opened = os.fstat(descriptor)
+            _require_regular_single_link(opened, expected_size=locked.size_bytes)
+            identity = _file_identity(before)
+            if _file_identity(opened) != identity:
+                raise LabError("artifact_unverified")
+
+            native_stream = os.fdopen(descriptor, "rb")
+            descriptor = None
+            public_stream = VerifiedArtifactStream(
+                resource_id=resource.resource_id,
+                dataset_id=resource.dataset_id,
+                dataset_version=resource.dataset_version,
+                sha256=locked.sha256,
+                size_bytes=locked.size_bytes,
+                media_type=locked.media_type,
+                adapter=locked.adapter,
+                _stream=native_stream,
+            )
+            held = _HeldArtifact(path=path, identity=identity, stream=public_stream)
+            self._verify_held_artifact(held)
+            verified = True
+            return held
+        except LabError:
+            raise
+        except (OSError, TypeError, ValueError) as exc:
+            raise LabError("artifact_unverified") from exc
+        finally:
+            if public_stream is not None and not verified:
+                try:
+                    public_stream._close()
+                except Exception:
+                    pass
+            if descriptor is not None:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+
+    @staticmethod
+    def _close_held_artifacts(held_artifacts: list[_HeldArtifact]) -> Exception | None:
+        first_error: Exception | None = None
+        for held in held_artifacts:
+            try:
+                held.stream._close()
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+                if not held.stream.closed:
+                    try:
+                        held.stream._stream.close()
+                    except Exception:
+                        pass
+        return first_error
+
+    @contextmanager
+    def _open_verified_artifacts(
+        self, resource_ids: Iterable[str]
+    ) -> Iterator[tuple[VerifiedArtifactStream, ...]]:
+        """Yield one exact catalog/lock closure as held, verified streams."""
+
+        normalized = self._normalize_resource_ids(resource_ids)
+        if not self._workspace.exists():
+            raise LabError("artifact_unverified")
+
+        with self._operation(create_workspace=False):
+            held_artifacts: list[_HeldArtifact] = []
+            primary_failure = False
+            try:
+                try:
+                    catalog = self.catalog()
+                    lock = self._read_lock(required=True)
+                    if lock is None:  # pragma: no cover - required=True is fail-closed
+                        raise LabError("artifact_unverified")
+                    closure = self._validated_artifact_closure(
+                        catalog,
+                        lock,
+                        normalized,
+                    )
+                    for resource, locked in closure:
+                        held_artifacts.append(
+                            self._open_verified_artifact(resource, locked)
+                        )
+                except LabError as exc:
+                    if exc.code == "artifact_unverified":
+                        raise
+                    raise LabError("artifact_unverified") from exc
+                except (OSError, TypeError, ValueError) as exc:
+                    raise LabError("artifact_unverified") from exc
+
+                yield tuple(held.stream for held in held_artifacts)
+
+                for held in held_artifacts:
+                    self._verify_held_artifact(held)
+            except BaseException:
+                primary_failure = True
+                raise
+            finally:
+                close_error = self._close_held_artifacts(held_artifacts)
+                if close_error is not None and not primary_failure:
+                    raise LabError("artifact_unverified") from close_error
+
+    @contextmanager
+    def open_verified_artifacts(
+        self, resource_ids: Iterable[str]
+    ) -> Iterator[tuple[VerifiedArtifactStream, ...]]:
+        """Yield verified streams behind a fully detached error boundary."""
+
+        caller_failure = False
+        internal_failure = False
+        try:
+            with self._open_verified_artifacts(resource_ids) as artifacts:
+                try:
+                    yield artifacts
+                except BaseException:
+                    caller_failure = True
+                    raise
+        except Exception:
+            if caller_failure:
+                raise
+            internal_failure = True
+        if internal_failure:
+            raise LabError("artifact_unverified") from None
 
     def verify(self, resource_id: str | None = None) -> VerificationReport:
         catalog = self.catalog()
@@ -463,5 +835,6 @@ __all__ = [
     "ArtifactRecord",
     "ArtifactVerification",
     "TelcoLab",
+    "VerifiedArtifactStream",
     "VerificationReport",
 ]

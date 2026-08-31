@@ -27,13 +27,14 @@ MAX_DOCUMENT_BYTES = 64 * 1024
 MAX_JSON_DEPTH = 16
 MAX_BACKUP_DATABASE_BYTES = 128 * 1024 * 1024
 MAX_BACKUP_MANIFEST_BYTES = 16 * 1024
-LOCAL_OWNERSHIP_DOMAIN = b"networkagent-local-backup-ownership/1\0"
+LOCAL_OWNERSHIP_DOMAIN = b"networkagent-local-backup-ownership/2\0"
 _TOKEN = re.compile(r"[0-9a-f]{12}\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _SAFE_CATALOG_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,127}\Z")
 
-PathIdentity = tuple[int, int]
-BackupTreeIdentity = tuple[PathIdentity, tuple[tuple[str, PathIdentity], ...]]
+DirectoryIdentity = tuple[int, int]
+FileIdentity = tuple[int, int, int, int, int, int]
+BackupTreeIdentity = tuple[DirectoryIdentity, tuple[tuple[str, FileIdentity], ...]]
 
 _NOT_CLAIMED = [
     "ONLINE_BACKUP",
@@ -337,7 +338,7 @@ def _regular_file(
     return details
 
 
-def _plain_directory_identity(path: Path, *, error_code: str) -> PathIdentity:
+def _plain_directory_identity(path: Path, *, error_code: str) -> DirectoryIdentity:
     try:
         details = os.lstat(path)
     except OSError:
@@ -364,9 +365,27 @@ def _plain_directory_identity(path: Path, *, error_code: str) -> PathIdentity:
     return details.st_dev, details.st_ino
 
 
+def _file_identity(details: os.stat_result, *, error_code: str) -> FileIdentity:
+    identity = (
+        details.st_dev,
+        details.st_ino,
+        details.st_size,
+        details.st_mtime_ns,
+        details.st_ctime_ns,
+        details.st_nlink,
+    )
+    minimums = (0, 1, 0, 1, 1, 1)
+    if any(
+        type(value) is not int or value < minimum
+        for value, minimum in zip(identity, minimums, strict=True)
+    ):
+        raise BackupRecoveryError(error_code)
+    return identity
+
+
 def _unlink_owned_file(
     path: Path,
-    expected_identity: PathIdentity,
+    expected_identity: FileIdentity,
     *,
     error_code: str,
     allowed_links: frozenset[int] = frozenset({1}),
@@ -377,7 +396,7 @@ def _unlink_owned_file(
             _is_link_like(path)
             or not stat.S_ISREG(details.st_mode)
             or details.st_nlink not in allowed_links
-            or (details.st_dev, details.st_ino) != expected_identity
+            or _file_identity(details, error_code=error_code) != expected_identity
         ):
             raise BackupRecoveryError(error_code)
         path.unlink()
@@ -388,7 +407,7 @@ def _unlink_owned_file(
 
 
 def _remove_owned_empty_directory(
-    path: Path, expected_identity: PathIdentity, *, error_code: str
+    path: Path, expected_identity: DirectoryIdentity, *, error_code: str
 ) -> None:
     if not os.path.lexists(path):
         return
@@ -403,14 +422,22 @@ def _remove_owned_empty_directory(
         raise BackupRecoveryError(error_code) from None
 
 
-def _file_snapshot(details: os.stat_result) -> tuple[int, int, int, int, int]:
-    return (
-        details.st_dev,
-        details.st_ino,
-        details.st_size,
-        details.st_mtime_ns,
-        details.st_nlink,
-    )
+def _file_snapshot(details: os.stat_result) -> FileIdentity:
+    return _file_identity(details, error_code="recovery_contract_failed")
+
+
+def _file_object_shape(
+    details: os.stat_result, *, error_code: str
+) -> tuple[int, int, int, int]:
+    identity = _file_identity(details, error_code=error_code)
+    return identity[0], identity[1], identity[2], identity[5]
+
+
+def _file_handle_shape(
+    details: os.stat_result, *, error_code: str
+) -> tuple[int, int, int, int, int]:
+    identity = _file_identity(details, error_code=error_code)
+    return identity[0], identity[1], identity[2], identity[3], identity[5]
 
 
 def _file_digest(
@@ -436,7 +463,8 @@ def _file_digest(
             if (
                 not stat.S_ISREG(opened.st_mode)
                 or opened.st_nlink != 1
-                or _file_snapshot(opened) != _file_snapshot(before)
+                or _file_handle_shape(opened, error_code=error_code)
+                != _file_handle_shape(before, error_code=error_code)
             ):
                 raise BackupRecoveryError(error_code)
             while True:
@@ -461,8 +489,11 @@ def _file_digest(
     after = _regular_file(path, error_code=error_code)
     if (
         opened_after is None
-        or _file_snapshot(opened_after) != _file_snapshot(before)
-        or _file_snapshot(after) != _file_snapshot(before)
+        or _file_handle_shape(opened_after, error_code=error_code)
+        != _file_handle_shape(before, error_code=error_code)
+        or _file_snapshot(opened_after) != _file_snapshot(opened)
+        or _file_identity(after, error_code=error_code)
+        != _file_identity(before, error_code=error_code)
         or size != before.st_size
     ):
         raise BackupRecoveryError(error_code)
@@ -482,10 +513,10 @@ def _capture_backup_tree_identity(
             "networkagent.duckdb",
         }:
             raise BackupRecoveryError(error_code)
-        files: list[tuple[str, PathIdentity]] = []
+        files: list[tuple[str, FileIdentity]] = []
         for child in sorted(children, key=lambda item: item.name):
             details = _regular_file(child, error_code=error_code)
-            files.append((child.name, (details.st_dev, details.st_ino)))
+            files.append((child.name, _file_identity(details, error_code=error_code)))
         if (
             _plain_directory_identity(backup_directory, error_code=error_code)
             != directory_identity
@@ -493,7 +524,7 @@ def _capture_backup_tree_identity(
             raise BackupRecoveryError(error_code)
         for name, identity in files:
             details = _regular_file(backup_directory / name, error_code=error_code)
-            if (details.st_dev, details.st_ino) != identity:
+            if _file_identity(details, error_code=error_code) != identity:
                 raise BackupRecoveryError(error_code)
         return directory_identity, tuple(files)
     except BackupRecoveryError:
@@ -510,18 +541,32 @@ def _local_ownership_sha256(identity: BackupTreeIdentity) -> str:
     if set(files) != {"backup-manifest.json", "networkagent.duckdb"}:
         raise BackupRecoveryError("recovery_contract_failed")
 
-    def entry(name: str, value: PathIdentity) -> list[object]:
+    def directory_entry(name: str, value: DirectoryIdentity) -> list[object]:
+        if len(value) != 2:
+            raise BackupRecoveryError("recovery_contract_failed")
         return [
             name,
             _strict_int(value[0], minimum=0),
             _strict_int(value[1], minimum=1),
         ]
 
+    def file_entry(name: str, value: FileIdentity) -> list[object]:
+        if len(value) != 6 or value[5] != 1:
+            raise BackupRecoveryError("recovery_contract_failed")
+        minimums = (0, 1, 0, 1, 1, 1)
+        return [
+            name,
+            *(
+                _strict_int(item, minimum=minimum)
+                for item, minimum in zip(value, minimums, strict=True)
+            ),
+        ]
+
     encoded = json.dumps(
         [
-            entry("directory", directory_identity),
-            entry("networkagent.duckdb", files["networkagent.duckdb"]),
-            entry("backup-manifest.json", files["backup-manifest.json"]),
+            directory_entry("directory", directory_identity),
+            file_entry("networkagent.duckdb", files["networkagent.duckdb"]),
+            file_entry("backup-manifest.json", files["backup-manifest.json"]),
         ],
         ensure_ascii=True,
         separators=(",", ":"),
@@ -574,7 +619,7 @@ def _create_run_directory(
     *,
     utc_now: Callable[[], datetime],
     random_token: Callable[[], str],
-) -> tuple[Path, str, PathIdentity]:
+) -> tuple[Path, str, DirectoryIdentity]:
     local_root = repository_root / ".local"
     defense_root = local_root / "networkagent-defense"
     run_directory: Path | None = None
@@ -630,10 +675,10 @@ def _create_run_directory(
 
 def _create_workspace_directory(
     run_directory: Path,
-    run_identity: PathIdentity,
+    run_identity: DirectoryIdentity,
     workspace: Path,
-) -> PathIdentity:
-    created_identity: PathIdentity | None = None
+) -> DirectoryIdentity:
+    created_identity: DirectoryIdentity | None = None
     completed = False
     try:
         if workspace.parent != run_directory or workspace.name != "success":
@@ -757,7 +802,7 @@ def _validate_reset(payload: Mapping[str, object]) -> None:
 
 def _copy_bounded_regular_file(
     source: Path, destination: Path, *, maximum_bytes: int
-) -> PathIdentity:
+) -> FileIdentity:
     source_before = _regular_file(source)
     if source_before.st_size > maximum_bytes:
         raise BackupRecoveryError("recovery_contract_failed")
@@ -779,7 +824,8 @@ def _copy_bounded_regular_file(
         if (
             not stat.S_ISREG(source_opened.st_mode)
             or source_opened.st_nlink != 1
-            or _file_snapshot(source_opened) != _file_snapshot(source_before)
+            or _file_handle_shape(source_opened, error_code="recovery_contract_failed")
+            != _file_handle_shape(source_before, error_code="recovery_contract_failed")
             or not stat.S_ISREG(destination_opened.st_mode)
             or destination_opened.st_nlink != 1
         ):
@@ -816,14 +862,21 @@ def _copy_bounded_regular_file(
     if (
         source_opened_after is None
         or destination_opened_after is None
-        or _file_snapshot(source_opened_after) != _file_snapshot(source_before)
+        or _file_handle_shape(
+            source_opened_after, error_code="recovery_contract_failed"
+        )
+        != _file_handle_shape(source_before, error_code="recovery_contract_failed")
+        or _file_snapshot(source_opened_after) != _file_snapshot(source_opened)
         or _file_snapshot(source_after) != _file_snapshot(source_before)
-        or _file_snapshot(destination_after) != _file_snapshot(destination_opened_after)
+        or _file_handle_shape(destination_after, error_code="recovery_contract_failed")
+        != _file_handle_shape(
+            destination_opened_after, error_code="recovery_contract_failed"
+        )
         or copied != source_before.st_size
         or copied != destination_after.st_size
     ):
         raise BackupRecoveryError("recovery_contract_failed")
-    return destination_after.st_dev, destination_after.st_ino
+    return _file_identity(destination_after, error_code="recovery_contract_failed")
 
 
 def _copy_corrupt_backup(
@@ -832,8 +885,8 @@ def _copy_corrupt_backup(
     *,
     source_identity: BackupTreeIdentity,
 ) -> BackupTreeIdentity:
-    destination_identity: PathIdentity | None = None
-    created_files: dict[str, PathIdentity] = {}
+    destination_identity: DirectoryIdentity | None = None
+    created_files: dict[str, FileIdentity] = {}
     try:
         if (
             os.path.lexists(destination)
@@ -885,8 +938,13 @@ def _copy_corrupt_backup(
         try:
             opened = os.fstat(descriptor)
             if (
-                _file_snapshot(opened) != _file_snapshot(before_corruption)
-                or (opened.st_dev, opened.st_ino)
+                _file_handle_shape(opened, error_code="recovery_contract_failed")
+                != _file_handle_shape(
+                    before_corruption, error_code="recovery_contract_failed"
+                )
+                or _file_identity(
+                    before_corruption, error_code="recovery_contract_failed"
+                )
                 != created_files["networkagent.duckdb"]
                 or _plain_directory_identity(
                     destination, error_code="recovery_contract_failed"
@@ -907,22 +965,27 @@ def _copy_corrupt_backup(
         corrupted_path_after = _regular_file(corrupted_database)
         if (
             corrupted_opened_after is None
-            or _file_snapshot(corrupted_path_after)
-            != _file_snapshot(corrupted_opened_after)
-            or (
-                corrupted_opened_after.st_dev,
-                corrupted_opened_after.st_ino,
-                corrupted_opened_after.st_size,
-                corrupted_opened_after.st_nlink,
+            or _file_handle_shape(
+                corrupted_path_after, error_code="recovery_contract_failed"
             )
-            != (
-                before_corruption.st_dev,
-                before_corruption.st_ino,
-                before_corruption.st_size,
-                before_corruption.st_nlink,
+            != _file_handle_shape(
+                corrupted_opened_after, error_code="recovery_contract_failed"
+            )
+            or _file_object_shape(
+                corrupted_opened_after, error_code="recovery_contract_failed"
+            )
+            != _file_object_shape(
+                before_corruption, error_code="recovery_contract_failed"
             )
         ):
             raise BackupRecoveryError("recovery_contract_failed")
+        created_files["networkagent.duckdb"] = _file_identity(
+            corrupted_path_after, error_code="recovery_contract_failed"
+        )
+        expected_destination = (
+            destination_identity,
+            tuple(sorted(created_files.items())),
+        )
         if _file_digest(
             corrupted_database, maximum_bytes=MAX_BACKUP_DATABASE_BYTES
         ) == _file_digest(
@@ -1004,13 +1067,13 @@ def _write_report(
     report: Mapping[str, object],
     *,
     token: str,
-    run_identity: PathIdentity,
+    run_identity: DirectoryIdentity,
 ) -> tuple[int, str]:
     if _TOKEN.fullmatch(token) is None:
         raise BackupRecoveryError("report_write_failed")
     final_path = run_directory / REPORT_NAME
     temporary = run_directory / f".{REPORT_NAME}.{token}.tmp"
-    owned_identity: tuple[int, int] | None = None
+    owned_identity: FileIdentity | None = None
     published = False
     linked = False
 
@@ -1041,30 +1104,53 @@ def _write_report(
                     recovered = os.fstat(stream.fileno())
                 except OSError:
                     raise BackupRecoveryError("report_write_failed") from None
-                owned_identity = (recovered.st_dev, recovered.st_ino)
+                owned_identity = _file_identity(
+                    recovered, error_code="report_write_failed"
+                )
                 raise BackupRecoveryError("report_write_failed") from None
-            owned_identity = (opened.st_dev, opened.st_ino)
+            owned_identity = _file_identity(opened, error_code="report_write_failed")
             if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1:
                 raise BackupRecoveryError("report_write_failed")
             if stream.write(encoded) != len(encoded):
                 raise BackupRecoveryError("report_write_failed")
             stream.flush()
+            flushed = os.fstat(stream.fileno())
+            flushed_path = _regular_file(temporary, error_code="report_write_failed")
+            if (
+                _file_handle_shape(flushed, error_code="report_write_failed")
+                != _file_handle_shape(flushed_path, error_code="report_write_failed")
+                or (flushed.st_dev, flushed.st_ino) != owned_identity[:2]
+                or flushed.st_size != len(encoded)
+            ):
+                raise BackupRecoveryError("report_write_failed")
+            owned_identity = _file_identity(
+                flushed_path, error_code="report_write_failed"
+            )
             os.fsync(stream.fileno())
             written = os.fstat(stream.fileno())
+            written_identity = _file_identity(written, error_code="report_write_failed")
             if (
                 not stat.S_ISREG(written.st_mode)
                 or written.st_nlink != 1
-                or (written.st_dev, written.st_ino) != owned_identity
+                or written_identity[:2] != owned_identity[:2]
                 or written.st_size != len(encoded)
             ):
                 raise BackupRecoveryError("report_write_failed")
+            owned_identity = written_identity
         ensure_run_owned()
         temporary_identity = _regular_file(temporary, error_code="report_write_failed")
-        if (
-            temporary_identity.st_dev,
-            temporary_identity.st_ino,
-        ) != owned_identity or temporary_identity.st_size != len(encoded):
+        temporary_file_identity = _file_identity(
+            temporary_identity, error_code="report_write_failed"
+        )
+        if _file_handle_shape(temporary_identity, error_code="report_write_failed") != (
+            owned_identity[0],
+            owned_identity[1],
+            owned_identity[2],
+            owned_identity[3],
+            owned_identity[5],
+        ) or temporary_identity.st_size != len(encoded):
             raise BackupRecoveryError("report_write_failed")
+        owned_identity = temporary_file_identity
         ensure_run_owned()
         os.link(temporary, final_path, follow_symlinks=False)
         linked = True
@@ -1074,19 +1160,20 @@ def _write_report(
         final_identity = _regular_file(
             final_path, expected_links=2, error_code="report_write_failed"
         )
+        linked_temporary_identity = _file_identity(
+            linked_temporary, error_code="report_write_failed"
+        )
+        linked_final_identity = _file_identity(
+            final_identity, error_code="report_write_failed"
+        )
         if (
-            owned_identity
-            != (
-                linked_temporary.st_dev,
-                linked_temporary.st_ino,
-            )
-            or owned_identity
-            != (
-                final_identity.st_dev,
-                final_identity.st_ino,
-            )
-            or not os.path.samefile(temporary, final_path)
+            linked_temporary_identity != linked_final_identity
+            or linked_temporary_identity[:2] != owned_identity[:2]
+            or linked_temporary.st_size != len(encoded)
         ):
+            raise BackupRecoveryError("report_write_failed")
+        owned_identity = linked_temporary_identity
+        if not os.path.samefile(temporary, final_path):
             raise BackupRecoveryError("report_write_failed")
         ensure_run_owned()
         _unlink_owned_file(
@@ -1095,6 +1182,17 @@ def _write_report(
             error_code="report_write_failed",
             allowed_links=frozenset({2}),
         )
+        unlinked_final = _regular_file(
+            final_path, expected_links=1, error_code="report_write_failed"
+        )
+        unlinked_identity = _file_identity(
+            unlinked_final, error_code="report_write_failed"
+        )
+        if unlinked_identity[:2] != owned_identity[:2] or unlinked_final.st_size != len(
+            encoded
+        ):
+            raise BackupRecoveryError("report_write_failed")
+        owned_identity = unlinked_identity
         size, digest = _file_digest(
             final_path,
             maximum_bytes=MAX_DOCUMENT_BYTES,
@@ -1106,9 +1204,8 @@ def _write_report(
         published_identity = _regular_file(
             final_path, expected_links=1, error_code="report_write_failed"
         )
-        if (
-            published_identity.st_dev,
-            published_identity.st_ino,
+        if _file_identity(
+            published_identity, error_code="report_write_failed"
         ) != owned_identity or published_identity.st_size != len(encoded):
             raise BackupRecoveryError("report_write_failed")
         ensure_run_owned()
@@ -1175,7 +1272,7 @@ def _execute(
     backup: dict[str, object] | None = None
     backup_identity: BackupTreeIdentity | None = None
     corrupt_backup_identity: BackupTreeIdentity | None = None
-    workspace_identity: PathIdentity | None = None
+    workspace_identity: DirectoryIdentity | None = None
     lifecycle_before: dict[str, object] | None = None
     first_restore: dict[str, object] | None = None
     retry_restore: dict[str, object] | None = None

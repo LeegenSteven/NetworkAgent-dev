@@ -572,7 +572,7 @@ def test_evidence_reader_rejects_oversized_and_hardlinked_files(
     assert caught.value.code == "recovery_contract_failed"
 
 
-def test_failed_report_publication_removes_both_links(
+def test_failed_report_publication_preserves_link_after_identity_changes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     run_directory = tmp_path / "run"
@@ -588,7 +588,9 @@ def test_failed_report_publication_removes_both_links(
         )
 
     assert caught.value.code == "report_write_failed"
-    assert not tuple(run_directory.iterdir())
+    assert {child.name for child in run_directory.iterdir()} == {
+        backup_demo.REPORT_NAME
+    }
 
 
 def test_report_collision_never_deletes_an_unowned_file(tmp_path: Path) -> None:
@@ -642,6 +644,53 @@ def test_backup_child_replacement_is_preserved_on_cleanup(tmp_path: Path) -> Non
     assert database.read_bytes() == b"unowned-racer"
     assert (backup_directory / "backup-manifest.json").is_file()
     assert parked.is_file()
+
+
+def test_same_inode_with_different_ctime_is_never_unlinked(tmp_path: Path) -> None:
+    target = tmp_path / "owned-report.tmp"
+    target.write_bytes(b"unowned-racer")
+    current = backup_demo._file_identity(
+        os.lstat(target), error_code="report_write_failed"
+    )
+    expected = (*current[:4], current[4] + 1, current[5])
+
+    with pytest.raises(backup_demo.BackupRecoveryError) as caught:
+        backup_demo._unlink_owned_file(
+            target, expected, error_code="report_write_failed"
+        )
+
+    assert caught.value.code == "report_write_failed"
+    assert target.read_bytes() == b"unowned-racer"
+
+
+def test_backup_same_inode_with_different_ctime_is_not_owned(
+    tmp_path: Path,
+) -> None:
+    backup_directory, _backup, identity = _fake_backup_tree(tmp_path)
+    directory_identity, file_identities = identity
+    changed_files = []
+    for filename, file_identity in file_identities:
+        changed_files.append(
+            (
+                filename,
+                (
+                    *file_identity[:4],
+                    file_identity[4] + (1 if filename == "networkagent.duckdb" else 0),
+                    file_identity[5],
+                ),
+            )
+        )
+    raced_identity = (directory_identity, tuple(changed_files))
+
+    assert backup_demo._local_ownership_sha256(identity) != (
+        backup_demo._local_ownership_sha256(raced_identity)
+    )
+    with pytest.raises(backup_demo.BackupRecoveryError) as caught:
+        backup_demo._remove_backup_directory(backup_directory, raced_identity)
+
+    assert caught.value.code == "cleanup_failed"
+    assert (backup_directory / "backup-manifest.json").is_file()
+    assert (backup_directory / "networkagent.duckdb").is_file()
 
 
 def test_backup_response_window_exact_copy_replacement_is_never_adopted(
@@ -759,7 +808,7 @@ def test_corrupt_copy_directory_replacement_is_preserved_and_never_written(
 
 
 @pytest.mark.parametrize("failure", ["initial_identity", "write"])
-def test_early_report_failures_remove_owned_temp_file(
+def test_early_report_failure_cleanup_requires_full_identity(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     failure: str,
@@ -795,7 +844,11 @@ def test_early_report_failures_remove_owned_temp_file(
         )
 
     assert caught.value.code == "report_write_failed"
-    assert not tuple(run_directory.iterdir())
+    remaining = {child.name for child in run_directory.iterdir()}
+    if failure == "initial_identity":
+        assert remaining == {".local-backup-recovery-report.json.abc123def456.tmp"}
+    else:
+        assert not remaining
 
 
 def test_transient_first_fstat_failure_recovers_identity_and_cleans_temp(

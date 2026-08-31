@@ -45,7 +45,9 @@ _BACKUP_MAX_ROWS = 100_000
 _BACKUP_MAX_CATALOG_RECORDS = 1024
 _MAINTENANCE_LOCK_NAME = ".backup-restore.lock"
 _RESTORE_TEMP_NAME = ".networkagent.duckdb.restore.tmp"
-_LOCAL_BACKUP_OWNERSHIP_DOMAIN = b"networkagent-local-backup-ownership/1\0"
+_LOCAL_BACKUP_OWNERSHIP_DOMAIN = b"networkagent-local-backup-ownership/2\0"
+DirectoryIdentity = tuple[int, int]
+FileIdentity = tuple[int, int, int, int, int, int]
 _PACKAGE_SOURCES = (
     REPOSITORY_ROOT / "packages" / "telco-domain" / "src",
     REPOSITORY_ROOT / "packages" / "telco-local" / "src",
@@ -249,22 +251,61 @@ def _safe_file_stat(path: Path, *, invalid_code: str) -> os.stat_result:
     return metadata
 
 
-def _file_identity(metadata: os.stat_result) -> tuple[int, int]:
-    return metadata.st_dev, metadata.st_ino
+def _strict_directory_identity(
+    identity: DirectoryIdentity, *, invalid_code: str
+) -> list[int]:
+    device, inode = identity
+    if type(device) is not int or type(inode) is not int or device < 0 or inode <= 0:
+        raise SafeCliError(invalid_code)
+    return [device, inode]
+
+
+def _strict_file_identity(identity: FileIdentity, *, invalid_code: str) -> list[int]:
+    device, inode, size, modified_ns, changed_ns, link_count = identity
+    if (
+        type(device) is not int
+        or type(inode) is not int
+        or type(size) is not int
+        or type(modified_ns) is not int
+        or type(changed_ns) is not int
+        or type(link_count) is not int
+        or device < 0
+        or inode <= 0
+        or size < 0
+        or modified_ns <= 0
+        or changed_ns <= 0
+        or link_count != 1
+    ):
+        raise SafeCliError(invalid_code)
+    return [device, inode, size, modified_ns, changed_ns, link_count]
+
+
+def _file_identity(metadata: os.stat_result, *, invalid_code: str) -> FileIdentity:
+    identity = (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+        metadata.st_nlink,
+    )
+    _strict_file_identity(identity, invalid_code=invalid_code)
+    return identity
 
 
 def _require_file_identity(
-    path: Path, expected: tuple[int, int], *, invalid_code: str
+    path: Path, expected: FileIdentity, *, invalid_code: str
 ) -> os.stat_result:
+    _strict_file_identity(expected, invalid_code=invalid_code)
     metadata = _safe_file_stat(path, invalid_code=invalid_code)
-    if _file_identity(metadata) != expected:
+    if _file_identity(metadata, invalid_code=invalid_code) != expected:
         raise SafeCliError(invalid_code)
     return metadata
 
 
 def _unlink_file_identity(
     path: Path,
-    expected: tuple[int, int],
+    expected: FileIdentity,
     *,
     invalid_code: str,
     failure_code: str,
@@ -278,19 +319,19 @@ def _unlink_file_identity(
 
 def _capture_partial_child(
     path: Path,
-    expected_children: dict[str, tuple[int, int]],
+    expected_children: dict[str, FileIdentity],
     *,
     invalid_code: str,
 ) -> None:
     metadata = _safe_file_stat(path, invalid_code=invalid_code)
-    identity = _file_identity(metadata)
+    identity = _file_identity(metadata, invalid_code=invalid_code)
     previous = expected_children.get(path.name)
     if previous is not None and previous != identity:
         raise SafeCliError(invalid_code)
     expected_children[path.name] = identity
 
 
-def _directory_identity(path: Path, *, invalid_code: str) -> tuple[int, int]:
+def _directory_identity(path: Path, *, invalid_code: str) -> DirectoryIdentity:
     try:
         if _is_link_like(path):
             raise SafeCliError(invalid_code)
@@ -303,12 +344,15 @@ def _directory_identity(path: Path, *, invalid_code: str) -> tuple[int, int]:
         raise
     except OSError:
         raise SafeCliError(invalid_code) from None
-    return metadata.st_dev, metadata.st_ino
+    identity = (metadata.st_dev, metadata.st_ino)
+    _strict_directory_identity(identity, invalid_code=invalid_code)
+    return identity
 
 
 def _require_directory_identity(
-    path: Path, expected: tuple[int, int], *, invalid_code: str
+    path: Path, expected: DirectoryIdentity, *, invalid_code: str
 ) -> None:
+    _strict_directory_identity(expected, invalid_code=invalid_code)
     if _directory_identity(path, invalid_code=invalid_code) != expected:
         raise SafeCliError(invalid_code)
 
@@ -319,14 +363,45 @@ def _same_file_snapshot(left: os.stat_result, right: os.stat_result) -> bool:
         left.st_ino,
         left.st_size,
         left.st_mtime_ns,
+        left.st_ctime_ns,
         left.st_nlink,
     ) == (
         right.st_dev,
         right.st_ino,
         right.st_size,
         right.st_mtime_ns,
+        right.st_ctime_ns,
         right.st_nlink,
     )
+
+
+def _same_path_and_open_snapshot(
+    path_metadata: os.stat_result, opened_metadata: os.stat_result
+) -> bool:
+    """Compare path and handle views without Windows' divergent ctime view."""
+
+    return (
+        path_metadata.st_dev,
+        path_metadata.st_ino,
+        path_metadata.st_size,
+        path_metadata.st_mtime_ns,
+        path_metadata.st_nlink,
+    ) == (
+        opened_metadata.st_dev,
+        opened_metadata.st_ino,
+        opened_metadata.st_size,
+        opened_metadata.st_mtime_ns,
+        opened_metadata.st_nlink,
+    )
+
+
+def _capture_open_file_identity(
+    path: Path, opened_metadata: os.stat_result, *, invalid_code: str
+) -> FileIdentity:
+    path_metadata = _safe_file_stat(path, invalid_code=invalid_code)
+    if not _same_path_and_open_snapshot(path_metadata, opened_metadata):
+        raise SafeCliError(invalid_code)
+    return _file_identity(path_metadata, invalid_code=invalid_code)
 
 
 def _bounded_file_sha256(
@@ -348,7 +423,7 @@ def _bounded_file_sha256(
         if (
             not stat.S_ISREG(opened.st_mode)
             or opened.st_nlink != 1
-            or not _same_file_snapshot(before, opened)
+            or not _same_path_and_open_snapshot(before, opened)
         ):
             os.close(descriptor)
             raise SafeCliError(invalid_code)
@@ -369,7 +444,7 @@ def _bounded_file_sha256(
     after = _safe_file_stat(path, invalid_code=invalid_code)
     if (
         consumed != before.st_size
-        or not _same_file_snapshot(before, opened_after)
+        or not _same_file_snapshot(opened, opened_after)
         or not _same_file_snapshot(before, after)
     ):
         raise SafeCliError(invalid_code)
@@ -393,7 +468,7 @@ def _bounded_file_bytes(
         if (
             not stat.S_ISREG(opened.st_mode)
             or opened.st_nlink != 1
-            or not _same_file_snapshot(before, opened)
+            or not _same_path_and_open_snapshot(before, opened)
         ):
             os.close(descriptor)
             raise SafeCliError(invalid_code)
@@ -409,7 +484,7 @@ def _bounded_file_bytes(
     after = _safe_file_stat(path, invalid_code=invalid_code)
     if (
         len(payload) != before.st_size
-        or not _same_file_snapshot(before, opened_after)
+        or not _same_file_snapshot(opened, opened_after)
         or not _same_file_snapshot(before, after)
     ):
         raise SafeCliError(invalid_code)
@@ -1077,20 +1152,11 @@ def _validate_manifest(value: object) -> dict[str, object]:
     return manifest
 
 
-def _strict_local_identity(
-    identity: tuple[int, int], *, invalid_code: str
-) -> list[int]:
-    device, inode = identity
-    if type(device) is not int or type(inode) is not int or device < 0 or inode <= 0:
-        raise SafeCliError(invalid_code)
-    return [device, inode]
-
-
 def _local_backup_ownership_sha256(
     directory: Path,
     *,
-    expected_directory: tuple[int, int],
-    expected_children: Mapping[str, tuple[int, int]],
+    expected_directory: DirectoryIdentity,
+    expected_children: Mapping[str, FileIdentity],
 ) -> str:
     """Bind outer-process cleanup to this exact local published tree.
 
@@ -1101,7 +1167,7 @@ def _local_backup_ownership_sha256(
     expected_names = {BACKUP_DATABASE_NAME, BACKUP_MANIFEST_NAME}
     if set(expected_children) != expected_names:
         raise SafeCliError("backup_failed")
-    _strict_local_identity(expected_directory, invalid_code="backup_failed")
+    _strict_directory_identity(expected_directory, invalid_code="backup_failed")
     _exact_backup_entries(directory, invalid_code="backup_failed")
     actual_directory = _directory_identity(directory, invalid_code="backup_failed")
     if actual_directory != expected_directory:
@@ -1109,20 +1175,21 @@ def _local_backup_ownership_sha256(
     entries: list[list[object]] = [
         [
             "directory",
-            *_strict_local_identity(actual_directory, invalid_code="backup_failed"),
+            *_strict_directory_identity(actual_directory, invalid_code="backup_failed"),
         ]
     ]
     for name in (BACKUP_DATABASE_NAME, BACKUP_MANIFEST_NAME):
         expected = expected_children[name]
-        _strict_local_identity(expected, invalid_code="backup_failed")
+        _strict_file_identity(expected, invalid_code="backup_failed")
         metadata = _require_file_identity(
             directory / name, expected, invalid_code="backup_failed"
         )
         entries.append(
             [
                 name,
-                *_strict_local_identity(
-                    _file_identity(metadata), invalid_code="backup_failed"
+                *_strict_file_identity(
+                    _file_identity(metadata, invalid_code="backup_failed"),
+                    invalid_code="backup_failed",
                 ),
             ]
         )
@@ -1316,16 +1383,19 @@ def _load_and_verify_backup(
 def _cleanup_partial_backup(
     directory: Path,
     *,
-    expected_identity: tuple[int, int],
-    expected_children: Mapping[str, tuple[int, int]],
+    expected_identity: DirectoryIdentity,
+    expected_children: Mapping[str, FileIdentity],
 ) -> None:
+    _strict_directory_identity(expected_identity, invalid_code="backup_failed")
     if not directory.exists() and not _is_link_like(directory):
         return
     try:
         if _is_link_like(directory) or not directory.is_dir():
             raise SafeCliError("unsafe_workspace")
         metadata = directory.stat(follow_symlinks=False)
-        if (metadata.st_dev, metadata.st_ino) != expected_identity:
+        actual_identity = (metadata.st_dev, metadata.st_ino)
+        _strict_directory_identity(actual_identity, invalid_code="backup_failed")
+        if actual_identity != expected_identity:
             raise SafeCliError("backup_failed")
         names = {entry.name for entry in directory.iterdir()}
     except SafeCliError:
@@ -1361,9 +1431,7 @@ def _cleanup_partial_backup(
         raise SafeCliError("backup_failed") from None
 
 
-def _write_new_file(
-    path: Path, payload: bytes, *, failure_code: str
-) -> tuple[int, int]:
+def _write_new_file(path: Path, payload: bytes, *, failure_code: str) -> FileIdentity:
     flags = (
         os.O_WRONLY
         | os.O_CREAT
@@ -1372,21 +1440,33 @@ def _write_new_file(
         | getattr(os, "O_NOINHERIT", 0)
         | getattr(os, "O_NOFOLLOW", 0)
     )
-    created_identity: tuple[int, int] | None = None
+    created_identity: FileIdentity | None = None
     try:
         descriptor = os.open(path, flags, 0o600)
         with os.fdopen(descriptor, "wb") as handle:
             metadata = os.fstat(handle.fileno())
             if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
                 raise SafeCliError(failure_code)
-            created_identity = _file_identity(metadata)
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-            if os.name != "nt":
-                os.fchmod(handle.fileno(), 0o600)
-            if _file_identity(os.fstat(handle.fileno())) != created_identity:
-                raise SafeCliError(failure_code)
+            created_location = (metadata.st_dev, metadata.st_ino)
+            _strict_directory_identity(created_location, invalid_code=failure_code)
+            try:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+                if os.name != "nt":
+                    os.fchmod(handle.fileno(), 0o600)
+            finally:
+                final_metadata = os.fstat(handle.fileno())
+                if (
+                    not stat.S_ISREG(final_metadata.st_mode)
+                    or final_metadata.st_nlink != 1
+                    or (final_metadata.st_dev, final_metadata.st_ino)
+                    != created_location
+                ):
+                    raise SafeCliError(failure_code)
+                created_identity = _capture_open_file_identity(
+                    path, final_metadata, invalid_code=failure_code
+                )
         _require_file_identity(path, created_identity, invalid_code=failure_code)
         return created_identity
     except BaseException as error:
@@ -1411,7 +1491,7 @@ def _copy_database_to_restore_temp(
     *,
     expected_bytes: int,
     expected_sha256: str,
-) -> tuple[int, int]:
+) -> FileIdentity:
     source_before = _safe_file_stat(source, invalid_code="backup_invalid")
     if source_before.st_size != expected_bytes:
         raise SafeCliError("backup_invalid")
@@ -1434,11 +1514,11 @@ def _copy_database_to_restore_temp(
     )
     digest = hashlib.sha256()
     copied = 0
-    target_identity: tuple[int, int] | None = None
+    target_identity: FileIdentity | None = None
     try:
         source_descriptor = os.open(source, source_flags)
         opened_source = os.fstat(source_descriptor)
-        if not _same_file_snapshot(source_before, opened_source):
+        if not _same_path_and_open_snapshot(source_before, opened_source):
             os.close(source_descriptor)
             raise SafeCliError("backup_invalid")
         try:
@@ -1455,22 +1535,39 @@ def _copy_database_to_restore_temp(
                 or target_metadata.st_nlink != 1
             ):
                 raise SafeCliError("restore_failed")
-            target_identity = _file_identity(target_metadata)
-            while True:
-                chunk = source_handle.read(1024 * 1024)
-                if not chunk:
-                    break
-                copied += len(chunk)
-                if copied > _BACKUP_MAX_DATABASE_BYTES:
-                    raise SafeCliError("backup_too_large")
-                digest.update(chunk)
-                target_handle.write(chunk)
-            target_handle.flush()
-            os.fsync(target_handle.fileno())
-            if os.name != "nt":
-                os.fchmod(target_handle.fileno(), 0o600)
-            if _file_identity(os.fstat(target_handle.fileno())) != target_identity:
-                raise SafeCliError("restore_failed")
+            target_location = (target_metadata.st_dev, target_metadata.st_ino)
+            _strict_directory_identity(target_location, invalid_code="restore_failed")
+            try:
+                while True:
+                    chunk = source_handle.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    copied += len(chunk)
+                    if copied > _BACKUP_MAX_DATABASE_BYTES:
+                        raise SafeCliError("backup_too_large")
+                    digest.update(chunk)
+                    target_handle.write(chunk)
+                target_handle.flush()
+                os.fsync(target_handle.fileno())
+                if os.name != "nt":
+                    os.fchmod(target_handle.fileno(), 0o600)
+            finally:
+                final_target_metadata = os.fstat(target_handle.fileno())
+                if (
+                    not stat.S_ISREG(final_target_metadata.st_mode)
+                    or final_target_metadata.st_nlink != 1
+                    or (
+                        final_target_metadata.st_dev,
+                        final_target_metadata.st_ino,
+                    )
+                    != target_location
+                ):
+                    raise SafeCliError("restore_failed")
+                target_identity = _capture_open_file_identity(
+                    target,
+                    final_target_metadata,
+                    invalid_code="restore_failed",
+                )
             opened_source_after = os.fstat(source_handle.fileno())
     except BaseException as error:
         if target_identity is not None and (target.exists() or _is_link_like(target)):
@@ -1491,7 +1588,7 @@ def _copy_database_to_restore_temp(
         if (
             copied != expected_bytes
             or digest.hexdigest() != expected_sha256
-            or not _same_file_snapshot(source_before, opened_source_after)
+            or not _same_file_snapshot(opened_source, opened_source_after)
             or not _same_file_snapshot(source_before, source_after)
         ):
             raise SafeCliError("backup_invalid")
@@ -2516,8 +2613,8 @@ class LocalStackRuntime:
             if free_bytes < _BACKUP_MAX_DATABASE_BYTES + _BACKUP_MAX_MANIFEST_BYTES:
                 raise SafeCliError("backup_too_large")
 
-            staging_identity: tuple[int, int] | None = None
-            staging_children: dict[str, tuple[int, int]] = {}
+            staging_identity: DirectoryIdentity | None = None
+            staging_children: dict[str, FileIdentity] = {}
             staging_created = False
             try:
                 staging.mkdir(mode=0o700)
@@ -2526,6 +2623,9 @@ class LocalStackRuntime:
                 if not stat.S_ISDIR(staging_metadata.st_mode):
                     raise SafeCliError("backup_failed")
                 staging_identity = (staging_metadata.st_dev, staging_metadata.st_ino)
+                _strict_directory_identity(
+                    staging_identity, invalid_code="backup_failed"
+                )
             except BaseException as error:
                 if staging_created:
                     try:
@@ -2575,12 +2675,6 @@ class LocalStackRuntime:
                     f"{_quote_sql_string(str(copied_database))} "
                     "AS networkagent_backup"
                 )
-                if copied_database.exists() or _is_link_like(copied_database):
-                    _capture_partial_child(
-                        copied_database,
-                        staging_children,
-                        invalid_code="backup_failed",
-                    )
                 connection.execute("SET enable_external_access = false")
                 source = _database_metadata(connection)
                 connection.execute(
@@ -2588,30 +2682,8 @@ class LocalStackRuntime:
                     f"{_quote_sql_identifier(source_database[0])} "
                     "TO networkagent_backup"
                 )
-                _capture_partial_child(
-                    copied_database,
-                    staging_children,
-                    invalid_code="backup_failed",
-                )
                 copied_wal = Path(f"{copied_database}.wal")
-                if copied_wal.exists() or _is_link_like(copied_wal):
-                    _capture_partial_child(
-                        copied_wal,
-                        staging_children,
-                        invalid_code="backup_failed",
-                    )
                 connection.execute("CHECKPOINT networkagent_backup")
-                _capture_partial_child(
-                    copied_database,
-                    staging_children,
-                    invalid_code="backup_failed",
-                )
-                if copied_wal.exists() or _is_link_like(copied_wal):
-                    _capture_partial_child(
-                        copied_wal,
-                        staging_children,
-                        invalid_code="backup_failed",
-                    )
                 connection.execute("DETACH networkagent_backup")
                 connection.close()
                 connection = None
@@ -2622,6 +2694,17 @@ class LocalStackRuntime:
                 )
                 if os.name != "nt":
                     os.chmod(copied_database, 0o600, follow_symlinks=False)
+                _capture_partial_child(
+                    copied_database,
+                    staging_children,
+                    invalid_code="backup_failed",
+                )
+                if copied_wal.exists() or _is_link_like(copied_wal):
+                    _capture_partial_child(
+                        copied_wal,
+                        staging_children,
+                        invalid_code="backup_failed",
+                    )
 
                 _validate_database_sidecars(
                     copied_database,
@@ -2829,7 +2912,7 @@ class LocalStackRuntime:
             restore_temp = state_dir / _RESTORE_TEMP_NAME
 
             current_exists = database_path.exists() or _is_link_like(database_path)
-            current_database_identity: tuple[int, int] | None = None
+            current_database_identity: FileIdentity | None = None
             checkpoint_succeeded = False
             if current_exists:
                 _safe_file_stat(database_path, invalid_code="unsafe_workspace")
@@ -2870,7 +2953,9 @@ class LocalStackRuntime:
                 current = _safe_file_stat(
                     database_path, invalid_code="unsafe_workspace"
                 )
-                current_database_identity = _file_identity(current)
+                current_database_identity = _file_identity(
+                    current, invalid_code="unsafe_workspace"
+                )
                 if current.st_size == expected_bytes:
                     _, current_sha256 = _bounded_file_sha256(
                         database_path,
@@ -2891,7 +2976,7 @@ class LocalStackRuntime:
                 raise SafeCliError("restore_failed") from None
             if free_bytes < expected_bytes + 1024 * 1024:
                 raise SafeCliError("restore_failed")
-            restore_temp_identity: tuple[int, int] | None = None
+            restore_temp_identity: FileIdentity | None = None
             try:
                 _require_directory_identity(
                     source, source_identity, invalid_code="backup_invalid"

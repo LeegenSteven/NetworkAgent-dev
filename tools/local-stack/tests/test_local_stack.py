@@ -267,8 +267,24 @@ def local_ownership_sha256(backup: Path) -> str:
     manifest = os.lstat(backup / local_stack.BACKUP_MANIFEST_NAME)
     entries = [
         ["directory", directory.st_dev, directory.st_ino],
-        [local_stack.BACKUP_DATABASE_NAME, database.st_dev, database.st_ino],
-        [local_stack.BACKUP_MANIFEST_NAME, manifest.st_dev, manifest.st_ino],
+        [
+            local_stack.BACKUP_DATABASE_NAME,
+            database.st_dev,
+            database.st_ino,
+            database.st_size,
+            database.st_mtime_ns,
+            database.st_ctime_ns,
+            database.st_nlink,
+        ],
+        [
+            local_stack.BACKUP_MANIFEST_NAME,
+            manifest.st_dev,
+            manifest.st_ino,
+            manifest.st_size,
+            manifest.st_mtime_ns,
+            manifest.st_ctime_ns,
+            manifest.st_nlink,
+        ],
     ]
     encoded = json.dumps(
         entries,
@@ -773,8 +789,46 @@ def test_backup_post_publish_validation_failure_preserves_durable_backup(
 def test_local_ownership_identity_rejects_non_strict_or_invalid_integers() -> None:
     for identity in ((False, 1), (0, True), (-1, 1), (0, 0)):
         with pytest.raises(local_stack.SafeCliError) as captured:
-            local_stack._strict_local_identity(identity, invalid_code="backup_failed")
+            local_stack._strict_directory_identity(
+                identity, invalid_code="backup_failed"
+            )
         assert captured.value.code == "backup_failed"
+    invalid_files = (
+        (False, 1, 0, 1, 1, 1),
+        (0, True, 0, 1, 1, 1),
+        (0, 1, False, 1, 1, 1),
+        (0, 1, 0, False, 1, 1),
+        (0, 1, 0, 1, False, 1),
+        (0, 1, 0, 1, 1, True),
+        (-1, 1, 0, 1, 1, 1),
+        (0, 0, 0, 1, 1, 1),
+        (0, 1, -1, 1, 1, 1),
+        (0, 1, 0, 0, 1, 1),
+        (0, 1, 0, 1, 0, 1),
+        (0, 1, 0, 1, 1, 2),
+    )
+    for identity in invalid_files:
+        with pytest.raises(local_stack.SafeCliError) as captured:
+            local_stack._strict_file_identity(identity, invalid_code="backup_failed")
+        assert captured.value.code == "backup_failed"
+
+
+def test_file_cleanup_rejects_simulated_reused_inode_with_new_ctime(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "same-inode"
+    target.write_bytes(b"replacement")
+    actual = local_stack._file_identity(os.lstat(target), invalid_code="backup_failed")
+    simulated_old = (*actual[:4], actual[4] - 1, actual[5])
+    with pytest.raises(local_stack.SafeCliError) as captured:
+        local_stack._unlink_file_identity(
+            target,
+            simulated_old,
+            invalid_code="backup_failed",
+            failure_code="backup_failed",
+        )
+    assert captured.value.code == "backup_failed"
+    assert target.read_bytes() == b"replacement"
 
 
 def test_backup_ownership_binding_rejects_exact_content_child_replacement(
@@ -783,7 +837,7 @@ def test_backup_ownership_binding_rejects_exact_content_child_replacement(
     workspace = prepare_maintenance_workspace(tmp_path)
     destination = tmp_path / "backup"
     original = local_stack._local_backup_ownership_sha256
-    replaced_manifest_identity: tuple[int, int] | None = None
+    replaced_manifest_identity: local_stack.FileIdentity | None = None
     original_manifest_digest: str | None = None
 
     def replace_manifest_before_binding(directory: Path, **kwargs) -> str:
@@ -794,7 +848,9 @@ def test_backup_ownership_binding_rejects_exact_content_child_replacement(
         manifest.unlink()
         manifest.write_bytes(original_payload)
         metadata = os.lstat(manifest)
-        replaced_manifest_identity = (metadata.st_dev, metadata.st_ino)
+        replaced_manifest_identity = local_stack._file_identity(
+            metadata, invalid_code="backup_failed"
+        )
         return original(directory, **kwargs)
 
     monkeypatch.setattr(

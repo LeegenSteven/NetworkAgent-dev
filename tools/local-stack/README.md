@@ -242,6 +242,87 @@ trace, external alert delivery, backup/recovery, or Cloud/production evidence.
 S4, Workflow E, P7, and S7 remain in progress; Gate E/G5/G2/G4 remain open, and
 S2-04 remains blocked.
 
+## One-command Local cold backup and recovery evidence
+
+Run the fixed S4-04 wrapper from the repository root:
+
+```powershell
+.venv/Scripts/python.exe tools/local-stack/run_backup_restore_demo.py --approve-local-simulation
+```
+
+The only accepted argument is the explicit Local simulation confirmation. The
+wrapper creates one isolated success workspace, completes the native governance
+lifecycle, checkpoints and copies the full DuckDB database into an exact two-file
+backup, resets and freshly initializes the workspace, rejects a deliberately
+corrupted copy without changing that fresh database, restores the valid backup,
+and repeats the exact restore. The first valid restore must report `changed=true`;
+the retry must report `changed=false`, and both the catalog/row counts and the
+complete read-only lifecycle projection must remain equivalent. A successful run
+removes the workspace and both temporary backup trees, leaving only the atomic
+`local-backup-recovery-report.json` evidence body.
+
+For an operator-controlled offline backup, stop every Local writer first, then
+use a new destination directory:
+
+```powershell
+.venv/Scripts/python.exe tools/local-stack/local_stack.py --workspace .local/networkagent-stack backup --destination .local/networkagent-backups/BACKUP_ID
+```
+
+Keep the returned lowercase manifest SHA-256. With all writers still stopped,
+restore only after reviewing the source and supplying that exact hash plus the
+explicit confirmation:
+
+```powershell
+.venv/Scripts/python.exe tools/local-stack/local_stack.py --workspace .local/networkagent-stack restore --source .local/networkagent-backups/BACKUP_ID --expected-manifest-sha256 MANIFEST_SHA256 --yes
+```
+
+The portable backup closure is exactly `networkagent.duckdb` and
+`backup-manifest.json`, under schema `networkagent-local-cold-backup/1.0`; limits
+are 128 MiB for the database and 16 KiB for the manifest. The manifest binds the
+checkpointed database bytes/SHA, DuckDB library/storage versions, Local/Assurance
+schema versions, catalog/table/row counts, and a logical catalog+row fingerprint.
+Links, hardlinks, sidecars, duplicate or non-canonical JSON, extra/missing members,
+hash drift, catalog drift, path swaps, and concurrent writers fail closed. Cleanup
+deletes only entries whose captured directory/file identities still match; an
+unknown or raced replacement is preserved for inspection, never recursively
+removed.
+
+S4-04 is `DONE` only for this narrow slice on RC
+`54551feb43be60c3b9bdd5eab076cdb7c0aba61a`. [Local run
+33353994792](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33353994792)
+completed in 13m04s. Python 3.12 [job
+99372557281](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33353994792/job/99372557281)
+succeeded in 13m00s and its backup/recovery step took 37s; Python 3.13 [job
+99372557192](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33353994792/job/99372557192)
+succeeded in 10m28s and its step took 31s. Each job reported Domain + Local
+`576 passed`, local-stack `224 passed, 3 skipped`, and Local E2E `2 passed`.
+[Container run
+33353994784](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33353994784)
+also completed jobs 99372557334 and 99372587413 successfully.
+
+Python 3.12 published the 14-day [VERIFIED RC artifact
+9744736851](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33353994792/artifacts/9744736851),
+named `telco-local-release-py3.12-attempt-1`: 118,251 bytes, archive digest
+`sha256:5ca975e95cd86befb77ca977a3acc2aa57122a0148202b945a3a5c50a3153fe1`.
+Independent download confirmed 14 non-link regular files, exactly 13 manifest
+records plus the manifest, with manifest `PASS` and `failures=[]`. The fifth
+supplemental evidence `local-backup-recovery-summary.json` is 1,951 bytes /
+SHA-256 `f44187fece9d33b71b520521df188c6043cfdfe4e67618c71b96b5703828e7bb`;
+removing its stdout-only `report` envelope reconstructs the persisted report at
+1,804 bytes / SHA-256
+`f6698b0846571a6af3a9cca7edd57f20e1204154fc09dbec3630e86fca784a96`.
+Python 3.13 verifies the drill but does not upload a duplicate artifact.
+
+Follow the [Local cold backup and recovery
+runbook](../../docs/runbooks/local-backup-restore.md) for stopped-writer
+prerequisites, manifest/logical verification, stable error handling, artifact
+reconstruction, privacy, cleanup, and every explicit non-claim. This slice does
+not establish online backup, production HA, multi-replica failover, RPO/RTO,
+power-loss durability, encryption/signing, off-host retention, cross-version
+migration, Cloud/Spanner recovery, or production recovery. S4, Workflow E, P7,
+and S7 remain `IN PROGRESS`; Gate E/G5/G2/G4 remain open, and S2-04 remains
+`BLOCKED`.
+
 ## Safe governance demo
 
 Actions are disabled by default. This command confirms the deterministic sample

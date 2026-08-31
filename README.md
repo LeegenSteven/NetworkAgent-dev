@@ -124,6 +124,39 @@ external alert delivery, backup/recovery, or Cloud/production evidence. S4,
 Workflow E, P7, and S7 remain in progress; Gate E/G5/G2/G4 remain open, and
 S2-04 remains blocked.
 
+For one fixed Local cold-backup and recovery drill, run:
+
+```text
+python tools/local-stack/run_backup_restore_demo.py --approve-local-simulation
+```
+
+The S4-04 wrapper stops at a deliberately narrow offline boundary: one stopped
+Local writer, one DuckDB database, one two-file cold backup, a corrupt-copy
+rejection against an unchanged fresh database, one atomic restore, an exact
+idempotent retry, lifecycle equivalence, and identity-bound cleanup. The backup
+schema is `networkagent-local-cold-backup/1.0`; the evidence schema is
+`networkagent-local-backup-recovery/1.0`. See the [Local cold backup and recovery
+runbook](docs/runbooks/local-backup-restore.md) before using the lower-level
+`backup` or `restore` commands.
+
+This S4-04 narrow slice is `DONE` for RC
+`54551feb43be60c3b9bdd5eab076cdb7c0aba61a`. [Local run
+33353994792](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33353994792)
+completed in 13m04s; its Python 3.12/3.13 jobs both passed Domain + Local
+`576 passed`, local-stack `224 passed, 3 skipped`, Local E2E `2 passed`, and the
+fixed recovery drill. [Container run
+33353994784](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33353994784)
+also passed both jobs. Python 3.12 published the 14-day [VERIFIED RC artifact
+9744736851](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33353994792/artifacts/9744736851),
+118,251 bytes with archive digest
+`sha256:5ca975e95cd86befb77ca977a3acc2aa57122a0148202b945a3a5c50a3153fe1`.
+Independent download confirmed 14 regular files (13 manifest records plus the
+manifest), exact bytes/SHA closure, manifest `PASS`, `failures=[]`, privacy
+`PASS`, and the fifth supplemental recovery evidence. This is not online,
+off-host, encrypted/signed, multi-replica, cross-version, Cloud/Spanner, RPO/RTO,
+power-loss, HA, or production recovery evidence. S4, Workflow E, P7, and S7
+remain in progress; Gate E/G5/G2/G4 remain open, and S2-04 remains blocked.
+
 The demo stops at `AWAITING_APPROVAL`. A second command may enable
 `--action-mode simulate` and approve only the exact `action_hash` and Incident
 revision returned by that preview. The sole action is `LOCAL_SIMULATION`;

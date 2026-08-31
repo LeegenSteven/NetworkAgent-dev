@@ -16,6 +16,7 @@
 > S4-01 local observability evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
 > S4-02 Canonical lifecycle projection evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
 > S4-03 fixed-window acceptance SLO evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
+> S4-04 Local DuckDB cold backup recovery evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
 > Workflow E / Gate E / G5: **NOT PASSED BY THIS GATE**
 > Gate B overall: **NOT PASSED**
 > Cloud/production authorization: **NOT APPLICABLE**
@@ -86,6 +87,17 @@ The sample is not time-based availability, a latency SLO, long-term statistical
 reliability, external alert delivery, automatic recovery, backup/recovery, or a
 Cloud/production SLO. It does not expand this Gate or close Workflow E, Gate E,
 or G5.
+
+The separate S4-04 wrapper exercises one stopped-writer, single-process Local
+DuckDB cold-backup recovery drill. It proves an exact two-file checkpointed
+backup, manifest and logical-content verification, rejection of a corrupted
+copy without changing a fresh database, one atomic restore, an idempotent retry,
+durable lifecycle equivalence, and identity-bound cleanup. It is not an online,
+encrypted/signed, off-host, cross-version, multi-replica, RPO/RTO, power-loss,
+Cloud/Spanner, HA, or production recovery result. Unknown-identity or raced
+residue is deliberately preserved rather than auto-deleted. This evidence is
+assessed separately and does not expand the Governance Gate or close Workflow E,
+Gate E, or G5.
 
 ## S2-01 container review
 
@@ -193,7 +205,7 @@ attestation, provenance, or Trivy DB OCI digest/signature capture, and does
 not supply an offline-independent re-verification bundle because the image,
 scanner binary, and database are not uploaded.
 
-## S2-04, S4-01, S4-02, and S4-03 boundary updates
+## S2-04, S4-01, S4-02, S4-03, and S4-04 boundary updates
 
 S2-04 is `BLOCKED`: under the same Trivy 0.74.0/frozen database snapshot, none
 of four candidates simultaneously preserves the current CPython 3.12, glibc,
@@ -242,8 +254,36 @@ and the reconstructed report was 3,136 bytes / SHA-256
 The full independent procedure is recorded in the [Local fixed-window
 acceptance SLO runbook](../runbooks/local-slo-evidence.md).
 
+S4-04 is `DONE` only for the stopped-writer Local DuckDB cold backup/recovery
+slice on RC `54551feb43be60c3b9bdd5eab076cdb7c0aba61a`. The commit-bound [Local run
+33353994792](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33353994792)
+completed in 13m04s. Python 3.12 [job
+99372557281](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33353994792/job/99372557281)
+and Python 3.13 [job
+99372557192](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33353994792/job/99372557192)
+completed successfully in 13m00s / 10m28s; their fixed drill steps took 37s /
+31s. Each reported Domain + Local `576 passed`, local-stack `224 passed, 3
+skipped`, and Local E2E `2 passed`. The same SHA's [Container run
+33353994784](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33353994784)
+completed jobs 99372557334 and 99372587413 successfully in 2m07s. Only Local and
+Container workflows were triggered for this RC.
+
+The 14-day [VERIFIED RC artifact
+9744736851](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33353994792/artifacts/9744736851)
+is 118,251 bytes with archive digest
+`sha256:5ca975e95cd86befb77ca977a3acc2aa57122a0148202b945a3a5c50a3153fe1`.
+Independent download confirmed 14 non-link regular files: 13 manifest records
+plus the manifest, with exact bytes/SHA closure, manifest `PASS`, and
+`failures=[]`. The fifth supplemental recovery summary is 1,951 bytes /
+SHA-256 `f44187fece9d33b71b520521df188c6043cfdfe4e67618c71b96b5703828e7bb`;
+removing its stdout-only report envelope reconstructs the 1,804-byte persisted
+report with SHA-256
+`f6698b0846571a6af3a9cca7edd57f20e1204154fc09dbec3630e86fca784a96`.
+The exact independent procedure and non-claims are recorded in the [Local cold
+backup and recovery runbook](../runbooks/local-backup-restore.md).
+
 S4/Workflow E/P7/S7 therefore remain `IN PROGRESS`; Gate E/G5 and G2/G4 remain
-open, and S2-04 remains `BLOCKED`. Like S4-01 and S4-02, this S4-03 note is
+open, and S2-04 remains `BLOCKED`. Like S4-01 through S4-03, this S4-04 note is
 assessed separately and does not add a PASS row to the Governance Gate below.
 
 ## Reviewed flow
@@ -452,6 +492,11 @@ image, scanner binary, and database are not uploaded.
 ## Residual limitations
 
 * The Local Profile remains a single-process/single-writer DuckDB deployment.
+* S4-04 covers only a stopped-writer two-file Local DuckDB cold backup and
+  reset/fresh-init restore. It does not provide online, encrypted/signed,
+  off-host, cross-version, multi-replica, RPO/RTO, power-loss, Cloud/Spanner,
+  HA, or production recovery. Identity-unknown or raced residue is preserved
+  for manual review and is not automatically deleted.
 * The deterministic verification outcome is test input, not an observation from
   a real Tester/Operations service.
 * `serve` exposes the existing Assurance detect/confirm/analyze interface; it

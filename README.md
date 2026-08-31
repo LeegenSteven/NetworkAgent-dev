@@ -89,6 +89,41 @@ was not triggered. This Cloud result is CI/Emulator evidence, not Cloud Staging
 or production evidence. S4, Workflow E, P7, and S7 remain in progress; Gate E,
 G5, G2, and G4 remain open, and S2-04 remains blocked.
 
+For a fixed three-window Local acceptance SLI/SLO evaluation, run:
+
+```text
+python tools/local-stack/run_slo_evidence_demo.py --approve-local-simulation
+```
+
+The S4-03 wrapper executes three fresh, isolated S4-01 windows sequentially and
+evaluates five strict integer-ppm SLIs over 66 stage events. A complete healthy
+group requires `66/66`, `6/6`, `6/6`, `6/6`, and `3/3`; every objective is
+1,000,000 ppm with a zero error budget. The deliberate `REOPENED/FAILED` branch
+is an expected business outcome. `OK`, measurable `BREACH`, and untrustworthy
+`ERROR` remain separate states, and recovery evidence can only come from a new
+three-window invocation. See the [Local fixed-window acceptance SLO
+runbook](docs/runbooks/local-slo-evidence.md) for the frozen contract.
+
+The S4-03 narrow slice is `DONE` for RC
+`faa11ff7a165cd5eae6cf3f0fa1a030c9472f46c`: [Local run
+33340008133](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33340008133)
+completed in 11m40s, with Python 3.12 [job
+99333812338](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33340008133/job/99333812338)
+and Python 3.13 [job
+99333812397](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33340008133/job/99333812397)
+successful. Python 3.12 published [VERIFIED RC artifact
+9740377450](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33340008133/artifacts/9740377450),
+117,046 bytes with archive digest
+`sha256:11207c784de25ec1d6d956bb8b47274663100455a6924ccf95213c839c848536`.
+Independent download confirmed 13 files (12 manifest records plus the manifest)
+with exact closure and a manifest PASS. The five SLIs were all `OK`; evaluation
+was `OK` with no breaches and privacy was `PASS`. Only the Local workflow was
+triggered for this RC. This fixed acceptance sample is not a time-based or
+latency SLO, long-term statistical reliability, OpenTelemetry/Prometheus,
+external alert delivery, backup/recovery, or Cloud/production evidence. S4,
+Workflow E, P7, and S7 remain in progress; Gate E/G5/G2/G4 remain open, and
+S2-04 remains blocked.
+
 The demo stops at `AWAITING_APPROVAL`. A second command may enable
 `--action-mode simulate` and approve only the exact `action_hash` and Incident
 revision returned by that preview. The sole action is `LOCAL_SIMULATION`;

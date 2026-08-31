@@ -1,7 +1,7 @@
 # Local fixed-window acceptance SLO evidence runbook
 
 > Work package: S4-03 fixed three-window Local acceptance SLO evidence
-> Status: `IN PROGRESS (implemented, awaiting remote RC)`
+> Status: `DONE (S4-03 narrow slice)`
 > Scope: Local-only acceptance evidence with no Docker, Cloud credentials, external
 > network action, external alert delivery, or production reliability claim
 
@@ -13,10 +13,12 @@ acceptance sample. It does not convert a single demonstration into time-based
 availability, a latency SLO, long-term statistical reliability, or a Cloud/production
 SLO.
 
-The implementation is complete locally, but the work package remains
-`IN PROGRESS (implemented, awaiting remote RC)`. Do not mark S4-03 as `DONE`, assign an
-RC SHA, or claim a verified artifact until both remote Python jobs and the Python 3.12
-release artifact have been independently closed.
+The narrow work package is complete on independently verified RC
+`faa11ff7a165cd5eae6cf3f0fa1a030c9472f46c`. Both remote Python jobs completed
+successfully, and the Python 3.12 release artifact passed exact membership, manifest,
+digest, source-binding, report-reconstruction, SLI, evaluation, privacy, and
+`not_claimed` verification. This closes only the S4-03 acceptance-evidence slice; the
+broader boundaries in sections 11 and 12 remain open.
 
 ## 2. Prerequisites and the only command
 
@@ -261,12 +263,39 @@ under Python 3.13. Only the Python 3.12
 to release-manifest construction, manifest verification, and the uploaded artifact.
 Python 3.13 validates the same public contract but does not upload a duplicate artifact.
 
-Before both remote jobs finish successfully and the Python 3.12 artifact is independently
-verified for exact membership, manifest status, summary bytes/SHA, persisted-body
-reconstruction, source SHA, and SLI recomputation, the status remains exactly
-`IN PROGRESS (implemented, awaiting remote RC)`.
+The tested release candidate is
+`faa11ff7a165cd5eae6cf3f0fa1a030c9472f46c`. [Local run
+33340008133](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33340008133)
+completed in 11m40s, and it was the only workflow triggered for this RC. Python 3.12
+[job 99333812338](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33340008133/job/99333812338)
+completed successfully in 10m51s; its fixed three-window SLO step took 2m38s. Python
+3.13 [job 99333812397](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33340008133/job/99333812397)
+completed successfully in 11m36s; its SLO step took 2m51s and its release steps were
+skipped by the matrix as designed.
 
-After that evidence exists, documentation may mark only `DONE (S4-03 narrow slice)`.
-S4, Workflow E, Gate E, G5, G2, G4, Cloud/production SLO, external alert delivery, and
-backup/recovery remain open. A fresh healthy evaluation must never be described as
-automatic recovery, production reliability, or a backup/recovery result.
+Python 3.12 published the 14-day [VERIFIED RC artifact
+9740377450](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33340008133/artifacts/9740377450),
+named `telco-local-release-py3.12-attempt-1`: 117,046 bytes, archive digest
+`sha256:11207c784de25ec1d6d956bb8b47274663100455a6924ccf95213c839c848536`.
+Independent download confirmed exactly 13 files: 12 manifest records plus the manifest,
+with no extra, missing, or drifted member. Every recorded byte count and SHA matched;
+manifest status was `PASS` and `failures=[]`.
+
+The fourth supplemental evidence file,
+`release-evidence/local-slo-summary.json`, is 3,271 bytes with SHA-256
+`ae181eaffe6da11c5dd0cdea07dcfcba3a400daaf6ed44352b1e573faa5f489b`. Removing
+its stdout-only `report` envelope reconstructs `local-slo-report.json` at 3,136 bytes
+with SHA-256
+`2538629be3133920e76f2de9e0fa0ff9575853095538c266efc6e544d02c5c64`. The
+schema, `LOCAL_DEMO_ACCEPTANCE_SLO_EVIDENCE` classification, and exact source SHA
+binding matched. The three windows reconstructed 66/66 stage-command successes,
+6/6 expected branch outcomes, 6/6 exact retry integrities, 6/6 workspace cleanups, and
+3/3 valid observation contracts. Every SLI had observed/objective 1,000,000 ppm, zero
+error budget, and state `OK`; evaluation was `OK` with no breaches, privacy was `PASS`,
+and all 12 `not_claimed` entries matched section 11.
+
+This evidence permits only `DONE (S4-03 narrow slice)`. S4, Workflow E, P7, and S7
+remain `IN PROGRESS`; Gate E, G5, G2, and G4 remain open, and S2-04 remains `BLOCKED`.
+Cloud/production SLO, external alert delivery, and backup/recovery remain open. A fresh
+healthy evaluation must never be described as automatic recovery, production
+reliability, or a backup/recovery result.

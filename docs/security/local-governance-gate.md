@@ -15,6 +15,7 @@
 > S2-04 compatible base-image closure: **BLOCKED**
 > S4-01 local observability evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
 > S4-02 Canonical lifecycle projection evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
+> S4-03 fixed-window acceptance SLO evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
 > Workflow E / Gate E / G5: **NOT PASSED BY THIS GATE**
 > Gate B overall: **NOT PASSED**
 > Cloud/production authorization: **NOT APPLICABLE**
@@ -76,6 +77,15 @@ identifiers and hashes, paths, correlation values, and raw records. Its frozen
 structured logging, OpenTelemetry, Prometheus, a distributed trace, an SLO, or
 external alert delivery. It does not expand this Governance Gate or authorize
 Cloud/production execution.
+
+The separate S4-03 wrapper evaluates three fresh S4-01 windows as one fixed
+Local acceptance sample. Its five integer-ppm SLIs and report-internal breach
+rule distinguish trustworthy `OK`/`BREACH` from untrustworthy `ERROR`, but do
+not turn this Governance Gate into runtime monitoring or a reliability Gate.
+The sample is not time-based availability, a latency SLO, long-term statistical
+reliability, external alert delivery, automatic recovery, backup/recovery, or a
+Cloud/production SLO. It does not expand this Gate or close Workflow E, Gate E,
+or G5.
 
 ## S2-01 container review
 
@@ -183,7 +193,7 @@ attestation, provenance, or Trivy DB OCI digest/signature capture, and does
 not supply an offline-independent re-verification bundle because the image,
 scanner binary, and database are not uploaded.
 
-## S2-04, S4-01, and S4-02 boundary updates
+## S2-04, S4-01, S4-02, and S4-03 boundary updates
 
 S2-04 is `BLOCKED`: under the same Trivy 0.74.0/frozen database snapshot, none
 of four candidates simultaneously preserves the current CPython 3.12, glibc,
@@ -214,9 +224,27 @@ projection runbook](../runbooks/local-lifecycle-projection.md). Assurance run
 the same SHA; Data Lab was not triggered. The Cloud workflow result is CI and
 Emulator evidence, not Cloud Staging or production authorization.
 
+S4-03 is `DONE` only for the fixed three-window Local acceptance SLI/SLO slice
+on RC `faa11ff7a165cd5eae6cf3f0fa1a030c9472f46c`. The commit-bound [Local run
+33340008133](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33340008133)
+completed Python 3.12 job 99333812338 and Python 3.13 job 99333812397
+successfully; only the Local workflow was triggered. Each job evaluated its own
+three fresh windows and all five SLIs were `OK`, with evaluation `OK`, no
+breaches, and privacy `PASS`. The 14-day [VERIFIED RC artifact
+9740377450](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33340008133/artifacts/9740377450)
+was 117,046 bytes with archive digest
+`sha256:11207c784de25ec1d6d956bb8b47274663100455a6924ccf95213c839c848536`.
+Independent download confirmed exact 13-file closure; the SLO summary was 3,271
+bytes / SHA-256
+`ae181eaffe6da11c5dd0cdea07dcfcba3a400daaf6ed44352b1e573faa5f489b`,
+and the reconstructed report was 3,136 bytes / SHA-256
+`2538629be3133920e76f2de9e0fa0ff9575853095538c266efc6e544d02c5c64`.
+The full independent procedure is recorded in the [Local fixed-window
+acceptance SLO runbook](../runbooks/local-slo-evidence.md).
+
 S4/Workflow E/P7/S7 therefore remain `IN PROGRESS`; Gate E/G5 and G2/G4 remain
-open, and S2-04 remains `BLOCKED`. Like S4-01, this S4-02 note is assessed
-separately and does not add a PASS row to the Governance Gate below.
+open, and S2-04 remains `BLOCKED`. Like S4-01 and S4-02, this S4-03 note is
+assessed separately and does not add a PASS row to the Governance Gate below.
 
 ## Reviewed flow
 

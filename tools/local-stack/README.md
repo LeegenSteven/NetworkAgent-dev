@@ -183,6 +183,65 @@ OpenTelemetry/Collector, Prometheus, a distributed trace, SLOs, external alert
 delivery, or Cloud production evidence. S4, Workflow E, P7, and S7 remain in
 progress; Gate E/G5/G2/G4 remain open, and S2-04 remains blocked.
 
+## One-command fixed-window acceptance SLO evidence
+
+Run the fixed S4-03 wrapper from the repository root:
+
+```powershell
+.venv/Scripts/python.exe tools/local-stack/run_slo_evidence_demo.py --approve-local-simulation
+```
+
+The only accepted argument is `--approve-local-simulation`. Each invocation
+runs three fresh S4-01 observability windows sequentially in distinct
+marker-owned run directories. The aggregate
+`networkagent-local-slo-evidence/1.0` report evaluates five integer-ppm Local
+acceptance SLIs over 66 stage events: stage-command success `66/66`, expected
+branch outcome `6/6`, exact retry integrity `6/6`, workspace cleanup `6/6`, and
+observation-contract validity `3/3`. Each objective is 1,000,000 ppm with a zero
+error budget. The deliberate `REOPENED/FAILED` branch is expected, and timing is
+diagnostic only; it never enters an SLI.
+
+The persisted `local-slo-report.json` distinguishes a trustworthy `OK`, a
+measurable `BREACH`, and an untrustworthy `ERROR`. A later healthy window cannot
+hide a miss in the same group, and recovery requires a completely new
+three-window invocation. Public success output exposes only the fixed filename,
+byte count, and SHA-256 needed to reconstruct and verify the persisted body.
+
+S4-03 is `DONE` only for this narrow slice on RC
+`faa11ff7a165cd5eae6cf3f0fa1a030c9472f46c`. [Local run
+33340008133](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33340008133)
+completed in 11m40s. Python 3.12 [job
+99333812338](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33340008133/job/99333812338)
+succeeded in 10m51s and its fixed SLO step took 2m38s; Python 3.13 [job
+99333812397](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33340008133/job/99333812397)
+succeeded in 11m36s and its fixed SLO step took 2m51s. The Python 3.13 release
+steps were skipped by the matrix as designed.
+
+Python 3.12 published the 14-day [VERIFIED RC artifact
+9740377450](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33340008133/artifacts/9740377450),
+named `telco-local-release-py3.12-attempt-1`: 117,046 bytes, archive digest
+`sha256:11207c784de25ec1d6d956bb8b47274663100455a6924ccf95213c839c848536`.
+Independent download confirmed 13 files, exactly 12 manifest records plus the
+manifest, with all bytes/SHA values matching, manifest `PASS`, and
+`failures=[]`. `release-evidence/local-slo-summary.json` is 3,271 bytes / SHA-256
+`ae181eaffe6da11c5dd0cdea07dcfcba3a400daaf6ed44352b1e573faa5f489b`;
+removing its stdout-only `report` envelope reconstructs
+`local-slo-report.json` at 3,136 bytes / SHA-256
+`2538629be3133920e76f2de9e0fa0ff9575853095538c266efc6e544d02c5c64`.
+The schema, `LOCAL_DEMO_ACCEPTANCE_SLO_EVIDENCE` classification, source binding,
+three windows, five `OK` SLIs, no-breach evaluation, privacy `PASS`, and all 12
+`not_claimed` entries matched the frozen contract. Only the Local workflow was
+triggered.
+
+Follow the [Local fixed-window acceptance SLO
+runbook](../../docs/runbooks/local-slo-evidence.md) for independent report
+reconstruction, breach handling, and cleanup rules. This slice is not a
+time-based availability or latency SLO, long-term statistical reliability,
+runtime structured logging, OpenTelemetry/Collector, Prometheus, distributed
+trace, external alert delivery, backup/recovery, or Cloud/production evidence.
+S4, Workflow E, P7, and S7 remain in progress; Gate E/G5/G2/G4 remain open, and
+S2-04 remains blocked.
+
 ## Safe governance demo
 
 Actions are disabled by default. This command confirms the deterministic sample

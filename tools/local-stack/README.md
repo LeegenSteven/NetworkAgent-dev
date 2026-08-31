@@ -130,6 +130,56 @@ validation. S4/Workflow E/P7/S7 remain `IN PROGRESS`; Gate E/G5/G2/G4 remain
 open, S2-04 remains `BLOCKED`, and P6 unified UI remains `NOT STARTED`. This
 documentation update is later than and not equal to the tested RC.
 
+## Offline local submission bundle
+
+Run the fixed S7-05 builder from the repository root:
+
+```powershell
+.venv/Scripts/python.exe tools/local-stack/build_submission_bundle.py --offline
+```
+
+No alternate output, ledger, or online mode is accepted. The builder uses the
+committed evidence ledger and writes exactly five regular files under
+`.local/networkagent-submission`: `submission-index.json`, `limitations.json`,
+`REPRODUCE.md`, `index.html`, and `manifest.json`. A byte-identical retry is
+reported as unchanged. Unknown ownership, linked or hard-linked members,
+tracked source changes, ledger drift, privacy violations, or an in-progress
+build fail closed without overwriting foreign state.
+
+RC `67f08d887d6ba6e5ddb4108603af71b19e5e0d0f` passed the 33-second
+[telco-submission run
+33405685328](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33405685328):
+Python 3.12 job 99532578035 completed 9 successful steps in 7s, Python 3.13
+job 99532578383 completed 9 in 10s, cross-Python equality job 99532644051
+completed 3 in 3s, and clean rebuild/publish job 99532668880 completed 10 in
+11s. The same push also triggered successful 12m19s [telco-local run
+33405685291](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33405685291):
+Python 3.12 job 99532577952 completed 21 successful steps, while Python 3.13
+job 99532578269 completed 17 with four expected release skips.
+
+Only Python 3.12 published [artifact
+9763040737](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33405685328/artifacts/9763040737),
+`networkagent-local-submission-py3.12-attempt-1`, with 14-day retention. The raw
+ZIP is 8,759 bytes and has outer SHA-256
+`12e626cd7125f6b04b9f8d817f2db7abadc3c8eba4fca7068909e61355d53295`;
+the inner `manifest.json` SHA-256 is
+`32a2ffafaab603cd222c6fadf8e4111ecedb26b354d24d8409520c007c4d4e5c`.
+Independent download verified the exact five unique regular entries, CRC,
+four manifest records plus the manifest itself, 4/4 byte/digest bindings, and
+the 9-slice / 24-run / 66-job / 9-artifact-citation projection. The fixed CSP,
+four local links, privacy, non-closure, and historical citation policy also
+passed. Python 3.13 and pull requests upload no duplicate artifact.
+
+Follow the [Local submission bundle
+runbook](../../docs/runbooks/local-submission-bundle.md) for the exact member
+contract, stable failures, source/ownership rules, and independent review. This
+S7-05 RC validates the builder, workflow, and five-file index only. It neither
+reruns nor embeds the nine historical slices, whose tested RC/run/job/artifact
+identities remain unchanged; continuing remote availability is not asserted.
+S7/P7/P3e/S4/Workflow E remain `IN PROGRESS`, P6 remains `NOT STARTED`, S2-04
+remains `BLOCKED`, and Gate E/G2/G4/G5 remain open. This documentation update
+is later than and not equal to the tested RC.
+
 ## One-command local observability evidence
 
 The following fixed wrapper reruns the same native defense demonstration and

@@ -1,8 +1,9 @@
 # Local submission bundle
 
-> Status: **IN PROGRESS — awaiting the first commit-bound S7-05 RC and
-> independent artifact audit.** This runbook and workflow are not themselves a
-> successful RC, and no S7-05 artifact identity is claimed yet.
+> Status: **DONE FOR THE NARROW S7-05 BUILDER/WORKFLOW/BUNDLE SLICE.** The
+> tested RC is `67f08d887d6ba6e5ddb4108603af71b19e5e0d0f`; its successful remote
+> workflow and sole artifact have passed an independent download audit. This
+> does not close S7 or replace any historical slice identity.
 
 ## Scope and fixed entry point
 
@@ -129,12 +130,45 @@ The Actions summary labels two different hashes:
 
 They cover different bytes and are not expected to match.
 
+## Verified S7-05 RC evidence
+
+The tested release candidate is
+`67f08d887d6ba6e5ddb4108603af71b19e5e0d0f`. Its 33-second
+[telco-submission run
+33405685328](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33405685328)
+completed all four jobs successfully:
+
+| Job | Result |
+| --- | --- |
+| Python 3.12 [job 99532578035](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33405685328/job/99532578035) | 7s; 9 successful steps |
+| Python 3.13 [job 99532578383](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33405685328/job/99532578383) | 10s; 9 successful steps |
+| Cross-Python equality [job 99532644051](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33405685328/job/99532644051) | 3s; 3 successful steps |
+| Clean rebuild/publish [job 99532668880](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33405685328/job/99532668880) | 11s; 10 successful steps |
+
+The same push also triggered successful 12m19s [telco-local run
+33405685291](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33405685291).
+Python 3.12 job 99532577952 completed in 12m14s with 21 successful steps;
+Python 3.13 job 99532578269 completed in 12m15s with 17 successful steps and
+four expected release skips. That Local regression does not make this RC a
+retest of the nine historical slices recorded in the submission index.
+
+Submission produced exactly one [artifact
+9763040737](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33405685328/artifacts/9763040737),
+named `networkagent-local-submission-py3.12-attempt-1`, with 14-day retention.
+Python 3.13 did not upload, and pull-request runs are configured not to upload.
+The raw ZIP is 8,759 bytes with GitHub outer SHA-256
+`12e626cd7125f6b04b9f8d817f2db7abadc3c8eba4fca7068909e61355d53295`.
+The distinct inner manifest SHA-256 is
+`32a2ffafaab603cd222c6fadf8e4111ecedb26b354d24d8409520c007c4d4e5c`.
+No creation or expiry timestamp is asserted here.
+
 ## Independent artifact audit
 
-Accept a future S7-05 artifact only when the run is bound to the claimed RC and
-all build, equality, clean-rebuild, verification, upload, and final-summary steps
-are green. Record the run, jobs, artifact ID/name, creation and expiry, size, and
-GitHub outer digest. Download the artifact without trusting the HTML index, then
+The accepted S7-05 artifact was considered only after the run was bound to the
+claimed RC and all build, equality, clean-rebuild, verification, upload, and
+final-summary steps were green. For later or replacement evidence, record the
+run, jobs, artifact ID/name, available retention metadata, size, and GitHub
+outer digest. Download the artifact without trusting the HTML index, then
 verify the following independently:
 
 1. The archive has exactly the five expected non-link regular entries and no
@@ -151,6 +185,18 @@ verify the following independently:
 6. The limitations and non-closure projection are present, and no prohibited
    path, URL, secret-like field/value, evidence-document path, historical
    artifact payload, or raw dataset is present.
+
+The independent download of artifact 9763040737 passed all six checks. The ZIP
+had exactly five unique regular entries, no directory/link/special/traversal or
+duplicate entry, and valid CRCs. `manifest.json` contained four records plus
+its own exact closure; all 4/4 payload byte counts and SHA-256 values matched.
+The fixed `submission-index.json` and `limitations.json` SHA-256 values were
+`741f4cfb29c992e88eaaba0887cdc11373ae536f1683bc86280e6ce5d3594260`
+and `dd0ca40daeca8d004dafddfee673403f9750bb67a781528721cddd5ec39403f7`.
+The projection contained 9 slices, 24 runs, 66 jobs, and 9 historical artifact
+citations. CSP, the four relative links, privacy, non-closure, citation policy,
+and absence of historical payloads, prohibited suffixes, paths, and secrets all
+passed.
 
 If the artifact has expired, record that the historical citation is no longer
 downloadable. Do not substitute a locally rebuilt archive for the missing
@@ -196,6 +242,10 @@ bundle does not close those stages or Gates, rerun historical acceptance,
 guarantee artifact availability, prove signatures/attestation, provide complete
 upstream datasets, or establish cloud/production readiness.
 
-S7-05 itself remains **IN PROGRESS, awaiting a commit-bound RC, successful
-remote workflow, and independent download audit**. Only that later evidence may
-change this runbook's status.
+S7-05 is **DONE only for the narrow builder/workflow/five-file bundle slice** on
+the tested RC above. The nine historical records retain their own tested
+`rc_sha`, runs, jobs, and artifact citations; they were neither rerun nor
+embedded by S7-05, and continuing remote availability is not asserted. S7, P7,
+P3e, S4, and Workflow E remain `IN_PROGRESS`; P6 remains `NOT_STARTED`; S2-04
+remains `BLOCKED`; Gate E, G2, G4, and G5 remain open. This documentation update
+is later than and not equal to the tested RC.

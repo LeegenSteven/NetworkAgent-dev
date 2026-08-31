@@ -134,6 +134,60 @@ P3e, S4, Workflow E, P7, and S7 remain `IN PROGRESS`, Gate E/G5/G2/G4 remain
 open, S2-04 remains `BLOCKED`, and P6 remains `NOT STARTED`. This documentation
 update is later than and not equal to the tested RC.
 
+S7-05 adds a fixed offline submission bundle over the nine already tested
+narrow slices:
+
+```text
+python tools/local-stack/build_submission_bundle.py --offline
+```
+
+The builder reads the committed evidence ledger, not an uncommitted worktree
+copy, and writes exactly five regular files under
+`.local/networkagent-submission`: `submission-index.json`, `limitations.json`,
+`REPRODUCE.md`, `index.html`, and `manifest.json`. The bundle contains safe
+metadata, limitations, and historical citations only. It does not rerun the
+nine slices, embed their historical artifact payloads, or assert that those
+artifacts remain remotely downloadable.
+
+S7-05 is `DONE` only for this narrow builder/workflow/bundle slice on RC
+`67f08d887d6ba6e5ddb4108603af71b19e5e0d0f`. The 33-second
+[telco-submission run
+33405685328](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33405685328)
+passed Python 3.12 [job
+99532578035](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33405685328/job/99532578035),
+Python 3.13 [job
+99532578383](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33405685328/job/99532578383),
+the cross-Python equality [job
+99532644051](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33405685328/job/99532644051),
+and the clean rebuild/publish [job
+99532668880](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33405685328/job/99532668880).
+The same push also produced a successful 12m19s [telco-local run
+33405685291](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33405685291)
+with Python 3.12/3.13 jobs 99532577952/99532578269; four Python 3.13 release
+steps skipped as designed.
+
+The sole submission artifact is [artifact
+9763040737](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33405685328/artifacts/9763040737),
+`networkagent-local-submission-py3.12-attempt-1`, retained for 14 days. Its raw
+ZIP is 8,759 bytes with outer SHA-256
+`12e626cd7125f6b04b9f8d817f2db7abadc3c8eba4fca7068909e61355d53295`;
+the distinct inner manifest SHA-256 is
+`32a2ffafaab603cd222c6fadf8e4111ecedb26b354d24d8409520c007c4d4e5c`.
+Independent download verified five unique regular entries, CRC, manifest
+closure and 4/4 payload byte/digest bindings, 9 slices / 24 runs / 66 jobs / 9
+historical artifact citations, the fixed CSP and four local links, privacy,
+non-closure, and citation policy. Python 3.13 and pull requests do not upload a
+second artifact.
+
+See the [Local submission bundle
+runbook](docs/runbooks/local-submission-bundle.md) for the fixed contract,
+failure handling, and independent audit procedure. This RC validates only the
+S7-05 builder, workflow, and five-file bundle: every historical slice keeps its
+own tested RC/run/job/artifact identity. S7, P7, P3e, S4, and Workflow E remain
+`IN PROGRESS`; P6 remains `NOT STARTED`; S2-04 remains `BLOCKED`; Gate E and
+G2/G4/G5 remain open. This documentation update is later than and not equal to
+the tested RC.
+
 For a bounded, privacy-minimized observation of the same defense path, run:
 
 ```text
@@ -487,6 +541,7 @@ provenance is not accepted as closure. See the
 * [Local Profile setup and CLI](packages/telco-local/README.md)
 * [Local deployment and governance entry point](tools/local-stack/README.md)
 * [Local governance security Gate](docs/security/local-governance-gate.md)
+* [Local submission bundle runbook](docs/runbooks/local-submission-bundle.md)
 * [Local Data Lab design and operating boundary](docs/local-data-lab.md)
 * [P3e Local Data Lab security Gate](docs/security/p3e-data-lab-gate.md)
 * [P2a security Gate audit](docs/security/p2a-gate-audit.md)

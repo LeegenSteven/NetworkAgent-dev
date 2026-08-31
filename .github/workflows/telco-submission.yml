@@ -1,0 +1,1572 @@
+name: telco-submission
+
+on:
+  push:
+    paths:
+      - "tools/local-stack/build_submission_bundle.py"
+      - "tools/local-stack/tests/test_build_submission_bundle.py"
+      - "docs/evidence/local-submission-evidence.v1.json"
+      - "docs/runbooks/local-submission-bundle.md"
+      - ".github/workflows/telco-submission.yml"
+  pull_request:
+    paths:
+      - "tools/local-stack/build_submission_bundle.py"
+      - "tools/local-stack/tests/test_build_submission_bundle.py"
+      - "docs/evidence/local-submission-evidence.v1.json"
+      - "docs/runbooks/local-submission-bundle.md"
+      - ".github/workflows/telco-submission.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PYTHONUTF8: "1"
+
+jobs:
+  build-python-312:
+    name: Test and build / Python 3.12
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      manifest_sha256: ${{ steps.digest.outputs.manifest_sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - name: Run the stdlib-only submission contract
+        run: >-
+          python -m unittest
+          tools/local-stack/tests/test_build_submission_bundle.py
+      - name: Build the fixed offline submission bundle
+        run: >-
+          python tools/local-stack/build_submission_bundle.py --offline
+          > "$RUNNER_TEMP/submission-build-summary.json"
+      - name: Compute the inner manifest digest
+        id: digest
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          manifest = Path(".local/networkagent-submission/manifest.json")
+          if not manifest.is_file() or manifest.is_symlink():
+              raise SystemExit("inner manifest is unavailable")
+          digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
+          summary = json.loads(
+              (Path(os.environ["RUNNER_TEMP"]) / "submission-build-summary.json")
+              .read_text(encoding="utf-8")
+          )
+          bundle = summary.get("bundle")
+          if (
+              summary.get("ok") is not True
+              or not isinstance(bundle, dict)
+              or bundle.get("files") != 5
+              or bundle.get("manifest_sha256") != digest
+          ):
+              raise SystemExit("builder summary and inner manifest disagree")
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as stream:
+              stream.write(f"manifest_sha256={digest}\n")
+          PY
+
+  build-python-313:
+    name: Test and build / Python 3.13
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      manifest_sha256: ${{ steps.digest.outputs.manifest_sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.13"
+      - name: Run the stdlib-only submission contract
+        run: >-
+          python -m unittest
+          tools/local-stack/tests/test_build_submission_bundle.py
+      - name: Build the fixed offline submission bundle
+        run: >-
+          python tools/local-stack/build_submission_bundle.py --offline
+          > "$RUNNER_TEMP/submission-build-summary.json"
+      - name: Compute the inner manifest digest
+        id: digest
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          manifest = Path(".local/networkagent-submission/manifest.json")
+          if not manifest.is_file() or manifest.is_symlink():
+              raise SystemExit("inner manifest is unavailable")
+          digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
+          summary = json.loads(
+              (Path(os.environ["RUNNER_TEMP"]) / "submission-build-summary.json")
+              .read_text(encoding="utf-8")
+          )
+          bundle = summary.get("bundle")
+          if (
+              summary.get("ok") is not True
+              or not isinstance(bundle, dict)
+              or bundle.get("files") != 5
+              or bundle.get("manifest_sha256") != digest
+          ):
+              raise SystemExit("builder summary and inner manifest disagree")
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as stream:
+              stream.write(f"manifest_sha256={digest}\n")
+          PY
+
+  cross-python-equality:
+    name: Cross-Python inner-manifest equality gate
+    needs: [build-python-312, build-python-313]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      manifest_sha256: ${{ steps.compare.outputs.manifest_sha256 }}
+    steps:
+      - name: Require byte-identical Python 3.12 and 3.13 bundles
+        id: compare
+        shell: bash
+        env:
+          PY312_MANIFEST_SHA256: ${{ needs.build-python-312.outputs.manifest_sha256 }}
+          PY313_MANIFEST_SHA256: ${{ needs.build-python-313.outputs.manifest_sha256 }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          digest_312 = os.environ["PY312_MANIFEST_SHA256"]
+          digest_313 = os.environ["PY313_MANIFEST_SHA256"]
+          if re.fullmatch(r"[0-9a-f]{64}", digest_312) is None:
+              raise SystemExit("Python 3.12 inner digest is invalid")
+          if digest_312 != digest_313:
+              raise SystemExit("cross-Python inner manifests differ")
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as stream:
+              stream.write(f"manifest_sha256={digest_312}\n")
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open(
+              "a", encoding="utf-8"
+          ) as stream:
+              stream.write("## Cross-Python submission gate\n\n")
+              stream.write(f"Inner `manifest.json` SHA-256: `{digest_312}`.\n\n")
+              stream.write(
+                  "This digest covers the project-defined inner bundle manifest; "
+                  "it is not a GitHub-generated outer artifact archive digest.\n"
+              )
+          PY
+
+  publish-python-312:
+    name: Clean rebuild and publish / Python 3.12
+    if: github.event_name != 'pull_request'
+    needs: [build-python-312, build-python-313, cross-python-equality]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - name: Rebuild from the clean committed source
+        run: >-
+          python tools/local-stack/build_submission_bundle.py --offline
+          > "$RUNNER_TEMP/submission-publish-summary.json"
+      - name: Independently verify exact closure, manifest, and privacy
+        shell: bash
+        env:
+          EXPECTED_MANIFEST_SHA256: ${{ needs.cross-python-equality.outputs.manifest_sha256 }}
+        run: |
+          python - <<'PY'
+          import copy
+          import hashlib
+          import json
+          import os
+          import re
+          import stat
+          import subprocess
+          from pathlib import Path
+
+          root = Path(".local/networkagent-submission")
+          names = (
+              "submission-index.json",
+              "limitations.json",
+              "REPRODUCE.md",
+              "index.html",
+              "manifest.json",
+          )
+          if not root.is_dir() or root.is_symlink():
+              raise SystemExit("submission directory is unsafe")
+          entries = tuple(sorted(root.iterdir(), key=lambda item: item.name))
+          if tuple(item.name for item in entries) != tuple(sorted(names)):
+              raise SystemExit("submission closure is not exact-five")
+
+          payloads = {}
+          total_bytes = 0
+          for path in entries:
+              metadata = path.lstat()
+              if (
+                  not stat.S_ISREG(metadata.st_mode)
+                  or path.is_symlink()
+                  or metadata.st_nlink != 1
+              ):
+                  raise SystemExit("submission member is not an owned regular file")
+              payload = path.read_bytes()
+              if (
+                  not payload
+                  or len(payload) > 512 * 1024
+                  or payload.startswith(b"\xef\xbb\xbf")
+                  or b"\r" in payload
+                  or b"\0" in payload
+              ):
+                  raise SystemExit("submission member violates its byte contract")
+              payloads[path.name] = payload
+              total_bytes += len(payload)
+          if total_bytes > 2 * 1024 * 1024:
+              raise SystemExit("submission closure exceeds its byte budget")
+
+          def unique_object(pairs):
+              value = {}
+              for key, item in pairs:
+                  if key in value:
+                      raise ValueError("duplicate JSON key")
+                  value[key] = item
+              return value
+
+          def reject_number(_value):
+              raise ValueError("unsupported JSON number")
+
+          def parse_json(name):
+              return json.loads(
+                  payloads[name].decode("utf-8"),
+                  object_pairs_hook=unique_object,
+                  parse_constant=reject_number,
+                  parse_float=reject_number,
+              )
+
+          def canonical_json(value):
+              return (
+                  json.dumps(
+                      value,
+                      allow_nan=False,
+                      ensure_ascii=False,
+                      separators=(",", ":"),
+                      sort_keys=True,
+                  ).encode("utf-8")
+                  + b"\n"
+              )
+
+          manifest = parse_json("manifest.json")
+          if canonical_json(manifest) != payloads["manifest.json"]:
+              raise SystemExit("manifest is not canonical JSON")
+          if set(manifest) != {"files", "ownership", "schema"}:
+              raise SystemExit("manifest shape is invalid")
+          if manifest["schema"] != "networkagent-local-submission-manifest/1.0":
+              raise SystemExit("manifest schema is invalid")
+          records = manifest["files"]
+          if not isinstance(records, list) or len(records) != 4:
+              raise SystemExit("manifest records are not exact-four")
+          for record, name in zip(records, names[:-1], strict=True):
+              payload = payloads[name]
+              if record != {
+                  "bytes": len(payload),
+                  "name": name,
+                  "sha256": hashlib.sha256(payload).hexdigest(),
+              }:
+                  raise SystemExit("manifest member binding is invalid")
+          ownership = manifest["ownership"]
+          ledger = subprocess.run(
+              (
+                  "git",
+                  "show",
+                  "HEAD:docs/evidence/local-submission-evidence.v1.json",
+              ),
+              check=True,
+              stdin=subprocess.DEVNULL,
+              stdout=subprocess.PIPE,
+              stderr=subprocess.DEVNULL,
+          ).stdout
+          ledger_digest = hashlib.sha256(ledger).hexdigest()
+          if (
+              set(ownership) != {
+                  "ledger_sha256",
+                  "marker",
+                  "repository",
+                  "source_commit",
+              }
+              or ownership["marker"] != "NETWORKAGENT_LOCAL_SUBMISSION_BUNDLE"
+              or ownership["repository"] != "LeegenSteven/NetworkAgent-dev"
+              or ownership["source_commit"] != os.environ["GITHUB_SHA"]
+              or ownership["ledger_sha256"] != ledger_digest
+          ):
+              raise SystemExit("manifest ownership binding is invalid")
+
+          manifest_digest = hashlib.sha256(payloads["manifest.json"]).hexdigest()
+          if manifest_digest != os.environ["EXPECTED_MANIFEST_SHA256"]:
+              raise SystemExit("clean rebuild differs from the cross-Python gate")
+          publish_summary = json.loads(
+              (Path(os.environ["RUNNER_TEMP"]) / "submission-publish-summary.json")
+              .read_text(encoding="utf-8")
+          )
+          publish_bundle = publish_summary.get("bundle")
+          if (
+              publish_summary.get("ok") is not True
+              or publish_summary.get("changed") is not True
+              or not isinstance(publish_bundle, dict)
+              or publish_bundle.get("files") != 5
+              or publish_bundle.get("manifest_sha256") != manifest_digest
+          ):
+              raise SystemExit("clean rebuild summary is invalid")
+
+          index = parse_json("submission-index.json")
+          limitations = parse_json("limitations.json")
+          if canonical_json(index) != payloads["submission-index.json"]:
+              raise SystemExit("submission index is not canonical JSON")
+          if canonical_json(limitations) != payloads["limitations.json"]:
+              raise SystemExit("limitations are not canonical JSON")
+          expected_index_sha256 = (
+              "741f4cfb29c992e88eaaba0887cdc11373ae536f1683bc86280e6ce5d3594260"
+          )
+          expected_limitations_sha256 = (
+              "dd0ca40daeca8d004dafddfee673403f9750bb67a781528721cddd5ec39403f7"
+          )
+
+          def verify_public_payload_digests(index_payload, limitations_payload):
+              if (
+                  hashlib.sha256(index_payload).hexdigest()
+                  != expected_index_sha256
+                  or hashlib.sha256(limitations_payload).hexdigest()
+                  != expected_limitations_sha256
+              ):
+                  raise SystemExit("public projection digest is invalid")
+
+          verify_public_payload_digests(
+              payloads["submission-index.json"],
+              payloads["limitations.json"],
+          )
+          index_keys = {
+              "artifact_citation_policy",
+              "evidence_as_of",
+              "evidence_cutoff_commit",
+              "non_closure",
+              "repository",
+              "schema",
+              "slices",
+          }
+          limitations_keys = {
+              "evidence_as_of",
+              "evidence_cutoff_commit",
+              "non_closure",
+              "schema",
+              "slices",
+          }
+          index_slice_keys = {
+              "delivered",
+              "evidence_classification",
+              "evidence_docs",
+              "gate_effect",
+              "id",
+              "primary_run_id",
+              "rc_sha",
+              "runs",
+              "title_zh",
+          }
+          evidence_docs_keys = {
+              "commit",
+              "document_count",
+              "kind",
+              "provenance",
+          }
+          limitations_slice_keys = {"id", "not_claimed"}
+          if not isinstance(index, dict) or set(index) != index_keys:
+              raise SystemExit("submission index public shape is invalid")
+          if (
+              not isinstance(limitations, dict)
+              or set(limitations) != limitations_keys
+          ):
+              raise SystemExit("limitations public shape is invalid")
+          if index["schema"] != "networkagent-local-submission-index/1.0":
+              raise SystemExit("submission index schema is invalid")
+          if (
+              limitations["schema"]
+              != "networkagent-local-submission-limitations/1.0"
+          ):
+              raise SystemExit("limitations schema is invalid")
+          expected_repository = "LeegenSteven/NetworkAgent-dev"
+          expected_evidence_as_of = "2026-08-31T12:04:19Z"
+          expected_evidence_cutoff_commit = (
+              "aa50d74034d77bb36fbf2fad60d58e449308a1f1"
+          )
+
+          def verify_public_metadata(index_value, limitations_value):
+              if (
+                  index_value["repository"] != expected_repository
+                  or index_value["evidence_as_of"]
+                  != expected_evidence_as_of
+                  or limitations_value["evidence_as_of"]
+                  != expected_evidence_as_of
+                  or index_value["evidence_as_of"]
+                  != limitations_value["evidence_as_of"]
+                  or index_value["evidence_cutoff_commit"]
+                  != expected_evidence_cutoff_commit
+                  or limitations_value["evidence_cutoff_commit"]
+                  != expected_evidence_cutoff_commit
+                  or index_value["evidence_cutoff_commit"]
+                  != limitations_value["evidence_cutoff_commit"]
+              ):
+                  raise SystemExit("public evidence metadata is invalid")
+
+          verify_public_metadata(index, limitations)
+          expected_non_closure = {
+              "gates": {
+                  "G2": "OPEN",
+                  "G4": "OPEN",
+                  "G5": "OPEN",
+                  "GATE_E": "OPEN",
+              },
+              "stages": {
+                  "P3e": "IN_PROGRESS",
+                  "P3e-5": "IN_PROGRESS",
+                  "P6": "NOT_STARTED",
+                  "P7": "IN_PROGRESS",
+                  "S2-04": "BLOCKED",
+                  "S4": "IN_PROGRESS",
+                  "S7": "IN_PROGRESS",
+                  "WORKFLOW_E": "IN_PROGRESS",
+              },
+          }
+          if (
+              index["non_closure"] != expected_non_closure
+              or limitations["non_closure"] != expected_non_closure
+          ):
+              raise SystemExit("frozen non-closure state is invalid")
+          slice_ids = (
+              "S4-01",
+              "S4-02",
+              "S4-03",
+              "S4-04",
+              "S4-05",
+              "S7-01",
+              "S7-02",
+              "S7-03",
+              "S7-04",
+          )
+          expected_evidence_classification = {
+              "S4-01": {
+                  "scope": "PRIMARY_SUMMARY_PAYLOAD",
+                  "state": "ABSENT_BY_SCHEMA",
+                  "value": None,
+              },
+              "S4-02": {
+                  "scope": "PRIMARY_SUMMARY_PAYLOAD",
+                  "state": "VERIFIED",
+                  "value": "LOCAL_CANONICAL_LIFECYCLE_EVIDENCE",
+              },
+              "S4-03": {
+                  "scope": "PRIMARY_SUMMARY_PAYLOAD",
+                  "state": "VERIFIED",
+                  "value": "LOCAL_DEMO_ACCEPTANCE_SLO_EVIDENCE",
+              },
+              "S4-04": {
+                  "scope": "PRIMARY_SUMMARY_PAYLOAD",
+                  "state": "VERIFIED",
+                  "value": "LOCAL_COLD_BACKUP_RECOVERY_EVIDENCE",
+              },
+              "S4-05": {
+                  "scope": "PRIMARY_SUMMARY_PAYLOAD",
+                  "state": "VERIFIED",
+                  "value": "LOCAL_SINGLE_PROCESS_LOOPBACK_TRACE_EVIDENCE",
+              },
+              "S7-01": {
+                  "scope": "CI_RUNTIME_OUTPUT",
+                  "state": "VERIFIED",
+                  "value": "LOCAL_NATIVE_SIMULATION_EVIDENCE",
+              },
+              "S7-02": {
+                  "scope": "PRIMARY_SUMMARY_PAYLOAD",
+                  "state": "VERIFIED",
+                  "value": "LOCAL_NATIVE_SIMULATION_EVIDENCE",
+              },
+              "S7-03": {
+                  "scope": "PRIMARY_SUMMARY_PAYLOAD",
+                  "state": "VERIFIED",
+                  "value": "LOCAL_BUBBLERAN_VERTICAL_DEFENSE_EVIDENCE",
+              },
+              "S7-04": {
+                  "scope": "PRIMARY_SUMMARY_PAYLOAD",
+                  "state": "VERIFIED",
+                  "value": "PINNED_UPSTREAM_RCAEVAL_RE2OB_SLICE",
+              },
+          }
+          if index.get("artifact_citation_policy") != {
+              "payload_content_embedded_in_bundle": False,
+              "reference_mode": "HISTORICAL_VERIFIED_REFERENCE",
+              "remote_availability_asserted": False,
+          }:
+              raise SystemExit("artifact citation policy is invalid")
+          index_slices = index["slices"]
+          limitations_slices = limitations["slices"]
+          if (
+              not isinstance(index_slices, list)
+              or len(index_slices) != len(slice_ids)
+              or any(
+                  not isinstance(item, dict) or set(item) != index_slice_keys
+                  for item in index_slices
+              )
+          ):
+              raise SystemExit("submission index slice shape is invalid")
+          if (
+              not isinstance(limitations_slices, list)
+              or len(limitations_slices) != len(slice_ids)
+              or any(
+                  not isinstance(item, dict)
+                  or set(item) != limitations_slice_keys
+                  for item in limitations_slices
+              )
+          ):
+              raise SystemExit("limitations slice shape is invalid")
+          if tuple(item["id"] for item in index_slices) != slice_ids:
+              raise SystemExit("submission index does not contain nine slices")
+          if tuple(item["id"] for item in limitations_slices) != slice_ids:
+              raise SystemExit("limitations do not contain nine slices")
+          if any(
+              item["evidence_classification"]
+              != expected_evidence_classification[item["id"]]
+              for item in index_slices
+          ):
+              raise SystemExit("evidence classification projection is invalid")
+          provenance_roles = {
+              "CONSOLIDATED_EVIDENCE_RECORD",
+              "DEDICATED_POST_RC_EVIDENCE_RECORD",
+              "FIRST_REMOTE_EVIDENCE_RECORD",
+          }
+
+          def verify_evidence_docs(evidence_docs):
+              if (
+                  not isinstance(evidence_docs, dict)
+                  or set(evidence_docs) != evidence_docs_keys
+                  or isinstance(evidence_docs["document_count"], bool)
+                  or not isinstance(evidence_docs["document_count"], int)
+                  or evidence_docs["document_count"] <= 0
+                  or evidence_docs["document_count"] > 16
+                  or evidence_docs["kind"]
+                  not in {"DEDICATED_POST_RC", "MIXED_CI_DOCS_RECORD"}
+                  or not isinstance(evidence_docs["commit"], str)
+                  or re.fullmatch(
+                      r"[0-9a-f]{40}", evidence_docs["commit"]
+                  )
+                  is None
+              ):
+                  raise SystemExit("evidence document projection is invalid")
+              provenance = evidence_docs["provenance"]
+              if (
+                  not isinstance(provenance, list)
+                  or not 1 <= len(provenance) <= 4
+              ):
+                  raise SystemExit("evidence provenance projection is invalid")
+              commits = set()
+              for record in provenance:
+                  if (
+                      not isinstance(record, dict)
+                      or set(record) != {"commit", "role"}
+                      or not isinstance(record["commit"], str)
+                      or re.fullmatch(r"[0-9a-f]{40}", record["commit"])
+                      is None
+                      or not isinstance(record["role"], str)
+                      or re.fullmatch(r"[A-Z][A-Z0-9_]*", record["role"])
+                      is None
+                      or record["role"] not in provenance_roles
+                      or record["commit"] in commits
+                  ):
+                      raise SystemExit(
+                          "evidence provenance projection is invalid"
+                      )
+                  commits.add(record["commit"])
+              if evidence_docs["commit"] not in commits:
+                  raise SystemExit("evidence provenance projection is invalid")
+
+          delivered_keys = {"representation", "state", "value"}
+          gate_effect_keys = {
+              "overall_gates_closed",
+              "overall_stages_closed",
+              "scope",
+              "slice_status",
+              "stage_updates",
+          }
+          run_keys = {
+              "artifact",
+              "head_sha",
+              "jobs",
+              "run_id",
+              "trigger",
+              "workflow",
+          }
+          job_keys = {"conclusion", "id", "python"}
+          artifact_keys = {
+              "archive_bytes",
+              "archive_sha256",
+              "exact_closure",
+              "id",
+              "name",
+              "payload_content_embedded_in_ledger",
+              "primary_summary",
+              "publisher_job_id",
+              "remote_availability_asserted",
+              "retention_days",
+              "verification_label",
+          }
+          exact_closure_keys = {
+              "manifest_record_count",
+              "member_count",
+              "state",
+          }
+          summary_keys = {
+              "availability",
+              "bytes",
+              "name",
+              "path",
+              "schema",
+              "sha256",
+          }
+          verification_label_keys = {
+              "github_api_native",
+              "origin",
+              "value",
+          }
+          workflows = {
+              "telco-assurance",
+              "telco-cloud",
+              "telco-container",
+              "telco-lab",
+              "telco-local",
+          }
+
+          def verify_delivered(delivered, slice_id):
+              if not isinstance(delivered, dict) or set(delivered) != delivered_keys:
+                  raise SystemExit("delivered projection shape is invalid")
+              representation = delivered["representation"]
+              state = delivered["state"]
+              value = delivered["value"]
+              if representation == "ABSENT":
+                  valid = state == "ABSENT_BY_SCHEMA" and value is None
+              elif representation == "TOKEN_LIST":
+                  valid = (
+                      state == "VERIFIED"
+                      and isinstance(value, list)
+                      and 1 <= len(value) <= 128
+                      and len(set(value)) == len(value)
+                      and all(
+                          isinstance(token, str)
+                          and re.fullmatch(r"[A-Z][A-Z0-9_]*", token)
+                          is not None
+                          for token in value
+                      )
+                  )
+              elif representation == "BOOLEAN_MAP":
+                  valid = (
+                      state == "VERIFIED"
+                      and isinstance(value, dict)
+                      and 1 <= len(value) <= 128
+                      and all(
+                          isinstance(key, str) and key and flag is True
+                          for key, flag in value.items()
+                      )
+                  )
+              else:
+                  valid = False
+              if not valid or (representation == "ABSENT") != (
+                  slice_id in {"S7-01", "S7-02", "S7-04"}
+              ):
+                  raise SystemExit("delivered projection is invalid")
+
+          def verify_gate_effect(gate_effect, slice_id):
+              expected_stage_updates = (
+                  [
+                      {
+                          "effect": "FIXTURE_ENTRY_ADDED_STAGE_REMAINS_IN_PROGRESS",
+                          "id": "P3e-5",
+                      }
+                  ]
+                  if slice_id == "S7-03"
+                  else []
+              )
+              if (
+                  not isinstance(gate_effect, dict)
+                  or set(gate_effect) != gate_effect_keys
+                  or gate_effect
+                  != {
+                      "overall_gates_closed": [],
+                      "overall_stages_closed": [],
+                      "scope": "NARROW_SLICE_ONLY",
+                      "slice_status": "DONE",
+                      "stage_updates": expected_stage_updates,
+                  }
+              ):
+                  raise SystemExit("gate effect projection is invalid")
+
+          def verify_summary(summary, slice_id):
+              if not isinstance(summary, dict) or set(summary) != summary_keys:
+                  raise SystemExit("primary summary projection shape is invalid")
+              name = summary["name"]
+              if (
+                  not isinstance(name, str)
+                  or re.fullmatch(r"[a-z0-9][a-z0-9._-]*\.json", name)
+                  is None
+                  or summary["path"] != f"release-evidence/{name}"
+                  or not isinstance(summary["schema"], str)
+                  or re.fullmatch(
+                      r"networkagent-[a-z0-9-]+/1\.0", summary["schema"]
+                  )
+                  is None
+              ):
+                  raise SystemExit("primary summary identity is invalid")
+              byte_record = summary["bytes"]
+              digest_record = summary["sha256"]
+              if not isinstance(byte_record, dict) or not isinstance(
+                  digest_record, dict
+              ):
+                  raise SystemExit("primary summary record shape is invalid")
+              state = byte_record.get("state")
+              if digest_record.get("state") != state:
+                  raise SystemExit("primary summary states disagree")
+              if state == "VERIFIED":
+                  valid = (
+                      set(byte_record) == {"state", "value"}
+                      and set(digest_record) == {"state", "value"}
+                      and not isinstance(byte_record["value"], bool)
+                      and isinstance(byte_record["value"], int)
+                      and byte_record["value"] > 0
+                      and isinstance(digest_record["value"], str)
+                      and re.fullmatch(
+                          r"[0-9a-f]{64}", digest_record["value"]
+                      )
+                      is not None
+                      and summary["availability"] == "PRESENT"
+                  )
+              else:
+                  expected_reason = (
+                      "NOT_RECORDED"
+                      if state == "PRESENT_NOT_RECORDED"
+                      else "NOT_EMITTED"
+                  )
+                  expected_availability = (
+                      "PRESENT"
+                      if state == "PRESENT_NOT_RECORDED"
+                      else "NOT_EMITTED"
+                  )
+                  valid = (
+                      state in {"PRESENT_NOT_RECORDED", "NOT_EMITTED"}
+                      and set(byte_record) == {"reason", "state", "value"}
+                      and set(digest_record) == {"reason", "state", "value"}
+                      and byte_record["reason"] == expected_reason
+                      and digest_record["reason"] == expected_reason
+                      and byte_record["value"] is None
+                      and digest_record["value"] is None
+                      and summary["availability"] == expected_availability
+                  )
+              expected_state = (
+                  "NOT_EMITTED"
+                  if slice_id == "S7-01"
+                  else "PRESENT_NOT_RECORDED"
+                  if slice_id == "S4-05"
+                  else "VERIFIED"
+              )
+              if not valid or state != expected_state:
+                  raise SystemExit("primary summary projection is invalid")
+
+          def verify_artifact(artifact, *, workflow, job_ids, slice_id):
+              if not isinstance(artifact, dict) or set(artifact) != artifact_keys:
+                  raise SystemExit("artifact projection shape is invalid")
+              if (
+                  not isinstance(artifact["id"], str)
+                  or re.fullmatch(r"[1-9][0-9]*", artifact["id"]) is None
+                  or not isinstance(artifact["publisher_job_id"], str)
+                  or artifact["publisher_job_id"] not in job_ids
+                  or isinstance(artifact["archive_bytes"], bool)
+                  or not isinstance(artifact["archive_bytes"], int)
+                  or artifact["archive_bytes"] <= 0
+                  or not isinstance(artifact["archive_sha256"], str)
+                  or re.fullmatch(
+                      r"[0-9a-f]{64}", artifact["archive_sha256"]
+                  )
+                  is None
+                  or artifact["name"]
+                  != f"{workflow}-release-py3.12-attempt-1"
+                  or artifact["retention_days"] != 14
+                  or artifact["payload_content_embedded_in_ledger"] is not False
+                  or artifact["remote_availability_asserted"] is not False
+              ):
+                  raise SystemExit("artifact projection is invalid")
+              closure = artifact["exact_closure"]
+              if (
+                  not isinstance(closure, dict)
+                  or set(closure) != exact_closure_keys
+              ):
+                  raise SystemExit("artifact closure shape is invalid")
+              if closure["state"] == "VERIFIED":
+                  manifest_count = closure["manifest_record_count"]
+                  member_count = closure["member_count"]
+                  valid_closure = (
+                      not isinstance(manifest_count, bool)
+                      and isinstance(manifest_count, int)
+                      and manifest_count > 0
+                      and not isinstance(member_count, bool)
+                      and isinstance(member_count, int)
+                      and member_count == manifest_count + 1
+                  )
+              else:
+                  valid_closure = closure == {
+                      "manifest_record_count": None,
+                      "member_count": None,
+                      "state": "UNKNOWN",
+                  }
+              if not valid_closure or (closure["state"] == "UNKNOWN") != (
+                  slice_id == "S7-01"
+              ):
+                  raise SystemExit("artifact closure projection is invalid")
+              label = artifact["verification_label"]
+              if (
+                  not isinstance(label, dict)
+                  or set(label) != verification_label_keys
+                  or label
+                  != {
+                      "github_api_native": False,
+                      "origin": "PROJECT_WORKFLOW_AND_INDEPENDENT_AUDIT",
+                      "value": "VERIFIED RC",
+                  }
+              ):
+                  raise SystemExit("artifact verification label is invalid")
+              verify_summary(artifact["primary_summary"], slice_id)
+
+          def verify_runs(item):
+              slice_id = item["id"]
+              primary_run_id = item["primary_run_id"]
+              rc_sha = item["rc_sha"]
+              runs = item["runs"]
+              if (
+                  not isinstance(primary_run_id, str)
+                  or re.fullmatch(r"[1-9][0-9]*", primary_run_id) is None
+                  or not isinstance(rc_sha, str)
+                  or re.fullmatch(r"[0-9a-f]{40}", rc_sha) is None
+                  or not isinstance(runs, list)
+                  or not 1 <= len(runs) <= 8
+              ):
+                  raise SystemExit("run projection is invalid")
+              seen_runs = set()
+              seen_jobs = set()
+              artifact_count = 0
+              for run in runs:
+                  if not isinstance(run, dict) or set(run) != run_keys:
+                      raise SystemExit("run projection shape is invalid")
+                  run_id = run["run_id"]
+                  if (
+                      not isinstance(run_id, str)
+                      or re.fullmatch(r"[1-9][0-9]*", run_id) is None
+                      or run_id in seen_runs
+                      or run["head_sha"] != rc_sha
+                      or run["workflow"] not in workflows
+                      or run["trigger"] not in {"push", "workflow_dispatch"}
+                      or not isinstance(run["jobs"], list)
+                      or not 1 <= len(run["jobs"]) <= 8
+                  ):
+                      raise SystemExit("run projection is invalid")
+                  seen_runs.add(run_id)
+                  this_job_ids = set()
+                  for job in run["jobs"]:
+                      if not isinstance(job, dict) or set(job) != job_keys:
+                          raise SystemExit("job projection shape is invalid")
+                      job_id = job["id"]
+                      if (
+                          job["conclusion"] != "success"
+                          or not isinstance(job_id, str)
+                          or re.fullmatch(r"[1-9][0-9]*", job_id) is None
+                          or job_id in seen_jobs
+                          or job["python"] not in {"3.12", "3.13", None}
+                      ):
+                          raise SystemExit("job projection is invalid")
+                      seen_jobs.add(job_id)
+                      this_job_ids.add(job_id)
+                  if run_id == primary_run_id:
+                      verify_artifact(
+                          run["artifact"],
+                          workflow=run["workflow"],
+                          job_ids=this_job_ids,
+                          slice_id=slice_id,
+                      )
+                      artifact_count += 1
+                      artifact = run["artifact"]
+                      if (
+                          artifact["publisher_job_id"]
+                          not in {
+                              job["id"]
+                              for job in run["jobs"]
+                              if job["python"] == "3.12"
+                          }
+                          or not any(
+                              job["python"] == "3.13" for job in run["jobs"]
+                          )
+                      ):
+                          raise SystemExit("artifact publisher is invalid")
+                  elif run["artifact"] is not None:
+                      raise SystemExit("non-primary run contains an artifact")
+              if artifact_count != 1:
+                  raise SystemExit("primary artifact projection is invalid")
+
+          def verify_public_slice(item):
+              slice_id = item["id"]
+              if (
+                  not isinstance(item["title_zh"], str)
+                  or not item["title_zh"]
+                  or item["evidence_classification"]
+                  != expected_evidence_classification[slice_id]
+              ):
+                  raise SystemExit("slice public projection is invalid")
+              verify_delivered(item["delivered"], slice_id)
+              verify_gate_effect(item["gate_effect"], slice_id)
+              verify_evidence_docs(item["evidence_docs"])
+              verify_runs(item)
+
+          for item in index_slices:
+              verify_public_slice(item)
+
+          private_names = {
+              "access_key",
+              "access_token",
+              "api_key",
+              "authorization",
+              "body",
+              "checkpoint",
+              "cookie",
+              "credential",
+              "database",
+              "db_path",
+              "event_id",
+              "events",
+              "ground_truth",
+              "incident_id",
+              "label",
+              "labels",
+              "local_path",
+              "password",
+              "path",
+              "private_id",
+              "private_key",
+              "ran_ue_id",
+              "raw",
+              "raw_data",
+              "raw_payload",
+              "refresh_token",
+              "row",
+              "rows",
+              "secret",
+              "seal",
+              "source_event_id",
+              "source_url",
+              "token",
+              "trace_id",
+              "ue",
+              "ue_id",
+              "wheel",
+          }
+          secret_patterns = (
+              re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+              re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),
+              re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),
+              re.compile(r"sk-[A-Za-z0-9_-]{20,}"),
+              re.compile(r"AIza[0-9A-Za-z_-]{20,}"),
+              re.compile(r"AKIA[0-9A-Z]{16}"),
+              re.compile(
+                  r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\."
+                  r"[A-Za-z0-9_-]{8,}"
+              ),
+              re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"),
+              re.compile(r"glpat-[A-Za-z0-9_-]{20,}"),
+              re.compile(r"(?:npm|hf)_[A-Za-z0-9_-]{20,}"),
+              re.compile(r"(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}"),
+              re.compile(
+                  r"(?i)\b(?:bearer|basic)\s+[A-Za-z0-9._~+/-]{16,}"
+              ),
+              re.compile(
+                  r"(?i)\b(?:access[_-]?token|api[_-]?key|password|passwd|"
+                  r"private[_-]?key|refresh[_-]?token|secret|token)"
+                  r"\s*[:=]\s*[^\s,;]{4,}"
+              ),
+          )
+          scheme_pattern = re.compile(
+              r"(?i)(?<![A-Za-z0-9+.-])[A-Za-z][A-Za-z0-9+.-]{1,31}:"
+              r"(?://|[\\/]|[A-Za-z0-9])"
+          )
+          protocol_relative_pattern = re.compile(
+              r"(?<![:\\])//[^\s<>\"']+"
+          )
+          absolute_path_patterns = (
+              re.compile(r"[A-Za-z]:[\\/]"),
+              re.compile(r"\\\\(?:[?.]|GLOBALROOT)[\\/]", re.IGNORECASE),
+              re.compile(r"\\[?]{2}[\\/]"),
+              re.compile(r"\\\\[^\s\\/]+[\\/]"),
+              re.compile(r"(?<![<A-Za-z0-9._~-])~[\\/]"),
+              re.compile(
+                  r"(?<![<\w.~-])/(?!/)[^\s<>\"'\\/:]+"
+                  r"(?:/[^\s<>\"'\\/:]+)*"
+              ),
+          )
+
+          def verify_text_privacy(text):
+              if (
+                  scheme_pattern.search(text) is not None
+                  or protocol_relative_pattern.search(text) is not None
+                  or any(
+                      pattern.search(text) is not None
+                      for pattern in absolute_path_patterns
+                  )
+                  or any(pattern.search(text) for pattern in secret_patterns)
+              ):
+                  raise SystemExit(
+                      "submission member contains a private path, URL, or secret"
+                  )
+
+          summary_context = (
+              "slices",
+              "[]",
+              "runs",
+              "[]",
+              "artifact",
+              "primary_summary",
+          )
+          summary_keys = {
+              "availability",
+              "bytes",
+              "name",
+              "path",
+              "schema",
+              "sha256",
+          }
+
+          def verify_private_projection(value, *, document):
+              stack = [(value, ())]
+              while stack:
+                  item, context = stack.pop()
+                  if isinstance(item, dict):
+                      for key, nested in item.items():
+                          normalized = re.sub(
+                              r"[^a-z0-9]+", "_", key.lower()
+                          ).strip("_")
+                          if normalized == "path":
+                              name = item.get("name")
+                              if (
+                                  document != "submission-index.json"
+                                  or context != summary_context
+                                  or key != "path"
+                                  or set(item) != summary_keys
+                                  or not isinstance(name, str)
+                                  or re.fullmatch(
+                                      r"[a-z0-9][a-z0-9._-]*\.json", name
+                                  )
+                                  is None
+                                  or nested != f"release-evidence/{name}"
+                              ):
+                                  raise SystemExit(
+                                      "private field entered submission"
+                                  )
+                          elif normalized in private_names:
+                              raise SystemExit("private field entered submission")
+                          stack.append((nested, context + (normalized,)))
+                  elif isinstance(item, list):
+                      stack.extend(
+                          (nested, context + ("[]",)) for nested in item
+                      )
+                  elif isinstance(item, str):
+                      verify_text_privacy(item)
+
+          def require_fixture_rejection(label, operation):
+              try:
+                  operation()
+              except SystemExit:
+                  return
+              raise SystemExit(f"attacker fixture was accepted: {label}")
+
+          def verify_title_digest_fixture():
+              fixture = copy.deepcopy(index)
+              fixture["slices"][0]["title_zh"] += "（漂移）"
+              mutated_payload = canonical_json(fixture)
+              if mutated_payload == payloads["submission-index.json"]:
+                  raise RuntimeError("title fixture did not mutate the payload")
+              verify_public_payload_digests(
+                  mutated_payload,
+                  payloads["limitations.json"],
+              )
+
+          require_fixture_rejection(
+              "canonical title drift",
+              verify_title_digest_fixture,
+          )
+
+          def verify_limitations_digest_fixture():
+              fixture = copy.deepcopy(limitations)
+              fixture["slices"][0]["not_claimed"].append(
+                  "UNAPPROVED_LIMITATION_DRIFT"
+              )
+              mutated_payload = canonical_json(fixture)
+              if mutated_payload == payloads["limitations.json"]:
+                  raise RuntimeError("limitations fixture did not mutate the payload")
+              verify_public_payload_digests(
+                  payloads["submission-index.json"],
+                  mutated_payload,
+              )
+
+          require_fixture_rejection(
+              "canonical limitations drift",
+              verify_limitations_digest_fixture,
+          )
+
+          def verify_metadata_fixture(field, value, *, targets):
+              fixture_index = copy.deepcopy(index)
+              fixture_limitations = copy.deepcopy(limitations)
+              if "index" in targets:
+                  fixture_index[field] = value
+              if "limitations" in targets:
+                  fixture_limitations[field] = value
+              verify_public_metadata(fixture_index, fixture_limitations)
+
+          require_fixture_rejection(
+              "repository drift",
+              lambda: verify_metadata_fixture(
+                  "repository", "Fork/NetworkAgent-dev", targets={"index"}
+              ),
+          )
+          require_fixture_rejection(
+              "shared evidence timestamp drift",
+              lambda: verify_metadata_fixture(
+                  "evidence_as_of",
+                  "2026-08-31T12:04:20Z",
+                  targets={"index", "limitations"},
+              ),
+          )
+          require_fixture_rejection(
+              "shared evidence cutoff drift",
+              lambda: verify_metadata_fixture(
+                  "evidence_cutoff_commit",
+                  "b" * 40,
+                  targets={"index", "limitations"},
+              ),
+          )
+
+          def verify_slice_fixture(mutator):
+              fixture = copy.deepcopy(index_slices[0])
+              mutator(fixture)
+              verify_public_slice(fixture)
+
+          require_fixture_rejection(
+              "classification drift",
+              lambda: verify_slice_fixture(
+                  lambda item: item["evidence_classification"].update(
+                      {"state": "VERIFIED", "value": "UNAPPROVED"}
+                  )
+              ),
+          )
+          require_fixture_rejection(
+              "run raw payload",
+              lambda: verify_slice_fixture(
+                  lambda item: item["runs"][0].update({"raw_payload": {}})
+              ),
+          )
+          require_fixture_rejection(
+              "job diagnostic status",
+              lambda: verify_slice_fixture(
+                  lambda item: item["runs"][0]["jobs"][0].update(
+                      {"diagnostic_status": "PASS"}
+                  )
+              ),
+          )
+          require_fixture_rejection(
+              "artifact raw payload",
+              lambda: verify_slice_fixture(
+                  lambda item: item["runs"][0]["artifact"].update(
+                      {"raw_payload": {}}
+                  )
+              ),
+          )
+          require_fixture_rejection(
+              "summary diagnostic status",
+              lambda: verify_slice_fixture(
+                  lambda item: item["runs"][0]["artifact"][
+                      "primary_summary"
+                  ].update({"diagnostic_status": "PASS"})
+              ),
+          )
+          require_fixture_rejection(
+              "closure diagnostic status",
+              lambda: verify_slice_fixture(
+                  lambda item: item["runs"][0]["artifact"][
+                      "exact_closure"
+                  ].update({"diagnostic_status": "PASS"})
+              ),
+          )
+          require_fixture_rejection(
+              "delivered raw payload",
+              lambda: verify_slice_fixture(
+                  lambda item: item["delivered"].update({"raw_payload": {}})
+              ),
+          )
+          require_fixture_rejection(
+              "gate diagnostic status",
+              lambda: verify_slice_fixture(
+                  lambda item: item["gate_effect"].update(
+                      {"diagnostic_status": "PASS"}
+                  )
+              ),
+          )
+
+          valid_evidence_docs_fixture = {
+              "commit": "a" * 40,
+              "document_count": 1,
+              "kind": "DEDICATED_POST_RC",
+              "provenance": [
+                  {
+                      "commit": "a" * 40,
+                      "role": "DEDICATED_POST_RC_EVIDENCE_RECORD",
+                  }
+              ],
+          }
+          verify_evidence_docs(valid_evidence_docs_fixture)
+          require_fixture_rejection(
+              "empty provenance",
+              lambda: verify_evidence_docs(
+                  {**valid_evidence_docs_fixture, "provenance": []}
+              ),
+          )
+          require_fixture_rejection(
+              "unbounded provenance",
+              lambda: verify_evidence_docs(
+                  {
+                      **valid_evidence_docs_fixture,
+                      "provenance": [
+                          {
+                              "commit": f"{number:040x}",
+                              "role": "DEDICATED_POST_RC_EVIDENCE_RECORD",
+                          }
+                          for number in range(1, 6)
+                      ],
+                  }
+              ),
+          )
+          require_fixture_rejection(
+              "provenance paths",
+              lambda: verify_evidence_docs(
+                  {
+                      **valid_evidence_docs_fixture,
+                      "provenance": [
+                          {
+                              "commit": "a" * 40,
+                              "paths": ["docs/private.md"],
+                              "role": "DEDICATED_POST_RC_EVIDENCE_RECORD",
+                          }
+                      ],
+                  }
+              ),
+          )
+          require_fixture_rejection(
+              "provenance path",
+              lambda: verify_evidence_docs(
+                  {
+                      **valid_evidence_docs_fixture,
+                      "provenance": [
+                          {
+                              "commit": "a" * 40,
+                              "path": "docs/private.md",
+                              "role": "DEDICATED_POST_RC_EVIDENCE_RECORD",
+                          }
+                      ],
+                  }
+              ),
+          )
+          require_fixture_rejection(
+              "provenance commit type",
+              lambda: verify_evidence_docs(
+                  {
+                      **valid_evidence_docs_fixture,
+                      "provenance": [
+                          {
+                              "commit": 1,
+                              "role": "DEDICATED_POST_RC_EVIDENCE_RECORD",
+                          }
+                      ],
+                  }
+              ),
+          )
+          require_fixture_rejection(
+              "provenance role allowlist",
+              lambda: verify_evidence_docs(
+                  {
+                      **valid_evidence_docs_fixture,
+                      "provenance": [
+                          {"commit": "a" * 40, "role": "UNAPPROVED_ROLE"}
+                      ],
+                  }
+              ),
+          )
+          require_fixture_rejection(
+              "provenance role token",
+              lambda: verify_evidence_docs(
+                  {
+                      **valid_evidence_docs_fixture,
+                      "provenance": [
+                          {"commit": "a" * 40, "role": "lowercase-role"}
+                      ],
+                  }
+              ),
+          )
+
+          requested_private_names = (
+              "body",
+              "event_id",
+              "events",
+              "ground_truth",
+              "incident_id",
+              "label",
+              "labels",
+              "ran_ue_id",
+              "raw",
+              "row",
+              "rows",
+              "source_event_id",
+              "source_url",
+              "trace_id",
+              "ue",
+              "ue_id",
+          )
+          for private_name in requested_private_names:
+              require_fixture_rejection(
+                  f"private field {private_name}",
+                  lambda private_name=private_name: verify_private_projection(
+                      {private_name: "fixture"},
+                      document="submission-index.json",
+                  ),
+              )
+          require_fixture_rejection(
+              "path outside summary",
+              lambda: verify_private_projection(
+                  {"path": "release-evidence/summary.json"},
+                  document="submission-index.json",
+              ),
+          )
+          require_fixture_rejection(
+              "Unicode POSIX absolute path",
+              lambda: verify_text_privacy("/用户/姓名/证据"),
+          )
+          require_fixture_rejection(
+              "Windows absolute path",
+              lambda: verify_text_privacy("C:\\Users\\fixture\\evidence"),
+          )
+          require_fixture_rejection(
+              "UNC absolute path",
+              lambda: verify_text_privacy("\\\\server\\share\\evidence"),
+          )
+          require_fixture_rejection(
+              "Windows device path",
+              lambda: verify_text_privacy("\\\\?\\C:\\Users\\fixture"),
+          )
+          require_fixture_rejection(
+              "Windows device alias",
+              lambda: verify_text_privacy("\\\\.\\C:\\Users\\fixture"),
+          )
+          require_fixture_rejection(
+              "Windows GLOBALROOT path",
+              lambda: verify_text_privacy(
+                  "\\\\GLOBALROOT\\Device\\HarddiskVolume1"
+              ),
+          )
+          require_fixture_rejection(
+              "Windows NT device path",
+              lambda: verify_text_privacy("\\??\\C:\\Users\\fixture"),
+          )
+          require_fixture_rejection(
+              "embedded drive path",
+              lambda: verify_text_privacy(
+                  "diagnostic C:\\Users\\fixture\\evidence"
+              ),
+          )
+          secret_value_fixtures = (
+              "xo" + "xb-1234567890",
+              "gl" + "pat-12345678901234567890",
+              "np" + "m_12345678901234567890",
+              "h" + "f_12345678901234567890",
+              "sk_" + "live_1234567890123456",
+              "rk_" + "test_1234567890123456",
+              "password=four",
+              "passwd=four",
+              "token=four",
+              "secret=four",
+              "api_key=four",
+          )
+          for secret_fixture in secret_value_fixtures:
+              require_fixture_rejection(
+                  "secret value pattern",
+                  lambda secret_fixture=secret_fixture: verify_text_privacy(
+                      secret_fixture
+                  ),
+              )
+          verify_text_privacy("</head></body></html>")
+
+          valid_summary_path_fixture = {
+              "slices": [
+                  {
+                      "runs": [
+                          {
+                              "artifact": {
+                                  "primary_summary": {
+                                      "availability": "PRESENT",
+                                      "bytes": {},
+                                      "name": "summary.json",
+                                      "path": "release-evidence/summary.json",
+                                      "schema": "fixture/1.0",
+                                      "sha256": {},
+                                  }
+                              }
+                          }
+                      ]
+                  }
+              ]
+          }
+          verify_private_projection(
+              valid_summary_path_fixture,
+              document="submission-index.json",
+          )
+
+          verify_private_projection(manifest, document="manifest.json")
+          verify_private_projection(index, document="submission-index.json")
+          verify_private_projection(limitations, document="limitations.json")
+
+          texts = {}
+          for name, payload in payloads.items():
+              try:
+                  text = payload.decode("utf-8", "strict")
+              except UnicodeDecodeError:
+                  raise SystemExit("submission member is not UTF-8") from None
+              texts[name] = text
+              verify_text_privacy(text)
+
+          page = texts["index.html"]
+          expected_csp = (
+              '<meta http-equiv="Content-Security-Policy" '
+              'content="default-src \'none\'; base-uri \'none\'; '
+              'form-action \'none\'; frame-ancestors \'none\'">'
+          )
+          csp_meta_tags = re.findall(
+              r"<meta\b[^>]*\bhttp-equiv\s*=\s*"
+              r"(?:\"Content-Security-Policy\"|'Content-Security-Policy')"
+              r"[^>]*>",
+              page,
+              flags=re.IGNORECASE,
+          )
+          if csp_meta_tags != [expected_csp]:
+              raise SystemExit("submission HTML CSP is invalid")
+          if re.search(
+              r"<\s*/?\s*(?:base|iframe|object|embed|script|img|form|style|"
+              r"link|video|audio|svg)\b",
+              page,
+              flags=re.IGNORECASE,
+          ) is not None:
+              raise SystemExit("submission HTML contains an active element")
+          if re.search(
+              r"<meta\b[^>]*\bhttp-equiv\s*=\s*(?:\"refresh\"|'refresh'|refresh)",
+              page,
+              flags=re.IGNORECASE,
+          ) is not None:
+              raise SystemExit("submission HTML contains meta refresh")
+          if re.search(
+              r"\b(?:on[a-z0-9_-]+|src|srcset|style)\s*=",
+              page,
+              flags=re.IGNORECASE,
+          ) is not None:
+              raise SystemExit("submission HTML contains an active attribute")
+
+          expected_links = (
+              "submission-index.json",
+              "limitations.json",
+              "REPRODUCE.md",
+              "manifest.json",
+          )
+          anchor_tags = re.findall(r"<a\b[^>]*>", page, flags=re.IGNORECASE)
+          href_matches = re.findall(
+              r"\bhref\s*=\s*([\"'])(.*?)\1",
+              page,
+              flags=re.IGNORECASE,
+          )
+          links = tuple(value for _quote, value in href_matches)
+          if (
+              len(anchor_tags) != 4
+              or len(href_matches) != 4
+              or links != expected_links
+              or any(
+                  re.fullmatch(r'<a href="[^"/\\:#]+">', tag) is None
+                  for tag in anchor_tags
+              )
+          ):
+              raise SystemExit("submission HTML navigation is invalid")
+
+          reproduce = texts["REPRODUCE.md"]
+          if (
+              re.search(
+                  r"<\s*/?\s*(?:base|iframe|object|embed|script|img|form|style|"
+                  r"link|video|audio|svg|meta)\b",
+                  reproduce,
+                  flags=re.IGNORECASE,
+              )
+              is not None
+              or re.search(
+                  r"\b(?:on[a-z0-9_-]+|href|src|srcset|style)\s*=",
+                  reproduce,
+                  flags=re.IGNORECASE,
+              )
+              is not None
+              or re.search(r"!?\[[^\]\n]*\]\([^\)\n]+\)", reproduce)
+              is not None
+          ):
+              raise SystemExit("REPRODUCE contains a link or active token")
+          PY
+      - name: Upload the exact Python 3.12 submission directory
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: networkagent-local-submission-py3.12-attempt-${{ github.run_attempt }}
+          path: .local/networkagent-submission
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 14
+      - name: Distinguish the inner manifest from the GitHub outer artifact
+        shell: bash
+        env:
+          ARTIFACT_NAME: networkagent-local-submission-py3.12-attempt-${{ github.run_attempt }}
+          INNER_MANIFEST_SHA256: ${{ needs.cross-python-equality.outputs.manifest_sha256 }}
+          OUTER_ARTIFACT_SHA256: ${{ steps.upload.outputs.artifact-digest }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          inner = os.environ["INNER_MANIFEST_SHA256"]
+          outer = os.environ["OUTER_ARTIFACT_SHA256"]
+          if re.fullmatch(r"[0-9a-f]{64}", inner) is None:
+              raise SystemExit("inner manifest digest is invalid")
+          if re.fullmatch(r"[0-9a-f]{64}", outer) is None:
+              raise SystemExit("GitHub outer artifact digest is invalid")
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open(
+              "a", encoding="utf-8"
+          ) as stream:
+              stream.write("## Published local submission bundle\n\n")
+              stream.write(f"Artifact name: `{os.environ['ARTIFACT_NAME']}`.\n\n")
+              stream.write(f"Inner `manifest.json` SHA-256: `{inner}`.\n\n")
+              stream.write(f"GitHub outer artifact SHA-256: `{outer}`.\n\n")
+              stream.write(
+                  "The inner digest binds the project exact-five closure; the "
+                  "outer digest binds GitHub's uploaded artifact container. "
+                  "They cover different byte domains and are not expected to match.\n"
+              )
+          PY

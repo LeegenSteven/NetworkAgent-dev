@@ -24,8 +24,6 @@ on:
       - "tests/e2e/lab/**"
       - "tests/e2e/a2a/**"
       - "tools/local-stack/run_runtime_trace_demo.py"
-      - "tools/local-stack/tests/test_run_runtime_trace_demo.py"
-      - "tools/local-stack/tests/test_runtime_trace_evidence_workflow.py"
       - "docs/implementation-development-plan-2.0.md"
       - ".github/scripts/release_evidence.py"
       - ".github/scripts/test_release_evidence.py"
@@ -53,8 +51,6 @@ on:
       - "tests/e2e/lab/**"
       - "tests/e2e/a2a/**"
       - "tools/local-stack/run_runtime_trace_demo.py"
-      - "tools/local-stack/tests/test_run_runtime_trace_demo.py"
-      - "tools/local-stack/tests/test_runtime_trace_evidence_workflow.py"
       - "docs/implementation-development-plan-2.0.md"
       - ".github/scripts/release_evidence.py"
       - ".github/scripts/test_release_evidence.py"
@@ -184,10 +180,6 @@ jobs:
           python -m pytest networkagents/assurance/tests -q
           python -m pytest tests/contracts/a2a -q
           python -m pytest tests/e2e/a2a -q
-          python -m pytest \
-            tools/local-stack/tests/test_run_runtime_trace_demo.py \
-            tools/local-stack/tests/test_runtime_trace_evidence_workflow.py \
-            -q
       - name: Build all Local-profile wheels
         run: |
           python -m pip install "build>=1,<2"

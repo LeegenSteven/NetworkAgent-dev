@@ -13,7 +13,8 @@ import pytest
 from telco_lab import emit_local_runtime_trace_event
 
 
-MODULE_PATH = Path(__file__).parents[1] / "run_runtime_trace_demo.py"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+MODULE_PATH = REPOSITORY_ROOT / "tools" / "local-stack" / "run_runtime_trace_demo.py"
 SPEC = importlib.util.spec_from_file_location(
     "networkagent_runtime_trace_demo", MODULE_PATH
 )

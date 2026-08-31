@@ -15,8 +15,7 @@ def test_assurance_workflow_runs_fixed_demo_on_both_pythons() -> None:
     assert 'matrix:\n        python-version: ["3.12", "3.13"]' in workflow
     assert "timeout-minutes: 20" in workflow
     assert workflow.count(command) == 1
-    assert "tools/local-stack/tests/test_run_runtime_trace_demo.py" in workflow
-    assert "tools/local-stack/tests/test_runtime_trace_evidence_workflow.py" in workflow
+    assert workflow.count("python -m pytest networkagents/assurance/tests -q") == 1
     assert "python -m pytest tests/e2e/local -q" in workflow
     assert "if: matrix.python-version == '3.12'" in workflow
     assert "release-evidence/local-runtime-trace-summary.json" in workflow

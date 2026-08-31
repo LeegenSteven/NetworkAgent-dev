@@ -24,9 +24,12 @@ from telco_assurance_agent.fault_receiver import (
 )
 from telco_domain import IncidentStatus
 from telco_lab import (
+    LOCAL_REPLAY_TRACE_HEADER,
+    LocalRuntimeTraceEvent,
     ReplayEvent,
     ReplayWirePayload,
     canonical_json_bytes,
+    derive_local_replay_trace_id,
     validate_replay_wire_payload,
 )
 from telco_local import (
@@ -158,6 +161,13 @@ def _headers(wire: ReplayWirePayload) -> dict[str, str]:
     }
 
 
+def _trace_headers(wire: ReplayWirePayload) -> dict[str, str]:
+    return {
+        **_headers(wire),
+        LOCAL_REPLAY_TRACE_HEADER: derive_local_replay_trace_id(wire.source_event_id),
+    }
+
+
 def _database_counts(database_path: Path) -> tuple[int, int, int, int]:
     connection = duckdb.connect(str(database_path), read_only=True)
     try:
@@ -172,6 +182,165 @@ def _database_counts(database_path: Path) -> tuple[int, int, int, int]:
         )
     finally:
         connection.close()
+
+
+def test_trace_header_exact_match_emits_only_post_durable_receiver_events(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    initialize_assurance(config, clock=lambda: NOW)
+    events: list[LocalRuntimeTraceEvent] = []
+    app = create_app(config, clock=lambda: NOW, runtime_trace_sink=events.append)
+    wire, body = _wire()
+    trace_id = derive_local_replay_trace_id(wire.source_event_id)
+
+    async def scenario() -> None:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://127.0.0.1",
+        ) as client:
+            first = await client.post(
+                "/local/v1/faults/replay",
+                headers=_trace_headers(wire),
+                content=body,
+            )
+            replayed = await client.post(
+                "/local/v1/faults/replay",
+                headers=_trace_headers(wire),
+                content=body,
+            )
+        assert first.status_code == replayed.status_code == 202
+        assert first.content == replayed.content
+        assert first.json()["data"]["accepted"] == "DURABLE"
+
+    asyncio.run(scenario())
+
+    assert [(event.component, event.operation) for event in events] == [
+        ("repository", "INCIDENT_DURABLE_READBACK"),
+        ("receiver", "REPLAY_RESPONSE_ACCEPTED"),
+        ("repository", "INCIDENT_DURABLE_READBACK"),
+        ("receiver", "REPLAY_RESPONSE_ACCEPTED"),
+    ]
+    assert {event.trace_id for event in events} == {trace_id}
+    assert all(event.outcome == "OK" and event.error_code is None for event in events)
+    assert _database_counts(config.database_path) == (1, 1, 1, 1)
+
+
+def test_trace_header_conflicts_are_fixed_zero_write_and_non_reflective(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    initialize_assurance(config, clock=lambda: NOW)
+    events: list[LocalRuntimeTraceEvent] = []
+    app = create_app(config, clock=lambda: NOW, runtime_trace_sink=events.append)
+    wire, body = _wire("3")
+    other_wire, _ = _wire("4")
+    expected_trace_id = derive_local_replay_trace_id(wire.source_event_id)
+    other_trace_id = derive_local_replay_trace_id(other_wire.source_event_id)
+    base = tuple(
+        (name.encode("ascii"), value.encode("ascii"))
+        for name, value in _headers(wire).items()
+    )
+    cases = (
+        base
+        + (
+            (LOCAL_REPLAY_TRACE_HEADER.encode("ascii"), expected_trace_id.encode()),
+            (LOCAL_REPLAY_TRACE_HEADER.encode("ascii"), expected_trace_id.encode()),
+        ),
+        base + ((LOCAL_REPLAY_TRACE_HEADER.encode("ascii"), b"\xff"),),
+        base + ((LOCAL_REPLAY_TRACE_HEADER.encode("ascii"), b"x" * 257),),
+        base + ((LOCAL_REPLAY_TRACE_HEADER.encode("ascii"), other_trace_id.encode()),),
+    )
+
+    async def scenario() -> None:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://127.0.0.1",
+        ) as client:
+            for headers in cases:
+                response = await client.post(
+                    "/local/v1/faults/replay",
+                    headers=headers,
+                    content=body,
+                )
+                assert response.status_code == 409
+                assert response.json() == {
+                    "ok": False,
+                    "error": {
+                        "code": "LOCAL_FAULT_TRACE_CONFLICT",
+                        "message": (
+                            "The replay trace header conflicts with this replay event."
+                        ),
+                    },
+                }
+                assert other_trace_id not in response.text
+                assert "\ufffd" not in response.text
+
+    asyncio.run(scenario())
+
+    assert _database_counts(config.database_path) == (0, 0, 0, 0)
+    assert events == []
+
+
+def test_missing_trace_header_is_compatible_without_propagation_claim(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    initialize_assurance(config, clock=lambda: NOW)
+    events: list[LocalRuntimeTraceEvent] = []
+    app = create_app(config, clock=lambda: NOW, runtime_trace_sink=events.append)
+    wire, body = _wire()
+
+    async def scenario() -> None:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://127.0.0.1",
+        ) as client:
+            response = await client.post(
+                "/local/v1/faults/replay",
+                headers=_headers(wire),
+                content=body,
+            )
+        assert response.status_code == 202
+
+    asyncio.run(scenario())
+
+    assert events == []
+    assert _database_counts(config.database_path) == (1, 1, 1, 1)
+
+
+def test_trace_sink_exception_cannot_change_durable_receiver_result(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    initialize_assurance(config, clock=lambda: NOW)
+    calls = 0
+
+    def broken_sink(_event: LocalRuntimeTraceEvent) -> None:
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("trace evidence unavailable")
+
+    app = create_app(config, clock=lambda: NOW, runtime_trace_sink=broken_sink)
+    wire, body = _wire()
+
+    async def scenario() -> None:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://127.0.0.1",
+        ) as client:
+            response = await client.post(
+                "/local/v1/faults/replay",
+                headers=_trace_headers(wire),
+                content=body,
+            )
+        assert response.status_code == 202
+        assert response.json()["data"]["accepted"] == "DURABLE"
+
+    asyncio.run(scenario())
+
+    assert calls == 2
+    assert _database_counts(config.database_path) == (1, 1, 1, 1)
 
 
 def test_real_wire_missing_ul_bler_is_durable_discoverable_and_non_actionable(

@@ -10,6 +10,7 @@ from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from starlette.applications import Starlette
 from starlette.routing import Mount, Route
+from telco_lab import LocalRuntimeTraceSink
 from telco_local import LocalGovernanceEngine, LocalProfile
 
 from .boundary import SafeA2ARequestBoundary
@@ -62,6 +63,7 @@ def build_components(
     *,
     clock: Clock | None = None,
     after_incident_write: AfterIncidentWriteHook | None = None,
+    runtime_trace_sink: LocalRuntimeTraceSink | None = None,
 ) -> AssuranceComponents:
     """Open only a fully initialized DB; this runtime path performs no DDL."""
 
@@ -94,7 +96,11 @@ def build_components(
         business_profile.rule_repository,
         actor=config.actor,
     )
-    executor = AssuranceAgentExecutor(service)
+    executor = AssuranceAgentExecutor(
+        service,
+        runtime_trace_sink=runtime_trace_sink,
+        runtime_trace_clock=clock,
+    )
     request_handler = DefaultRequestHandler(
         agent_executor=executor,
         task_store=task_store,
@@ -118,11 +124,13 @@ def create_app(
     *,
     clock: Clock | None = None,
     after_incident_write: AfterIncidentWriteHook | None = None,
+    runtime_trace_sink: LocalRuntimeTraceSink | None = None,
 ) -> Starlette:
     components = build_components(
         config,
         clock=clock,
         after_incident_write=after_incident_write,
+        runtime_trace_sink=runtime_trace_sink,
     )
     sdk_application = A2AStarletteApplication(
         agent_card=build_agent_card(config),
@@ -157,6 +165,8 @@ def create_app(
                 components.fault_receiver,
                 operation_boundary=business_boundary,
                 request_admission=request_admission,
+                runtime_trace_sink=runtime_trace_sink,
+                runtime_trace_clock=clock,
             ),
             *governance_routes(
                 components.governance_engine,

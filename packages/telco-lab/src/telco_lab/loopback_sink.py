@@ -22,6 +22,13 @@ from urllib.parse import urlsplit
 
 from pydantic import ValidationError
 
+from .local_trace import (
+    LOCAL_REPLAY_TRACE_HEADER,
+    LocalRuntimeTraceClock,
+    LocalRuntimeTraceSink,
+    derive_local_replay_trace_id,
+    emit_local_runtime_trace_event,
+)
 from .replay import (
     HARD_MAX_PAYLOAD_BYTES,
     ReplayError,
@@ -392,6 +399,8 @@ class LoopbackHttpReplaySink:
         max_response_bytes: int = MAX_REPLAY_HTTP_RESPONSE_BYTES,
         transport: LoopbackHttpTransport | None = None,
         environ: Mapping[str, str] | None = None,
+        runtime_trace_sink: LocalRuntimeTraceSink | None = None,
+        runtime_trace_clock: LocalRuntimeTraceClock | None = None,
     ) -> None:
         self._policy = _normalized_policy(policy, constructor=True)
         self._timeout_seconds = _number_in_range(
@@ -415,6 +424,8 @@ class LoopbackHttpReplaySink:
                 raise ReplayDeliveryError("replay_delivery_arguments_invalid")
             self._transport = transport
         self._environ = environ
+        self._runtime_trace_sink = runtime_trace_sink
+        self._runtime_trace_clock = runtime_trace_clock
 
     @property
     def endpoint(self) -> str:
@@ -452,13 +463,22 @@ class LoopbackHttpReplaySink:
             raise ReplayDeliveryError("replay_delivery_payload_limit")
 
         endpoint = _pinned_loopback_endpoint(policy)
+        trace_id = derive_local_replay_trace_id(event.source_event_id)
         headers = (
             ("Host", endpoint.host_header),
             ("Content-Type", "application/json"),
             ("Content-Length", str(len(body))),
             ("Idempotency-Key", event.idempotency_key),
             ("X-NetworkAgent-Local-Operation", LOCAL_REPLAY_OPERATION),
+            (LOCAL_REPLAY_TRACE_HEADER, trace_id),
             ("Connection", "close"),
+        )
+        emit_local_runtime_trace_event(
+            self._runtime_trace_sink,
+            trace_id=trace_id,
+            component="sender",
+            operation="REPLAY_REQUEST_VALIDATED",
+            clock=self._runtime_trace_clock,
         )
         return LoopbackHttpRequest(
             scheme=endpoint.scheme,
@@ -505,6 +525,13 @@ class LoopbackHttpReplaySink:
             raise ReplayDeliveryError("replay_delivery_redirect")
         if response.status_code not in {202, 204}:
             raise ReplayDeliveryError("replay_delivery_status")
+        emit_local_runtime_trace_event(
+            self._runtime_trace_sink,
+            trace_id=derive_local_replay_trace_id(event.source_event_id),
+            component="sender",
+            operation="REPLAY_DELIVERY_ACKNOWLEDGED",
+            clock=self._runtime_trace_clock,
+        )
         return ReplayDeliveryReceipt(
             sequence_number=event.sequence_number,
             source_event_id=event.source_event_id,

@@ -37,10 +37,15 @@ from telco_domain import (
 from telco_lab import (
     BUBBLERAN_DATASET_ID,
     BUBBLERAN_DATASET_VERSION,
+    LOCAL_REPLAY_TRACE_HEADER,
     MAX_REPLAY_HTTP_REQUEST_BYTES,
     MAX_REPLAY_HTTP_RESPONSE_BYTES,
+    LocalRuntimeTraceClock,
+    LocalRuntimeTraceSink,
     ReplayError,
     ReplayWirePayload,
+    derive_local_replay_trace_id,
+    emit_local_runtime_trace_event,
     validate_replay_wire_payload,
 )
 from telco_local import (
@@ -64,6 +69,7 @@ LOCAL_FAULT_ROUTE = "/local/v1/faults/replay"
 LOCAL_FAULT_OPERATION_HEADER = "x-networkagent-local-operation"
 LOCAL_FAULT_OPERATION_VALUE = "replay-v1"
 LOCAL_FAULT_IDEMPOTENCY_HEADER = "idempotency-key"
+LOCAL_FAULT_TRACE_HEADER = LOCAL_REPLAY_TRACE_HEADER.lower()
 MAX_FAULT_REQUEST_BYTES = MAX_REPLAY_HTTP_REQUEST_BYTES
 MAX_FAULT_RESPONSE_BYTES = MAX_REPLAY_HTTP_RESPONSE_BYTES
 MAX_FAULT_JSON_DEPTH = 16
@@ -146,6 +152,10 @@ _ERRORS: dict[str, tuple[int, str]] = {
     "LOCAL_FAULT_IDEMPOTENCY_CONFLICT": (
         409,
         "The idempotency key conflicts with this replay event.",
+    ),
+    "LOCAL_FAULT_TRACE_CONFLICT": (
+        409,
+        "The replay trace header conflicts with this replay event.",
     ),
     "LOCAL_FAULT_UNSUPPORTED_MEDIA_TYPE": (
         415,
@@ -241,7 +251,24 @@ def _require_loopback(request: Request) -> None:
         raise _failure("LOCAL_FAULT_BAD_HOST") from None
 
 
-def _require_headers(request: Request) -> bytes:
+def _optional_trace_header(request: Request) -> str | None:
+    values = _header_values(request, LOCAL_FAULT_TRACE_HEADER)
+    if not values:
+        return None
+    if len(values) != 1 or not values[0] or len(values[0]) > 256:
+        raise _failure("LOCAL_FAULT_TRACE_CONFLICT")
+    try:
+        value = values[0].decode("ascii", errors="strict")
+    except UnicodeDecodeError:
+        raise _failure("LOCAL_FAULT_TRACE_CONFLICT") from None
+    if value != value.strip() or any(
+        ord(character) < 0x21 or ord(character) > 0x7E for character in value
+    ):
+        raise _failure("LOCAL_FAULT_TRACE_CONFLICT")
+    return value
+
+
+def _require_headers(request: Request) -> tuple[bytes, str | None]:
     operation = _header_values(request, LOCAL_FAULT_OPERATION_HEADER)
     if len(operation) != 1 or operation[0] != LOCAL_FAULT_OPERATION_VALUE.encode(
         "ascii"
@@ -265,7 +292,7 @@ def _require_headers(request: Request) -> bytes:
         raise _failure("LOCAL_FAULT_UNSUPPORTED_MEDIA_TYPE") from None
     if media_type.strip().lower() != "application/json":
         raise _failure("LOCAL_FAULT_UNSUPPORTED_MEDIA_TYPE")
-    return idempotency[0]
+    return idempotency[0], _optional_trace_header(request)
 
 
 def _depth(value: object) -> int:
@@ -701,10 +728,14 @@ class LocalReplayFaultHttpApi:
         *,
         operation_boundary: LocalBusinessOperationBoundary | None = None,
         request_admission: LocalHttpRequestAdmission | None = None,
+        runtime_trace_sink: LocalRuntimeTraceSink | None = None,
+        runtime_trace_clock: LocalRuntimeTraceClock | None = None,
     ) -> None:
         self.receiver = receiver
         self.operation_boundary = operation_boundary or LocalBusinessOperationBoundary()
         self.request_admission = request_admission or LocalHttpRequestAdmission()
+        self.runtime_trace_sink = runtime_trace_sink
+        self.runtime_trace_clock = runtime_trace_clock
 
     async def receive(self, request: Request) -> Response:
         admission = None
@@ -717,7 +748,7 @@ class LocalReplayFaultHttpApi:
                 )
             if request.url.query:
                 raise _failure("LOCAL_FAULT_INVALID_REQUEST")
-            header_idempotency = _require_headers(request)
+            header_idempotency, header_trace_id = _require_headers(request)
             admission = self.request_admission.try_acquire(
                 operation_boundary=self.operation_boundary
             )
@@ -736,11 +767,29 @@ class LocalReplayFaultHttpApi:
                 wire = await self.request_admission.read_body(
                     lambda: _read_wire(request)
                 )
+                expected_trace_id = derive_local_replay_trace_id(wire.source_event_id)
+                if header_trace_id is not None and header_trace_id != expected_trace_id:
+                    raise _failure("LOCAL_FAULT_TRACE_CONFLICT")
                 if header_idempotency != wire.idempotency_key.encode("ascii"):
                     raise _failure("LOCAL_FAULT_IDEMPOTENCY_CONFLICT")
                 receipt = await self.operation_boundary.run(
                     lambda: self.receiver.ingest(wire)
                 )
+                if header_trace_id is not None:
+                    emit_local_runtime_trace_event(
+                        self.runtime_trace_sink,
+                        trace_id=expected_trace_id,
+                        component="repository",
+                        operation="INCIDENT_DURABLE_READBACK",
+                        clock=self.runtime_trace_clock,
+                    )
+                    emit_local_runtime_trace_event(
+                        self.runtime_trace_sink,
+                        trace_id=expected_trace_id,
+                        component="receiver",
+                        operation="REPLAY_RESPONSE_ACCEPTED",
+                        clock=self.runtime_trace_clock,
+                    )
                 return _response(
                     {
                         "ok": True,
@@ -781,11 +830,15 @@ def fault_receiver_routes(
     *,
     operation_boundary: LocalBusinessOperationBoundary | None = None,
     request_admission: LocalHttpRequestAdmission | None = None,
+    runtime_trace_sink: LocalRuntimeTraceSink | None = None,
+    runtime_trace_clock: LocalRuntimeTraceClock | None = None,
 ) -> tuple[Route, ...]:
     api = LocalReplayFaultHttpApi(
         receiver,
         operation_boundary=operation_boundary,
         request_admission=request_admission,
+        runtime_trace_sink=runtime_trace_sink,
+        runtime_trace_clock=runtime_trace_clock,
     )
     return (
         Route(
@@ -803,6 +856,7 @@ __all__ = [
     "LOCAL_FAULT_OPERATION_HEADER",
     "LOCAL_FAULT_OPERATION_VALUE",
     "LOCAL_FAULT_ROUTE",
+    "LOCAL_FAULT_TRACE_HEADER",
     "LocalReplayFaultHttpApi",
     "LocalReplayFaultReceiver",
     "MAX_FAULT_REQUEST_BYTES",

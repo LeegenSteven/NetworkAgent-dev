@@ -11,6 +11,7 @@ import duckdb
 import httpx
 import pytest
 from starlette.responses import JSONResponse
+from telco_lab import LocalRuntimeTraceEvent
 
 from telco_assurance_agent import AssuranceConfig, create_app, initialize_assurance
 from telco_assurance_agent.boundary import SafeA2ARequestBoundary
@@ -386,7 +387,18 @@ def test_a2a_admission_spans_downstream_without_applying_body_deadline() -> None
 def test_real_asgi_card_scan_text_gate_and_confirm(tmp_path: Path, caplog) -> None:
     config = _config(tmp_path)
     initialize_assurance(config, clock=lambda: NOW)
-    app = create_app(config, clock=lambda: NOW)
+    runtime_trace_events: list[LocalRuntimeTraceEvent] = []
+    analyzed_trace_ids: list[str] = []
+
+    def failing_after_record_trace_sink(event: LocalRuntimeTraceEvent) -> None:
+        runtime_trace_events.append(event)
+        raise RuntimeError("evidence sink failure must remain non-business")
+
+    app = create_app(
+        config,
+        clock=lambda: NOW,
+        runtime_trace_sink=failing_after_record_trace_sink,
+    )
     empty_rules = tmp_path / "empty-rules"
     empty_rules.mkdir()
     empty_app = create_app(replace(config, rules_dir=empty_rules), clock=lambda: NOW)
@@ -524,6 +536,36 @@ def test_real_asgi_card_scan_text_gate_and_confirm(tmp_path: Path, caplog) -> No
             assert result["message_type"] == "assurance_confirmation_result"
             assert result["outcome"] in {"created", "correlated"}
 
+            analyze = {
+                **_envelope(
+                    "assurance_analyze_request",
+                    workflow_id=uuid4().hex,
+                    trace_id=trace_id,
+                ),
+                "incident_id": result["incident"]["incident_id"],
+                "requested_report_version": 1,
+            }
+            analyze_trace_before = analyze["trace_id"]
+            analyzed_trace_ids.append(analyze_trace_before)
+            analyzed_response = await client.post(
+                "/",
+                json=_rpc(
+                    "message/send",
+                    {
+                        "message": _message(analyze),
+                        "configuration": {"blocking": True},
+                    },
+                    "rpc-analyze",
+                ),
+            )
+            assert analyzed_response.status_code == 200
+            analyzed = analyzed_response.json()["result"]
+            assert analyzed["status"]["state"] == "completed"
+            rca_result = _data(analyzed["artifacts"][-1]["parts"])
+            assert rca_result["message_type"] == "rca_result"
+            assert rca_result["trace_id"] == trace_id
+            assert analyze["trace_id"] == analyze_trace_before
+
             gate_workflow, gate_trace = uuid4().hex, uuid4().hex
             gate_scan = {
                 **_envelope(
@@ -651,7 +693,7 @@ def test_real_asgi_card_scan_text_gate_and_confirm(tmp_path: Path, caplog) -> No
         )
         assert (
             connection.execute("SELECT COUNT(*) FROM assurance_a2a_tasks").fetchone()[0]
-            == 5
+            == 6
         )
         assert (
             connection.execute(
@@ -662,3 +704,59 @@ def test_real_asgi_card_scan_text_gate_and_confirm(tmp_path: Path, caplog) -> No
         )
     finally:
         connection.close()
+    assert [
+        (event.trace_id, event.component, event.operation)
+        for event in runtime_trace_events
+    ] == [
+        (analyzed_trace_ids[0], "a2a", "ANALYZE_REQUEST_VALIDATED"),
+        (analyzed_trace_ids[0], "a2a", "ANALYZE_COMPLETED"),
+    ]
+    assert all(
+        event.emitted_at == "2025-11-30T00:00:00.000000Z"
+        and event.outcome == "OK"
+        and event.error_code is None
+        for event in runtime_trace_events
+    )
+
+
+def test_failed_analyze_emits_validated_but_never_completed(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    initialize_assurance(config, clock=lambda: NOW)
+    events: list[LocalRuntimeTraceEvent] = []
+    app = create_app(config, clock=lambda: NOW, runtime_trace_sink=events.append)
+    trace_id = "trace-missing-incident"
+    analyze = {
+        **_envelope(
+            "assurance_analyze_request",
+            workflow_id="workflow-missing-incident",
+            trace_id=trace_id,
+        ),
+        "incident_id": "incident-not-present",
+        "requested_report_version": 1,
+    }
+
+    async def scenario() -> None:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://127.0.0.1",
+        ) as client:
+            response = await client.post(
+                "/",
+                json=_rpc(
+                    "message/send",
+                    {
+                        "message": _message(analyze),
+                        "configuration": {"blocking": True},
+                    },
+                    "rpc-missing-incident",
+                ),
+            )
+        assert response.status_code == 200
+        assert response.json()["result"]["status"]["state"] == "failed"
+
+    asyncio.run(scenario())
+
+    assert analyze["trace_id"] == trace_id
+    assert [(event.trace_id, event.component, event.operation) for event in events] == [
+        (trace_id, "a2a", "ANALYZE_REQUEST_VALIDATED")
+    ]

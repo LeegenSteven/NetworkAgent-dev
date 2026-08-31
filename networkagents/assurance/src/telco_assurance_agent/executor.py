@@ -11,6 +11,11 @@ from a2a.server.tasks import TaskUpdater
 from a2a.types import Message, Part, Role, TaskNotCancelableError, TaskState, TextPart
 from a2a.utils import new_task
 from a2a.utils.errors import ServerError
+from telco_lab import (
+    LocalRuntimeTraceClock,
+    LocalRuntimeTraceSink,
+    emit_local_runtime_trace_event,
+)
 
 from .messages import (
     safe_error_message,
@@ -29,8 +34,16 @@ from .service import AssuranceService, AssuranceServiceError
 
 
 class AssuranceAgentExecutor(AgentExecutor):
-    def __init__(self, service: AssuranceService) -> None:
+    def __init__(
+        self,
+        service: AssuranceService,
+        *,
+        runtime_trace_sink: LocalRuntimeTraceSink | None = None,
+        runtime_trace_clock: LocalRuntimeTraceClock | None = None,
+    ) -> None:
         self.service = service
+        self.runtime_trace_sink = runtime_trace_sink
+        self.runtime_trace_clock = runtime_trace_clock
 
     @staticmethod
     def _sanitized_request(incoming: Message) -> Message:
@@ -42,9 +55,7 @@ class AssuranceAgentExecutor(AgentExecutor):
             parts=[Part(root=TextPart(text="结构化请求已拒绝。"))],
         )
 
-    async def execute(
-        self, context: RequestContext, event_queue: EventQueue
-    ) -> None:
+    async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         incoming = context.message
         if incoming is None:
             raise ValueError("A2A request message is required")
@@ -132,8 +143,22 @@ class AssuranceAgentExecutor(AgentExecutor):
                         )
                     return
                 assert isinstance(request, AssuranceAnalyzeRequest)
+                emit_local_runtime_trace_event(
+                    self.runtime_trace_sink,
+                    trace_id=request.trace_id,
+                    component="a2a",
+                    operation="ANALYZE_REQUEST_VALIDATED",
+                    clock=self.runtime_trace_clock,
+                )
                 result = await self.service.analyze(
                     request, task_id=task.id, context_id=task.context_id
+                )
+                emit_local_runtime_trace_event(
+                    self.runtime_trace_sink,
+                    trace_id=request.trace_id,
+                    component="a2a",
+                    operation="ANALYZE_COMPLETED",
+                    clock=self.runtime_trace_clock,
                 )
                 await updater.add_artifact(
                     structured_artifact_parts(result, result.summary_zh),
@@ -149,11 +174,10 @@ class AssuranceAgentExecutor(AgentExecutor):
                 )
                 return
 
-            if (
-                current.status.state
-                not in {TaskState.input_required, TaskState.working}
-                or not isinstance(request, AssuranceConfirmationRequest)
-            ):
+            if current.status.state not in {
+                TaskState.input_required,
+                TaskState.working,
+            } or not isinstance(request, AssuranceConfirmationRequest):
                 raise AssuranceServiceError(
                     "ASSURANCE_CONTINUATION_INVALID",
                     "该任务仅接受与预览绑定的结构化确认请求。",
@@ -205,9 +229,7 @@ class AssuranceAgentExecutor(AgentExecutor):
                 )
             )
 
-    async def cancel(
-        self, context: RequestContext, event_queue: EventQueue
-    ) -> None:
+    async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         task = context.current_task
         if task is None:
             raise ServerError(error=TaskNotCancelableError())
@@ -216,9 +238,7 @@ class AssuranceAgentExecutor(AgentExecutor):
         )
         if not cancelled:
             raise ServerError(
-                error=TaskNotCancelableError(
-                    message="confirmation has already started"
-                )
+                error=TaskNotCancelableError(message="confirmation has already started")
             )
         updater = TaskUpdater(event_queue, task.id, task.context_id)
         await updater.cancel(

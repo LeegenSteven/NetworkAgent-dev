@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 import socket
 import threading
 
@@ -22,6 +24,11 @@ from telco_lab.loopback_sink import (
     ReplayDeliveryCheckpoint,
     ReplayDeliveryError,
     deliver_replay_plan,
+)
+from telco_lab.local_trace import (
+    LOCAL_REPLAY_TRACE_HEADER,
+    LocalRuntimeTraceEvent,
+    derive_local_replay_trace_id,
 )
 from telco_lab.replay import build_replay_plan
 from telco_lab.schema import canonical_json_bytes
@@ -55,12 +62,16 @@ def _emit(sink: LoopbackHttpReplaySink, event) -> object:  # noqa: ANN001
 def test_emit_revalidates_event_and_builds_fixed_bounded_request(tmp_path) -> None:
     plan = _plan(_source(tmp_path / "workspace"))
     transport = _FakeTransport(LoopbackHttpResponse(status_code=202, body=b"{}"))
+    trace_events: list[LocalRuntimeTraceEvent] = []
+    trace_now = datetime(2026, 8, 31, 9, 10, tzinfo=UTC)
     sink = LoopbackHttpReplaySink(
         plan.policy,
         transport=transport,
         environ={"RUNTIME_PROFILE": "local", "ACTION_MODE": "disabled"},
         timeout_seconds=1,
         max_response_bytes=32,
+        runtime_trace_sink=trace_events.append,
+        runtime_trace_clock=lambda: trace_now,
     )
     caller_thread = threading.get_ident()
 
@@ -82,8 +93,71 @@ def test_emit_revalidates_event_and_builds_fixed_bounded_request(tmp_path) -> No
     assert headers["Content-Type"] == "application/json"
     assert headers["Idempotency-Key"] == plan.events[0].idempotency_key
     assert headers["X-NetworkAgent-Local-Operation"] == LOCAL_REPLAY_OPERATION
+    expected_trace_id = derive_local_replay_trace_id(plan.events[0].source_event_id)
+    assert headers[LOCAL_REPLAY_TRACE_HEADER] == expected_trace_id
     assert headers["Content-Length"] == str(len(request.body))
     assert headers["Connection"] == "close"
+    assert [
+        (event.trace_id, event.component, event.operation) for event in trace_events
+    ] == [
+        (expected_trace_id, "sender", "REPLAY_REQUEST_VALIDATED"),
+        (expected_trace_id, "sender", "REPLAY_DELIVERY_ACKNOWLEDGED"),
+    ]
+
+
+def test_trace_sink_exception_never_changes_delivery_result(tmp_path) -> None:
+    plan = _plan(_source(tmp_path / "workspace"))
+    transport = _FakeTransport(LoopbackHttpResponse(status_code=204))
+
+    def broken_trace_sink(_event: LocalRuntimeTraceEvent) -> None:
+        raise RuntimeError("evidence collection failed")
+
+    sink = LoopbackHttpReplaySink(
+        plan.policy,
+        transport=transport,
+        environ={},
+        runtime_trace_sink=broken_trace_sink,
+    )
+
+    receipt = _emit(sink, plan.events[0])
+
+    assert receipt.status_code == 204
+    assert receipt.source_event_id == plan.events[0].source_event_id
+    assert len(transport.requests) == 1
+
+
+def test_concurrent_deliveries_keep_each_derived_trace_bound_to_its_event(
+    tmp_path: Path,
+) -> None:
+    plan = _plan(_source(tmp_path / "workspace"))
+    transport = _FakeTransport()
+    trace_events: list[LocalRuntimeTraceEvent] = []
+    sink = LoopbackHttpReplaySink(
+        plan.policy,
+        transport=transport,
+        environ={},
+        runtime_trace_sink=trace_events.append,
+    )
+
+    async def scenario() -> None:
+        receipts = await asyncio.gather(*(sink.emit(event) for event in plan.events))
+        assert {receipt.source_event_id for receipt in receipts} == {
+            event.source_event_id for event in plan.events
+        }
+
+    asyncio.run(scenario())
+
+    expected = Counter(
+        (derive_local_replay_trace_id(event.source_event_id), operation)
+        for event in plan.events
+        for operation in (
+            "REPLAY_REQUEST_VALIDATED",
+            "REPLAY_DELIVERY_ACKNOWLEDGED",
+        )
+    )
+    assert (
+        Counter((event.trace_id, event.operation) for event in trace_events) == expected
+    )
 
 
 def test_sink_requires_policy_and_hard_timeout_response_budgets() -> None:

@@ -1,6 +1,6 @@
 # P3e 本地开放数据实验室设计
 
-> 状态：**IN PROGRESS（BubbleRAN 下载/适配/评估、ReplayPlan、公开 wire、paced loopback transport、caller-owned 持久 checkpoint、Canonical Fault 持久接收、本地治理 E2E、RC 制品证据与独立代码生成 fixture 答辩入口已完成；完整上游答辩、跨事件聚合与 RCAEval 待开发）**
+> 状态：**IN PROGRESS（BubbleRAN 下载/适配/评估/受控回放与 S7-03 fixture 答辩入口，以及 S7-04 RCAEval 五案例锁定上游、聚合适配、回答盲排序/评估与离线复验均已完成；RCAEval Replay、完整上游 benchmark、跨事件聚合与完整发布终验仍开放）**
 > 日期：2026-08-30
 > 适用范围：Local Profile 的外部开放数据获取、脱敏、适配、离线评估和受限回放
 > 安全 Gate：[P3e Data Lab Gate](security/p3e-data-lab-gate.md)
@@ -44,7 +44,7 @@ P3e 是 P3 的新增子阶段。现有 **P3c 已用于只读 Cloud MCP**，因�
 | NIST RAN Anomalous State Dataset | [NIST/Data.gov](https://catalog.data.gov/dataset/radio-access-network-anomalous-state-detection-dataset) | NIST Open Data | 正常/异常状态对照、协议层证据安全投影 | ELIGIBLE / NOT IMPLEMENTED |
 | RANalyzer Dataset | [GitHub](https://github.com/wineslab/RANalyzer-Dataset) | CC BY 4.0 | 5G 性能指标、gNB 日志、安全 Evidence 与 Fault Ingress 回放 | ELIGIBLE / NOT IMPLEMENTED |
 | TelecomTS | [Hugging Face](https://huggingface.co/datasets/AliMaatouk/TelecomTS) | MIT | 多通道电信时序、异常分类和批量容量评估 | ELIGIBLE / NOT IMPLEMENTED |
-| RCAEval | [GitHub](https://github.com/phamquiluan/RCAEval) | MIT | 指标/日志/调用链联合 RCA、根因排序与重放幂等 | ELIGIBLE / NOT IMPLEMENTED |
+| RCAEval | [GitHub](https://github.com/phamquiluan/RCAEval) | MIT | 指标/日志/调用链联合 RCA、根因排序与重放幂等 | ENABLED / PINNED（仅五案例回答盲离线评估；Replay 未实现） |
 
 许可策略：
 
@@ -68,6 +68,8 @@ TelcoLab.verified_manifest() -> verified WorkspaceLock
 
 fetch_and_evaluate_bubbleran(lab, accepted_license, overlap_threshold)
 evaluate_cached_bubbleran(lab, overlap_threshold)
+fetch_and_evaluate_rcaeval(lab, accepted_license)
+evaluate_cached_rcaeval(lab)
 ```
 
 当前 CLI：
@@ -78,9 +80,11 @@ telco-lab --workspace .local/telco-lab fetch <resource-id> --accept-license <lic
 telco-lab --workspace .local/telco-lab verify [resource-id]
 telco-lab --workspace .local/telco-lab run bubbleran-persistent-interference --accept-license CC-BY-SA-4.0 --overlap-threshold 0.1
 telco-lab --workspace .local/telco-lab evaluate bubbleran-persistent-interference --overlap-threshold 0.1
+telco-lab --workspace .local/networkagent-rcaeval run rcaeval-re2ob-multisource-rca --accept-license MIT
+telco-lab --workspace .local/networkagent-rcaeval evaluate rcaeval-re2ob-multisource-rca
 ```
 
-工作区由调用方显式指定，推荐 `.local/telco-lab`。只有 `fetch` 与 `run` 允许触发下载；`catalog`、`verify` 和 `evaluate` 不隐式联网。命令输出是单行 JSON，只包含数据集/资源 ID、内容摘要、计数、指标和固定错误码，不输出本机路径、来源 URL/query、被拒绝原始行或敏感值。Python 已提供受限 `ReplayPlan`、公开 `ReplayWirePayload`、立即 loopback transport、单调 paced runner，以及显式 workspace/checkpoint 目录的 caller-owned 持久 store/wrapper；默认零重试，只有显式的有限策略可重试 network/timeout 瞬时失败。Assurance 已提供 durable-before-202 的 Canonical Fault 业务接收器。通用 replay CLI 尚未发布；S7-03 只新增参数冻结的代码生成 fixture 答辩 wrapper，不接受上游数据路径或任意 replay 配置，也不能触发真实动作。
+工作区由调用方显式指定；BubbleRAN 推荐 `.local/telco-lab`，S7-04 RCAEval 固定为 `.local/networkagent-rcaeval`。只有 `fetch` 与 `run` 允许触发下载；`catalog`、`verify` 和 `evaluate` 不隐式联网。命令输出是单行 JSON，只包含数据集/资源 ID、内容摘要、计数、指标和固定错误码，不输出本机路径、来源 URL/query、被拒绝原始行或敏感值。RCAEval 输出进一步省略 case/candidate/evidence/slot/resource 标识与原始行，只暴露有界聚合、协议布尔值、commitment 和固定 `not_claimed`。Python 已提供受限 `ReplayPlan`、公开 `ReplayWirePayload`、立即 loopback transport、单调 paced runner，以及显式 workspace/checkpoint 目录的 caller-owned 持久 store/wrapper；默认零重试，只有显式的有限策略可重试 network/timeout 瞬时失败。Assurance 已提供 durable-before-202 的 Canonical Fault 业务接收器。通用 replay CLI 尚未发布；S7-03 只新增参数冻结的代码生成 fixture 答辩 wrapper，S7-04 只做 RCAEval 离线排序/评估，二者均不能触发真实动作。
 
 ## 5. 仓库与缓存布局
 
@@ -91,6 +95,7 @@ packages/telco-lab/
 ├── src/telco_lab/catalogs/default.json  # 固定来源、许可、大小、SHA-256
 ├── src/telco_lab/adapters.py            # 明确字段映射与隐私/容量边界
 ├── src/telco_lab/pipeline.py            # fetch/evaluate 类型化入口
+├── src/telco_lab/rcaeval_*.py           # RCAEval 固定合同、聚合适配、seal/commitment、排序与评估
 ├── src/telco_lab/replay.py              # lock-bound ReplayPlan 与事件安全投影
 ├── src/telco_lab/loopback_sink.py       # opt-in loopback HTTP transport
 ├── src/telco_lab/paced_runner.py        # 单调节奏、deadline/cancel 与有限 transient retry
@@ -214,9 +219,9 @@ Canonical Dataset + Provenance Manifest
 |---|---|---|
 | P3e-1 | catalog/lock schema、许可白名单、缓存布局和安全下载器 | DONE |
 | P3e-2 | 安全解析、精确 schema 投影、通用隐私扫描与隔离流程 | IN PROGRESS（BubbleRAN CSV/JSON 精确 schema 已完成；通用扫描/quarantine、归档与其他格式未启用） |
-| P3e-3 | BubbleRAN 与 RCAEval 两个最小适配器及 Canonical fixture | IN PROGRESS（BubbleRAN 已完成；RCAEval 待开发） |
-| P3e-4 | Detector/RCA 离线评估器、机器可读报告和基线阈值 | IN PROGRESS（BubbleRAN episode/duration 评估已完成；RCA 待开发） |
-| P3e-5 | loopback 限定回放、重复/乱序/中断场景和答辩演示 | IN PROGRESS（BubbleRAN 公开 wire、paced transport、caller-owned 持久 checkpoint、durable receiver、真实 TCP 治理 E2E、远程 RC artifact/SBOM/`pip-audit` 与 S7-03 独立代码生成 fixture 答辩入口已验收；完整上游 BubbleRAN 答辩、完整重复/乱序/中断矩阵与第二数据路径仍待完成） |
+| P3e-3 | BubbleRAN 与 RCAEval 两个最小适配器及 Canonical fixture | IN PROGRESS（BubbleRAN 与 RCAEval 五案例 aggregate-only 适配已完成；完整 RCAEval benchmark、通用隐私扫描/quarantine 与其余数据集未完成） |
+| P3e-4 | Detector/RCA 离线评估器、机器可读报告和基线阈值 | IN PROGRESS（BubbleRAN episode/duration 与 RCAEval 五案例回答盲排序/评估已完成；完整 benchmark、跨数据集/统计泛化和生产阈值未完成） |
+| P3e-5 | loopback 限定回放、重复/乱序/中断场景和答辩演示 | IN PROGRESS（BubbleRAN 公开 wire、paced transport、caller-owned 持久 checkpoint、durable receiver、真实 TCP 治理 E2E、远程 RC artifact/SBOM/`pip-audit` 与 S7-03 独立代码生成 fixture 答辩入口已验收；S7-04 RCAEval 为离线评估而非 Replay，完整上游 BubbleRAN 答辩、完整重复/乱序/中断矩阵与 RCAEval 回放仍待完成） |
 | P3e-6 | 其余三套白名单适配器、容量基准和发布归属材料 | NOT STARTED |
 
 第一版退出标准以 BubbleRAN + RCAEval 两条互补路径为最低范围；其余白名单数据集可在接口和 Gate 稳定后逐步接入。任何切片只有在 [P3e Data Lab Gate](security/p3e-data-lab-gate.md) 对应证据完成后才能标为 `DONE`。
@@ -253,6 +258,21 @@ Canonical Dataset + Provenance Manifest
 - [S7-03 运行手册](runbooks/local-bubbleran-defense-demo.md) 冻结 6–8 分钟讲解、字段、失败、身份绑定清理、独立制品复核和十项 `not_claimed`。本次文档提交晚于且不等于受测 RC。
 
 S7-03 窄切片为 `DONE`，表示 P3e-5 已有独立 fixture 答辩入口；P3e-5 与 P3e 总体仍为 `IN PROGRESS`。RCAEval、第二数据路径、跨事件/episode 聚合、完整上游 BubbleRAN 答辩与完整发布终验尚未完成。S4/Workflow E/P7/S7 仍为 `IN PROGRESS`，Gate E/G5/G2/G4 仍开放，S2-04 为 `BLOCKED`，P6 统一 UI 为 `NOT STARTED`。
+
+### 10.4 S7-04 RCAEval 五案例回答盲评估证据（2026-08-31）
+
+**状态**：`DONE`（仅限本节定义的五案例离线评估窄切片）。
+
+- 唯一 fetch-and-evaluate 命令为 `telco-lab --workspace .local/networkagent-rcaeval run rcaeval-re2ob-multisource-rca --accept-license MIT`。它锁定 RCAEval 数据 revision `afeacb11bcc94dadfd1c8f483ee4377b2b8b614e`、16 个资源 / 53,433,532 bytes、closure `c99ced28f1cb56464820a9570ead783de753c31ad36f5d7d29de594115101fb1` 与 MIT 许可证据 `c2990bbe2e040a8d2f55fdd47c4f47f02223d8ea098e5d6e8851585a64956a0f`。上游代码语义参考提交为 `526cdd5818ea9d8c2a34e869ebd637bc6b4fa4b8`，但本切片不声明上游实现等价。
+- 回答盲顺序严格为：校验 catalog/manifest/closure 并打开 16 个已验证 artifact → 只加载 label-free timings → 构造五个 telemetry case 并适配 aggregate-only features → 在私有 slot 不进入 ranker 的前提下完成五个 rank/seal → 绑定 catalog/lock/closure/case digests/features/seals 创建 batch commitment → commitment 后才加载 answers → post-reveal 校验同一 commitment 并复用原 seals → 最后创建私有 truth mapping 并评估。协议必须同时为 `answer_blind_ranking=true`、`commitment_created_before_answer_reveal=true`、`post_reveal_commitment_validation=PASS`、`ranking_reused_after_reveal=true`、`sealed_ranking_count=5`、`externally_timestamped=false`；算法固定 `networkagent-multisource-shift-v1`，本次 commitment 前缀为 `e7756d…`。
+- 五案例均已排序，`inconclusive_count=0`；AC@1..5、Average@5 与 MRR 均为 1,000,000 ppm。该数值只描述锁定的五案例，不是完整 benchmark 或生产准确率。ownership validity 为 104,838 ppm，即 39 个 truth-owned references / 372 个 ranked references；它不是准确率、召回率或独立证据标签质量。
+- privacy policy 为 `rcaeval-aggregate-only-v1` 且 `PASS`；private sample、candidate、reference identifier、artifact location 与 raw row 均 `OMITTED`。输出不含 case/candidate/evidence/slot/lock/resource 私有标识、路径、URL 或原始值。
+- 受测 RC `b8a9e958a0a3354634f87e2fbc8f76aaf60913dd` 的 [Data Lab push run 33385845017](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33385845017)、[Assurance push run 33385845041](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33385845041) 与 [Container push run 33385844990](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33385844990) 均为 `success`。显式 [Data Lab dispatch 33385881296](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33385881296) 的 Python 3.12 job 99468272496、Pydantic job 99468272632 与 Python 3.13 job 99468272707 全绿。
+- 唯一制品为 Python 3.12 [VERIFIED RC artifact 9755569487](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33385881296/artifacts/9755569487)，名称 `telco-lab-release-py3.12-attempt-1`，148,959 bytes，archive SHA-256 `8afc11102a17310c78e1295a15a758396d904c9aea964985801c0e9e30fd88f4`，创建/到期时间 `2026-08-31T11:13:40Z` / `2026-09-14T11:13:40Z`。独立解包确认 10 文件闭包（9 records + manifest）、9/9 bytes/SHA 与 manifest `PASS`；`rcaeval-upstream-summary.json` 为 2,408 bytes / SHA-256 `999a35e25bfa53aaf3ef7f86f7eaf4b596c17b25366ba85cf7193724a41d0b38` 且 canonical bytes 精确一致。
+- 两个 wheel 共 47 members，不含 Parquet/Arrow/Feather/IPC/ORC/CSV/DuckDB/JSONL；runtime inventory 为 2 个 first-party + 6 个 runtime package，CycloneDX 1.4 SBOM 为 8 components 并包含 PyArrow 25.0.0，`pip-audit` 为 0，wheel scan 为 `PASS`。
+- [S7-04 运行手册](runbooks/local-rcaeval-evaluation.md) 冻结唯一命令、许可/下载、缓存与离线复验、上述八步顺序、指标判读、固定失败、安全清理、独立制品复核及实现顺序精确一致的 17 项 `not_claimed`。本次文档提交晚于且不等于受测 RC。
+
+本节只关闭 S7-04 五案例 RCAEval 回答盲离线评估窄切片，不代表完整 upstream RCAEval benchmark、全数据覆盖、上游实现等价、生产准确率、跨数据集/统计泛化、因果识别、在线/流式评估、RCAEval Replay、live remediation、外部时间戳、Cloud/OTel 或统一 Dashboard。S7/P7/P3e/S4/Workflow E 继续 `IN PROGRESS`，Gate E/G5/G2/G4 保持开放，S2-04 继续 `BLOCKED`，P6 保持 `NOT STARTED`。
 
 ## 11. 与 Cloud Staging 的边界
 

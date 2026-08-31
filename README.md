@@ -85,6 +85,55 @@ S4, Workflow E, P7, and S7 remain `IN PROGRESS`; Gate E/G5/G2/G4 remain open,
 S2-04 remains `BLOCKED`, and P6 unified UI remains `NOT STARTED`. This
 documentation update is later than and not equal to the tested RC.
 
+S7-04 adds a second, complementary Local Data Lab path: a five-case, pinned
+upstream RCAEval `re2ob` answer-blind evaluation. Its single fetch-and-evaluate
+command is:
+
+```text
+telco-lab --workspace .local/networkagent-rcaeval run rcaeval-re2ob-multisource-rca --accept-license MIT
+```
+
+The command verifies 16 MIT-licensed resources at revision
+`afeacb11bcc94dadfd1c8f483ee4377b2b8b614e` (53,433,532 bytes), builds only
+aggregate label-free features, ranks and seals all five cases before loading
+answers, creates a batch commitment, then reuses the same seals for private
+truth evaluation. The fixed slice reports five ranked cases, zero inconclusive,
+Accuracy@1 through @5, average@5, and MRR all at 1,000,000 ppm. Its ownership
+validity is 104,838 ppm (39 truth-owned references out of 372 ranked
+references); that value is not an accuracy or annotation-quality metric.
+
+S7-04 is `DONE` only for this narrow slice on RC
+`b8a9e958a0a3354634f87e2fbc8f76aaf60913dd`. The [Data Lab push run
+33385845017](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33385845017),
+[Assurance push run
+33385845041](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33385845041),
+and [Container push run
+33385844990](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33385844990)
+all succeeded. The explicit [Data Lab dispatch
+33385881296](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33385881296)
+also passed its Python 3.12, minimum-Pydantic, and Python 3.13 jobs. Its only
+[VERIFIED RC artifact
+9755569487](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33385881296/artifacts/9755569487),
+`telco-lab-release-py3.12-attempt-1`, is 148,959 bytes with archive SHA-256
+`8afc11102a17310c78e1295a15a758396d904c9aea964985801c0e9e30fd88f4`.
+Independent download confirmed an exact 10-file closure (9 manifest records
+plus the manifest), a canonical 2,408-byte RCAEval summary with SHA-256
+`999a35e25bfa53aaf3ef7f86f7eaf4b596c17b25366ba85cf7193724a41d0b38`,
+two wheels / 47 members with no Parquet, Arrow, Feather, IPC, ORC, CSV,
+DuckDB, or JSONL payload, an 8-component CycloneDX 1.4
+SBOM including PyArrow 25.0.0, `pip-audit` 0, and wheel scan `PASS`.
+
+See the [Local RCAEval answer-blind evaluation
+runbook](docs/runbooks/local-rcaeval-evaluation.md) for licensing, cache/offline
+verification, the exact pre-reveal ordering, interpretation, failures, cleanup,
+artifact review, and all 17 exact non-claims. This is not the complete upstream
+benchmark, production accuracy, generalization, causal identification, online
+evaluation, live remediation, externally timestamped evidence, Cloud/OTel, or
+a dashboard. RCAEval replay and cross-event aggregation remain unfinished;
+P3e, S4, Workflow E, P7, and S7 remain `IN PROGRESS`, Gate E/G5/G2/G4 remain
+open, S2-04 remains `BLOCKED`, and P6 remains `NOT STARTED`. This documentation
+update is later than and not equal to the tested RC.
+
 For a bounded, privacy-minimized observation of the same defense path, run:
 
 ```text

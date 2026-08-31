@@ -19,6 +19,7 @@
 > S4-04 Local DuckDB cold backup recovery evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
 > S4-05 Local single-process runtime trace evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
 > S7-03 Local BubbleRAN four-branch fixture defense: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
+> S7-04 Local RCAEval five-case answer-blind evaluation: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
 > Workflow E / Gate E / G5: **NOT PASSED BY THIS GATE**
 > Gate B overall: **NOT PASSED**
 > Cloud/production authorization: **NOT APPLICABLE**
@@ -122,6 +123,15 @@ business-record delta after four checkpoint-bypassing settled redeliveries. It
 does not provide cross-event aggregation, RCAEval, production accuracy, real
 remediation, Cloud deployment, a unified dashboard, or Gate E/G5 closure. It is
 assessed separately and does not expand this Governance Gate.
+
+The separate S7-04 path evaluates five pinned upstream RCAEval cases entirely
+inside the Local Data Lab. It validates all 16 resources, builds only
+aggregate label-free features, ranks and seals every case before answer reveal,
+then validates the same batch commitment and reuses the same seals for private
+truth evaluation. It does not call the governance engine, replay an RCAEval
+event, perform remediation, or expand this Gate. Its perfect five-case metrics
+are not a complete benchmark, production-accuracy, generalization, or causality
+claim; its commitment is explicitly not externally timestamped.
 
 ## S2-01 container review
 
@@ -394,6 +404,66 @@ remains `BLOCKED`, and P6 unified UI remains `NOT STARTED`. This documentation
 update is later than and not equal to the tested RC, and this section adds no
 new PASS row to the Governance Gate below.
 
+## S7-04 RCAEval answer-blind evaluation evidence
+
+S7-04 is `DONE` only for the five-case offline evaluation slice on RC
+`b8a9e958a0a3354634f87e2fbc8f76aaf60913dd`. Its only fetch-and-evaluate
+command is `telco-lab --workspace .local/networkagent-rcaeval run
+rcaeval-re2ob-multisource-rca --accept-license MIT`. The catalog binds dataset
+revision `afeacb11bcc94dadfd1c8f483ee4377b2b8b614e`, 16 resources / 53,433,532
+bytes, closure
+`c99ced28f1cb56464820a9570ead783de753c31ad36f5d7d29de594115101fb1`, and MIT
+evidence
+`c2990bbe2e040a8d2f55fdd47c4f47f02223d8ea098e5d6e8851585a64956a0f`.
+
+The fixed ordering validates and opens the entire closure, reads only
+label-free timing, builds five aggregate-only feature sets, ranks and seals all
+five while private slots remain outside the ranker, and creates a batch
+commitment before loading answers. Only then does it load answers, validate the
+same commitment, reuse the same seals, construct the private truth mapping, and
+evaluate. The protocol reports answer-blind ranking, pre-reveal commitment,
+post-reveal validation, reused ranking, five seals, and
+`externally_timestamped=false`. Public output omits private sample, candidate,
+reference-identifier, artifact-location, and raw-row details.
+
+The fixed result is 5 ranked / 0 inconclusive; Accuracy@1 through @5,
+Average@5, and MRR are each 1,000,000 ppm. Candidate-ownership validity is
+104,838 ppm: 39 truth-owned references among 372 ranked references. The latter
+is not accuracy, recall, or annotation quality, and none of the perfect metrics
+extends beyond this five-case slice.
+
+The exact RC's [Data Lab push run
+33385845017](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33385845017),
+[Assurance push run
+33385845041](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33385845041),
+and [Container push run
+33385844990](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33385844990)
+all succeeded. Explicit [Data Lab dispatch
+33385881296](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33385881296)
+also passed jobs 99468272496/99468272632/99468272707.
+
+The sole carrier is the Python 3.12 Data Lab [VERIFIED RC artifact
+9755569487](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33385881296/artifacts/9755569487),
+named `telco-lab-release-py3.12-attempt-1`: 148,959 bytes, archive SHA-256
+`8afc11102a17310c78e1295a15a758396d904c9aea964985801c0e9e30fd88f4`, created
+`2026-08-31T11:13:40Z` and retained for 14 days through
+`2026-09-14T11:13:40Z`. Independent download confirmed exactly ten regular
+files (nine manifest records plus the manifest), 9/9 byte/digest matches, and
+manifest `PASS`. The canonical 2,408-byte summary has SHA-256
+`999a35e25bfa53aaf3ef7f86f7eaf4b596c17b25366ba85cf7193724a41d0b38`.
+Two wheels contain 47 members and no Parquet, Arrow, Feather, IPC, ORC, CSV,
+DuckDB, or JSONL. Runtime inventory is two first-party plus six runtime
+packages; CycloneDX 1.4 has eight components including PyArrow 25.0.0,
+`pip-audit` reports zero findings, and wheel scan is `PASS`.
+
+The [Local RCAEval evaluation
+runbook](../runbooks/local-rcaeval-evaluation.md) freezes license/download,
+the single command, cache/offline revalidation, interpretation, stable failure,
+safe cleanup, artifact audit, the exact answer-blind ordering, and all 17 exact
+non-claims. This section is later than and not equal to the tested RC. It closes
+only S7-04: P3e/S7/P7/S4/Workflow E remain `IN PROGRESS`, Gate E/G5/G2/G4
+remain open, S2-04 remains `BLOCKED`, and P6 remains `NOT STARTED`.
+
 ## Reviewed flow
 
 ```text
@@ -614,6 +684,13 @@ image, scanner binary, and database are not uploaded.
   BubbleRAN upstream benchmark. It does not supply RCAEval, a second data path,
   cross-event/episode aggregation, production accuracy, real remediation,
   Cloud/GCP deployment, a unified dashboard, or P3e/S7/Gate E/G5 closure.
+* S7-04 separately supplies a five-case pinned-upstream RCAEval answer-blind
+  offline evaluation, but no RCAEval replay or governance integration. It is
+  not the complete benchmark, full dataset coverage, upstream implementation
+  parity, independent evidence annotation, production accuracy, cross-dataset
+  or statistical generalization, causal identification, online evaluation,
+  live remediation, an externally timestamped commitment, Cloud/OTel, a
+  dashboard, or P3e/S7/Gate E/G5 closure.
 * The deterministic verification outcome is test input, not an observation from
   a real Tester/Operations service.
 * `serve` exposes the existing Assurance detect/confirm/analyze interface; it

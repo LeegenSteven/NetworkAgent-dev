@@ -17,6 +17,7 @@
 > S4-02 Canonical lifecycle projection evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
 > S4-03 fixed-window acceptance SLO evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
 > S4-04 Local DuckDB cold backup recovery evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
+> S4-05 Local single-process runtime trace evidence: **DONE FOR ITS NARROW RC SLICE; ASSESSED SEPARATELY**
 > Workflow E / Gate E / G5: **NOT PASSED BY THIS GATE**
 > Gate B overall: **NOT PASSED**
 > Cloud/production authorization: **NOT APPLICABLE**
@@ -98,6 +99,18 @@ Cloud/Spanner, HA, or production recovery result. Unknown-identity or raced
 residue is deliberately preserved rather than auto-deleted. This evidence is
 assessed separately and does not expand the Governance Gate or close Workflow E,
 Gate E, or G5.
+
+The separate S4-05 wrapper correlates one fixed BubbleRAN replay across the real
+loopback sender/receiver, durable DuckDB readback, and A2A Analyze path. It
+requires six ordered events, four components, one derived header correlation,
+six durable/request/result bindings, and governance actions/approvals/executions/
+verifications remaining `0 -> 0`. Analyze changes only the
+`assurance_a2a_tasks` transport table; the Canonical domain and nine other tables
+remain unchanged, so the whole database is explicitly not claimed read-only.
+Raw JSONL remains Local-only and is not uploaded. This is not OTel/Prometheus,
+distributed/cross-process/multi-event correlation, MCP propagation, external
+alerting, Cloud/production observability, or Gate E/G5 closure. It is assessed
+separately and does not expand this Governance Gate.
 
 ## S2-01 container review
 
@@ -205,7 +218,7 @@ attestation, provenance, or Trivy DB OCI digest/signature capture, and does
 not supply an offline-independent re-verification bundle because the image,
 scanner binary, and database are not uploaded.
 
-## S2-04, S4-01, S4-02, S4-03, and S4-04 boundary updates
+## S2-04 and S4-01 through S4-05 boundary updates
 
 S2-04 is `BLOCKED`: under the same Trivy 0.74.0/frozen database snapshot, none
 of four candidates simultaneously preserves the current CPython 3.12, glibc,
@@ -282,9 +295,38 @@ report with SHA-256
 The exact independent procedure and non-claims are recorded in the [Local cold
 backup and recovery runbook](../runbooks/local-backup-restore.md).
 
+S4-05 is `DONE` only for the single-process Local runtime trace slice on
+corrective RC `2e59d7ca88cc550e315d63e80339909ef619cd2c`. The original feature
+candidate `b0bcb8fa39c2971e2dd1c1910cde69d68cc97edc` is historical only: [Local
+run 33362166565](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33362166565)
+failed while collecting trace tests that belonged to the Assurance profile.
+The corrective RC migrated those tests and removed their duplicate Local
+collection.
+
+On that corrective SHA, [Assurance run
+33362806092](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33362806092)
+passed jobs 99397345468/99397345590/99397345635/99397345601; [Local run
+33362806180](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33362806180)
+passed jobs 99397346249/99397346041; and [Container run
+33362806104](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33362806104)
+passed jobs 99397345678/99397392344. The Python 3.12 Assurance job published the
+14-day [VERIFIED RC artifact
+9747354240](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33362806092/artifacts/9747354240),
+named `telco-assurance-release-py3.12-attempt-1`, 246,678 bytes with archive
+digest
+`sha256:f772dcae631cdde59483eaef6a28d1caee0b0b357d8eb5eb069e863747991fa4`.
+Independent download confirmed exactly 12 non-link regular entries (11 manifest
+records plus the manifest), no uploaded raw JSONL, and a reconstructed report
+of 1,651 bytes / SHA-256
+`5932b0454c7d095b7864f7c50cd0e2a48a05e288dbb74fd83a1773aedcaea5e8`.
+The exact event/header/write/privacy/error/non-claim contract and independent
+procedure are frozen in the [Local single-process runtime trace
+runbook](../runbooks/local-runtime-trace.md).
+
 S4/Workflow E/P7/S7 therefore remain `IN PROGRESS`; Gate E/G5 and G2/G4 remain
-open, and S2-04 remains `BLOCKED`. Like S4-01 through S4-03, this S4-04 note is
+open, and S2-04 remains `BLOCKED`. Like S4-01 through S4-04, this S4-05 note is
 assessed separately and does not add a PASS row to the Governance Gate below.
+This documentation update is later than and not equal to the tested RC.
 
 ## Reviewed flow
 
@@ -497,6 +539,11 @@ image, scanner binary, and database are not uploaded.
   off-host, cross-version, multi-replica, RPO/RTO, power-loss, Cloud/Spanner,
   HA, or production recovery. Identity-unknown or raced residue is preserved
   for manual review and is not automatically deleted.
+* S4-05 covers one fixed event in one Local process. Its raw JSONL is not release
+  evidence; it supplies no OTel/Prometheus export, distributed/cross-process or
+  concurrent/multi-event correlation, MCP propagation, external alert delivery,
+  sink guarantee, or Cloud/production monitoring. A2A Analyze persists
+  `assurance_a2a_tasks`, so the full database is not read-only.
 * The deterministic verification outcome is test input, not an observation from
   a real Tester/Operations service.
 * `serve` exposes the existing Assurance detect/confirm/analyze interface; it

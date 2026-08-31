@@ -323,6 +323,76 @@ migration, Cloud/Spanner recovery, or production recovery. S4, Workflow E, P7,
 and S7 remain `IN PROGRESS`; Gate E/G5/G2/G4 remain open, and S2-04 remains
 `BLOCKED`.
 
+## One-command Local runtime trace evidence
+
+Run the fixed S4-05 wrapper from the repository root:
+
+```powershell
+.venv/Scripts/python.exe tools/local-stack/run_runtime_trace_demo.py --approve-local-simulation
+```
+
+The explicit Local simulation confirmation is the only accepted argument. One
+fixed BubbleRAN event crosses the real loopback Replay sender and HTTP receiver,
+passes bounded durable DuckDB readback, and then enters the real A2A Analyze
+handler. `X-NetworkAgent-Trace-Id` is deterministically derived from the
+validated source event and binds six ordered `OK` events across four components:
+
+```text
+sender:     REPLAY_REQUEST_VALIDATED
+repository: INCIDENT_DURABLE_READBACK
+receiver:   REPLAY_RESPONSE_ACCEPTED
+sender:     REPLAY_DELIVERY_ACKNOWLEDGED
+a2a:        ANALYZE_REQUEST_VALIDATED
+a2a:        ANALYZE_COMPLETED
+```
+
+All six header/durable/audit/association/request/result bindings must pass. The
+A2A request changes only transport table `assurance_a2a_tasks`; the other nine
+tracked tables and the Canonical domain remain unchanged. Actions, approvals,
+executions, and verifications remain `0 -> 0`. This is not a whole-database
+read-only claim.
+
+A successful run retains `local-runtime-trace-report.json` and the six-line raw
+`local-runtime-events.jsonl` under a new identity-bound directory in
+`.local/networkagent-runtime-trace/`, while removing its temporary scenario
+workspace. The raw JSONL contains the correlation value, remains Local-only,
+and must never enter `release-evidence` or an uploaded artifact. The persisted
+report and release summary omit raw events/payloads, correlation and domain
+identifiers, and absolute paths.
+
+S4-05 is `DONE` only for corrective RC
+`2e59d7ca88cc550e315d63e80339909ef619cd2c`. [Assurance run
+33362806092](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33362806092)
+passed jobs 99397345468/99397345590/99397345635/99397345601; [Local run
+33362806180](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33362806180)
+passed jobs 99397346249/99397346041; [Container run
+33362806104](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33362806104)
+passed jobs 99397345678/99397392344. The Python 3.12 Assurance job published
+[VERIFIED RC artifact
+9747354240](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33362806092/artifacts/9747354240),
+named `telco-assurance-release-py3.12-attempt-1`: 246,678 bytes with archive
+digest
+`sha256:f772dcae631cdde59483eaef6a28d1caee0b0b357d8eb5eb069e863747991fa4`.
+Independent download verified exactly 12 entries (11 manifest records plus the
+manifest), no JSONL, and a reconstructed 1,651-byte report / SHA-256
+`5932b0454c7d095b7864f7c50cd0e2a48a05e288dbb74fd83a1773aedcaea5e8`.
+
+The initial feature candidate `b0bcb8fa39c2971e2dd1c1910cde69d68cc97edc`
+is not a successful RC: Local run 33362166565 failed while collecting trace
+tests that belonged to the Assurance profile. The corrective commit migrated
+those tests and removed duplicate Local collection. Follow the [Local
+single-process runtime trace
+runbook](../../docs/runbooks/local-runtime-trace.md) for the exact seven-field
+event schema, six bindings, failure codes, privacy rules, artifact
+reconstruction, ten `not_claimed` values, and independent audit steps.
+
+This slice is not OpenTelemetry/Collector, Prometheus, distributed or
+cross-process/multi-event correlation, MCP propagation, sink delivery,
+external alerting, Cloud/production observability, or Gate E/G5 closure. S4,
+Workflow E, P7, and S7 remain `IN PROGRESS`; Gate E/G5/G2/G4 remain open,
+S2-04 remains `BLOCKED`, and this documentation update is later than and not
+equal to the tested RC.
+
 ## Safe governance demo
 
 Actions are disabled by default. This command confirms the deterministic sample

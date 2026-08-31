@@ -157,6 +157,52 @@ off-host, encrypted/signed, multi-replica, cross-version, Cloud/Spanner, RPO/RTO
 power-loss, HA, or production recovery evidence. S4, Workflow E, P7, and S7
 remain in progress; Gate E/G5/G2/G4 remain open, and S2-04 remains blocked.
 
+For one fixed single-process runtime correlation through the real Local replay
+and Assurance path, run:
+
+```text
+python tools/local-stack/run_runtime_trace_demo.py --approve-local-simulation
+```
+
+The S4-05 wrapper sends one fixed BubbleRAN event over real loopback TCP, checks
+durable DuckDB readback, and issues a real A2A Analyze request. The derived
+`X-NetworkAgent-Trace-Id` binds exactly six ordered events across `sender`,
+`repository`, `receiver`, and `a2a`, with six durable/request/result bindings.
+Analyze leaves the Canonical domain and nine tables unchanged but writes the
+expected A2A transport state in `assurance_a2a_tasks`; the whole database is
+therefore not claimed read-only. Actions, approvals, executions, and
+verifications remain `0 -> 0`. Raw JSONL stays only in the local run directory
+and is never release evidence. See the [Local single-process runtime trace
+runbook](docs/runbooks/local-runtime-trace.md) for the frozen event, privacy,
+failure, artifact-audit, and non-claim contract.
+
+S4-05 is `DONE` only for this narrow slice on corrective RC
+`2e59d7ca88cc550e315d63e80339909ef619cd2c`. Its [Assurance run
+33362806092](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33362806092)
+(jobs 99397345468/99397345590/99397345635/99397345601), [Local run
+33362806180](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33362806180)
+(jobs 99397346249/99397346041), and [Container run
+33362806104](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33362806104)
+(jobs 99397345678/99397392344) all passed. Python 3.12 Assurance published the
+14-day [VERIFIED RC artifact
+9747354240](https://github.com/LeegenSteven/NetworkAgent-dev/actions/runs/33362806092/artifacts/9747354240),
+`telco-assurance-release-py3.12-attempt-1`, 246,678 bytes with archive digest
+`sha256:f772dcae631cdde59483eaef6a28d1caee0b0b357d8eb5eb069e863747991fa4`.
+Independent download confirmed 12 files (11 manifest records plus the
+manifest), exact closure, no raw JSONL, and a reconstructed 1,651-byte report
+with SHA-256
+`5932b0454c7d095b7864f7c50cd0e2a48a05e288dbb74fd83a1773aedcaea5e8`.
+
+The first feature commit `b0bcb8fa39c2971e2dd1c1910cde69d68cc97edc`
+is historical only: its Local workflow failed while collecting the misplaced
+Assurance-owned trace tests. The corrective RC moved those tests to the
+Assurance profile and removed duplicate Local collection. This result is not
+OpenTelemetry/Prometheus, distributed or cross-process/multi-event correlation,
+MCP propagation, external alert delivery, Cloud/production observability, or a
+full-database read-only claim. S4, Workflow E, P7, and S7 remain in progress;
+Gate E/G5/G2/G4 remain open, and S2-04 remains blocked. This documentation
+update is later than and not equal to the tested RC.
+
 The demo stops at `AWAITING_APPROVAL`. A second command may enable
 `--action-mode simulate` and approve only the exact `action_hash` and Incident
 revision returned by that preview. The sole action is `LOCAL_SIMULATION`;
